@@ -1,0 +1,405 @@
+/* Student dashboard — Bloque A · with active module + daily target + activity checklist */
+
+function StudentDashboard({ user, onLogout }) {
+  const { STUDENTS, GROUPS, LEVELS, MODULE_CATALOG, ACHIEVEMENT_DEFS, getGroupSettings, getStudentProgress, getStudentXP, getStudentLevel, MEDAL_RARITY, RARITY_STYLE } = window.JUCUM_DATA;
+  const student = STUDENTS.find(s => s.id === user.studentId) || STUDENTS[0];
+  const group = GROUPS.find(g => g.id === student.group);
+  const level = LEVELS[student.level];
+  const settings = getGroupSettings(student.group);
+  const progress = getStudentProgress(student.id);
+  const allModules = MODULE_CATALOG[student.level] || [];
+  const activeModule = allModules.find(m => m.id === settings.activeModuleId) || allModules[0];
+  const [view, setView] = React.useState('dashboard');
+  const [showOnb, setShowOnb] = React.useState(() => !localStorage.getItem(`jucum_onboarded_${user.studentId}`));
+
+  // Gamification stats
+  const xp = getStudentXP(student);
+  const xpInfo = getStudentLevel(xp);
+
+  React.useEffect(() => { document.body.setAttribute('data-level', student.level); }, [student.level]);
+
+  // Practice reminder — fires once per day if behind on daily target
+  React.useEffect(() => {
+    if (!window.JUCUM_NOTIF) return;
+    const todayKey = `jucum_reminded_${student.id}_${new Date().toISOString().slice(0,10)}`;
+    if (localStorage.getItem(todayKey)) return;
+    const todayMin = progress.todayMinutes || 0;
+    const targetMin = settings.dailyTargetMin || 15;
+    if (todayMin < targetMin) {
+      const missing = targetMin - todayMin;
+      window.JUCUM_NOTIF.pushNotif(student.id, {
+        type: 'daily-reminder',
+        title: '🎯 Tu meta diaria te espera',
+        body: todayMin === 0
+          ? `Aún no has practicado hoy. Necesitas ${targetMin} min para cumplir tu meta.`
+          : `Llevas ${todayMin} min — te faltan ${missing} min para tu meta de hoy.`,
+      });
+      localStorage.setItem(todayKey, '1');
+    }
+    // Streak warning — practiced yesterday but not today, after 6pm
+    const now = new Date();
+    if (student.streak > 0 && todayMin === 0 && now.getHours() >= 18) {
+      const streakKey = `jucum_streak_warn_${student.id}_${now.toISOString().slice(0,10)}`;
+      if (!localStorage.getItem(streakKey)) {
+        window.JUCUM_NOTIF.pushNotif(student.id, {
+          type: 'streak',
+          title: '🔥 Tu racha está en peligro',
+          body: `Lleva ${student.streak} día${student.streak === 1 ? '' : 's'} seguidos. Practica antes de medianoche para no perderla.`,
+        });
+        localStorage.setItem(streakKey, '1');
+      }
+    }
+  }, [student.id, progress.todayMinutes, settings.dailyTargetMin]);
+
+  const activities = activeModule?.activities || [];
+  const doneCount = activities.filter(a => progress.completed[`${activeModule?.id}:${a.id}`]).length;
+  const pctModule = activities.length ? Math.round((doneCount/activities.length)*100) : 0;
+
+  const todayMin = progress.todayMinutes || 0;
+  const targetMin = settings.dailyTargetMin || 15;
+
+  let deadlineLabel = null;
+  if (settings.deadline) {
+    const d = new Date(settings.deadline + 'T23:59:59');
+    const diff = Math.ceil((d - new Date()) / 86400000);
+    deadlineLabel = diff < 0 ? `⏰ Vencido hace ${-diff}d` : diff === 0 ? '⏰ Vence hoy' : `⏰ Vence en ${diff}d`;
+  }
+
+  return (
+    <>
+      {showOnb && <Onboarding studentId={user.studentId} onClose={() => setShowOnb(false)} />}
+      <header className="app-header">
+        <div className="app-logo">
+          <img src="logo-jucum.png" alt="JUCUM EC" />
+          <div className="pgtitle">Mi panel de aprendizaje</div>
+        </div>
+        <div className="app-right">
+          <span className="role-pill s">🎓 Alumno</span>
+          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('profile');}}>👤 Mi perfil</a>
+          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('forum');}}>💬 Foro</a>
+          <NotifBell userId={student.id} onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); }} />
+          <div className="user-pill">
+            <div className="ava" style={{background:`linear-gradient(135deg,${level.color}80,${level.dark})`}}>
+              {student.fullName.split(' ').map(n=>n[0]).slice(0,2).join('')}
+            </div>
+            <span>{student.fullName.split(' ')[0]}</span>
+          </div>
+          <button className="logout-btn" onClick={onLogout} title="Cerrar sesión">⎋ Salir</button>
+        </div>
+      </header>
+
+      {view === 'profile' ? (
+        <StudentProfile user={user} onBack={() => setView('dashboard')} />
+      ) : view === 'forum' ? (
+        <>
+          <button className="back-btn" onClick={() => setView('dashboard')} style={{padding:'10px 28px 0'}}>← Volver al panel</button>
+          <Forum user={user} groupOverride={student.group} />
+        </>
+      ) : (
+      <main>
+        <div className="welcome">
+          <div className="welcome-text">
+            <div className="eyebrow">{level.emoji} {level.code} · {group.name}</div>
+            <h1>¡Hola, {student.fullName.split(' ')[0]}!</h1>
+            <p>{student.streak > 0
+              ? <>Racha de <b>{student.streak} {student.streak === 1 ? 'día' : 'días'}</b> 🔥 ¡No la rompas hoy!</>
+              : 'Hoy es buen día para retomar la práctica 🌱'}</p>
+          </div>
+          <div className="welcome-streak">
+            <div className="streak-num">{student.streak}</div>
+            <div className="streak-lbl">días<br/>seguidos</div>
+          </div>
+        </div>
+
+        {/* ── Bloque C · Gamification ── */}
+        <div className="gami-row">
+          <XpCard xp={xp} xpInfo={xpInfo} student={student} />
+          <StreakCard streak={student.streak} />
+          <RankCard student={student} groupName={group.name} />
+        </div>
+
+        <div className="scard" style={{marginTop:18}}>
+          <div className="sec-head">
+            <div className="sec-title">Mis medallas</div>
+            <span className="sec-meta">{student.achievements.length} / {Object.keys(ACHIEVEMENT_DEFS).length}</span>
+          </div>
+          <MedalShowcase
+            unlocked={student.achievements}
+            defs={ACHIEVEMENT_DEFS}
+            rarities={MEDAL_RARITY}
+            styles={RARITY_STYLE}
+          />
+        </div>
+
+        <div className="two-col" style={{gridTemplateColumns:'1fr 2fr'}}>
+          <div className="scard daily-card">
+            <div className="sec-head"><div className="sec-title">Meta de hoy</div></div>
+            <DailyRing done={todayMin} target={targetMin} levelColor={level.color} dark={level.dark} />
+            <div className="daily-msg">
+              {todayMin >= targetMin
+                ? <>🎉 <b>¡Meta cumplida!</b> Sigue si quieres más XP.</>
+                : <>Te faltan <b>{targetMin - todayMin} min</b> para tu meta de hoy.</>}
+            </div>
+          </div>
+
+          <div className="scard">
+            <div className="sec-head">
+              <div className="sec-title">Mi módulo activo</div>
+              {deadlineLabel && <span className={`deadline ${settings.deadline && new Date(settings.deadline) < new Date() ? 'late' : ''}`}>{deadlineLabel}</span>}
+            </div>
+            {activeModule ? <ModuleProgress mod={activeModule} progress={progress} pct={pctModule} doneCount={doneCount} studentId={student.id} /> :
+              <div className="empty-state"><div className="icon">📦</div>El profesor aún no activa ningún módulo.</div>}
+          </div>
+        </div>
+
+        <div className="kpi-grid">
+          <div className="kpi"><div className="kpi-ico">📦</div><div className="kpi-num">{student.completedModules}</div><div className="kpi-lbl">Módulos completos</div></div>
+          <div className="kpi"><div className="kpi-ico">📊</div><div className="kpi-num">{student.avgScore}%</div><div className="kpi-lbl">Promedio</div></div>
+          <div className="kpi"><div className="kpi-ico">🏆</div><div className="kpi-num">{student.achievements.length}</div><div className="kpi-lbl">Logros</div></div>
+          <div className="kpi"><div className="kpi-ico">⏱️</div><div className="kpi-num">{Math.floor(student.totalMinutes/60)}h {student.totalMinutes%60}m</div><div className="kpi-lbl">Tiempo total</div></div>
+        </div>
+        <div className="scard" style={{marginTop:18}}>
+          <div className="sec-head">
+            <div className="sec-title">📊 Evaluaciones del profesor</div>
+            <span className="sec-meta">Speaking · Listening · Comprehension</span>
+          </div>
+          <StudentEvaluations studentId={student.id} isStudent={true} />
+        </div>
+      </main>
+      )}
+    </>
+  );
+}
+
+function DailyRing({ done, target, levelColor, dark }) {
+  const pct = Math.min(100, Math.round((done/target)*100));
+  const deg = (pct/100) * 360;
+  const ringStyle = { background: `conic-gradient(${levelColor} 0deg, ${levelColor} ${deg}deg, #EEE ${deg}deg 360deg)` };
+  return (
+    <div className="ring-wrap">
+      <div className="ring-outer" style={ringStyle}>
+        <div className="ring-inner">
+          <div className="ring-num">{done}<span>min</span></div>
+          <div className="ring-meta">de {target}</div>
+          <div className="ring-pct" style={{color:dark}}>{pct}%</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ModuleProgress({ mod, progress, pct, doneCount, studentId }) {
+  return (
+    <>
+      <div className="cur-module">
+        <div className="cm-ico">{mod.emoji}</div>
+        <div className="cm-body">
+          <div className="cm-name">{mod.name}</div>
+          <div className="cm-sub">{doneCount} de {mod.activities.length} actividades · {pct}%</div>
+          <div className="cm-progress">
+            <div className="cm-bar"><div className="cm-fill" style={{width:pct+'%'}}></div></div>
+            <div className="cm-pct">{pct}%</div>
+          </div>
+        </div>
+      </div>
+      <div className="activity-list">
+        <div className="al-head">
+          <span>Actividades del módulo</span>
+          <span className="al-meta">{doneCount}/{mod.activities.length}</span>
+        </div>
+        <div className="al-items">
+          {(() => {
+            // status per activity (sequential unlock over the flat list)
+            const items = mod.activities.map((a, i) => {
+              const done = progress.completed[`${mod.id}:${a.id}`];
+              const prevDone = i === 0 || progress.completed[`${mod.id}:${mod.activities[i-1].id}`];
+              const locked = !done && !prevDone;
+              return { a, i, done, status: done ? 'done' : locked ? 'locked' : 'open' };
+            });
+            // group consecutive items that share a.group into expandable topics
+            const segments = [];
+            items.forEach(it => {
+              const g = it.a.group || null;
+              const last = segments[segments.length - 1];
+              if (last && last.group === g) last.items.push(it);
+              else segments.push({ group: g, items: [it] });
+            });
+            let topicNum = 0;
+            return segments.map((seg, si) => {
+              if (!seg.group) return seg.items.map(it => <ChecklistRow key={it.a.id} it={it} mod={mod} studentId={studentId} />);
+              topicNum++;
+              return <TopicGroup key={'g'+si} num={topicNum} name={seg.group} items={seg.items} mod={mod} studentId={studentId} />;
+            });
+          })()}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ChecklistRow({ it, mod, studentId }) {
+  const { a, i, done, status } = it;
+  return (
+    <a href={status!=='locked' ? linkFor(a, mod, studentId) : undefined}
+       className={`al-item ${status}`}>
+      <span className="al-num">{status==='done' ? '✓' : status==='locked' ? '🔒' : i+1}</span>
+      <span className="al-ico">{typeIcon(a.type)}</span>
+      <span className="al-name">{a.name}</span>
+      {done && <span className="al-score">{done.score}{typeof done.score === 'number' && done.score <= 10 ? '' : '%'}</span>}
+      {status==='open' && <span className="al-arr">→</span>}
+    </a>
+  );
+}
+
+/* Tema numerado expandible — replica el patrón "Práctica de Gramática → Temas del módulo" */
+function TopicGroup({ num, name, items, mod, studentId }) {
+  const doneCount = items.filter(it => it.done).length;
+  const allDone = doneCount === items.length;
+  const anyOpen = items.some(it => it.status === 'open');
+  const [open, setOpen] = React.useState(anyOpen);
+  return (
+    <div className={`tg ${allDone ? 'tg-done' : ''}`}>
+      <button type="button" className="tg-head" onClick={() => setOpen(!open)}>
+        <span className={`tg-num ${allDone ? 'done' : ''}`}>{allDone ? '✓' : num}</span>
+        <span className="tg-name">{name}</span>
+        <span className="tg-meta">{doneCount}/{items.length}</span>
+        <span className={`tg-arr ${open ? 'open' : ''}`}>▾</span>
+      </button>
+      {open && (
+        <div className="tg-items">
+          {items.map(it => <ChecklistRow key={it.a.id} it={it} mod={mod} studentId={studentId} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function typeIcon(t) { return { story:'📗', reading:'📖', listening:'🎧', grammar:'📝', summary:'📚', quizlet:'🃏' }[t] || '📄'; }
+function linkFor(a, mod, studentId) {
+  // a.url = la URL real del material en GitHub Pages (se configura por actividad).
+  // Si no hay url, usa la muestra local del UI kit.
+  const base = a.url || { story:'../story/index.html', reading:'../reading/index.html', listening:'../listening/index.html' }[a.type] || '#';
+  if (base === '#') return '#';
+  // Adjunta la identidad para que jucum-connect.js registre el progreso
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent(mod.id)}&jucum_act=${encodeURIComponent(a.id)}`;
+}
+
+/* ─── Bloque C · gamification components ─── */
+function XpCard({ xp, xpInfo, student }) {
+  return (
+    <div className="gami-card xp-card" style={{background:`linear-gradient(135deg,${xpInfo.tier.bg},#fff)`,borderTopColor:xpInfo.tier.color}}>
+      <div className="gami-eyebrow" style={{color:xpInfo.tier.color}}>{xpInfo.tier.emoji} {xpInfo.tier.name.toUpperCase()}</div>
+      <div className="xp-level-row">
+        <div className="xp-level-badge" style={{background:xpInfo.tier.color}}>
+          <span className="xp-lvl-lbl">Nivel</span>
+          <span className="xp-lvl-num">{xpInfo.level}</span>
+        </div>
+        <div className="xp-info">
+          <div className="xp-total">{xpInfo.totalXP.toLocaleString()} <span>XP</span></div>
+          <div className="xp-meta">{xpInfo.currentXP} / {xpInfo.nextNeeded} para nivel {xpInfo.level + 1}</div>
+        </div>
+      </div>
+      <div className="xp-bar"><div className="xp-fill" style={{width:xpInfo.pct+'%',background:`linear-gradient(90deg,${xpInfo.tier.color},${xpInfo.tier.color}cc)`}}></div></div>
+      <div className="xp-pct">{xpInfo.pct}% al siguiente nivel</div>
+    </div>
+  );
+}
+
+function StreakCard({ streak }) {
+  const flameSize = streak >= 7 ? 'huge' : streak >= 3 ? 'big' : streak > 0 ? 'med' : 'cold';
+  return (
+    <div className={`gami-card streak-card s-${flameSize}`}>
+      <div className="gami-eyebrow">🔥 Racha activa</div>
+      <div className="streak-flame">
+        <span className="flame">{streak >= 7 ? '🔥🔥🔥' : streak >= 3 ? '🔥🔥' : streak > 0 ? '🔥' : '❄️'}</span>
+      </div>
+      <div className="streak-big">{streak}</div>
+      <div className="streak-lbl-big">{streak === 1 ? 'día seguido' : 'días seguidos'}</div>
+      <div className="streak-tip">
+        {streak >= 7 ? '¡Imparable! Sigue así.' :
+         streak >= 3 ? '¡Vas muy bien! No la rompas hoy.' :
+         streak > 0  ? 'Construye tu hábito día a día.' :
+                       'Practica hoy para empezar tu racha.'}
+      </div>
+    </div>
+  );
+}
+
+function RankCard({ student, groupName }) {
+  const { getGroupRanking } = window.JUCUM_DATA;
+  const ranking = getGroupRanking(student.group);
+  const myRank = ranking.findIndex(r => r.student.id === student.id) + 1;
+  const myXP = ranking[myRank - 1]?.xp || 0;
+  const top3 = ranking.slice(0, 3);
+  const medalE = ['🥇','🥈','🥉'];
+  return (
+    <div className="gami-card rank-card">
+      <div className="gami-eyebrow">🏅 Top del grupo</div>
+      <div className="rank-mine">
+        <div className="rank-mine-pos">#{myRank}</div>
+        <div>
+          <div className="rank-mine-lbl">Tu posición</div>
+          <div className="rank-mine-xp">{myXP.toLocaleString()} XP</div>
+        </div>
+      </div>
+      <div className="rank-podium">
+        {top3.map((r, i) => (
+          <div key={r.student.id} className={`rank-row ${r.student.id===student.id?'me':''}`}>
+            <span className="rank-emo">{medalE[i]}</span>
+            <span className="rank-name">{r.student.fullName.split(' ')[0]}</span>
+            <span className="rank-xp">{r.xp}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MedalShowcase({ unlocked, defs, rarities, styles }) {
+  return (
+    <div className="medal-grid">
+      {Object.entries(defs).map(([key, def]) => {
+        const isUnlocked = unlocked.includes(key);
+        const rarity = rarities[key]?.rarity || 'bronze';
+        const r = styles[rarity];
+        return (
+          <div key={key} className={`medal ${isUnlocked?'unlocked':'locked'}`}
+               style={isUnlocked ? {'--ring':r.ring,'--ringDark':r.ringDark,'--glow':r.glow} : undefined}>
+            <div className="medal-ring">
+              <div className="medal-inner">
+                <span className="medal-ico">{isUnlocked ? def.icon : '🔒'}</span>
+              </div>
+            </div>
+            <div className="medal-name">{def.name}</div>
+            <div className="medal-rarity" style={isUnlocked ? {color:r.ringDark} : undefined}>
+              {isUnlocked ? r.label : 'Bloqueada'}
+            </div>
+            <div className="medal-desc">{def.desc}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ActivityRow({ act }) {
+  const ICONS = { reading:'📖', listening:'🎧', grammar:'📝', story:'📗', achievement:'🏆' };
+  const COLORS = { reading:'#1565C0', listening:'#E65100', grammar:'#7B1FA2', story:'#2E7D32', achievement:'#F57C00' };
+  return (
+    <div className="act-row">
+      <div className="act-ico" style={{background:COLORS[act.type]+'22',color:COLORS[act.type]}}>{ICONS[act.type]}</div>
+      <div className="act-body">
+        <div className="act-line"><b>{act.detail}</b>{act.module && <span className="act-mod"> · {act.module}</span>}</div>
+        <div className="act-meta">{act.date}</div>
+      </div>
+      {act.score !== undefined && (
+        <div className={`act-score ${act.score/act.max >= 0.85 ? 'high' : act.score/act.max >= 0.7 ? 'mid' : 'low'}`}>
+          {act.score}/{act.max}
+        </div>
+      )}
+    </div>
+  );
+}
+
+Object.assign(window, { StudentDashboard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase });

@@ -1,0 +1,354 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   JUCUM English Center — Design Tokens
+   Source of truth for color, typography and base primitives used across
+   all educational HTML materials (Pre-A1, A1, A2).
+
+   Import:    <link rel="stylesheet" href="colors_and_type.css">
+   Fonts:     loaded via Google Fonts (Nunito, Fredoka, Atkinson Hyperlegible) below.
+              Atkinson Hyperlegible is the dyslexia-friendly editorial face;
+              it replaces the previous Lora pick for accessibility.
+   Level mode: set data-level="pre-a1" | "a1" | "a2" on <body>
+               OR add class .lvl-pre-a1 / .lvl-a1 / .lvl-a2 to a wrapper.
+               This re-maps the --lp / --ld / --ll / --lm / --lg variables.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:ital,wght@0,400;0,500;0,600;0,700;0,800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
+:root {
+  /* ── Type families ─────────────────────────────────────────────────────── */
+  --font-display: 'Fredoka', 'Nunito', system-ui, sans-serif;   /* titles, headers, brand */
+  --font-body:    'Nunito', system-ui, sans-serif;              /* body, UI, buttons */
+  --font-serif:   'Atkinson Hyperlegible', system-ui, sans-serif;                       /* Spanish translations, story prose */
+
+  /* Weights — Nunito ships 400/500/600/700/800. Fredoka 400/500/600/700. */
+  --fw-regular: 400; /* @kind font */
+  --fw-medium:  500; /* @kind font */
+  --fw-semi:    600; /* @kind font */
+  --fw-bold:    700; /* @kind font */
+  --fw-black:   800; /* @kind font */
+
+  /* ── Type scale (rem; 1rem = 16px) ─────────────────────────────────────── */
+  --fs-hero:     38px;   /* Hero h1 in panels (Fredoka 600) */
+  --fs-h1:       1.9rem; /* 30px — page-level header h1 */
+  --fs-h2:       1.3rem; /* 21px — section-title (Fredoka 600) */
+  --fs-h3:       1.15rem;/* 18px — sub-section */
+  --fs-body:     1rem;   /* 16px */
+  --fs-small:    0.88rem;/* 14px */
+  --fs-micro:    0.78rem;/* 12.5px */
+  --fs-eyebrow:  0.73rem;/* 11.7px — section-label uppercase */
+
+  --lh-tight: 1.2; /* @kind font */
+  --lh-snug:  1.5; /* @kind font */
+  --lh-body:  1.7; /* @kind font */
+  --lh-prose: 1.9; /* @kind font */ /* story paragraphs — generous for readers with dyslexia */
+
+  --ls-tight:   -0.01em; /* @kind font */
+  --ls-eyebrow: 0.13em;  /* @kind font */ /* section-label */
+  --ls-pill:    0.1em;   /* @kind font */ /* uppercase pills */
+
+  /* ── Base / neutral palette ────────────────────────────────────────────── */
+  --bg:        #FAFAF6;  /* default page bg (cream — overridden per level) */
+  --card:      #FFFFFF;
+  --text:      #2A2A2A;  /* primary text */
+  --text-soft: #777777;  /* meta / sub / captions */
+  --text-mute: #BBBBBB;  /* disabled / locked */
+  --border:    #E8E5DC;
+  --border-soft:#F0EDE4;
+  --shadow:    0 2px 4px rgba(0,0,0,0.09), 0 6px 18px rgba(0,0,0,0.15);    /* default cards — projector-safe */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.07), 0 2px 6px rgba(0,0,0,0.10);     /* small surfaces */
+  --shadow-lg: 0 4px 8px rgba(0,0,0,0.11), 0 14px 36px rgba(0,0,0,0.22);   /* modals / completion */
+
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 10px;     /* small chips, list items */
+  --radius:    14px;     /* default card radius */
+  --radius-lg: 18px;     /* completion modals */
+  --radius-xl: 20px;     /* hero, drawer corner */
+  --radius-pill: 22px;
+  --radius-circle: 50%;
+
+  /* ── Spacing scale (used loosely; flex/grid gaps in px) ───────────────── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 56px;
+
+  /* Optimal reading column */
+  --container-max: 820px;    /* @kind other */
+  --container-narrow: 780px; /* @kind other */
+
+  /* Mobile breakpoint */
+  --bp-mobile: 600px;
+
+  /* ── Motion ──────────────────────────────────────────────────────────── */
+  --ease-out:   cubic-bezier(0.2, 0.7, 0.3, 1); /* @kind other */
+  --ease-soft:  cubic-bezier(0.4, 0, 0.2, 1); /* @kind other */
+  --dur-fast:   0.15s; /* @kind other */
+  --dur-base:   0.22s; /* @kind other */
+  --dur-slow:   0.32s; /* @kind other */
+
+  /* ── Per-level palette (DEFAULT = Pre-A1 amber) ──────────────────────── */
+  --lp: #F9A825;  /* level primary */
+  --ld: #E65100;  /* level dark / on-light text */
+  --ll: #FFF9C4;  /* level light tint (badges, hover wash) */
+  --lm: #FFECB3;  /* level mid tint (border) */
+  --lbt:#4E3800;  /* level badge text on --ll */
+  --lg: linear-gradient(135deg, #F9A825 0%, #FF8F00 100%); /* @kind color */
+  --lglow: rgba(249,168,37,0.28);
+  --bg-tint: #FAFAF6; /* page bg for Pre-A1 — cream */
+
+  /* ── Universal semantic tints (DON'T re-color per level) ─────────────── */
+  /* Reveal-translation pill: always purple — signals "click for Spanish" */
+  --rv-bg:   #F3E5F5;
+  --rv-text: #7B1FA2;
+  --rv-border: #CE93D8;
+
+  /* Vocab-of-the-module highlight: always amber underline */
+  --hl-bg:     #FFF8E1;
+  --hl-border: #FFD54F;
+
+  /* Note / "did you know" callouts */
+  --note-bg:     #FFFDE7;
+  --note-border: #FBC02D;
+  --note-dot:    #F9A825;
+
+  /* Chat bubbles — fixed colors regardless of level */
+  --sp-a:    #1565C0; --sp-a-bg: #E3F2FD;    /* speaker A — blue (left)  */
+  --sp-b:    #C46200; --sp-b-bg: #FFF3E0;    /* speaker B — orange (right) */
+  --sp-c:    #2E7D32; --sp-c-bg: #E8F5E9;    /* speaker C — green (center) */
+
+  /* Quiz feedback */
+  --correct:       #2E7D32;
+  --correct-bg:    #E8F5E9;
+  --correct-border:#A5D6A7;
+  --wrong:         #C62828;
+  --wrong-bg:      #FFEBEE;
+  --wrong-border:  #EF9A9A;
+
+  /* Krashen / pedagogy callout (always blue) */
+  --krashen-grad: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%); /* @kind color */
+  --krashen-dark: #1565C0;
+}
+
+/* ── Pre-A1 — amber ────────────────────────────────────────────────────── */
+[data-level="pre-a1"], .lvl-pre-a1 {
+  --lp: #F9A825;  --ld: #E65100;  --ll: #FFF9C4;  --lm: #FFECB3;  --lbt: #4E3800;
+  --lg: linear-gradient(135deg, #F9A825 0%, #FF8F00 100%); /* @kind color */
+  --lglow: rgba(249,168,37,0.28);
+  --bg-tint: #FAFAF6;
+}
+/* ── A1 — sky blue ─────────────────────────────────────────────────────── */
+[data-level="a1"], .lvl-a1 {
+  --lp: #2196F3;  --ld: #0D47A1;  --ll: #E3F2FD;  --lm: #BBDEFB;  --lbt: #0A3470;
+  --lg: linear-gradient(135deg, #1565C0 0%, #2196F3 60%, #64B5F6 100%); /* @kind color */
+  --lglow: rgba(33,150,243,0.24);
+  --bg-tint: #F0F7FF;
+}
+/* ── A2 — emerald ──────────────────────────────────────────────────────── */
+[data-level="a2"], .lvl-a2 {
+  --lp: #2EA84B;  --ld: #1B5E20;  --ll: #DFF5E3;  --lm: #9FD3A2;  --lbt: #0E4B16;
+  --lg: linear-gradient(135deg, #43C062 0%, #1F7A33 100%); /* @kind color */
+  --lglow: rgba(46,168,75,0.30);
+  --bg-tint: #EEF7F1;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Semantic element styles (apply automatically — no class needed)
+   ───────────────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--bg-tint);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-weight: var(--fw-regular);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: var(--fw-semi);
+  line-height: var(--lh-tight);
+  color: var(--text);
+  margin: 0;
+}
+h1 { font-size: var(--fs-h1); }
+h2 { font-size: var(--fs-h2); }
+h3 { font-size: var(--fs-h3); }
+h4 { font-size: var(--fs-small); font-weight: var(--fw-bold); }
+
+p { margin: 0; }
+small { font-size: var(--fs-small); color: var(--text-soft); }
+strong { font-weight: var(--fw-bold); }
+
+/* Italic "translation" feel — apply to Spanish glosses */
+.es, em.es { font-family: var(--font-serif); font-style: italic; color: var(--text-soft); }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Reusable primitives — flat, framework-free CSS classes
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Eyebrow / section label — uppercase tracking, preceded by 18-20px tint line */
+.eyebrow {
+  display: flex; align-items: center; gap: 0.6rem;
+  font-family: var(--font-body);
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-black);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-eyebrow);
+  color: var(--ld);
+}
+.eyebrow::before {
+  content: ''; width: 20px; height: 3px;
+  background: var(--lp); border-radius: 2px;
+}
+
+/* Pill badge — used for level tags, topic tags, status */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-body);
+  font-size: 11px; font-weight: var(--fw-black);
+  letter-spacing: var(--ls-pill); text-transform: uppercase;
+  background: var(--ll); color: var(--lbt);
+  border: 1.5px solid var(--lm);
+  padding: 4px 12px; border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+
+/* Card — white surface, top accent line in level color */
+.jc-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-top: 3.5px solid var(--lp);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.8rem;
+}
+
+/* Soft card — no accent line, used inside drawer */
+.jc-card-soft {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 1rem;
+}
+
+/* Button — primary (filled gradient) */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font-family: var(--font-body);
+  font-size: var(--fs-small); font-weight: var(--fw-black);
+  padding: 0.7rem 1.4rem;
+  border: 1.5px solid transparent; border-radius: var(--radius-pill);
+  cursor: pointer; text-decoration: none;
+  transition: transform var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out),
+              background var(--dur-fast) var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-primary { background: var(--lg); color: #fff; border-color: var(--lp); box-shadow: 0 2px 8px var(--lglow); }
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 14px var(--lglow); }
+.btn-primary:active { transform: translateY(0); }
+
+.btn-soft { background: var(--ll); color: var(--ld); border-color: var(--lm); }
+.btn-soft:hover { background: var(--lm); }
+
+.btn-ghost { background: transparent; color: var(--text-soft); border-color: var(--border); }
+.btn-ghost:hover { background: var(--ll); color: var(--ld); border-color: var(--lm); }
+
+/* Chip — small, used for grammar variants etc. */
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-body);
+  font-size: 11px; font-weight: var(--fw-black);
+  padding: 5px 13px; border-radius: var(--radius-pill);
+  cursor: pointer; text-decoration: none; transition: all var(--dur-fast) var(--ease-out);
+}
+.chip-fill { background: var(--ll); color: var(--ld); border: 1.5px solid var(--lm); }
+.chip-fill:hover { background: var(--lg); color: #fff; border-color: var(--lp); }
+
+/* "Click for Spanish" — universally purple */
+.reveal-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-body);
+  font-size: 0.76rem; font-weight: var(--fw-semi);
+  color: var(--rv-text); background: var(--rv-bg);
+  border: none; padding: 3px 10px; border-radius: var(--radius-xs);
+  cursor: pointer; user-select: none;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.reveal-btn:hover { background: #E1BEE7; }
+
+/* Vocab span — amber underline */
+.vocab {
+  background: var(--hl-bg);
+  border-bottom: 2.5px solid var(--hl-border);
+  padding: 1px 4px; border-radius: 4px;
+  font-weight: var(--fw-bold);
+}
+
+/* Audio button — US/UK flag rocker */
+.audio-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-body);
+  font-size: 0.72rem; font-weight: var(--fw-bold);
+  border: 1.5px solid #E0E0E0; background: #FAFAFA; color: var(--text);
+  padding: 3px 10px; border-radius: var(--radius-sm);
+  cursor: pointer; user-select: none;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.audio-btn:hover { background: #F0F0F0; border-color: #BDBDBD; transform: translateY(-1px); }
+.audio-btn.playing { border-color: var(--lp); background: var(--lglow); color: var(--ld); }
+
+/* Chat bubbles */
+.chat-msg {
+  max-width: 82%;
+  padding: 0.8rem 1.1rem;
+  border-radius: 18px;
+  font-size: 0.95rem; line-height: 1.65;
+  position: relative; transition: box-shadow 0.2s;
+}
+.chat-msg .speaker-name {
+  font-size: 0.7rem; font-weight: var(--fw-black);
+  text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 3px;
+}
+.chat-msg.left  { align-self: flex-start; background: var(--sp-a-bg); border-bottom-left-radius: 5px; }
+.chat-msg.left  .speaker-name { color: var(--sp-a); }
+.chat-msg.right { align-self: flex-end;   background: var(--sp-b-bg); border-bottom-right-radius: 5px; text-align: right; }
+.chat-msg.right .speaker-name { color: var(--sp-b); }
+.chat-msg.center{ align-self: center;     background: var(--sp-c-bg); border-radius: 18px; }
+.chat-msg.center .speaker-name { color: var(--sp-c); }
+
+/* Hero gradient header (panel pages) */
+.hero {
+  background: var(--lg);
+  padding: 40px 28px 48px;
+  position: relative; overflow: hidden;
+  color: #fff;
+  border-radius: var(--radius-xl);
+}
+.hero::before, .hero::after { content: ''; position: absolute; border-radius: 50%; background: rgba(255,255,255,0.1); }
+.hero::before { top: -40%; right: -8%; width: 280px; height: 280px; }
+.hero::after  { bottom: -60%; left: -5%; width: 200px; height: 200px; background: rgba(255,255,255,0.06); }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 0.36s var(--ease-out) both; }
+
+@media (max-width: 600px) {
+  :root { --fs-hero: 28px; }
+}
