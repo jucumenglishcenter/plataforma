@@ -147,7 +147,7 @@ function StudentDashboard({ user, onLogout }) {
               <div className="sec-title">Mi módulo activo</div>
               {deadlineLabel && <span className={`deadline ${settings.deadline && new Date(settings.deadline) < new Date() ? 'late' : ''}`}>{deadlineLabel}</span>}
             </div>
-            {activeModule ? <ModuleProgress mod={activeModule} progress={progress} pct={pctModule} doneCount={doneCount} studentId={student.id} /> :
+            {activeModule ? <ModuleProgress mod={activeModule} progress={progress} pct={pctModule} doneCount={doneCount} studentId={student.id} freeUnlock={settings.unlockMode === 'free'} unlockMode={settings.unlockMode} unlockedActivities={settings.unlockedActivities} /> :
               <div className="empty-state"><div className="icon">📦</div>El profesor aún no activa ningún módulo.</div>}
           </div>
         </div>
@@ -188,7 +188,7 @@ function DailyRing({ done, target, levelColor, dark }) {
   );
 }
 
-function ModuleProgress({ mod, progress, pct, doneCount, studentId }) {
+function ModuleProgress({ mod, progress, pct, doneCount, studentId, freeUnlock, unlockMode, unlockedActivities }) {
   return (
     <>
       <div className="cur-module">
@@ -209,11 +209,15 @@ function ModuleProgress({ mod, progress, pct, doneCount, studentId }) {
         </div>
         <div className="al-items">
           {(() => {
-            // status per activity (sequential unlock over the flat list)
+            // status per activity: sequential unlock always applies; 'free' opens all,
+            // 'custom' additionally opens the teacher-enabled checklist
+            const enabledSet = new Set(unlockedActivities || []);
             const items = mod.activities.map((a, i) => {
               const done = progress.completed[`${mod.id}:${a.id}`];
               const prevDone = i === 0 || progress.completed[`${mod.id}:${mod.activities[i-1].id}`];
-              const locked = !done && !prevDone;
+              const teacherOpen = freeUnlock || unlockMode === 'free' ||
+                (unlockMode === 'custom' && enabledSet.has(`${mod.id}:${a.id}`));
+              const locked = !done && !prevDone && !teacherOpen;
               return { a, i, done, status: done ? 'done' : locked ? 'locked' : 'open' };
             });
             // group consecutive items that share a.group into expandable topics

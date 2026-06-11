@@ -384,6 +384,8 @@ function getGroupSettings(groupId) {
     deadline: null,
     dailyTargetMin: 15,
     isPaused: false,
+    unlockMode: 'sequential',
+    unlockedActivities: [],
   };
 }
 function setGroupSettings(groupId, partial) {

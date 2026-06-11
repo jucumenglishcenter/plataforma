@@ -31,6 +31,8 @@ function App() {
           startDate: g.start_date, _settings: {
             activeModuleId: g.active_module_id, deadline: g.deadline,
             dailyTargetMin: g.daily_target_min ?? 15, isPaused: g.is_paused,
+            unlockMode: g.unlock_mode || 'sequential',
+            unlockedActivities: g.unlocked_activities || [],
           },
         }));
 

@@ -257,6 +257,40 @@ function GroupSettingsModal({ groupId, level, onClose }) {
           </div>
 
           <div className="settings-block">
+            <div className="settings-label">🔓 Desbloqueo de actividades</div>
+            <div className="settings-hint">Secuencial: cada actividad se abre al completar la anterior. Personalizado: tú eliges cuáles habilitar (el avance secuencial sigue funcionando). Libre: todas abiertas.</div>
+            <div className="preset-row">
+              <button className={`preset ${(s.unlockMode || 'sequential') === 'sequential' ? 'on' : ''}`}
+                      onClick={() => setS({...s, unlockMode: 'sequential'})}>🔒 Secuencial</button>
+              <button className={`preset ${s.unlockMode === 'custom' ? 'on' : ''}`}
+                      onClick={() => setS({...s, unlockMode: 'custom'})}>🎛 Personalizado</button>
+              <button className={`preset ${s.unlockMode === 'free' ? 'on' : ''}`}
+                      onClick={() => setS({...s, unlockMode: 'free'})}>🔓 Libre</button>
+            </div>
+            {s.unlockMode === 'custom' && (() => {
+              const mod = modules.find(m => m.id === s.activeModuleId);
+              if (!mod) return <div className="settings-hint">Primero elige el módulo activo arriba.</div>;
+              const list = s.unlockedActivities || [];
+              const toggle = (key) => setS({...s, unlockedActivities: list.includes(key) ? list.filter(k => k !== key) : [...list, key]});
+              return (
+                <div style={{marginTop: 10, display: 'grid', gap: 6}}>
+                  {mod.activities.map((a, i) => {
+                    const key = `${mod.id}:${a.id}`;
+                    return (
+                      <label key={key} className="check-row">
+                        <input type="checkbox" checked={i === 0 || list.includes(key)} disabled={i === 0}
+                               onChange={() => toggle(key)} />
+                        <span>{i + 1}. {a.name}{i === 0 ? ' (siempre abierta)' : ''}</span>
+                      </label>
+                    );
+                  })}
+                  <div className="settings-hint">Además de lo marcado, cada actividad completada desbloquea la siguiente automáticamente.</div>
+                </div>
+              );
+            })()}
+          </div>
+
+          <div className="settings-block">
             <div className="settings-label">⏸ Estado del módulo</div>
             <div className="row-flex">
               <label className="check-row">

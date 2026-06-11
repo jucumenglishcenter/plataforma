@@ -3,16 +3,20 @@
    ════════════════════════════════════════════════════════════════════
    Pega UNA línea al final de cada material de práctica (antes de </body>):
 
-     <script src="https://TU-PLATAFORMA.netlify.app/jucum-connect.js"></script>
+     <script src="https://jucum-english-center.netlify.app/jucum-connect.js"></script>
 
    Qué hace automáticamente:
    - Lee la identidad del alumno desde la URL (?jucum_uid=...&jucum_mod=...&jucum_act=...)
      que la plataforma agrega al abrir el material.
-   - Cuenta SOLO el tiempo ACTIVO de práctica (mouse, teclado, scroll, touch).
+   - Muestra un chip flotante con el TIEMPO ACTIVO de práctica.
+   - Cuenta SOLO el tiempo activo (mouse, teclado, scroll, touch).
    - Anti-abandono: a los 3 min sin actividad muestra "¿Sigues ahí?" y DEJA de
      contar tiempo. Si no responde en 5 min más, cierra la sesión de práctica
      (el tiempo inactivo nunca se registra como lectura).
    - Al terminar registra puntuación + minutos en Supabase.
+   - Si el material se abre SIN ?jucum_uid (fuera de la plataforma), entra en
+     MODO PRUEBA: el contador y el aviso de inactividad funcionan igual, pero
+     NO se registra nada en la nube.
 
    Cómo se completa una actividad (según el tipo de material):
    A) CON quiz/MCQ (readings, listenings, prácticas y resúmenes de gramática):
@@ -36,9 +40,10 @@
   var uid = q.get('jucum_uid');
   var modId = q.get('jucum_mod') || 'general';
   var actId = q.get('jucum_act') || 'auto';
-  if (!uid) return; // material abierto fuera de la plataforma → no rastrea
+  var demo = !uid; // abierto fuera de la plataforma → modo prueba (no registra)
 
   function load(cb) {
+    if (demo) return cb(); // en modo prueba no hace falta Supabase
     if (window.supabase) return cb();
     var s = document.createElement('script');
     s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
@@ -46,14 +51,43 @@
     document.head.appendChild(s);
   }
 
-  load(function () {
-    var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  function start() {
+    var sb = demo ? null : window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     var activeSec = 0;          // segundos de práctica real acumulados
     var idleSec = 0;            // segundos sin actividad
     var done = false;           // ya registrado
     var sessionClosed = false;  // abandonó y no respondió
     var warned = false;
     var modal = null;
+
+    // ── Chip flotante con el tiempo activo ──
+    var chip = document.createElement('div');
+    chip.id = 'jec-conn-chip';
+    chip.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:999997;display:flex;align-items:center;gap:7px;background:#1F3A8A;color:#fff;padding:8px 14px;border-radius:24px;font:700 13px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,0.25);cursor:default;user-select:none;white-space:nowrap;';
+    chip.innerHTML = '<span>⏱</span><span id="jec-conn-time" style="font-family:monospace;font-size:14px;">0:00</span>' +
+      (demo ? '<span style="background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:800;">PRUEBA · no registra</span>' : '');
+    chip.title = demo
+      ? 'Modo prueba: abriste el material fuera de la plataforma, el tiempo NO se registra.'
+      : 'Tiempo activo de práctica (se registra en tu progreso).';
+    document.body.appendChild(chip);
+
+    function fmt(sec) {
+      return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+    }
+    function updateChip() {
+      var t = document.getElementById('jec-conn-time');
+      if (t) t.textContent = fmt(activeSec);
+      if (warned || sessionClosed) {
+        chip.style.background = '#9E9E9E';
+        chip.firstChild.textContent = '⏸';
+      } else if (done) {
+        chip.style.background = '#2EA84B';
+        chip.firstChild.textContent = '✓';
+      } else {
+        chip.style.background = '#1F3A8A';
+        chip.firstChild.textContent = '⏱';
+      }
+    }
 
     ['mousemove','mousedown','keydown','scroll','touchstart','click'].forEach(function (ev) {
       document.addEventListener(ev, function () {
@@ -64,11 +98,13 @@
     });
 
     setInterval(function () {
-      if (done || sessionClosed) return;
+      if (sessionClosed) return;
       idleSec++;
       if (!warned && idleSec < WARN_AFTER_SEC) {
-        activeSec++; // solo cuenta mientras está activo y sin aviso pendiente
-        if (activeSec >= AUTO_DONE_SEC) complete(null); // stories/diálogos
+        if (!done) {
+          activeSec++; // solo cuenta mientras está activo y sin aviso pendiente
+          if (activeSec >= AUTO_DONE_SEC) complete(null); // stories/diálogos
+        }
       } else if (!warned && idleSec >= WARN_AFTER_SEC) {
         warned = true;
         idleSec = 0;
@@ -78,17 +114,20 @@
       } else if (warned) {
         updateCountdown(CLOSE_AFTER_SEC - idleSec);
       }
+      updateChip();
     }, 1000);
 
     function resume() {
       warned = false;
       idleSec = 0;
       hideWarning();
+      updateChip();
     }
 
     function closeSession() {
       sessionClosed = true;
       hideWarning();
+      updateChip();
       // registra solo el tiempo activo real acumulado (si llegó al menos a 1 min)
       if (!done && activeSec >= 60) pushProgress(0, Math.round(activeSec / 60));
       banner('⏸ Práctica pausada por inactividad. El tiempo sin actividad no cuenta. Recarga la página para continuar.');
@@ -97,13 +136,17 @@
     function complete(score) {
       if (done || sessionClosed) return;
       done = true;
+      updateChip();
       var minutes = Math.max(1, Math.round(activeSec / 60));
       pushProgress(score == null ? 100 : score, minutes, function () {
-        toast('✅ Práctica registrada · ' + minutes + ' min' + (score != null ? ' · ' + score + '%' : ''));
+        toast(demo
+          ? '🧪 Modo prueba · ' + minutes + ' min' + (score != null ? ' · ' + score + '%' : '') + ' (no se registró)'
+          : '✅ Práctica registrada · ' + minutes + ' min' + (score != null ? ' · ' + score + '%' : ''));
       });
     }
 
     function pushProgress(score, minutes, ok) {
+      if (demo) { if (ok) ok(); return; } // modo prueba: no escribe en la nube
       sb.from('progress').upsert({
         user_id: uid, module_id: modId, activity_id: actId,
         score: score, minutes: minutes, completed_at: new Date().toISOString()
@@ -143,7 +186,7 @@
     function toast(msg) {
       var t = document.createElement('div');
       t.textContent = msg;
-      t.style.cssText = 'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#2EA84B;color:#fff;padding:11px 20px;border-radius:24px;font:700 14px system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.3);z-index:999999';
+      t.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:#2EA84B;color:#fff;padding:11px 20px;border-radius:24px;font:700 14px system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.3);z-index:999999;white-space:nowrap;max-width:92vw;';
       document.body.appendChild(t);
       setTimeout(function () { t.remove(); }, 4000);
     }
@@ -159,5 +202,7 @@
       if (done || sessionClosed || activeSec < 60) return;
       pushProgress(0, Math.round(activeSec / 60));
     });
-  });
+  }
+
+  load(start);
 })();

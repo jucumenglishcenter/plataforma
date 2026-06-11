@@ -32,6 +32,7 @@
     groups.forEach(g => settings[g.id] = {
       activeModuleId: g.active_module_id, deadline: g.deadline,
       dailyTargetMin: g.daily_target_min ?? 15, isPaused: g.is_paused,
+      unlockMode: g.unlock_mode || 'sequential',
     });
     write(KEYS.settings, settings);
 
@@ -114,6 +115,9 @@
       active_module_id: s.activeModuleId, deadline: s.deadline || null,
       daily_target_min: s.dailyTargetMin, is_paused: s.isPaused,
     }).eq('id', groupId));
+    // unlock_mode lives in a separate update: if the column doesn't exist yet
+    // (script 5 not run), only this one fails and the rest still saves.
+    safe(SB().from('groups').update({ unlock_mode: s.unlockMode || 'sequential' }).eq('id', groupId));
   }
   function pushProgress(userId, moduleId, activityId, score, minutes) {
     safe(SB().from('progress').upsert({
