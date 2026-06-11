@@ -381,7 +381,7 @@ function StudentDetail({ studentId, onBack }) {
   const stu = STUDENTS.find(s => s.id === studentId);
   const group = GROUPS.find(g => g.id === stu.group);
   const level = LEVELS[stu.level];
-  const myLog = ACTIVITY_LOG.filter(a => a.studentId === stu.id);
+  const myLog = window.JUCUM_DATA.getStudentLog ? window.JUCUM_DATA.getStudentLog(stu.id) : ACTIVITY_LOG.filter(a => a.studentId === stu.id);
   React.useEffect(() => { document.body.setAttribute('data-level', stu.level); return () => document.body.removeAttribute('data-level'); }, [stu.level]);
 
   return (

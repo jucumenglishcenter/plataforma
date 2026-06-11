@@ -249,6 +249,27 @@ function dailyDataReal(student) {
   return days;
 }
 
+/* Real per-student activity log from the cloud progress cache (cloud mode);
+ * falls back to the demo ACTIVITY_LOG locally. */
+function getStudentLog(studentId) {
+  if (!window.JUCUM_SB) return ACTIVITY_LOG.filter(a => a.studentId === studentId);
+  const completed = (getStudentProgress(studentId) || {}).completed || {};
+  const idx = {};
+  Object.values(MODULE_CATALOG).forEach(mods => (mods || []).forEach(m =>
+    (m.activities || []).forEach(a => idx[`${m.id}:${a.id}`] = { module: m.name, item: a.name, type: a.type })));
+  const events = Object.entries(completed).map(([key, e]) => {
+    const info = idx[key] || { module: '', item: key, type: 'story' };
+    const ev = {
+      studentId, type: info.type || 'story', module: info.module,
+      detail: info.item + (e.minutes ? ` · ${Math.round(e.minutes)} min` : ''),
+      date: String(e.date || '').replace('T', ' ').slice(0, 16),
+    };
+    if (typeof e.score === 'number') { ev.score = e.score > 10 ? Math.round(e.score) : Math.round(e.score * 10); ev.max = 100; }
+    return ev;
+  });
+  return events.sort((a, b) => b.date.localeCompare(a.date));
+}
+
 const STUDENTS = [
   /* Pre-A1 · Grupo 1 — Lunes y Miércoles */
   makeStudent('s01','leo.cruz','Leonardo Cruz','pre-a1','g1',{completedModules:2,avgScore:92,streak:5,lastActiveDays:0,totalMinutes:380,achievements:['first','streak','literal','identity','family','perfect'],starred:true}),
@@ -633,10 +654,28 @@ function addWeeklyXP(studentId, xp) {
   for (const k of Object.keys(all)) { if (k !== id) delete all[k]; }
   localStorage.setItem(LEAGUE_KEY, JSON.stringify(all));
 }
+/* Cloud mode: weekly XP derived from real progress entries since Monday
+ * (same per-activity formula as getStudentXP, no streak/achievement bonus) */
+function getWeeklyXPFromProgress(student) {
+  const progress = getStudentProgress(student.id);
+  const monday = weekId();
+  let xp = 0;
+  for (const [key, entry] of Object.entries(progress.completed || {})) {
+    if (!entry || !entry.date || String(entry.date).slice(0, 10) < monday) continue;
+    const [modId, actId] = key.split(':');
+    const mods = MODULE_CATALOG[student.level] || [];
+    const act = mods.find(m => m.id === modId)?.activities.find(a => a.id === actId);
+    const base = act ? (XP_BASE[act.type] || 10) : 10;
+    let bonusPct = 0.5;
+    if (typeof entry.score === 'number') bonusPct = entry.score > 10 ? Math.min(1, entry.score / 100) : Math.min(1, entry.score / 10);
+    xp += Math.round(base * (1 + bonusPct));
+  }
+  return xp;
+}
 function getWeeklyRanking(groupId) {
   return STUDENTS
     .filter(s => s.group === groupId)
-    .map(s => ({ student: s, xp: getWeeklyXP(s.id) || Math.floor(getStudentXP(s) * 0.12) })) // seed fallback
+    .map(s => ({ student: s, xp: window.JUCUM_SB ? getWeeklyXPFromProgress(s) : (getWeeklyXP(s.id) || Math.floor(getStudentXP(s) * 0.12)) }))
     .sort((a, b) => b.xp - a.xp);
 }
 function daysUntilMonday() {
@@ -645,3 +684,5 @@ function daysUntilMonday() {
 }
 
 window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday };
+
+window.JUCUM_DATA.getStudentLog = getStudentLog;
