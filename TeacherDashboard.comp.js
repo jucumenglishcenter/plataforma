@@ -311,6 +311,41 @@ function GroupSettingsModal({ groupId, level, onClose }) {
   );
 }
 
+/* Per-activity progress of the student's active module (teacher view) */
+function ModuleChecklist({ stu, group }) {
+  const { MODULE_CATALOG, getGroupSettings, getStudentProgress } = window.JUCUM_DATA;
+  const settings = getGroupSettings(group.id);
+  const mods = MODULE_CATALOG[group.level] || [];
+  const mod = mods.find(m => m.id === settings.activeModuleId) || mods[0];
+  if (!mod) return null;
+  const progress = getStudentProgress(stu.id);
+  const doneCount = mod.activities.filter(a => progress.completed[`${mod.id}:${a.id}`]).length;
+  return (
+    <div className="scard" style={{marginTop:18}}>
+      <div className="sec-head">
+        <div className="sec-title">📦 Avance en “{mod.name}”</div>
+        <span className="sec-meta">{doneCount}/{mod.activities.length} actividades · {mod.activities.length ? Math.round((doneCount/mod.activities.length)*100) : 0}%</span>
+      </div>
+      <div style={{display:'grid', gap:8}}>
+        {mod.activities.map((a, i) => {
+          const e = progress.completed[`${mod.id}:${a.id}`];
+          const score = e && typeof e.score === 'number' ? (e.score > 10 ? Math.round(e.score) : Math.round(e.score * 10)) : null;
+          return (
+            <div key={a.id} style={{display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderRadius:12, background: e ? '#F0F9F1' : '#FAFAFA', border: '1px solid ' + (e ? '#CDEBD2' : '#EEEEEE')}}>
+              <span style={{fontSize:17}}>{e ? '✅' : '⬜'}</span>
+              <span style={{flex:1, fontWeight:700, color: e ? '#1B5E20' : '#9E9E9E'}}>{i + 1}. {a.name}</span>
+              {e && score !== null && <span style={{fontWeight:800, color: score >= 85 ? '#2E7D32' : score >= 70 ? '#B58500' : '#C62828'}}>{score}%</span>}
+              {e && e.minutes ? <span style={{color:'#888', fontSize:13}}>{Math.round(e.minutes)} min</span> : null}
+              {e && e.date ? <span style={{color:'#AAA', fontSize:12}}>{new Date(e.date).toLocaleDateString('es-PE', {day:'numeric', month:'short'})}</span> : null}
+              {!e && <span style={{color:'#BBB', fontSize:13}}>Pendiente</span>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function StudentRow({ stu, rank, level, onClick }) {
   const status = stu.lastActiveDays === 0 ? {label:'🟢 Hoy',cls:'ok'}
               : stu.lastActiveDays <= 2 ? {label:`🟢 hace ${stu.lastActiveDays}d`,cls:'ok'}
@@ -376,6 +411,8 @@ function StudentDetail({ studentId, onBack }) {
         <div className="kpi"><div className="kpi-ico">🏆</div><div className="kpi-num">{stu.achievements.length}</div><div className="kpi-lbl">Logros</div></div>
         <div className="kpi"><div className="kpi-ico">📅</div><div className="kpi-num">{stu.lastActiveDays === 0 ? 'Hoy' : `${stu.lastActiveDays}d`}</div><div className="kpi-lbl">Última conexión</div></div>
       </div>
+
+      <ModuleChecklist stu={stu} group={group} />
 
       <div className="two-col">
         <div className="scard">

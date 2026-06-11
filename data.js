@@ -171,7 +171,7 @@ function pickN(r, arr, n) {
 }
 
 /* Build last-14-days time series per student with activity breakdown + specifics */
-function dailyData(student) {
+function dailyDataDemo(student) {
   const r = rng(hash(student.id));
   const content = CONTENT[student.level] || CONTENT['pre-a1'];
   const days = [];
@@ -204,6 +204,47 @@ function dailyData(student) {
     } else {
       days.push({ date: dStr, reading:0, listening:0, grammar:0, story:0, total:0, details:{reading:[],listening:[],grammar:[],story:[]} });
     }
+  }
+  return days;
+}
+
+/* Real 14-day series from the cloud-hydrated progress cache (cloud mode);
+ * falls back to the demo generator in local mode. */
+function dailyData(student) {
+  return window.JUCUM_SB ? dailyDataReal(student) : dailyDataDemo(student);
+}
+function dailyDataReal(student) {
+  const completed = (getStudentProgress(student.id) || {}).completed || {};
+  const idx = {};
+  Object.values(MODULE_CATALOG).forEach(mods => (mods || []).forEach(m =>
+    (m.activities || []).forEach(a => idx[`${m.id}:${a.id}`] = { module: m.name, item: a.name, type: a.type })));
+  const catOf = (t) => {
+    t = String(t || '').toLowerCase();
+    if (t.includes('story') || t.includes('dialog')) return 'story';
+    if (t.includes('listen')) return 'listening';
+    if (t.includes('read') || t.includes('lectura')) return 'reading';
+    return 'grammar';
+  };
+  const blank = (dStr) => ({ date: dStr, reading:0, listening:0, grammar:0, story:0, total:0, details:{reading:[],listening:[],grammar:[],story:[]} });
+  const byDay = {};
+  Object.entries(completed).forEach(([key, e]) => {
+    if (!e || !e.date) return;
+    const dStr = String(e.date).slice(0, 10);
+    byDay[dStr] = byDay[dStr] || blank(dStr);
+    const info = idx[key] || { module: '', item: key, type: '' };
+    const cat = catOf(info.type);
+    const min = Math.max(1, Math.round(e.minutes || 0));
+    byDay[dStr][cat] += min;
+    byDay[dStr].total += min;
+    const row = { module: info.module, item: info.item, minutes: min };
+    if (typeof e.score === 'number') { row.score = e.score > 10 ? Math.round(e.score) : Math.round(e.score * 10); row.max = 100; }
+    byDay[dStr].details[cat].push(row);
+  });
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const date = new Date(); date.setDate(date.getDate() - i);
+    const dStr = date.toISOString().slice(0, 10);
+    days.push(byDay[dStr] || blank(dStr));
   }
   return days;
 }
