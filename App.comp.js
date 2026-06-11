@@ -73,6 +73,8 @@ function App() {
             }
             try { localStorage.setItem('jucum_module_catalog_cache', JSON.stringify(CAT)); } catch {}
           } catch (e) { console.warn('modules:', e.message); }
+          // Real stats (minutes, avg score, streak, completed modules) from progress
+          try { window.JUCUM_SYNC.computeStats(); } catch (e) { console.warn('stats:', e.message); }
         }
 
         setReady(true);

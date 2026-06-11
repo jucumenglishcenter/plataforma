@@ -176,8 +176,69 @@
   window.JUCUM_SYNC = {
     hydrate, pushSettings, pushProgress, pushNotif, markNotifRead, markAllNotifRead,
     pushEvaluation, pushPost, pushReply, pushPin, deletePostDb, deleteReplyDb, pushLike, pushMute,
-    pushModule, deleteModuleDb, fetchModules,
+    pushModule, deleteModuleDb, fetchModules, computeStats,
   };
+
+  /* ── Stats: derive avgScore / streak / totalMinutes / completedModules /
+   *    lastActiveDays / achievements from the hydrated progress cache.
+   *    Call AFTER hydrate() and after the module catalog is loaded.
+   *    Patches window.JUCUM_DATA.STUDENTS in place. ── */
+  const dayStr = t => new Date(t).toISOString().slice(0, 10);
+  function computeStats() {
+    const D = window.JUCUM_DATA;
+    if (!D) return;
+    const DAY = 86400000;
+    const prog = read(KEYS.progress);
+    D.STUDENTS.forEach(s => {
+      const p = prog[s.id] || { completed: {} };
+      const completed = p.completed || {};
+      const entries = Object.values(completed);
+
+      let minutes = 0, scoreSum = 0, scoreN = 0, perfect = false, lastTs = 0;
+      const days = new Set();
+      entries.forEach(e => {
+        minutes += e.minutes || 0;
+        if (typeof e.score === 'number') {
+          // >10 = percent (0-100); ≤10 = out of 10 — same rule as getStudentXP
+          const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100);
+          scoreSum += pct; scoreN++;
+          if (pct >= 100) perfect = true;
+        }
+        if (e.date) {
+          days.add(e.date.slice(0, 10));
+          const ts = Date.parse(e.date);
+          if (ts > lastTs) lastTs = ts;
+        }
+      });
+
+      // streak = consecutive active days ending today (or yesterday)
+      let streak = 0, cur = Date.now();
+      if (!days.has(dayStr(cur))) cur -= DAY;
+      while (days.has(dayStr(cur))) { streak++; cur -= DAY; }
+
+      // completed modules of the student's CURRENT level
+      const mods = (D.MODULE_CATALOG[s.level] || []).filter(m => (m.activities || []).length > 0);
+      const doneMod = m => m.activities.every(a => completed[`${m.id}:${a.id}`]);
+      const completedModules = mods.filter(doneMod).length;
+
+      // achievements derived from real progress
+      const ach = [];
+      if (entries.length > 0) ach.push('first');
+      if (streak >= 3) ach.push('streak');
+      if (perfect) ach.push('perfect');
+      const m1 = mods.find(m => m.id === 'pa1-m1');
+      if (m1 && doneMod(m1)) ach.push('identity');
+
+      s.totalMinutes = minutes;
+      s.avgScore = scoreN ? Math.round(scoreSum / scoreN) : 0;
+      s.streak = streak;
+      s.completedModules = completedModules;
+      s.lastActiveDays = lastTs
+        ? Math.max(0, Math.round((Date.parse(dayStr(Date.now())) - Date.parse(dayStr(lastTs))) / DAY))
+        : 99;
+      s.achievements = ach;
+    });
+  }
 
   /* ── Module catalog (tabla module_catalog) ── */
   function pushModule(level, mod, sort) {
