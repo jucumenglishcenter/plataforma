@@ -19,6 +19,7 @@ function ManageModules({ onBack }) {
   const { MODULE_CATALOG, LEVELS } = window.JUCUM_DATA;
   const [level, setLevel] = mmUseState('pre-a1');
   const [editing, setEditing] = mmUseState(null); // 'new' | module object
+  const [importing, setImporting] = mmUseState(false);
   const [tick, setTick] = mmUseState(0);
   const refresh = () => setTick(t => t + 1);
   const mods = MODULE_CATALOG[level] || [];
@@ -59,6 +60,38 @@ function ManageModules({ onBack }) {
     refresh();
   };
 
+  /* Importa un catalogo.json publicado junto a los materiales en GitHub Pages.
+   * Si ya existe un módulo con el mismo nombre en este nivel → lo actualiza
+   * (conserva su id, no rompe el progreso); si no → lo crea. */
+  const handleImport = (cat) => {
+    const valid = new Set(MM_TYPES.map(t => t.v));
+    const acts = (cat.activities || []).map((a, i) => ({
+      id: String(a.id || ('imp' + i)),
+      type: valid.has(a.type) ? a.type : 'grammar',
+      name: String(a.name || '').trim(),
+      group: String(a.group || '').trim() || undefined,
+      url: String(a.url || '').trim() || undefined,
+    }));
+    const data = {
+      name: String(cat.module || cat.name || '').trim(),
+      emoji: String(cat.emoji || '📦').trim(),
+      topics: Array.isArray(cat.topics) ? cat.topics.map(t => String(t).trim()).filter(Boolean) : [],
+      activities: acts,
+    };
+    const idx = mods.findIndex(m => m.name.trim().toLowerCase() === data.name.toLowerCase());
+    if (idx >= 0) {
+      mods[idx] = { ...mods[idx], ...data };
+      persist(mods[idx], idx);
+    } else {
+      const id = level.replace('-','') + '-m' + Date.now().toString(36);
+      const mod = { id, ...data };
+      mods.push(mod);
+      persist(mod, mods.length - 1);
+    }
+    setImporting(false);
+    refresh();
+  };
+
   return (
     <main>
       <button className="back-btn" onClick={onBack}>← Volver al panel</button>
@@ -68,7 +101,10 @@ function ManageModules({ onBack }) {
           <h1>Módulos y actividades</h1>
           <p>Crea los módulos de cada nivel y pega las URLs de tus materiales de GitHub.</p>
         </div>
-        <button className="btn-settings" onClick={() => setEditing('new')}>+ Nuevo módulo</button>
+        <div className="mm-head-btns" style={{display:'flex', gap:10, flexWrap:'wrap'}}>
+          <button className="btn-settings" onClick={() => setImporting(true)}>📥 Importar catálogo</button>
+          <button className="btn-settings" onClick={() => setEditing('new')}>+ Nuevo módulo</button>
+        </div>
       </div>
 
       <div className="mm-tabs">
@@ -112,6 +148,16 @@ function ManageModules({ onBack }) {
           mod={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}
           onSave={handleSave}
+        />
+      )}
+
+      {importing && (
+        <CatalogImportModal
+          level={level}
+          levelLabel={(LEVELS[level] || {}).code || level}
+          existingNames={mods.map(m => m.name.trim().toLowerCase())}
+          onClose={() => setImporting(false)}
+          onImport={handleImport}
         />
       )}
     </main>
@@ -212,4 +258,81 @@ function ModuleFormModal({ mod, onClose, onSave }) {
   );
 }
 
-Object.assign(window, { ManageModules, ModuleFormModal });
+/* Modal: importar catalogo.json desde GitHub Pages — registra todo el módulo de golpe */
+function CatalogImportModal({ level, levelLabel, existingNames, onClose, onImport }) {
+  const [url, setUrl] = mmUseState('');
+  const [busy, setBusy] = mmUseState(false);
+  const [err, setErr] = mmUseState('');
+  const [preview, setPreview] = mmUseState(null);
+
+  const fetchCatalog = () => {
+    const u = url.trim();
+    if (!u) { setErr('Pega la URL del catalogo.json.'); return; }
+    setBusy(true); setErr(''); setPreview(null);
+    fetch(u)
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status + ' — ¿ya está subido a GitHub? (espera ~1 min tras el commit)'); return r.json(); })
+      .then(cat => {
+        if (!cat || !Array.isArray(cat.activities) || cat.activities.length === 0) throw new Error('El archivo no tiene actividades. ¿Es un catalogo.json válido?');
+        if (!(cat.module || cat.name)) throw new Error('El catálogo no tiene nombre de módulo.');
+        setPreview(cat);
+      })
+      .catch(e => setErr(e.message === 'Failed to fetch' ? 'No se pudo descargar. Revisa la URL (debe ser el link público de GitHub Pages, no el de github.com).' : e.message))
+      .finally(() => setBusy(false));
+  };
+
+  const counts = preview ? preview.activities.reduce((acc, a) => { acc[a.type] = (acc[a.type] || 0) + 1; return acc; }, {}) : {};
+  const nUrls = preview ? preview.activities.filter(a => a.url).length : 0;
+  const modName = preview ? String(preview.module || preview.name || '') : '';
+  const willUpdate = preview && existingNames.includes(modName.trim().toLowerCase());
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal settings-modal" style={{maxWidth:560}} onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <div className="modal-title">📥 Importar catálogo → nivel {levelLabel}</div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div className="settings-hint" style={{marginBottom:12}}>
+            Pega la URL pública del <b>catalogo.json</b> que viene junto a los materiales del módulo
+            (ej: <code>https://jucumenglishcenter.github.io/A2/A2_M1/catalogo.json</code>).
+            Se registrarán todas las actividades de golpe en el nivel <b>{levelLabel}</b> — verifica estar en la pestaña correcta.
+          </div>
+          <div style={{display:'flex', gap:8}}>
+            <input className="input-text" style={{flex:1}} placeholder="https://…/catalogo.json" value={url}
+              onChange={e => setUrl(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') fetchCatalog(); }} />
+            <button className="btn-save" onClick={fetchCatalog} disabled={busy}>{busy ? '⏳…' : 'Leer'}</button>
+          </div>
+          {err && <div className="err" style={{marginTop:12}}>⚠ {err}</div>}
+
+          {preview && (
+            <div className="scard" style={{marginTop:14, padding:'14px 16px'}}>
+              <div style={{fontWeight:800, fontSize:'1.05rem'}}>{preview.emoji || '📦'} {modName}</div>
+              <div className="mm-meta" style={{margin:'6px 0'}}>
+                {preview.activities.length} actividades · {nUrls}/{preview.activities.length} con URL
+                {nUrls < preview.activities.length && <span className="mm-warn"> ⚠ faltan URLs</span>}
+              </div>
+              <div className="mm-topics">
+                {Object.entries(counts).map(([t, n]) => <span key={t} className="mm-chip">{n} × {t}</span>)}
+              </div>
+              {willUpdate && (
+                <div className="settings-hint" style={{marginTop:8}}>
+                  ♻️ Ya existe un módulo “{modName}” en {levelLabel}: se <b>actualizará</b> (mismo id, el progreso de los alumnos se conserva).
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="modal-actions">
+            <button className="btn-cancel" onClick={onClose}>Cancelar</button>
+            <button className="btn-save" disabled={!preview} onClick={() => onImport(preview)}>
+              {willUpdate ? '♻️ Actualizar módulo' : '📥 Importar módulo'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { ManageModules, ModuleFormModal, CatalogImportModal });
