@@ -71,6 +71,7 @@ function ManageModules({ onBack }) {
       name: String(a.name || '').trim(),
       group: String(a.group || '').trim() || undefined,
       url: String(a.url || '').trim() || undefined,
+      open: a.open === true || undefined,
     }));
     const data = {
       name: String(cat.module || cat.name || '').trim(),
@@ -191,7 +192,7 @@ function ModuleFormModal({ mod, onClose, onSave }) {
     onSave({
       name: name.trim(), emoji: emoji.trim() || '📦',
       topics: topics.split(',').map(t => t.trim()).filter(Boolean),
-      activities: acts.map(a => ({ id:a.id, type:a.type, name:a.name.trim(), group:(a.group||'').trim() || undefined, url:(a.url||'').trim() || undefined })),
+      activities: acts.map(a => ({ id:a.id, type:a.type, name:a.name.trim(), group:(a.group||'').trim() || undefined, url:(a.url||'').trim() || undefined, open:a.open || undefined })),
     });
   };
 

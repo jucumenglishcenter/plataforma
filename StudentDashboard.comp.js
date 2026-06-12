@@ -70,7 +70,7 @@ function StudentDashboard({ user, onLogout }) {
       {showOnb && <Onboarding studentId={user.studentId} onClose={() => setShowOnb(false)} />}
       <header className="app-header">
         <div className="app-logo">
-          <img src="logo-jucum.png" alt="JUCUM EC" />
+          <img src="../../assets/logo-jucum.png" alt="JUCUM EC" />
           <div className="pgtitle">Mi panel de aprendizaje</div>
         </div>
         <div className="app-right">
@@ -217,7 +217,8 @@ function ModuleProgress({ mod, progress, pct, doneCount, studentId, freeUnlock, 
               const prevDone = i === 0 || progress.completed[`${mod.id}:${mod.activities[i-1].id}`];
               const teacherOpen = freeUnlock || unlockMode === 'free' ||
                 (unlockMode === 'custom' && enabledSet.has(`${mod.id}:${a.id}`));
-              const locked = !done && !prevDone && !teacherOpen;
+              const alwaysOpen = a.open === true; // marcado en el catálogo ("open": true)
+              const locked = !done && !prevDone && !teacherOpen && !alwaysOpen;
               return { a, i, done, status: done ? 'done' : locked ? 'locked' : 'open' };
             });
             // group consecutive items that share a.group into expandable topics
