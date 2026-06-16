@@ -324,16 +324,64 @@ const ACTIVITY_LOG = [
   { studentId:'s21', type:'reading', module:'Services & Support', detail:'Story 2', score:7, max:7, date:'2026-05-10 20:10' },
 ];
 
+/* Logros coherentes y CON PROGRESO.
+ * Cada uno: icon, name, how (cómo ganarlo, da dirección al alumno),
+ * metric (de dónde sale el progreso), goal, color del aro.
+ * El aro se llena a medida que avanzan y se vuelve dorado/lleno al conseguirlo. */
 const ACHIEVEMENT_DEFS = {
-  first:       { icon:'🌱', name:'Primera Respuesta',     desc:'Tu primera pregunta respondida'   },
-  streak:      { icon:'🔥', name:'3 Seguidas',            desc:'3 respuestas correctas seguidas'  },
-  literal:     { icon:'📖', name:'Comp. Literal',         desc:'Dominaste comprensión literal'    },
-  inferential: { icon:'🔍', name:'Comp. Inferencial',     desc:'Dominaste inferencia'             },
-  critical:    { icon:'🎓', name:'Pensamiento Crítico',   desc:'Dominaste pensamiento crítico'    },
-  perfect:     { icon:'⭐', name:'Perfección',            desc:'Quiz completo sin errores'        },
-  identity:    { icon:'🪪', name:'Identidad Personal',    desc:'Completaste Personal Identity'    },
-  family:      { icon:'👨‍👩‍👧‍👦', name:'Familia',         desc:'Dominaste vocabulario familiar'   },
+  first:      { icon:'🌱', name:'Primer paso',     how:'Completa tu primera práctica.',                 metric:'practices', goal:1,   color:'#66BB6A', colorDark:'#2E7D32', glow:'rgba(102,187,106,0.45)' },
+  practice5:  { icon:'📚', name:'Constante',       how:'Completa 5 prácticas en total.',                metric:'practices', goal:5,   color:'#42A5F5', colorDark:'#1565C0', glow:'rgba(66,165,245,0.45)' },
+  practice15: { icon:'🏅', name:'Dedicado/a',      how:'Completa 15 prácticas en total.',               metric:'practices', goal:15,  color:'#FFB300', colorDark:'#FF8F00', glow:'rgba(255,179,0,0.5)' },
+  streak3:    { icon:'🔥', name:'En racha',        how:'Practica 3 días seguidos.',                     metric:'streak',    goal:3,   color:'#FF7043', colorDark:'#E64A19', glow:'rgba(255,112,67,0.45)' },
+  streak7:    { icon:'⚡', name:'Imparable',       how:'Practica 7 días seguidos sin fallar un día.',   metric:'streak',    goal:7,   color:'#FFCA28', colorDark:'#F9A825', glow:'rgba(255,202,40,0.5)' },
+  hour1:      { icon:'⏱️', name:'Una hora',        how:'Acumula 60 minutos de práctica.',               metric:'minutes',   goal:60,  unit:' min', color:'#26C6DA', colorDark:'#00838F', glow:'rgba(38,198,218,0.45)' },
+  hours5:     { icon:'🏆', name:'Maratón',         how:'Acumula 5 horas (300 min) de práctica.',        metric:'minutes',   goal:300, unit:' min', color:'#FFD54F', colorDark:'#F57F17', glow:'rgba(255,213,79,0.55)' },
+  perfect:    { icon:'⭐', name:'Sin errores',     how:'Saca 100% en cualquier quiz.',                  metric:'perfect',   goal:1,   color:'#AB47BC', colorDark:'#6A1B9A', glow:'rgba(171,71,188,0.45)' },
+  perfect3:   { icon:'💎', name:'Perfeccionista',  how:'Saca 100% en 3 quizzes distintos.',             metric:'perfect',   goal:3,   color:'#29B6F6', colorDark:'#0277BD', glow:'rgba(41,182,246,0.5)' },
+  avg85:      { icon:'🎯', name:'Puntería',        how:'Mantén 85% de promedio o más.',                 metric:'avg',       goal:85,  unit:'%', color:'#EC407A', colorDark:'#AD1457', glow:'rgba(236,64,122,0.45)' },
+  module1:    { icon:'🪪', name:'Módulo completo', how:'Termina todas las actividades de un módulo.',   metric:'modules',   goal:1,   color:'#FFA726', colorDark:'#EF6C00', glow:'rgba(255,167,38,0.5)' },
 };
+
+/* Progreso real de cada logro a partir de las estadísticas del alumno */
+function _medalCurrent(student, metric) {
+  const prog = (typeof getStudentProgress === 'function' ? getStudentProgress(student.id) : null) || { completed: {} };
+  const entries = Object.values(prog.completed || {});
+  switch (metric) {
+    case 'practices': return entries.length;
+    case 'streak':    return student.streak || 0;
+    case 'minutes':   return student.totalMinutes || 0;
+    case 'perfect':   return entries.filter(e => typeof e.score === 'number' && e.score >= 100).length;
+    case 'avg':       return student.avgScore || 0;
+    case 'modules':   return student.completedModules || 0;
+    default:          return 0;
+  }
+}
+function medalProgress(student, key) {
+  const def = ACHIEVEMENT_DEFS[key];
+  if (!def) return { current: 0, goal: 1, pct: 0, done: false, remaining: 1 };
+  const raw = _medalCurrent(student, def.metric);
+  const goal = def.goal || 1;
+  const pct = Math.max(0, Math.min(100, Math.round((raw / goal) * 100)));
+  return { current: Math.min(raw, goal), rawCurrent: raw, goal, pct, done: raw >= goal, remaining: Math.max(0, goal - raw) };
+}
+function earnedMedals(student) {
+  return Object.keys(ACHIEVEMENT_DEFS).filter(k => medalProgress(student, k).done);
+}
+/* Logros más cercanos aún no conseguidos (para "Próximos logros" y el cierre de práctica) */
+function nextMedals(student, n = 3) {
+  return Object.keys(ACHIEVEMENT_DEFS)
+    .map(k => ({ key: k, def: ACHIEVEMENT_DEFS[k], ...medalProgress(student, k) }))
+    .filter(m => !m.done)
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, n);
+}
+/* Frase motivacional según el puntaje (motiva tanto si va bien como si va mal) */
+function getMotivation(pct) {
+  if (pct >= 90) return { emoji:'🌟', title:'¡Excelente!',     text:'Dominaste el tema. Tu constancia se nota — sigue así.' };
+  if (pct >= 70) return { emoji:'💪', title:'¡Muy bien!',      text:'Vas por buen camino. Repasa los pocos errores y serás imparable.' };
+  if (pct >= 50) return { emoji:'🌱', title:'¡Buen intento!',  text:'Aprendiste más de lo que crees. Revisa el feedback y vuelve a intentarlo: cada error te acerca.' };
+  return                { emoji:'🤗', title:'¡Sigue adelante!', text:'Equivocarse ES aprender — tu cerebro ya está cambiando aunque no lo sientas. Repasa con calma y verás el avance.' };
+}
 
 /* Demo logins */
 const DEMO_CREDS = {
@@ -683,6 +731,6 @@ function daysUntilMonday() {
   return ((8 - d.getDay()) % 7) || 7;
 }
 
-window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday };
+window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getMotivation };
 
 window.JUCUM_DATA.getStudentLog = getStudentLog;

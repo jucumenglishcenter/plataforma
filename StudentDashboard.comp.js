@@ -1,7 +1,7 @@
 /* Student dashboard — Bloque A · with active module + daily target + activity checklist */
 
 function StudentDashboard({ user, onLogout }) {
-  const { STUDENTS, GROUPS, LEVELS, MODULE_CATALOG, ACHIEVEMENT_DEFS, getGroupSettings, getStudentProgress, getStudentXP, getStudentLevel, MEDAL_RARITY, RARITY_STYLE } = window.JUCUM_DATA;
+  const { STUDENTS, GROUPS, LEVELS, MODULE_CATALOG, ACHIEVEMENT_DEFS, getGroupSettings, getStudentProgress, getStudentXP, getStudentLevel, MEDAL_RARITY, RARITY_STYLE, earnedMedals } = window.JUCUM_DATA;
   const student = STUDENTS.find(s => s.id === user.studentId) || STUDENTS[0];
   const group = GROUPS.find(g => g.id === student.group);
   const level = LEVELS[student.level];
@@ -120,15 +120,10 @@ function StudentDashboard({ user, onLogout }) {
 
         <div className="scard" style={{marginTop:18}}>
           <div className="sec-head">
-            <div className="sec-title">Mis medallas</div>
-            <span className="sec-meta">{student.achievements.length} / {Object.keys(ACHIEVEMENT_DEFS).length}</span>
+            <div className="sec-title">🏆 Mis logros</div>
+            <span className="sec-meta">{earnedMedals(student).length} / {Object.keys(ACHIEVEMENT_DEFS).length} conseguidos</span>
           </div>
-          <MedalShowcase
-            unlocked={student.achievements}
-            defs={ACHIEVEMENT_DEFS}
-            rarities={MEDAL_RARITY}
-            styles={RARITY_STYLE}
-          />
+          <MedalShowcase student={student} defs={ACHIEVEMENT_DEFS} />
         </div>
 
         <div className="two-col" style={{gridTemplateColumns:'1fr 2fr'}}>
@@ -155,7 +150,7 @@ function StudentDashboard({ user, onLogout }) {
         <div className="kpi-grid">
           <div className="kpi"><div className="kpi-ico">📦</div><div className="kpi-num">{student.completedModules}</div><div className="kpi-lbl">Módulos completos</div></div>
           <div className="kpi"><div className="kpi-ico">📊</div><div className="kpi-num">{student.avgScore}%</div><div className="kpi-lbl">Promedio</div></div>
-          <div className="kpi"><div className="kpi-ico">🏆</div><div className="kpi-num">{student.achievements.length}</div><div className="kpi-lbl">Logros</div></div>
+          <div className="kpi"><div className="kpi-ico">🏆</div><div className="kpi-num">{earnedMedals(student).length}</div><div className="kpi-lbl">Logros</div></div>
           <div className="kpi"><div className="kpi-ico">⏱️</div><div className="kpi-num">{Math.floor(student.totalMinutes/60)}h {student.totalMinutes%60}m</div><div className="kpi-lbl">Tiempo total</div></div>
         </div>
         <div className="scard" style={{marginTop:18}}>
@@ -361,26 +356,31 @@ function RankCard({ student, groupName }) {
   );
 }
 
-function MedalShowcase({ unlocked, defs, rarities, styles }) {
+function MedalShowcase({ student, defs }) {
+  const { medalProgress } = window.JUCUM_DATA;
   return (
     <div className="medal-grid">
       {Object.entries(defs).map(([key, def]) => {
-        const isUnlocked = unlocked.includes(key);
-        const rarity = rarities[key]?.rarity || 'bronze';
-        const r = styles[rarity];
+        const p = medalProgress(student, key);
+        const ringBg = `conic-gradient(${def.color} ${p.pct}%, #ECE9E0 ${p.pct}%)`;
         return (
-          <div key={key} className={`medal ${isUnlocked?'unlocked':'locked'}`}
-               style={isUnlocked ? {'--ring':r.ring,'--ringDark':r.ringDark,'--glow':r.glow} : undefined}>
-            <div className="medal-ring">
+          <div key={key} className={`medal ${p.done?'unlocked':'locked'}`}
+               style={{'--ring':def.color,'--ringDark':def.colorDark,'--glow':def.glow}}>
+            <div className="medal-ring" style={{background:ringBg}}>
               <div className="medal-inner">
-                <span className="medal-ico">{isUnlocked ? def.icon : '🔒'}</span>
+                <span className="medal-ico" style={p.done?undefined:{filter:'grayscale(0.7)',opacity:0.5}}>{def.icon}</span>
               </div>
             </div>
             <div className="medal-name">{def.name}</div>
-            <div className="medal-rarity" style={isUnlocked ? {color:r.ringDark} : undefined}>
-              {isUnlocked ? r.label : 'Bloqueada'}
-            </div>
-            <div className="medal-desc">{def.desc}</div>
+            <div className="medal-desc">{def.how}</div>
+            {p.done ? (
+              <div className="medal-rarity done" style={{color:def.colorDark}}>✓ ¡Conseguida!</div>
+            ) : (
+              <div className="medal-prog">
+                <div className="medal-prog-bar"><span style={{width:p.pct+'%', background:def.color}}></span></div>
+                <span className="medal-prog-txt">{p.current}/{p.goal}{def.unit||''} · te falta {p.remaining}{def.unit||''}</span>
+              </div>
+            )}
           </div>
         );
       })}

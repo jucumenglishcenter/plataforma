@@ -3,7 +3,7 @@
 const { useState: prUseState } = React;
 
 function StudentProfile({ user, onBack }) {
-  const { STUDENTS, GROUPS, LEVELS, ACHIEVEMENT_DEFS, MEDAL_RARITY, RARITY_STYLE, getStudentXP, getStudentLevel, getWeeklyRanking, daysUntilMonday, getStudentProgress, MODULE_CATALOG } = window.JUCUM_DATA;
+  const { STUDENTS, GROUPS, LEVELS, ACHIEVEMENT_DEFS, MEDAL_RARITY, RARITY_STYLE, getStudentXP, getStudentLevel, getWeeklyRanking, daysUntilMonday, getStudentProgress, MODULE_CATALOG, earnedMedals } = window.JUCUM_DATA;
   const student = STUDENTS.find(s => s.id === user.studentId) || STUDENTS[0];
   const group = GROUPS.find(g => g.id === student.group);
   const level = LEVELS[student.level];
@@ -43,10 +43,10 @@ function StudentProfile({ user, onBack }) {
         <WeeklyLeague student={student} />
         <div className="scard">
           <div className="sec-head">
-            <div className="sec-title">Mis medallas</div>
-            <span className="sec-meta">{student.achievements.length}/{Object.keys(ACHIEVEMENT_DEFS).length}</span>
+            <div className="sec-title">🏆 Mis logros</div>
+            <span className="sec-meta">{earnedMedals(student).length}/{Object.keys(ACHIEVEMENT_DEFS).length} conseguidos</span>
           </div>
-          <MedalShowcase unlocked={student.achievements} defs={ACHIEVEMENT_DEFS} rarities={MEDAL_RARITY} styles={RARITY_STYLE} />
+          <MedalShowcase student={student} defs={ACHIEVEMENT_DEFS} />
         </div>
       </div>
 
