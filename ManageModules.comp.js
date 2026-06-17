@@ -122,6 +122,8 @@ function ManageModules({ onBack }) {
         ) : mods.map((m, i) => {
           const nGroups = new Set(m.activities.filter(a => a.group).map(a => a.group)).size;
           const nUrls = m.activities.filter(a => a.url).length;
+          const missing = m.activities.length - nUrls;
+          const complete = m.activities.length > 0 && missing === 0;
           return (
             <div key={m.id} className="mm-card scard">
               <div className="mm-emoji">{m.emoji}</div>
@@ -129,7 +131,9 @@ function ManageModules({ onBack }) {
                 <div className="mm-name">M{i+1} · {m.name}</div>
                 <div className="mm-meta">
                   {m.activities.length} actividades{nGroups > 0 && ` · ${nGroups} temas`} · {nUrls}/{m.activities.length} con URL
-                  {nUrls < m.activities.length && <span className="mm-warn"> ⚠ faltan URLs</span>}
+                  {complete
+                    ? <span className="mm-done" style={{color:'#2E7D32', fontWeight:800}}> ✅ Completado</span>
+                    : <span className="mm-warn"> ⚠ faltan {missing} URL{missing > 1 ? 's' : ''}</span>}
                 </div>
                 <div className="mm-topics">{(m.topics||[]).map(t => <span key={t} className="mm-chip">{t}</span>)}</div>
               </div>
@@ -283,6 +287,8 @@ function CatalogImportModal({ level, levelLabel, existingNames, onClose, onImpor
 
   const counts = preview ? preview.activities.reduce((acc, a) => { acc[a.type] = (acc[a.type] || 0) + 1; return acc; }, {}) : {};
   const nUrls = preview ? preview.activities.filter(a => a.url).length : 0;
+  const pvMissing = preview ? preview.activities.length - nUrls : 0;
+  const pvComplete = preview && pvMissing === 0;
   const modName = preview ? String(preview.module || preview.name || '') : '';
   const willUpdate = preview && existingNames.includes(modName.trim().toLowerCase());
 
@@ -311,7 +317,9 @@ function CatalogImportModal({ level, levelLabel, existingNames, onClose, onImpor
               <div style={{fontWeight:800, fontSize:'1.05rem'}}>{preview.emoji || '📦'} {modName}</div>
               <div className="mm-meta" style={{margin:'6px 0'}}>
                 {preview.activities.length} actividades · {nUrls}/{preview.activities.length} con URL
-                {nUrls < preview.activities.length && <span className="mm-warn"> ⚠ faltan URLs</span>}
+                {pvComplete
+                  ? <span style={{color:'#2E7D32', fontWeight:800}}> ✅ Completado</span>
+                  : <span className="mm-warn"> ⚠ faltan {pvMissing} URL{pvMissing > 1 ? 's' : ''}</span>}
               </div>
               <div className="mm-topics">
                 {Object.entries(counts).map(([t, n]) => <span key={t} className="mm-chip">{n} × {t}</span>)}
