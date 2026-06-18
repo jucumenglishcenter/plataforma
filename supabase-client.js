@@ -56,6 +56,16 @@
     if (error) throw error;
   }
 
+  /* ── Verificar la contraseña del profesor (para acciones sensibles:
+   *    resetear contraseña de un alumno, etc.) sin alterar la sesión. ── */
+  async function verifyTeacherPassword(password) {
+    try {
+      const { data, error } = await getClient().from('users').select('password').eq('role', 'teacher');
+      if (error) throw error;
+      return (data || []).some(u => u.password === password);
+    } catch (e) { return false; }
+  }
+
   /* ── Connection test ── */
   async function testConnection() {
     try {
@@ -67,5 +77,5 @@
     }
   }
 
-  window.JUCUM_SB = { getClient, login, all, insert, update, remove, testConnection };
+  window.JUCUM_SB = { getClient, login, all, insert, update, remove, testConnection, verifyTeacherPassword };
 })();

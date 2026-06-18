@@ -36,7 +36,7 @@ function deleteEvaluation(studentId, evalId) {
 }
 
 /* Helper: convert File to data URL (with size cap) */
-function fileToDataUrl(file, maxBytes = 5 * 1024 * 1024) {
+function fileToDataUrl(file, maxBytes = 50 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
     if (file.size > maxBytes) {
       reject(new Error(`El archivo pesa ${(file.size/1024/1024).toFixed(1)}MB. Máximo ${maxBytes/1024/1024}MB.`));

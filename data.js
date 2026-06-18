@@ -731,6 +731,72 @@ function daysUntilMonday() {
   return ((8 - d.getDay()) % 7) || 7;
 }
 
-window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getMotivation };
+/* ── Dominio real del alumno (anti falsos positivos) ──────────────────
+ * El "promedio" antiguo solo promediaba las prácticas hechas, así que un
+ * alumno con 2 actividades al 100% mostraba 100%. El dominio pondera:
+ *   dominio = cobertura × aciertos × factor_de_constancia
+ * - cobertura  = actividades hechas ÷ total del módulo activo (no puede
+ *                ser 100% si apenas hizo unas pocas).
+ * - aciertos   = promedio de aciertos de lo hecho (participación = 70 si
+ *                la actividad no da nota, p.ej. story).
+ * - constancia = qué tan seguido practica (días activos de los últimos 7);
+ *                cumplir la práctica diaria SUMA, dejar de practicar RESTA.
+ * Ámbito: módulo(s) activo(s) del grupo; si no hay, todo el nivel. */
+function getStudentMastery(student) {
+  if (!student) return { pct: 0, coverage: 0, quality: 0, done: 0, total: 0, active7: 0, constancyPct: 0 };
+  const prog = getStudentProgress(student.id);
+  const completed = prog.completed || {};
+  const mods = MODULE_CATALOG[student.level] || [];
+  let scope = mods;
+  const group = GROUPS.find(g => g.id === student.group);
+  if (group) {
+    const settings = getGroupSettings(group.id);
+    const activeIds = settings.activeModuleIds
+      || (settings.activeModuleId ? [settings.activeModuleId] : []);
+    const active = mods.filter(m => activeIds.includes(m.id));
+    if (active.length) scope = active;
+  }
+  let total = 0, done = 0, scoreSum = 0, scoreN = 0;
+  scope.forEach(m => (m.activities || []).forEach(a => {
+    total++;
+    const e = completed[`${m.id}:${a.id}`];
+    if (e) {
+      done++;
+      if (typeof e.score === 'number') {
+        const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100);
+        scoreSum += pct; scoreN++;
+      } else { scoreSum += 70; scoreN++; } // participación (story / sin nota)
+    }
+  }));
+  const coverage = total ? done / total : 0;
+  const quality = scoreN ? (scoreSum / scoreN) / 100 : 0;
+  // constancia: días activos de los últimos 7 (meta ~5/7 días)
+  const activeDays = new Set();
+  Object.values(completed).forEach(e => { if (e && e.date) activeDays.add(String(e.date).slice(0, 10)); });
+  let active7 = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    if (activeDays.has(d.toISOString().slice(0, 10))) active7++;
+  }
+  const constancy = Math.min(1, active7 / 5);
+  const constancyFactor = 0.85 + 0.20 * constancy; // 0.85 (nunca) → 1.05 (constante)
+  const pct = Math.max(0, Math.min(100, Math.round(coverage * quality * 100 * constancyFactor)));
+  return {
+    pct, coverage: Math.round(coverage * 100), quality: Math.round(quality * 100),
+    done, total, active7, constancyPct: Math.round(constancy * 100),
+  };
+}
+
+/* Ranking del grupo por CUMPLIMIENTO de prácticas (no por XP):
+ * "los mejores" = los que practican y dominan. Ordena por dominio y,
+ * a igualdad, por racha. Lo usa el Top del grupo (muestra los 5 primeros). */
+function getComplianceRanking(groupId) {
+  return STUDENTS
+    .filter(s => s.group === groupId)
+    .map(s => ({ student: s, score: getStudentMastery(s).pct, streak: s.streak || 0, xp: getStudentXP(s) }))
+    .sort((a, b) => b.score - a.score || b.streak - a.streak || b.xp - a.xp);
+}
+
+window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getMotivation, getStudentMastery, getComplianceRanking };
 
 window.JUCUM_DATA.getStudentLog = getStudentLog;

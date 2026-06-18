@@ -11,6 +11,7 @@ function StudentDashboard({ user, onLogout }) {
   const activeModule = allModules.find(m => m.id === settings.activeModuleId) || allModules[0];
   const [view, setView] = React.useState('dashboard');
   const [showOnb, setShowOnb] = React.useState(() => !localStorage.getItem(`jucum_onboarded_${user.studentId}`));
+  const [alertKind, setAlertKind] = React.useState(null);
 
   // Gamification stats
   const xp = getStudentXP(student);
@@ -51,6 +52,20 @@ function StudentDashboard({ user, onLogout }) {
     }
   }, [student.id, progress.todayMinutes, settings.dailyTargetMin]);
 
+  // Alarma visual + sonora (1 vez al día): inactividad o racha en peligro
+  React.useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const key = `jucum_alert_${student.id}_${today}`;
+    if (localStorage.getItem(key)) return;
+    let kind = null;
+    if (student.lastActiveDays >= 3) kind = 'inactive';
+    else if (student.streak >= 1 && (progress.todayMinutes || 0) === 0 && new Date().getHours() >= 18) kind = 'streak';
+    if (!kind) return;
+    setAlertKind(kind);
+    localStorage.setItem(key, '1');
+    if (window.JUCUM_SOUND) window.JUCUM_SOUND.alert();
+  }, [student.id]);
+
   const activities = activeModule?.activities || [];
   const doneCount = activities.filter(a => progress.completed[`${activeModule?.id}:${a.id}`]).length;
   const pctModule = activities.length ? Math.round((doneCount/activities.length)*100) : 0;
@@ -68,6 +83,7 @@ function StudentDashboard({ user, onLogout }) {
   return (
     <>
       {showOnb && <Onboarding studentId={user.studentId} onClose={() => setShowOnb(false)} />}
+      {!showOnb && alertKind && <StudentAlertModal kind={alertKind} student={student} onClose={() => setAlertKind(null)} />}
       <header className="app-header">
         <div className="app-logo">
           <img src="../../assets/logo-jucum.png" alt="JUCUM EC" />
@@ -327,28 +343,28 @@ function StreakCard({ streak }) {
 }
 
 function RankCard({ student, groupName }) {
-  const { getGroupRanking } = window.JUCUM_DATA;
-  const ranking = getGroupRanking(student.group);
+  const { getComplianceRanking } = window.JUCUM_DATA;
+  const ranking = getComplianceRanking(student.group);
   const myRank = ranking.findIndex(r => r.student.id === student.id) + 1;
-  const myXP = ranking[myRank - 1]?.xp || 0;
-  const top3 = ranking.slice(0, 3);
-  const medalE = ['🥇','🥈','🥉'];
+  const myScore = ranking[myRank - 1]?.score || 0;
+  const top5 = ranking.slice(0, 5);
+  const medalE = ['🥇','🥈','🥉','🏅','🏅'];
   return (
     <div className="gami-card rank-card">
-      <div className="gami-eyebrow">🏅 Top del grupo</div>
+      <div className="gami-eyebrow">🏅 Top del grupo · constancia</div>
       <div className="rank-mine">
         <div className="rank-mine-pos">#{myRank}</div>
         <div>
-          <div className="rank-mine-lbl">Tu posición</div>
-          <div className="rank-mine-xp">{myXP.toLocaleString()} XP</div>
+          <div className="rank-mine-lbl">Tu cumplimiento</div>
+          <div className="rank-mine-xp">{myScore}% de dominio</div>
         </div>
       </div>
       <div className="rank-podium">
-        {top3.map((r, i) => (
+        {top5.map((r, i) => (
           <div key={r.student.id} className={`rank-row ${r.student.id===student.id?'me':''}`}>
             <span className="rank-emo">{medalE[i]}</span>
             <span className="rank-name">{r.student.fullName.split(' ')[0]}</span>
-            <span className="rank-xp">{r.xp}</span>
+            <span className="rank-xp">{r.score}%</span>
           </div>
         ))}
       </div>
@@ -407,4 +423,36 @@ function ActivityRow({ act }) {
   );
 }
 
-Object.assign(window, { StudentDashboard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase });
+/* Alarma reflexiva (1 vez al día) — inactividad o racha en peligro.
+ * Visual rojo + sonido (sounds.js). Mensajes pensados para que el alumno
+ * entienda que avanzar/seguir con nosotros depende de SU constancia. */
+function StudentAlertModal({ kind, student, onClose }) {
+  const data = kind === 'inactive'
+    ? {
+        ico: '⚠️',
+        title: `Hace ${student.lastActiveDays} días que no practicas`,
+        body: 'El inglés que ganaste se desvanece sin práctica. Y algo importante: para rendir tu examen de avance de módulo necesitas mantener tu constancia. Si te sigues alejando, no podrás dar tu examen ni continuar avanzando con nosotros. Hoy puedes cambiarlo — bastan 10 minutos para retomar el camino. 💪',
+        cta: '🚀 Practicar ahora',
+      }
+    : {
+        ico: '🔥',
+        title: `Tu racha de ${student.streak} día${student.streak === 1 ? '' : 's'} está en peligro`,
+        body: 'Pasar al siguiente nivel depende de TU práctica constante, no de la suerte. Cada día que practicas te acerca a tu examen; cada día que lo dejas, retrocedes. Si quieres seguir avanzando con nosotros, no sueltes justo hoy: dedícale unos minutos y mantén el fuego encendido. 🔥',
+        cta: '✅ No romper mi racha',
+      };
+  return (
+    <div className="onb-backdrop" onClick={onClose}>
+      <div className="onb-card" onClick={e => e.stopPropagation()} style={{borderTop:'6px solid #E11930'}}>
+        <button className="onb-skip" onClick={onClose}>Cerrar</button>
+        <div className="onb-ico" style={{filter:'drop-shadow(0 0 12px rgba(225,25,48,0.55))'}}>{data.ico}</div>
+        <div className="onb-title" style={{color:'#C62828'}}>{data.title}</div>
+        <div className="onb-body">{data.body}</div>
+        <div className="onb-actions">
+          <button className="btn-save" onClick={onClose}>{data.cta}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { StudentDashboard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase, StudentAlertModal });

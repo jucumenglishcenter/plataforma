@@ -8,6 +8,7 @@ function ManageStudents({ onBack }) {
   const [filterGroup, setFilterGroup] = smUseState('all');
   const [search, setSearch] = smUseState('');
   const [tick, setTick] = smUseState(0);
+  const [resetting, setResetting] = smUseState(null);
   const refresh = () => setTick(t => t + 1);
 
   let list = STUDENTS;
@@ -27,8 +28,9 @@ function ManageStudents({ onBack }) {
     refresh();
   };
 
-  const handleResetPassword = (s) => {
+  const doResetPassword = (s) => {
     if (window.JUCUM_SB) window.JUCUM_SB.update('users', s.id, { password: '1234' }).catch(e => console.warn(e.message));
+    setResetting(null);
     alert(`Contraseña de ${s.fullName} reseteada a "1234".\n\nPídele que la cambie en su primer ingreso.`);
   };
 
@@ -74,7 +76,7 @@ function ManageStudents({ onBack }) {
                   </div>
                   <div className="sm-actions">
                     <button className="att-btn" onClick={() => setEditing(s.id)}>✏️ Editar</button>
-                    <button className="att-btn" onClick={() => handleResetPassword(s)}>🔑 Reset</button>
+                    <button className="att-btn" onClick={() => setResetting(s)}>🔑 Reset</button>
                     <button className="att-btn" style={{borderColor:'#EF9A9A',color:'#C62828'}} onClick={() => handleDelete(s.id)}>🗑</button>
                   </div>
                 </div>
@@ -83,6 +85,16 @@ function ManageStudents({ onBack }) {
           )}
         </div>
       </div>
+
+      {resetting && (
+        <TeacherPasswordGate
+          title="Confirmar reset de contraseña"
+          message={`Vas a resetear la contraseña de ${resetting.fullName} a "1234". Ingresa tu contraseña de profesor para confirmar.`}
+          confirmLabel="🔑 Resetear a 1234"
+          onConfirm={() => doResetPassword(resetting)}
+          onClose={() => setResetting(null)}
+        />
+      )}
 
       {editing && (
         <StudentFormModal
@@ -197,4 +209,43 @@ function StudentFormModal({ student, onClose, onSave }) {
   );
 }
 
-Object.assign(window, { ManageStudents, StudentFormModal });
+/* Modal de aprobación — pide la contraseña del profesor antes de una acción
+ * sensible (reset de contraseña de un alumno, etc.) para evitar clics por error. */
+function TeacherPasswordGate({ title, message, confirmLabel, onConfirm, onClose }) {
+  const [pwd, setPwd] = smUseState('');
+  const [err, setErr] = smUseState('');
+  const [busy, setBusy] = smUseState(false);
+  const submit = async () => {
+    if (!pwd) { setErr('Ingresa tu contraseña de profesor.'); return; }
+    setBusy(true); setErr('');
+    let ok = false;
+    if (window.JUCUM_SB?.verifyTeacherPassword) ok = await window.JUCUM_SB.verifyTeacherPassword(pwd);
+    else { const c = window.JUCUM_DATA?.DEMO_CREDS?.teacher?.password || '1234'; ok = pwd === c; }
+    setBusy(false);
+    if (!ok) { setErr('Contraseña incorrecta. La acción no se realizó.'); return; }
+    onConfirm();
+  };
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal settings-modal" style={{maxWidth:430}} onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <div className="modal-title">🔐 {title}</div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div className="settings-hint" style={{marginBottom:12}}>{message}</div>
+          {err && <div className="err" style={{marginBottom:12}}>⚠ {err}</div>}
+          <input type="password" className="input-text" autoFocus placeholder="Contraseña del profesor"
+                 value={pwd} onChange={e => setPwd(e.target.value)}
+                 onKeyDown={e => { if (e.key === 'Enter') submit(); }} style={{width:'100%'}} />
+          <div className="modal-actions">
+            <button className="btn-cancel" onClick={onClose}>Cancelar</button>
+            <button className="btn-save" onClick={submit} disabled={busy}>{busy ? 'Verificando…' : (confirmLabel || 'Confirmar')}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { ManageStudents, StudentFormModal, TeacherPasswordGate });

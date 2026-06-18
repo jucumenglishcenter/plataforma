@@ -5,7 +5,7 @@
  */
 
 function TeacherDashboard({ onLogout }) {
-  const { STUDENTS, GROUPS, LEVELS, ACHIEVEMENT_DEFS, ACTIVITY_LOG } = window.JUCUM_DATA;
+  const { STUDENTS, GROUPS, LEVELS, ACHIEVEMENT_DEFS, ACTIVITY_LOG, getStudentMastery } = window.JUCUM_DATA;
   const [view, setView] = React.useState({ kind:'groups' });
 
   // Reset palette
@@ -13,14 +13,14 @@ function TeacherDashboard({ onLogout }) {
 
   const totalStudents = STUDENTS.length;
   const activeToday = STUDENTS.filter(s => s.lastActiveDays === 0).length;
-  const avgScore = Math.round(STUDENTS.reduce((s, x) => s + x.avgScore, 0) / STUDENTS.length);
+  const avgMastery = STUDENTS.length ? Math.round(STUDENTS.reduce((s, x) => s + getStudentMastery(x).pct, 0) / STUDENTS.length) : 0;
 
   /* ─── header is shared ─── */
   return (
     <>
       <header className="app-header">
         <div className="app-logo">
-          <img src="logo-jucum.png" alt="JUCUM EC" />
+          <img src="../../assets/logo-jucum.png" alt="JUCUM EC" />
           <div className="pgtitle">Panel del Profesor</div>
         </div>
         <div className="app-right">
@@ -70,7 +70,7 @@ function TeacherDashboard({ onLogout }) {
 
         {view.kind === 'groups' && (
           <GroupsView
-            stats={{ totalStudents, activeToday, avgScore }}
+            stats={{ totalStudents, activeToday, avgMastery }}
             onSelectGroup={(id) => setView({kind:'group', id})}
           />
         )}
@@ -96,21 +96,21 @@ function TeacherDashboard({ onLogout }) {
 /* ─── Groups overview ─────────────────────────────────────────────── */
 
 function GroupsView({ stats, onSelectGroup }) {
-  const { GROUPS, STUDENTS, LEVELS } = window.JUCUM_DATA;
+  const { GROUPS, STUDENTS, LEVELS, getStudentMastery } = window.JUCUM_DATA;
   return (
     <>
       <div className="welcome teacher">
         <div className="welcome-text">
           <div className="eyebrow t">👨‍🏫 Panel general</div>
           <h1>{stats.totalStudents} alumnos · 4 grupos activos</h1>
-          <p><b>{stats.activeToday}</b> alumnos activos hoy · Promedio general <b>{stats.avgScore}%</b></p>
+          <p><b>{stats.activeToday}</b> alumnos activos hoy · Dominio general <b>{stats.avgMastery}%</b></p>
         </div>
       </div>
 
       <div className="kpi-grid">
         <div className="kpi"><div className="kpi-ico">👥</div><div className="kpi-num">{stats.totalStudents}</div><div className="kpi-lbl">Total alumnos</div></div>
         <div className="kpi"><div className="kpi-ico">🟢</div><div className="kpi-num">{stats.activeToday}</div><div className="kpi-lbl">Activos hoy</div></div>
-        <div className="kpi"><div className="kpi-ico">📊</div><div className="kpi-num">{stats.avgScore}%</div><div className="kpi-lbl">Promedio</div></div>
+        <div className="kpi"><div className="kpi-ico">📊</div><div className="kpi-num">{stats.avgMastery}%</div><div className="kpi-lbl">Dominio</div></div>
         <div className="kpi"><div className="kpi-ico">🎯</div><div className="kpi-num">4</div><div className="kpi-lbl">Grupos</div></div>
       </div>
 
@@ -123,7 +123,7 @@ function GroupsView({ stats, onSelectGroup }) {
         {GROUPS.map(g => {
           const level = LEVELS[g.level];
           const members = STUDENTS.filter(s => s.group === g.id);
-          const groupAvg = members.length ? Math.round(members.reduce((s,x)=>s+x.avgScore,0)/members.length) : 0;
+          const groupAvg = members.length ? Math.round(members.reduce((s,x)=>s+getStudentMastery(x).pct,0)/members.length) : 0;
           const activeNow = members.filter(s => s.lastActiveDays <= 1).length;
           const inactive = members.filter(s => s.lastActiveDays >= 7).length;
           return (
@@ -135,7 +135,7 @@ function GroupsView({ stats, onSelectGroup }) {
               <div className="gcard-name">{g.name}</div>
               <div className="gcard-sched">⏰ {g.schedule}</div>
               <div className="gcard-stats">
-                <div><b style={{color:level.dark}}>{groupAvg}%</b> promedio</div>
+                <div><b style={{color:level.dark}}>{groupAvg}%</b> dominio</div>
                 <div><b style={{color:'#2E7D32'}}>{activeNow}</b> activos</div>
                 {inactive > 0 && <div><b style={{color:'#C62828'}}>{inactive}</b> ausentes</div>}
               </div>
@@ -151,7 +151,7 @@ function GroupsView({ stats, onSelectGroup }) {
 /* ─── Group detail (one group, students inside) ───────────────────── */
 
 function GroupDetail({ groupId, onBack, onSelectStudent }) {
-  const { GROUPS, STUDENTS, LEVELS } = window.JUCUM_DATA;
+  const { GROUPS, STUDENTS, LEVELS, getStudentMastery } = window.JUCUM_DATA;
   const group = GROUPS.find(g => g.id === groupId);
   const level = LEVELS[group.level];
   const members = STUDENTS.filter(s => s.group === groupId);
@@ -159,8 +159,8 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
   const [showReport, setShowReport] = React.useState(false);
   React.useEffect(() => { document.body.setAttribute('data-level', group.level); return () => document.body.removeAttribute('data-level'); }, [group.level]);
 
-  const groupAvg = Math.round(members.reduce((s,x)=>s+x.avgScore,0)/members.length);
-  const sorted = [...members].sort((a, b) => b.avgScore - a.avgScore);
+  const groupAvg = Math.round(members.reduce((s,x)=>s+getStudentMastery(x).pct,0)/members.length);
+  const sorted = [...members].sort((a, b) => getStudentMastery(b).pct - getStudentMastery(a).pct);
 
   if (showReport) return <GroupReport groupId={groupId} onBack={() => setShowReport(false)} />;
 
@@ -171,7 +171,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
         <div className="welcome-text">
           <div className="eyebrow">{level.emoji} {level.code} · {group.schedule}</div>
           <h1>{group.name}</h1>
-          <p>{members.length} alumnos · promedio del grupo <b>{groupAvg}%</b> · iniciado el {group.startDate}</p>
+          <p>{members.length} alumnos · dominio del grupo <b>{groupAvg}%</b> · iniciado el {group.startDate}</p>
         </div>
         <button className="btn-settings" onClick={() => setShowSettings(true)}>⚙️ Configurar grupo</button>
         <button className="btn-settings" onClick={() => setShowReport(true)} style={{marginLeft:8}}>📄 Reporte PDF</button>
@@ -181,7 +181,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
         <div className="st-head">
           <div className="col-name">Alumno</div>
           <div className="col-mod">Módulos</div>
-          <div className="col-avg">Promedio</div>
+          <div className="col-avg">Dominio</div>
           <div className="col-streak">Racha</div>
           <div className="col-time">Tiempo</div>
           <div className="col-last">Última actividad</div>
@@ -347,6 +347,7 @@ function ModuleChecklist({ stu, group }) {
 }
 
 function StudentRow({ stu, rank, level, onClick }) {
+  const mastery = window.JUCUM_DATA.getStudentMastery(stu).pct;
   const status = stu.lastActiveDays === 0 ? {label:'🟢 Hoy',cls:'ok'}
               : stu.lastActiveDays <= 2 ? {label:`🟢 hace ${stu.lastActiveDays}d`,cls:'ok'}
               : stu.lastActiveDays <= 6 ? {label:`🟡 hace ${stu.lastActiveDays}d`,cls:'warn'}
@@ -363,8 +364,8 @@ function StudentRow({ stu, rank, level, onClick }) {
         </div>
       </div>
       <div className="col-mod">{stu.completedModules}</div>
-      <div className={`col-avg ${stu.avgScore >= 85 ? 'high' : stu.avgScore >= 70 ? 'mid' : stu.avgScore > 0 ? 'low' : 'na'}`}>
-        {stu.avgScore > 0 ? `${stu.avgScore}%` : '—'}
+      <div className={`col-avg ${mastery >= 85 ? 'high' : mastery >= 70 ? 'mid' : mastery > 0 ? 'low' : 'na'}`}>
+        {mastery > 0 ? `${mastery}%` : '—'}
       </div>
       <div className="col-streak">{stu.streak > 0 ? `🔥 ${stu.streak}` : '—'}</div>
       <div className="col-time">{Math.floor(stu.totalMinutes/60) > 0 ? `${Math.floor(stu.totalMinutes/60)}h ${stu.totalMinutes%60}m` : `${stu.totalMinutes}m`}</div>
@@ -377,8 +378,16 @@ function StudentRow({ stu, rank, level, onClick }) {
 /* ─── Student detail view ──────────────────────────────────────────── */
 
 function StudentDetail({ studentId, onBack }) {
-  const { STUDENTS, GROUPS, LEVELS, ACHIEVEMENT_DEFS, ACTIVITY_LOG } = window.JUCUM_DATA;
+  const { STUDENTS, GROUPS, LEVELS, ACHIEVEMENT_DEFS, ACTIVITY_LOG, getStudentMastery } = window.JUCUM_DATA;
   const stu = STUDENTS.find(s => s.id === studentId);
+  const mastery = getStudentMastery(stu);
+  const [resetting, setResetting] = React.useState(false);
+  const Gate = window.TeacherPasswordGate;
+  const doReset = () => {
+    if (window.JUCUM_SB) window.JUCUM_SB.update('users', stu.id, { password: '1234' }).catch(e => console.warn(e.message));
+    setResetting(false);
+    alert(`Contraseña de ${stu.fullName} reseteada a "1234".`);
+  };
   const group = GROUPS.find(g => g.id === stu.group);
   const level = LEVELS[stu.level];
   const myLog = window.JUCUM_DATA.getStudentLog ? window.JUCUM_DATA.getStudentLog(stu.id) : ACTIVITY_LOG.filter(a => a.studentId === stu.id);
@@ -399,13 +408,14 @@ function StudentDetail({ studentId, onBack }) {
         </div>
         <div className="sh-actions">
           <button className="btn-soft">📧 Contactar</button>
-          <button className="btn-soft">🔑 Resetear contraseña</button>
+          <button className="btn-soft" onClick={() => setResetting(true)}>🔑 Resetear contraseña</button>
         </div>
       </div>
 
       <div className="kpi-grid">
         <div className="kpi"><div className="kpi-ico">📦</div><div className="kpi-num">{stu.completedModules}</div><div className="kpi-lbl">Módulos completos</div></div>
-        <div className="kpi"><div className="kpi-ico">📊</div><div className="kpi-num">{stu.avgScore || '—'}{stu.avgScore?'%':''}</div><div className="kpi-lbl">Promedio</div></div>
+        <div className="kpi" title={`Cobertura ${mastery.coverage}% · aciertos ${mastery.quality}% · ${mastery.active7}/7 días activos`}><div className="kpi-ico">🎯</div><div className="kpi-num">{mastery.pct}%</div><div className="kpi-lbl">Dominio</div></div>
+        <div className="kpi"><div className="kpi-ico">📊</div><div className="kpi-num">{stu.avgScore || '—'}{stu.avgScore?'%':''}</div><div className="kpi-lbl">Aciertos</div></div>
         <div className="kpi"><div className="kpi-ico">🔥</div><div className="kpi-num">{stu.streak}</div><div className="kpi-lbl">Racha (días)</div></div>
         <div className="kpi"><div className="kpi-ico">⏱️</div><div className="kpi-num">{Math.floor(stu.totalMinutes/60)}h {stu.totalMinutes%60}m</div><div className="kpi-lbl">Tiempo total</div></div>
         <div className="kpi"><div className="kpi-ico">🏆</div><div className="kpi-num">{stu.achievements.length}</div><div className="kpi-lbl">Logros</div></div>
@@ -444,6 +454,16 @@ function StudentDetail({ studentId, onBack }) {
         </div>
         <StudentEvaluations studentId={stu.id} isStudent={false} />
       </div>
+
+      {resetting && Gate && (
+        <Gate
+          title="Confirmar reset de contraseña"
+          message={`Vas a resetear la contraseña de ${stu.fullName} a "1234". Ingresa tu contraseña de profesor para confirmar.`}
+          confirmLabel="🔑 Resetear a 1234"
+          onConfirm={doReset}
+          onClose={() => setResetting(false)}
+        />
+      )}
     </>
   );
 }
