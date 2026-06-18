@@ -44,7 +44,8 @@
   var uid = q.get('jucum_uid');
   var modId = q.get('jucum_mod') || 'general';
   var actId = q.get('jucum_act') || 'auto';
-  var demo = !uid; // abierto fuera de la plataforma → modo prueba (no registra)
+  var teacher = q.get('jucum_teacher') === '1'; // profesor: vista libre para dar clase
+  var demo = !uid || teacher; // sin uid o modo profesor → no registra
 
   function load(cb) {
     if (demo) return cb(); // en modo prueba no hace falta Supabase
@@ -65,7 +66,8 @@
       return t ? Math.max(0, COOLDOWN_MS - (Date.now() - t)) : 0;
     }
     // Si la terminó hace menos de 20 min → bloquear y mostrar cuenta regresiva
-    if (cooldownLeft() > 0) { showCooldownGate(); return; }
+    // (el profesor en modo libre NUNCA tiene cooldown: presenta sin límites)
+    if (!teacher && cooldownLeft() > 0) { showCooldownGate(); return; }
     var activeSec = 0;          // segundos de práctica real acumulados
     var idleSec = 0;            // segundos sin actividad
     var done = false;           // ya registrado
@@ -78,7 +80,8 @@
     chip.id = 'jec-conn-chip';
     chip.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:999997;display:flex;align-items:center;gap:7px;background:#1F3A8A;color:#fff;padding:8px 14px;border-radius:24px;font:700 13px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,0.25);cursor:default;user-select:none;white-space:nowrap;';
     chip.innerHTML = '<span>⏱</span><span id="jec-conn-time" style="font-family:monospace;font-size:14px;">0:00</span>' +
-      (demo ? '<span style="background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:800;">PRUEBA · no registra</span>' : '');
+      (teacher ? '<span style="background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:800;">PROFESOR · libre</span>'
+               : (demo ? '<span style="background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:800;">PRUEBA · no registra</span>' : ''));
     chip.title = demo
       ? 'Modo prueba: abriste el material fuera de la plataforma, el tiempo NO se registra.'
       : 'Tiempo activo de práctica (se registra en tu progreso).';

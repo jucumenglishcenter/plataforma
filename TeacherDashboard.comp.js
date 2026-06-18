@@ -29,6 +29,7 @@ function TeacherDashboard({ onLogout }) {
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'evaluate'});}}>📊 Evaluar</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'tasks'});}}>📝 Tareas</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'modules'});}}>📦 Módulos</a>
+          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'materials'});}}>📚 Materiales</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'manage'});}}>⚙️ Grupos</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'students'});}}>👥 Alumnos</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'promote'});}}>🎓 Avance</a>
@@ -49,6 +50,8 @@ function TeacherDashboard({ onLogout }) {
         <ManageGroups onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'modules' ? (
         <ManageModules onBack={() => setView({kind:'groups'})} />
+      ) : view.kind === 'materials' ? (
+        <TeacherMaterials onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'students' ? (
         <ManageStudents onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'promote' ? (
