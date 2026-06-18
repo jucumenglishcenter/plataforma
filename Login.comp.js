@@ -33,7 +33,7 @@ function Login({ onLogin }) {
     const { DEMO_CREDS, STUDENTS } = window.JUCUM_DATA;
     if (role === 'staff') {
       if (username === DEMO_CREDS.teacher.username && password === DEMO_CREDS.teacher.password) {
-        onLogin({ role:'teacher', name:'Profesor JUCUM' });
+        onLogin({ role:'teacher', name:'Joe Miller' });
       } else if (username === 'dev' && password === '1234') {
         onLogin({ role:'dev', name:'Desarrollador' });
       } else if (username === 'admin' && password === '1234') {

@@ -4,9 +4,10 @@
  *         student  — detailed view of one student
  */
 
-function TeacherDashboard({ onLogout }) {
+function TeacherDashboard({ onLogout, user }) {
   const { STUDENTS, GROUPS, LEVELS, ACHIEVEMENT_DEFS, ACTIVITY_LOG, getStudentMastery } = window.JUCUM_DATA;
   const [view, setView] = React.useState({ kind:'groups' });
+  const teacherName = (user && user.name && user.name !== 'Profesor' && user.name !== 'Profesor JUCUM') ? user.name : 'Joe Miller';
 
   // Reset palette
   React.useEffect(() => { document.body.removeAttribute('data-level'); }, []);
@@ -35,8 +36,8 @@ function TeacherDashboard({ onLogout }) {
           <a className={`nav-link ${view.kind==='manage'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'manage'});}}>⚙️ Grupos</a>
           <NotifBell userId="teacher" />
           <div className="user-pill">
-            <div className="ava" style={{background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>P</div>
-            <span>Profesor</span>
+            <div className="ava" style={{background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>{(teacherName.split(' ').map(n=>n[0]).slice(0,2).join('')||'JM').toUpperCase()}</div>
+            <span>{teacherName}</span>
           </div>
           <button className="logout-btn" onClick={onLogout} title="Cerrar sesión">⎋ Salir</button>
         </div>
@@ -83,6 +84,7 @@ function TeacherDashboard({ onLogout }) {
         {view.kind === 'groups' && (
           <GroupsView
             stats={{ totalStudents, activeToday, avgMastery }}
+            teacherName={teacherName}
             onSelectGroup={(id) => setView({kind:'group', id})}
           />
         )}
@@ -107,13 +109,13 @@ function TeacherDashboard({ onLogout }) {
 
 /* ─── Groups overview ─────────────────────────────────────────────── */
 
-function GroupsView({ stats, onSelectGroup }) {
+function GroupsView({ stats, onSelectGroup, teacherName }) {
   const { GROUPS, STUDENTS, LEVELS, getStudentMastery } = window.JUCUM_DATA;
   return (
     <>
       <div className="welcome teacher">
         <div className="welcome-text">
-          <div className="eyebrow t">👨‍🏫 Panel general</div>
+          <div className="eyebrow t">👨‍🏫 Hola, {teacherName || 'Joe Miller'}</div>
           <h1>{stats.totalStudents} alumnos · 4 grupos activos</h1>
           <p><b>{stats.activeToday}</b> alumnos activos hoy · Dominio general <b>{stats.avgMastery}%</b></p>
         </div>

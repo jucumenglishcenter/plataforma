@@ -709,24 +709,46 @@ function getGroupRanking(groupId) {
     .sort((a, b) => b.xp - a.xp);
 }
 
-/* Seed plausible progress for demo students */
+/* Seed plausible progress for demo students — 2 meses de historial repartido en
+ * varias semanas y competencias, para que "Mi evolución" muestre una curva real
+ * y todas las secciones tengan datos. Solo en modo local (sin Supabase). */
 function seedDemoProgress() {
-  if (window.JUCUM_SB) return; // cloud mode: progress comes from Supabase
-  if (localStorage.getItem(PROGRESS_KEY)) return; // already seeded
+  if (window.JUCUM_SB && localStorage.getItem('jucum_demo_mode') !== '1') return; // nube: datos reales
+  if (localStorage.getItem(PROGRESS_KEY)) return; // ya sembrado
+  const DAY = 86400000;
   const seeded = {};
   for (const s of STUDENTS) {
     const r = rng(hash(s.id));
     const mods = MODULE_CATALOG[s.level] || [];
     if (mods.length === 0) continue;
-    const mod = mods[0];
+    // ventana de actividad: ~8 semanas, empezando hace 56 días
+    const weeks = 8;
+    // perfil del alumno: cobertura objetivo y calidad media derivadas de sus stats
+    const targetCoverage = Math.min(1, 0.25 + (s.avgScore/100) * 0.7 * (s.completedModules>0?1:0.7));
+    const baseQuality = Math.max(45, Math.min(96, s.avgScore - 12)); // arranca más bajo y mejora
+    const improves = r() < 0.7; // la mayoría mejora con el tiempo
     const completed = {};
-    const completionRate = Math.min(1, (s.avgScore / 100) * (s.completedModules > 0 ? 0.95 : 0.55));
-    for (const a of mod.activities) {
-      if (r() < completionRate) {
-        completed[`${mod.id}:${a.id}`] = { score: Math.floor(70 + r() * 30), minutes: Math.floor(5 + r() * 12), date: new Date(Date.now() - Math.floor(r() * 7 * 86400000)).toISOString() };
-      }
-    }
-    seeded[s.id] = { completed, todayMinutes: Math.floor(r() * 18), lastDay: new Date().toISOString().slice(0, 10) };
+    // módulos a cubrir: los completos + el actual en progreso
+    const modsToFill = mods.slice(0, Math.max(1, Math.min(mods.length, s.completedModules + 1)));
+    modsToFill.forEach((mod, mi) => {
+      const acts = mod.activities || [];
+      const isCurrent = mi === s.completedModules;
+      const cover = isCurrent ? targetCoverage : 1; // módulos previos completos
+      acts.forEach((a, ai) => {
+        if (r() > cover) return;
+        // fecha: distribuida por el avance dentro de la ventana
+        const progressFrac = (mi + (ai/Math.max(1,acts.length))) / Math.max(1, modsToFill.length);
+        const weekIdx = Math.min(weeks-1, Math.floor(progressFrac * weeks + r()*1.2));
+        const daysAgo = (weeks - weekIdx) * 7 - Math.floor(r()*6);
+        const date = new Date(Date.now() - Math.max(0, daysAgo) * DAY);
+        // calidad sube con el tiempo si el alumno mejora
+        const trend = improves ? (weekIdx/weeks)*22 - 8 : (1-weekIdx/weeks)*10 - 4;
+        const score = Math.max(40, Math.min(100, Math.round(baseQuality + trend + (r()*16-8))));
+        completed[`${mod.id}:${a.id}`] = { score, minutes: Math.floor(5 + r()*14), date: date.toISOString() };
+      });
+    });
+    const lastDate = Object.values(completed).reduce((mx,e)=> e.date>mx?e.date:mx, '');
+    seeded[s.id] = { completed, todayMinutes: s.lastActiveDays===0 ? Math.floor(r()*18) : 0, lastDay: (lastDate||new Date().toISOString()).slice(0,10) };
   }
   localStorage.setItem(PROGRESS_KEY, JSON.stringify(seeded));
 }
@@ -799,11 +821,25 @@ function daysUntilMonday() {
  * - constancia = qué tan seguido practica (días activos de los últimos 7);
  *                cumplir la práctica diaria SUMA, dejar de practicar RESTA.
  * Ámbito: módulo(s) activo(s) del grupo; si no hay, todo el nivel. */
+/* Semana de adaptación: durante los primeros 7 días desde el inicio del grupo
+ * NO se penaliza al alumno por no practicar (solo se registran sus avances).
+ * Pasada la semana, empieza la experiencia completa (decaimiento por inactividad). */
+function inGraceWeek(student) {
+  if (!student) return false;
+  const g = GROUPS.find(x => x.id === student.group);
+  if (!g || !g.startDate) return false;
+  const start = new Date(g.startDate);
+  if (isNaN(start)) return false;
+  const end = new Date(start); end.setDate(end.getDate() + 7);
+  return new Date() < end;
+}
+
 function getStudentMastery(student) {
   if (!student) return { pct: 0, coverage: 0, quality: 0, done: 0, total: 0, active7: 0, constancyPct: 0 };
   const prog = getStudentProgress(student.id);
   const completed = prog.completed || {};
   const mods = MODULE_CATALOG[student.level] || [];
+  const grace = inGraceWeek(student);
   let scope = mods;
   const group = GROUPS.find(g => g.id === student.group);
   if (group) {
@@ -836,7 +872,9 @@ function getStudentMastery(student) {
     if (activeDays.has(d.toISOString().slice(0, 10))) active7++;
   }
   const constancy = Math.min(1, active7 / 5);
-  const constancyFactor = 0.85 + 0.20 * constancy; // 0.85 (nunca) → 1.05 (constante)
+  let constancyFactor = 0.85 + 0.20 * constancy; // 0.85 (nunca) → 1.05 (constante)
+  // Semana de adaptación: la constancia solo suma, nunca resta (no penaliza al inicio).
+  if (grace) constancyFactor = Math.max(1, constancyFactor);
   const pct = Math.max(0, Math.min(100, Math.round(coverage * quality * 100 * constancyFactor)));
   return {
     pct, coverage: Math.round(coverage * 100), quality: Math.round(quality * 100),
@@ -939,6 +977,8 @@ function getStudentReadiness(student) {
   if (inactive >= 14) inactivityFactor = 0.55;
   else if (inactive >= 7) inactivityFactor = 0.7;
   else if (inactive >= 4) inactivityFactor = 0.85;
+  // Semana de adaptación: no se penaliza la inactividad al inicio.
+  if (inGraceWeek(student)) inactivityFactor = 1;
   base = base * inactivityFactor;
 
   // las tareas suman de forma acotada y proporcional (máx 15 puntos de empuje)
@@ -1112,6 +1152,7 @@ function getModuleFinalGrade(student, module) {
 window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getAchievementAlert, achievementDecayFactor, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness, getStudentGrades, getStudentMonthlyPractice, getStudentTrends };
 
 window.JUCUM_DATA.getStudentLog = getStudentLog;
+window.JUCUM_DATA.inGraceWeek = inGraceWeek;
 window.JUCUM_DATA.getModuleExamWeight = getModuleExamWeight;
 window.JUCUM_DATA.setModuleExamWeight = setModuleExamWeight;
 window.JUCUM_DATA.getModuleStats = getModuleStats;

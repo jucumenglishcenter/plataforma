@@ -9,12 +9,13 @@ function App() {
     try { return JSON.parse(localStorage.getItem('jucum_user') || 'null'); }
     catch { return null; }
   });
-  const [ready, setReady] = React.useState(!window.JUCUM_SB); // local mode = ready immediately
+  const DEMO = !!(window.JUCUM_DEMO && window.JUCUM_DEMO.isDemo());
+  const [ready, setReady] = React.useState(!window.JUCUM_SB || DEMO); // local/demo = ready immediately
   const [bootErr, setBootErr] = React.useState('');
 
-  // Bootstrap real roster from Supabase
+  // Bootstrap real roster from Supabase (se omite en modo demostración)
   React.useEffect(() => {
-    if (!window.JUCUM_SB) return;
+    if (!window.JUCUM_SB || DEMO) { if (DEMO && window.JUCUM_DEMO) { try { window.JUCUM_DEMO.seedAll(); } catch {} } return; }
     (async () => {
       try {
         const sb = window.JUCUM_SB.getClient();
@@ -110,7 +111,7 @@ function App() {
   if (!user) return <Login onLogin={onLogin} />;
   if (user.role === 'admin') return <AdminDashboard user={user} onLogout={onLogout} />;
   if (user.role === 'dev') return <DevDashboard user={user} onLogout={onLogout} />;
-  if (user.role === 'teacher') return <TeacherDashboard onLogout={onLogout} />;
+  if (user.role === 'teacher') return <TeacherDashboard onLogout={onLogout} user={user} />;
   return <StudentDashboard user={user} onLogout={onLogout} />;
 }
 

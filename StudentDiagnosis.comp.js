@@ -66,6 +66,8 @@ function StudentDiagnosis({ user, onBack }) {
         </div>
       </div>
 
+      <div style={{marginTop:18}}><MyEvolution student={student} /></div>
+
       {/* Competencias */}
       <div className="scard" style={{marginTop:18}}>
         <div className="sec-head"><div className="sec-title">🎯 Tus habilidades</div><span className="sec-meta">Sube con la práctica constante</span></div>
