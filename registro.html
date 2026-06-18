@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Registro · JUCUM English Center</title>
+<style>
+  :root{ --primary:#1F3A8A; --primary-d:#0D1B5A; --red:#E11; --bg:#F4F6FC; --line:#E2E6F0; --text:#1A1F36; --soft:#6B7280; }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Nunito',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;}
+  .wrap{max-width:560px;margin:0 auto;padding:24px 18px 60px;}
+  .logo{display:flex;flex-direction:column;align-items:center;gap:6px;margin:8px 0 18px;}
+  .logo img{height:64px;}
+  .card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 8px 30px rgba(20,30,90,.06);}
+  h1{font-size:22px;margin:0 0 4px;color:var(--primary-d);}
+  .sub{color:var(--soft);font-size:14px;margin:0 0 18px;}
+  label{display:block;font-weight:800;font-size:13px;margin:14px 0 5px;}
+  .req::after{content:' *';color:var(--red);}
+  input,select{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;font-size:15px;font-family:inherit;background:#fff;}
+  input:focus,select:focus{outline:none;border-color:var(--primary);}
+  .row{display:flex;gap:12px;}
+  .row>div{flex:1;}
+  .modes{display:flex;gap:8px;flex-wrap:wrap;}
+  .mode{flex:1;min-width:120px;padding:11px;border:1.5px solid var(--line);border-radius:10px;text-align:center;font-weight:800;font-size:13px;cursor:pointer;background:#fff;}
+  .mode.on{border-color:var(--primary);background:#EEF2FB;color:var(--primary-d);}
+  .guardian{background:#FFF8E8;border:1px solid #F4C430;border-radius:12px;padding:12px;margin-top:10px;}
+  .file-note{font-size:12px;color:var(--soft);margin-top:4px;}
+  .btn{width:100%;margin-top:22px;padding:15px;border:none;border-radius:12px;background:var(--primary);color:#fff;font-size:16px;font-weight:800;cursor:pointer;}
+  .btn:disabled{opacity:.6;}
+  .err{background:#FFEBEE;color:#C62828;border:1px solid #EF9A9A;border-radius:10px;padding:10px 12px;font-size:13.5px;font-weight:700;margin-top:14px;}
+  .ok-screen{text-align:center;padding:20px 6px;}
+  .ok-screen .big{font-size:54px;}
+  .ok-screen h2{color:#2E7D32;margin:8px 0;}
+  .phone{display:inline-block;margin-top:6px;font-weight:800;color:var(--primary-d);font-size:18px;}
+  .hint{font-size:12.5px;color:var(--soft);margin-top:6px;}
+  .voucher-prev{height:54px;border-radius:8px;border:1px solid var(--line);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">
+    <img src="assets/logo-jucum.png" alt="JUCUM English Center" onerror="this.style.display='none'" />
+    <div style="font-weight:900;color:var(--primary-d);letter-spacing:.5px;">JUCUM ENGLISH CENTER</div>
+  </div>
+
+  <div class="card" id="form-card">
+    <h1>Ficha de inscripción</h1>
+    <p class="sub">Completa tus datos para inscribirte. La administración revisará tu información y te asignará tu grupo.</p>
+
+    <label class="req">🧑‍💼 Nombre completo</label>
+    <input id="fullName" placeholder="Ej: Ana Pérez García" />
+
+    <div class="row">
+      <div><label>📧 Correo electrónico</label><input id="email" type="email" placeholder="tucorreo@…" /></div>
+      <div><label class="req">🙍 Edad</label><input id="age" type="number" min="3" max="99" placeholder="Edad" /></div>
+    </div>
+
+    <label class="req">✏️ Número de DNI</label>
+    <input id="dni" placeholder="Tu DNI" />
+
+    <div id="guardianBox" class="guardian" style="display:none;">
+      <div style="font-weight:800;font-size:13px;margin-bottom:6px;">👨‍👩‍👧 Eres menor de edad — datos del apoderado</div>
+      <label class="req">Nombre del apoderado</label>
+      <input id="guardianName" placeholder="Nombre completo del apoderado" />
+      <label>DNI del apoderado</label>
+      <input id="guardianDni" placeholder="DNI del apoderado" />
+    </div>
+
+    <label>📱 Teléfono / WhatsApp</label>
+    <input id="phone" placeholder="Para contactarte" />
+
+    <label class="req">💳 ¿Cómo pagarás?</label>
+    <div class="modes" id="modes">
+      <div class="mode" data-mode="mensual">Mensual</div>
+      <div class="mode" data-mode="modulo">Por módulo</div>
+      <div class="mode" data-mode="total">Paquete completo</div>
+    </div>
+
+    <label>🧾 Voucher de pago (foto o PDF)</label>
+    <input id="voucher" type="file" accept="image/*,application/pdf" />
+    <div class="file-note">Sube la captura de tu pago. Máx 50 MB. (Opcional si aún no has pagado.)</div>
+    <div id="voucherPrev"></div>
+
+    <div id="err" class="err" style="display:none;"></div>
+    <button class="btn" id="submitBtn">Enviar mi inscripción →</button>
+    <div class="hint">Tus datos solo se usan para tu inscripción en JUCUM English Center.</div>
+  </div>
+
+  <div class="card ok-screen" id="ok-card" style="display:none;">
+    <div class="big">🎉</div>
+    <h2>¡Registro completo!</h2>
+    <p class="sub">Recibimos tu inscripción. La administración revisará tus datos y tu voucher, y te asignará tu grupo. Pronto te contactaremos.</p>
+    <p style="margin:14px 0 2px;font-weight:700;">¿Tienes alguna duda? Escríbenos:</p>
+    <a class="phone" id="phoneLink" href="#">+51 935 972 183</a>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="supabase-client.js"></script>
+<script src="registration.js"></script>
+<script>
+  var ATTN_PHONE = '+51 935 972 183';
+  document.getElementById('phoneLink').textContent = ATTN_PHONE;
+  document.getElementById('phoneLink').href = 'https://wa.me/' + ATTN_PHONE.replace(/[^0-9]/g,'');
+
+  var payMode = 'mensual';
+  document.querySelectorAll('.mode').forEach(function(m){
+    m.addEventListener('click', function(){
+      document.querySelectorAll('.mode').forEach(function(x){x.classList.remove('on');});
+      m.classList.add('on'); payMode = m.dataset.mode;
+    });
+  });
+  document.querySelector('.mode[data-mode="mensual"]').classList.add('on');
+
+  var ageEl = document.getElementById('age');
+  ageEl.addEventListener('input', function(){
+    var minor = ageEl.value !== '' && Number(ageEl.value) < 18;
+    document.getElementById('guardianBox').style.display = minor ? 'block' : 'none';
+  });
+
+  var voucherData = null;
+  document.getElementById('voucher').addEventListener('change', function(e){
+    var f = e.target.files[0]; if (!f) return;
+    if (f.size > 50*1024*1024) { showErr('El archivo supera los 50 MB.'); e.target.value=''; return; }
+    var fr = new FileReader();
+    fr.onload = function(){ voucherData = fr.result;
+      var prev = document.getElementById('voucherPrev');
+      prev.innerHTML = (f.type.indexOf('image')===0) ? '<img class="voucher-prev" src="'+fr.result+'" />' : '<div class="hint">📄 '+f.name+' adjuntado</div>';
+    };
+    fr.readAsDataURL(f);
+  });
+
+  function showErr(m){ var e=document.getElementById('err'); e.textContent='⚠ '+m; e.style.display='block'; }
+  function hideErr(){ document.getElementById('err').style.display='none'; }
+  function val(id){ return document.getElementById(id).value.trim(); }
+
+  document.getElementById('submitBtn').addEventListener('click', async function(){
+    hideErr();
+    if (!val('fullName')) return showErr('Escribe tu nombre completo.');
+    if (!val('age')) return showErr('Indica tu edad.');
+    if (!val('dni')) return showErr('Escribe tu número de DNI.');
+    var minor = Number(val('age')) < 18;
+    if (minor && !val('guardianName')) return showErr('Como eres menor de edad, indica el nombre de tu apoderado.');
+    var btn = this; btn.disabled = true; btn.textContent = 'Enviando…';
+    try {
+      await window.JUCUM_REG.submitRegistration({
+        fullName: val('fullName'), email: val('email'), age: Number(val('age')) || null, dni: val('dni'),
+        guardianName: val('guardianName'), guardianDni: val('guardianDni'), phone: val('phone'),
+        payMode: payMode, voucher: voucherData,
+      });
+      document.getElementById('form-card').style.display = 'none';
+      document.getElementById('ok-card').style.display = 'block';
+      window.scrollTo(0,0);
+    } catch (err) {
+      btn.disabled = false; btn.textContent = 'Enviar mi inscripción →';
+      showErr('No se pudo enviar. Revisa tu conexión e inténtalo de nuevo.');
+    }
+  });
+</script>
+</body>
+</html>

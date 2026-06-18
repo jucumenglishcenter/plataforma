@@ -11,9 +11,11 @@ function AdminDashboard({ user, onLogout }) {
   React.useEffect(() => { document.body.removeAttribute('data-level'); }, []);
   // Recarga de la nube al entrar (por si hay pagos nuevos desde otros equipos)
   React.useEffect(() => { if (P.cloudLoad) P.cloudLoad().then(refresh); }, []);
+  React.useEffect(() => { if (window.JUCUM_REG && window.JUCUM_REG.cloudLoadRegistrations) window.JUCUM_REG.cloudLoadRegistrations().then(refresh); }, []);
 
   const payments = P.getAllPayments();
   const pending = payments.filter(p => p.status === 'por_confirmar');
+  const regPend = window.JUCUM_REG ? window.JUCUM_REG.pendingCount() : 0;
 
   return (
     <>
@@ -26,6 +28,7 @@ function AdminDashboard({ user, onLogout }) {
           <span className="role-pill t">🛠️ Administrador</span>
           <a className={`nav-link ${view==='payments'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('payments');}} style={{position:'relative'}}>💳 Pagos{pending.length > 0 && <span className="nav-dot">{pending.length > 9 ? '9+' : pending.length}</span>}</a>
           <a className={`nav-link ${view==='students'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('students');}}>👥 Alumnos</a>
+          <a className={`nav-link ${view==='inscripciones'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('inscripciones');}} style={{position:'relative'}}>📝 Inscripciones{regPend > 0 && <span className="nav-dot">{regPend > 9 ? '9+' : regPend}</span>}</a>
           <a className={`nav-link ${view==='attendance'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('attendance');}}>📋 Asistencia</a>
           <a className={`nav-link ${view==='config'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('config');}}>⚙️ Configuración</a>
           <a className={`nav-link ${view==='account'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('account');}}>🔑 Mi cuenta</a>
@@ -36,6 +39,7 @@ function AdminDashboard({ user, onLogout }) {
       </header>
 
       {view === 'students' ? <AdminStudents onChange={refresh} />
+        : view === 'inscripciones' ? <InscripcionesView />
         : view === 'attendance' ? <AdminAttendance />
         : view === 'config' ? <AdminConfig onChange={refresh} />
         : view === 'account' ? <AdminAccount user={user} />
@@ -116,6 +120,8 @@ function AdminPayments({ onChange }) {
 function AdminStudents({ onChange }) {
   const D = window.JUCUM_DATA; const P = window.JUCUM_PAY;
   const [q, setQ] = React.useState('');
+  const [reg, setReg] = React.useState(false);
+  const [, setT] = React.useState(0);
   const students = D.STUDENTS.filter(s => !q || s.fullName.toLowerCase().includes(q.toLowerCase()) || (s.username||'').includes(q.toLowerCase()));
   const cfg = P.getConfig();
   return (
@@ -126,6 +132,7 @@ function AdminStudents({ onChange }) {
           <h1>{D.STUDENTS.length} alumnos</h1>
           <p>Estado de pago e inscripción de cada alumno.</p>
         </div>
+        <button className="btn-settings" onClick={()=>setReg(true)}>➕ Registrar alumno</button>
       </div>
       <input className="input-text" style={{width:'100%', maxWidth:320, margin:'16px 0'}} placeholder="🔍 Buscar alumno…" value={q} onChange={e=>setQ(e.target.value)} />
       <div className="student-table">
@@ -148,7 +155,8 @@ function AdminStudents({ onChange }) {
           );
         })}
       </div>
-      <div className="settings-hint" style={{marginTop:10}}>La inscripción a módulos (niveles A1 y A2) y más datos administrativos se ampliarán próximamente.</div>
+      <div className="settings-hint" style={{marginTop:10}}>Comparte el <b>link de autoregistro</b> (archivo <code>registro.html</code>) para que los alumnos se inscriban solos; sus solicitudes llegan a 📝 Inscripciones.</div>
+      {reg && <RegisterStudentForm onClose={()=>setReg(false)} onDone={(stu, u)=>{ setReg(false); alert(`✅ ${stu.fullName} registrado. Usuario: ${stu.username||u} · contraseña 1234.`); setT(t=>t+1); onChange&&onChange(); }} />}
     </main>
   );
 }
