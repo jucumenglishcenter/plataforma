@@ -8,7 +8,11 @@ function StudentDashboard({ user, onLogout }) {
   const settings = getGroupSettings(student.group);
   const progress = getStudentProgress(student.id);
   const allModules = MODULE_CATALOG[student.level] || [];
-  const activeModule = allModules.find(m => m.id === settings.activeModuleId) || allModules[0];
+  const activeIds = (settings.activeModuleIds && settings.activeModuleIds.length)
+    ? settings.activeModuleIds
+    : (settings.activeModuleId ? [settings.activeModuleId] : []);
+  const activeModules = allModules.filter(m => activeIds.includes(m.id));
+  const activeModule = activeModules[0] || allModules[0];
   const [view, setView] = React.useState('dashboard');
   const [showOnb, setShowOnb] = React.useState(() => !localStorage.getItem(`jucum_onboarded_${user.studentId}`));
   const [alertKind, setAlertKind] = React.useState(null);
@@ -155,11 +159,21 @@ function StudentDashboard({ user, onLogout }) {
 
           <div className="scard">
             <div className="sec-head">
-              <div className="sec-title">Mi módulo activo</div>
+              <div className="sec-title">{activeModules.length > 1 ? 'Mis módulos activos' : 'Mi módulo activo'}</div>
               {deadlineLabel && <span className={`deadline ${settings.deadline && new Date(settings.deadline) < new Date() ? 'late' : ''}`}>{deadlineLabel}</span>}
             </div>
-            {activeModule ? <ModuleProgress mod={activeModule} progress={progress} pct={pctModule} doneCount={doneCount} studentId={student.id} freeUnlock={settings.unlockMode === 'free'} unlockMode={settings.unlockMode} unlockedActivities={settings.unlockedActivities} /> :
-              <div className="empty-state"><div className="icon">📦</div>El profesor aún no activa ningún módulo.</div>}
+            {activeModules.length === 0 ? (
+              <div className="empty-state"><div className="icon">📦</div>El profesor aún no activa ningún módulo.</div>
+            ) : activeModules.map((mod, mi) => {
+              const acts = mod.activities || [];
+              const dc = acts.filter(a => progress.completed[`${mod.id}:${a.id}`]).length;
+              const pc = acts.length ? Math.round((dc/acts.length)*100) : 0;
+              return (
+                <div key={mod.id} style={mi > 0 ? {marginTop:16, paddingTop:16, borderTop:'1px dashed var(--border)'} : undefined}>
+                  <ModuleProgress mod={mod} progress={progress} pct={pc} doneCount={dc} studentId={student.id} freeUnlock={settings.unlockMode === 'free'} unlockMode={settings.unlockMode} unlockedActivities={settings.unlockedActivities} />
+                </div>
+              );
+            })}
           </div>
         </div>
 

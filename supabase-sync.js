@@ -34,6 +34,7 @@
       dailyTargetMin: g.daily_target_min ?? 15, isPaused: g.is_paused,
       unlockMode: g.unlock_mode || 'sequential',
       unlockedActivities: g.unlocked_activities || [],
+      activeModuleIds: g.active_module_ids || (g.active_module_id ? [g.active_module_id] : []),
     });
     write(KEYS.settings, settings);
 
@@ -119,6 +120,9 @@
     // unlock_mode lives in a separate update: if the column doesn't exist yet
     // (script 5 not run), only this one fails and the rest still saves.
     safe(SB().from('groups').update({ unlock_mode: s.unlockMode || 'sequential', unlocked_activities: s.unlockedActivities || [] }).eq('id', groupId));
+    // active_module_ids (script 7): update aparte para que si la columna aún no
+    // existe, solo falle esta y lo demás se guarde igual.
+    safe(SB().from('groups').update({ active_module_ids: s.activeModuleIds || [] }).eq('id', groupId));
   }
   function pushProgress(userId, moduleId, activityId, score, minutes) {
     safe(SB().from('progress').upsert({

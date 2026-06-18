@@ -216,19 +216,33 @@ function GroupSettingsModal({ groupId, level, onClose }) {
         <div className="modal-body">
 
           <div className="settings-block">
-            <div className="settings-label">📦 Módulo activo</div>
-            <div className="settings-hint">Los alumnos verán este módulo en su panel principal.</div>
+            <div className="settings-label">📦 Módulos activos del grupo</div>
+            <div className="settings-hint">Prende los módulos que este grupo verá ahora. Puedes tener <b>varios activos a la vez</b> — cada grupo a su ritmo.</div>
             <div className="module-picker">
-              {modules.map(m => (
-                <button key={m.id}
-                        className={`mp-btn ${s.activeModuleId === m.id ? 'on' : ''}`}
-                        onClick={() => setS({...s, activeModuleId: m.id})}>
-                  <span className="mp-emo">{m.emoji}</span>
-                  <span className="mp-name">{m.name}</span>
-                  <span className="mp-count">{m.activities.length} actividades</span>
-                </button>
-              ))}
+              {modules.map(m => {
+                const on = (s.activeModuleIds || []).includes(m.id);
+                const toggle = () => {
+                  const set = new Set(s.activeModuleIds || []);
+                  if (on) set.delete(m.id); else set.add(m.id);
+                  const ids = modules.filter(x => set.has(x.id)).map(x => x.id);
+                  setS({...s, activeModuleIds: ids, activeModuleId: ids[0] || null});
+                };
+                return (
+                  <div key={m.id} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 14px',border:'1.5px solid '+(on?'#A5D6A7':'#E6E3DA'),borderRadius:10,background:on?'#F0FAF1':'#fff'}}>
+                    <span style={{fontSize:20}}>{m.emoji}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontFamily:"'Fredoka',sans-serif",fontWeight:600,fontSize:13,color:'var(--text)'}}>{m.name}</div>
+                      <div style={{fontSize:11,color:'var(--text-soft)',fontWeight:700,marginTop:1}}>{m.activities.length} actividades · {on ? '🟢 Activo' : '⚪ Apagado'}</div>
+                    </div>
+                    <button type="button" onClick={toggle} aria-label={on?'Apagar módulo':'Prender módulo'}
+                            style={{width:48,height:27,borderRadius:14,border:'none',cursor:'pointer',background:on?'#2EA84B':'#CFCFC8',position:'relative',transition:'background .15s',flexShrink:0,padding:0}}>
+                      <span style={{position:'absolute',top:3,left:on?24:3,width:21,height:21,borderRadius:'50%',background:'#fff',transition:'left .15s',boxShadow:'0 1px 3px rgba(0,0,0,0.3)'}}></span>
+                    </button>
+                  </div>
+                );
+              })}
             </div>
+            {(s.activeModuleIds || []).length === 0 && <div className="settings-hint" style={{marginTop:8,color:'#C62828',fontWeight:700}}>⚠ Sin módulos activos, el alumno no verá actividades.</div>}
           </div>
 
           <div className="settings-block">

@@ -485,11 +485,11 @@ const DEFAULT_SETTINGS = {
   // per groupId: { activeModuleId, deadline (yyyy-mm-dd), dailyTargetMin, isPaused }
 };
 function getGroupSettings(groupId) {
-  let all = DEFAULT_SETTINGS;
-  try { all = { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch {}
+  let all = {};
+  try { all = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch {}
   const group = GROUPS.find(g => g.id === groupId);
   const firstMod = group ? (MODULE_CATALOG[group.level] || [])[0] : null;
-  return all[groupId] || {
+  const s = all[groupId] || {
     activeModuleId: firstMod?.id || null,
     deadline: null,
     dailyTargetMin: 15,
@@ -497,6 +497,14 @@ function getGroupSettings(groupId) {
     unlockMode: 'sequential',
     unlockedActivities: [],
   };
+  // Normalizar a LISTA de módulos activos (varios a la vez), migrando desde
+  // el modelo antiguo de un solo activeModuleId.
+  if (!Array.isArray(s.activeModuleIds)) {
+    s.activeModuleIds = s.activeModuleId ? [s.activeModuleId] : (firstMod ? [firstMod.id] : []);
+  }
+  // activeModuleId = el primero, por compatibilidad con código antiguo
+  s.activeModuleId = s.activeModuleIds[0] || null;
+  return s;
 }
 function setGroupSettings(groupId, partial) {
   let all = {};
@@ -507,21 +515,27 @@ function setGroupSettings(groupId, partial) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(all));
   if (window.JUCUM_SYNC) window.JUCUM_SYNC.pushSettings(groupId, next);
 
-  // Auto-notify all group members when the active module changes
-  if (window.JUCUM_NOTIF && partial.activeModuleId && partial.activeModuleId !== prev.activeModuleId) {
-    const group = GROUPS.find(g => g.id === groupId);
-    const modules = MODULE_CATALOG[group?.level] || [];
-    const mod = modules.find(m => m.id === partial.activeModuleId);
-    const modName = mod?.name || 'un nuevo módulo';
-    const modEmoji = mod?.emoji || '📦';
-    const members = STUDENTS.filter(s => s.group === groupId);
-    members.forEach(s => {
-      window.JUCUM_NOTIF.pushNotif(s.id, {
-        type: 'module-activated',
-        title: '¡Nuevo módulo activo!',
-        body: `${modEmoji} "${modName}" está disponible. ¡Empieza ya!`,
+  // Auto-notify all group members when a module is newly turned ON
+  if (window.JUCUM_NOTIF && partial.activeModuleIds) {
+    const prevSet = new Set(prev.activeModuleIds || []);
+    const added = (partial.activeModuleIds || []).filter(id => !prevSet.has(id));
+    if (added.length) {
+      const group = GROUPS.find(g => g.id === groupId);
+      const modules = MODULE_CATALOG[group?.level] || [];
+      const members = STUDENTS.filter(s => s.group === groupId);
+      added.forEach(mid => {
+        const mod = modules.find(m => m.id === mid);
+        const modName = mod?.name || 'un nuevo módulo';
+        const modEmoji = mod?.emoji || '📦';
+        members.forEach(s => {
+          window.JUCUM_NOTIF.pushNotif(s.id, {
+            type: 'module-activated',
+            title: '¡Nuevo módulo activo!',
+            body: `${modEmoji} "${modName}" está disponible. ¡Empieza ya!`,
+          });
+        });
       });
-    });
+    }
   }
   // Notify if deadline changed
   if (window.JUCUM_NOTIF && partial.deadline && partial.deadline !== prev.deadline) {
