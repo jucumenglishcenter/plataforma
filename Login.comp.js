@@ -56,7 +56,7 @@ function Login({ onLogin }) {
     <div className="login-wrap">
       <form className="login-card" onSubmit={handleSubmit}>
         <div className="login-logo">
-          <img src="../../assets/logo-jucum.png" alt="JUCUM English Center" />
+          <img src={window.JUCUM_LOGO || 'logo-jucum.png'} alt="JUCUM English Center" />
         </div>
         <div className="login-title">Plataforma de aprendizaje</div>
         <div className="login-sub">Ingresa con tu usuario para acceder a tus materiales.</div>

@@ -20,7 +20,7 @@ function TeacherDashboard({ onLogout }) {
     <>
       <header className="app-header">
         <div className="app-logo">
-          <img src="../../assets/logo-jucum.png" alt="JUCUM EC" />
+          <img src={window.JUCUM_LOGO || 'logo-jucum.png'} alt="JUCUM EC" />
           <div className="pgtitle">Panel del Profesor</div>
         </div>
         <div className="app-right">

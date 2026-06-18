@@ -9,6 +9,7 @@ function ManageStudents({ onBack }) {
   const [search, setSearch] = smUseState('');
   const [tick, setTick] = smUseState(0);
   const [resetting, setResetting] = smUseState(null);
+  const [importing, setImporting] = smUseState(false);
   const refresh = () => setTick(t => t + 1);
 
   let list = STUDENTS;
@@ -43,7 +44,10 @@ function ManageStudents({ onBack }) {
           <h1>Mis alumnos</h1>
           <p>{STUDENTS.length} alumno{STUDENTS.length === 1 ? '' : 's'} registrado{STUDENTS.length === 1 ? '' : 's'}. Crea, edita o elimina.</p>
         </div>
-        <button className="btn-settings" onClick={() => setEditing('new')}>+ Nuevo alumno</button>
+        <div className="welcome-actions" style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+          <button className="btn-settings" onClick={() => setImporting(true)}>📋 Importar lista</button>
+          <button className="btn-settings" onClick={() => setEditing('new')}>+ Nuevo alumno</button>
+        </div>
       </div>
 
       <div className="scard" style={{marginTop:18}}>
@@ -93,6 +97,13 @@ function ManageStudents({ onBack }) {
           confirmLabel="🔑 Resetear a 1234"
           onConfirm={() => doResetPassword(resetting)}
           onClose={() => setResetting(null)}
+        />
+      )}
+
+      {importing && (
+        <BulkImportModal
+          onClose={() => setImporting(false)}
+          onDone={() => { setImporting(false); refresh(); }}
         />
       )}
 
@@ -248,4 +259,128 @@ function TeacherPasswordGate({ title, message, confirmLabel, onConfirm, onClose 
   );
 }
 
-Object.assign(window, { ManageStudents, StudentFormModal, TeacherPasswordGate });
+/* Importación masiva de alumnos desde una lista pegada.
+ * Acepta una línea por alumno: "Nombre Completo" o "Nombre Completo, usuario".
+ * Genera el usuario automáticamente (nombre.apellido), evita duplicados, y los
+ * crea en bloque (Supabase + caché local). Contraseña inicial 1234. */
+function slugifyName(s) {
+  return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+function BulkImportModal({ onClose, onDone }) {
+  const { STUDENTS, GROUPS, LEVELS, saveStudents } = window.JUCUM_DATA;
+  const [groupId, setGroupId] = smUseState(GROUPS[0]?.id || '');
+  const [raw, setRaw] = smUseState('');
+  const [busy, setBusy] = smUseState(false);
+  const [doneMsg, setDoneMsg] = smUseState(null);
+  const group = GROUPS.find(g => g.id === groupId);
+  const level = group?.level;
+
+  // Usuarios existentes (para evitar choques)
+  const existing = new Set(STUDENTS.map(s => (s.username || '').toLowerCase()));
+
+  // Parseo + preview
+  const rows = [];
+  const seen = new Set();
+  raw.split('\n').map(l => l.trim()).filter(Boolean).forEach(line => {
+    const parts = line.split(/[,\t;]+/).map(p => p.trim()).filter(Boolean);
+    const fullName = parts[0];
+    if (!fullName) return;
+    let username = parts[1]
+      ? parts[1].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9._-]/g, '')
+      : '';
+    if (!username) {
+      const words = fullName.split(/\s+/).filter(w => w.length > 1);
+      username = words.length >= 2 ? `${slugifyName(words[0])}.${slugifyName(words[1])}` : slugifyName(words[0] || fullName);
+    }
+    // Unicidad (contra existentes y dentro del lote)
+    let uname = username, i = 2;
+    while (existing.has(uname) || seen.has(uname)) { uname = `${username}${i}`; i++; }
+    let warn = '';
+    if (parts[1] && existing.has(username)) warn = 'usuario ya existía → ajustado';
+    seen.add(uname);
+    rows.push({ fullName, username: uname, warn });
+  });
+
+  const doImport = async () => {
+    if (!rows.length || !group) return;
+    setBusy(true);
+    let created = 0;
+    for (const r of rows) {
+      const id = 's' + Date.now() + Math.floor(Math.random() * 1000);
+      let realId = id;
+      if (window.JUCUM_SB) {
+        try {
+          const row = await window.JUCUM_SB.insert('users', {
+            username: r.username, full_name: r.fullName, role: 'student',
+            level, group_id: groupId, starred: false, password: '1234',
+          });
+          if (row && row.id) realId = row.id;
+        } catch (e) { console.warn('bulk insert:', e.message); }
+      }
+      STUDENTS.push({
+        id: realId, username: r.username, fullName: r.fullName, level, group: groupId,
+        completedModules: 0, avgScore: 0, streak: 0, lastActiveDays: 0,
+        totalMinutes: 0, achievements: [], starred: false,
+      });
+      created++;
+    }
+    saveStudents(STUDENTS);
+    setBusy(false);
+    setDoneMsg(`✅ ${created} alumno${created === 1 ? '' : 's'} creado${created === 1 ? '' : 's'} en ${group.name}. Contraseña inicial: 1234.`);
+    setTimeout(onDone, 1800);
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal settings-modal" style={{maxWidth:560}} onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <div className="modal-title">📋 Importar lista de alumnos</div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          {doneMsg ? <div className="pwd-ok">{doneMsg}</div> : <>
+            <div className="settings-block" style={{paddingTop:0}}>
+              <div className="settings-label">Grupo de destino</div>
+              <div className="settings-hint">Todos los alumnos del lote se crean en este grupo (el nivel se hereda).</div>
+              <select className="input-text" style={{width:'100%'}} value={groupId} onChange={e => setGroupId(e.target.value)}>
+                {GROUPS.map(g => <option key={g.id} value={g.id}>{LEVELS[g.level].emoji} {g.name} · {LEVELS[g.level].code}</option>)}
+              </select>
+            </div>
+            <div className="settings-block">
+              <div className="settings-label">Pega la lista (un alumno por línea)</div>
+              <div className="settings-hint">Solo el nombre, o <b>Nombre, usuario</b> si quieres fijarlo. El usuario se genera solo y se evita cualquier duplicado.</div>
+              <textarea className="eval-textarea" rows={7} value={raw} onChange={e => setRaw(e.target.value)}
+                placeholder={'Leonardo Cruz\nAna Flores\nMarco Tello, marco.t\nLucía Huamán'} style={{width:'100%', fontFamily:'inherit'}} />
+            </div>
+            {rows.length > 0 && (
+              <div className="settings-block">
+                <div className="settings-label">Vista previa · {rows.length} alumno{rows.length === 1 ? '' : 's'}</div>
+                <div className="bulk-preview">
+                  {rows.map((r, i) => (
+                    <div key={i} className="bulk-row">
+                      <span className="bulk-n">{i + 1}</span>
+                      <span className="bulk-name">{r.fullName}</span>
+                      <span className="bulk-user">@{r.username}</span>
+                      {r.warn && <span className="bulk-warn">{r.warn}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="prom-summary" style={{background:'#FFF9C4',border:'1px solid #FFECB3',color:'#5D4037'}}>
+              🔑 Todos inician con contraseña <b>1234</b>. Pide que la cambien en su primer ingreso.
+            </div>
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={onClose}>Cancelar</button>
+              <button className="btn-save" onClick={doImport} disabled={busy || rows.length === 0}>
+                {busy ? 'Creando…' : `➕ Crear ${rows.length || ''} alumno${rows.length === 1 ? '' : 's'}`}
+              </button>
+            </div>
+          </>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { ManageStudents, StudentFormModal, TeacherPasswordGate, BulkImportModal });

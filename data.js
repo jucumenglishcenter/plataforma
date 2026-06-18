@@ -328,19 +328,32 @@ const ACTIVITY_LOG = [
  * Cada uno: icon, name, how (cómo ganarlo, da dirección al alumno),
  * metric (de dónde sale el progreso), goal, color del aro.
  * El aro se llena a medida que avanzan y se vuelve dorado/lleno al conseguirlo. */
+/* Logros que DECAEN por inactividad (los acumulativos: prácticas, minutos,
+ * módulos, rachas). Los de habilidad demostrada (100%, promedio) no decaen. */
 const ACHIEVEMENT_DEFS = {
-  first:      { icon:'🌱', name:'Primer paso',     how:'Completa tu primera práctica.',                 metric:'practices', goal:1,   color:'#66BB6A', colorDark:'#2E7D32', glow:'rgba(102,187,106,0.45)' },
-  practice5:  { icon:'📚', name:'Constante',       how:'Completa 5 prácticas en total.',                metric:'practices', goal:5,   color:'#42A5F5', colorDark:'#1565C0', glow:'rgba(66,165,245,0.45)' },
-  practice15: { icon:'🏅', name:'Dedicado/a',      how:'Completa 15 prácticas en total.',               metric:'practices', goal:15,  color:'#FFB300', colorDark:'#FF8F00', glow:'rgba(255,179,0,0.5)' },
-  streak3:    { icon:'🔥', name:'En racha',        how:'Practica 3 días seguidos.',                     metric:'streak',    goal:3,   color:'#FF7043', colorDark:'#E64A19', glow:'rgba(255,112,67,0.45)' },
-  streak7:    { icon:'⚡', name:'Imparable',       how:'Practica 7 días seguidos sin fallar un día.',   metric:'streak',    goal:7,   color:'#FFCA28', colorDark:'#F9A825', glow:'rgba(255,202,40,0.5)' },
-  hour1:      { icon:'⏱️', name:'Una hora',        how:'Acumula 60 minutos de práctica.',               metric:'minutes',   goal:60,  unit:' min', color:'#26C6DA', colorDark:'#00838F', glow:'rgba(38,198,218,0.45)' },
-  hours5:     { icon:'🏆', name:'Maratón',         how:'Acumula 5 horas (300 min) de práctica.',        metric:'minutes',   goal:300, unit:' min', color:'#FFD54F', colorDark:'#F57F17', glow:'rgba(255,213,79,0.55)' },
+  first:      { icon:'🌱', name:'Primer paso',     how:'Completa tu primera práctica.',                 metric:'practices', goal:1,   decay:true, color:'#66BB6A', colorDark:'#2E7D32', glow:'rgba(102,187,106,0.45)' },
+  practice5:  { icon:'📚', name:'Constante',       how:'Completa 5 prácticas en total.',                metric:'practices', goal:5,   decay:true, color:'#42A5F5', colorDark:'#1565C0', glow:'rgba(66,165,245,0.45)' },
+  practice15: { icon:'🏅', name:'Dedicado/a',      how:'Completa 15 prácticas en total.',               metric:'practices', goal:15,  decay:true, color:'#FFB300', colorDark:'#FF8F00', glow:'rgba(255,179,0,0.5)' },
+  streak3:    { icon:'🔥', name:'En racha',        how:'Practica 3 días seguidos.',                     metric:'streak',    goal:3,   decay:true, color:'#FF7043', colorDark:'#E64A19', glow:'rgba(255,112,67,0.45)' },
+  streak7:    { icon:'⚡', name:'Imparable',       how:'Practica 7 días seguidos sin fallar un día.',   metric:'streak',    goal:7,   decay:true, color:'#FFCA28', colorDark:'#F9A825', glow:'rgba(255,202,40,0.5)' },
+  hour1:      { icon:'⏱️', name:'Una hora',        how:'Acumula 60 minutos de práctica.',               metric:'minutes',   goal:60,  decay:true, unit:' min', color:'#26C6DA', colorDark:'#00838F', glow:'rgba(38,198,218,0.45)' },
+  hours5:     { icon:'🏆', name:'Maratón',         how:'Acumula 5 horas (300 min) de práctica.',        metric:'minutes',   goal:300, decay:true, unit:' min', color:'#FFD54F', colorDark:'#F57F17', glow:'rgba(255,213,79,0.55)' },
   perfect:    { icon:'⭐', name:'Sin errores',     how:'Saca 100% en cualquier quiz.',                  metric:'perfect',   goal:1,   color:'#AB47BC', colorDark:'#6A1B9A', glow:'rgba(171,71,188,0.45)' },
   perfect3:   { icon:'💎', name:'Perfeccionista',  how:'Saca 100% en 3 quizzes distintos.',             metric:'perfect',   goal:3,   color:'#29B6F6', colorDark:'#0277BD', glow:'rgba(41,182,246,0.5)' },
   avg85:      { icon:'🎯', name:'Puntería',        how:'Mantén 85% de promedio o más.',                 metric:'avg',       goal:85,  unit:'%', color:'#EC407A', colorDark:'#AD1457', glow:'rgba(236,64,122,0.45)' },
-  module1:    { icon:'🪪', name:'Módulo completo', how:'Termina todas las actividades de un módulo.',   metric:'modules',   goal:1,   color:'#FFA726', colorDark:'#EF6C00', glow:'rgba(255,167,38,0.5)' },
+  module1:    { icon:'🪪', name:'Módulo completo', how:'Termina todas las actividades de un módulo.',   metric:'modules',   goal:1,   decay:true, color:'#FFA726', colorDark:'#EF6C00', glow:'rgba(255,167,38,0.5)' },
 };
+
+/* ── Decaimiento de logros por inactividad ────────────────────────────
+ * Mientras el alumno practica (lastActiveDays < 2) no pierde nada.
+ * A partir de 2 días sin práctica sus logros acumulables empiezan a
+ * debilitarse progresivamente, y se recuperan en cuanto vuelve a practicar. */
+const ACH_GRACE_DAYS = 2;
+function achievementDecayFactor(student) {
+  const d = student.lastActiveDays || 0;
+  if (d < ACH_GRACE_DAYS) return 1;
+  return Math.max(0.25, 1 - (d - 1) * 0.18); // d2≈0.82 · d3≈0.64 · d4≈0.46 · d5≈0.28 · d6+≈0.25
+}
 
 /* Progreso real de cada logro a partir de las estadísticas del alumno */
 function _medalCurrent(student, metric) {
@@ -361,11 +374,33 @@ function medalProgress(student, key) {
   if (!def) return { current: 0, goal: 1, pct: 0, done: false, remaining: 1 };
   const raw = _medalCurrent(student, def.metric);
   const goal = def.goal || 1;
-  const pct = Math.max(0, Math.min(100, Math.round((raw / goal) * 100)));
-  return { current: Math.min(raw, goal), rawCurrent: raw, goal, pct, done: raw >= goal, remaining: Math.max(0, goal - raw) };
+  const trulyEarned = raw >= goal;
+  const factor = def.decay ? achievementDecayFactor(student) : 1;
+  const eff = def.decay ? raw * factor : raw;
+  const pct = Math.max(0, Math.min(100, Math.round((eff / goal) * 100)));
+  const done = eff >= goal;
+  return {
+    current: Math.min(Math.round(eff), goal), rawCurrent: raw, goal, pct, done,
+    remaining: Math.max(0, goal - Math.round(eff)),
+    decays: !!def.decay, factor,
+    lost: trulyEarned && !done,                 // lo tenías y lo estás perdiendo
+    fading: trulyEarned && done && factor < 1,  // lo conservas pero está en riesgo
+  };
 }
 function earnedMedals(student) {
   return Object.keys(ACHIEVEMENT_DEFS).filter(k => medalProgress(student, k).done);
+}
+/* Aviso de logros en peligro por inactividad (banner + notificación) */
+function getAchievementAlert(student) {
+  const d = student.lastActiveDays || 0;
+  if (d < ACH_GRACE_DAYS) return null;
+  let lost = 0, fading = 0;
+  Object.keys(ACHIEVEMENT_DEFS).forEach(k => {
+    const m = medalProgress(student, k);
+    if (m.lost) lost++; else if (m.fading) fading++;
+  });
+  if (lost === 0 && fading === 0) return null;
+  return { days: d, lost, fading, atRisk: lost + fading, factor: achievementDecayFactor(student) };
 }
 /* Logros más cercanos aún no conseguidos (para "Próximos logros" y el cierre de práctica) */
 function nextMedals(student, n = 3) {
@@ -1074,7 +1109,7 @@ function getModuleFinalGrade(student, module) {
   return { stats, exam, examWeight, finalPct, approved: finalPct >= 75, hasExam };
 }
 
-window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness, getStudentGrades, getStudentMonthlyPractice, getStudentTrends };
+window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getAchievementAlert, achievementDecayFactor, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness, getStudentGrades, getStudentMonthlyPractice, getStudentTrends };
 
 window.JUCUM_DATA.getStudentLog = getStudentLog;
 window.JUCUM_DATA.getModuleExamWeight = getModuleExamWeight;

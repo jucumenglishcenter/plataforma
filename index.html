@@ -917,6 +917,28 @@ main{max-width:1100px;margin:0 auto;padding:28px 24px 80px;}
 .cal-num{font-weight:800;font-size:13px;color:var(--text);}
 .cal-dot{margin-top:auto;font-size:9.5px;font-weight:800;color:#1565C0;background:#E3F2FD;border-radius:6px;padding:1px 5px;}
 @media (max-width:700px){.cal-cell{min-height:46px;} .cal-dot{font-size:8px;}}
+
+/* ── Logros en peligro por inactividad ── */
+.ach-warn{display:flex;gap:12px;align-items:flex-start;background:linear-gradient(135deg,#FFF3E0,#FFEBEE);border:1.5px solid #FFB74D;border-radius:12px;padding:12px 14px;margin-bottom:14px;}
+.ach-warn-ico{font-size:24px;flex-shrink:0;animation:achPulse 1.6s ease-in-out infinite;}
+@keyframes achPulse{0%,100%{transform:scale(1);}50%{transform:scale(1.18);}}
+.ach-warn-text{font-size:13px;line-height:1.5;color:#6D4C00;}
+.medal.lost{opacity:0.92;}
+.medal.lost .medal-ring{filter:grayscale(0.55);}
+.medal.lost .medal-ico{filter:grayscale(1) !important;opacity:0.6 !important;}
+.medal.fading .medal-ring{box-shadow:0 0 0 2px #FFB74D, 0 4px 12px rgba(255,152,0,0.3);}
+.medal-ring{position:relative;}
+.medal-risk-badge{position:absolute;top:-4px;right:-4px;font-size:15px;background:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.25);}
+.medal-lost-txt{font-size:11px;font-weight:800;color:#C62828;margin-bottom:2px;}
+
+/* ── Importación masiva de alumnos ── */
+.bulk-preview{max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;background:#FAFAF6;}
+.bulk-row{display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid var(--border-soft);font-size:13px;}
+.bulk-row:last-child{border-bottom:none;}
+.bulk-n{width:22px;height:22px;flex-shrink:0;background:#1F3A8A;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;}
+.bulk-name{font-weight:700;color:var(--text);flex:1;min-width:0;}
+.bulk-user{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#1565C0;background:#E3F2FD;border-radius:6px;padding:2px 8px;}
+.bulk-warn{font-size:10.5px;font-weight:700;color:#E65100;background:#FFF3E0;border-radius:6px;padding:2px 7px;}
 </style>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
@@ -928,6 +950,7 @@ main{max-width:1100px;margin:0 auto;padding:28px 24px 80px;}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
+<script src="logo.js"></script>
 <script src="supabase-client.js"></script>
 <script src="supabase-sync.js"></script>
 <script type="text/babel" src="data.js"></script>

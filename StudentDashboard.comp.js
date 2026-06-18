@@ -115,7 +115,7 @@ function StudentDashboard({ user, onLogout }) {
       {!showOnb && !celebrate && alertKind && <StudentAlertModal kind={alertKind} student={student} onClose={() => setAlertKind(null)} />}
       <header className="app-header">
         <div className="app-logo">
-          <img src="../../assets/logo-jucum.png" alt="JUCUM EC" />
+          <img src={window.JUCUM_LOGO || 'logo-jucum.png'} alt="JUCUM EC" />
           <div className="pgtitle">Mi panel de aprendizaje</div>
         </div>
         <div className="app-right">
@@ -193,6 +193,7 @@ function StudentDashboard({ user, onLogout }) {
             <div className="sec-title">🏆 Mis logros</div>
             <span className="sec-meta">{earnedMedals(student).length} / {Object.keys(ACHIEVEMENT_DEFS).length} conseguidos</span>
           </div>
+          <AchievementWarning student={student} />
           <MedalShowcase student={student} defs={ACHIEVEMENT_DEFS} />
         </div>
 
@@ -444,25 +445,65 @@ function RankCard({ student, groupName }) {
   );
 }
 
+function AchievementWarning({ student }) {
+  const { getAchievementAlert } = window.JUCUM_DATA;
+  const alert = getAchievementAlert(student);
+  React.useEffect(() => {
+    if (!alert || !window.JUCUM_NOTIF) return;
+    const today = new Date().toISOString().slice(0,10);
+    const key = 'jucum_ach_warn_' + student.id;
+    if (localStorage.getItem(key) === today) return;
+    localStorage.setItem(key, today);
+    window.JUCUM_NOTIF.pushNotif(student.id, {
+      type: 'achievement',
+      title: '⚠️ Tus logros están en peligro',
+      body: `Hace ${alert.days} días no practicas. ${alert.lost > 0 ? `Ya empezaste a perder ${alert.lost} logro${alert.lost===1?'':'s'}.` : `${alert.atRisk} logro${alert.atRisk===1?'':'s'} en riesgo.`} ¡Practica hoy para recuperarlos!`,
+      link: 'dashboard',
+    });
+  }, [alert && alert.days]);
+  if (!alert) return null;
+  return (
+    <div className="ach-warn">
+      <span className="ach-warn-ico">⚠️</span>
+      <div className="ach-warn-text">
+        <b>Hace {alert.days} días no practicas — tus logros están en peligro.</b>
+        {alert.lost > 0
+          ? <> Ya empezaste a perder <b>{alert.lost}</b> logro{alert.lost===1?'':'s'} y otros se están debilitando. Practica hoy para recuperarlos — cada día sin practicar pierdes más.</>
+          : <> Tienes <b>{alert.atRisk}</b> logro{alert.atRisk===1?'':'s'} debilitándose. Practica hoy y vuelven a brillar.</>}
+      </div>
+    </div>
+  );
+}
+
 function MedalShowcase({ student, defs }) {
   const { medalProgress } = window.JUCUM_DATA;
   return (
     <div className="medal-grid">
       {Object.entries(defs).map(([key, def]) => {
         const p = medalProgress(student, key);
-        const ringBg = `conic-gradient(${def.color} ${p.pct}%, #ECE9E0 ${p.pct}%)`;
+        const ringColor = p.lost ? '#C62828' : def.color;
+        const ringBg = `conic-gradient(${ringColor} ${p.pct}%, #ECE9E0 ${p.pct}%)`;
+        const cls = p.done ? (p.fading ? 'unlocked fading' : 'unlocked') : (p.lost ? 'locked lost' : 'locked');
         return (
-          <div key={key} className={`medal ${p.done?'unlocked':'locked'}`}
+          <div key={key} className={`medal ${cls}`}
                style={{'--ring':def.color,'--ringDark':def.colorDark,'--glow':def.glow}}>
             <div className="medal-ring" style={{background:ringBg}}>
               <div className="medal-inner">
                 <span className="medal-ico" style={p.done?undefined:{filter:'grayscale(0.7)',opacity:0.5}}>{def.icon}</span>
               </div>
+              {p.lost && <span className="medal-risk-badge">⚠️</span>}
             </div>
             <div className="medal-name">{def.name}</div>
             <div className="medal-desc">{def.how}</div>
             {p.done ? (
-              <div className="medal-rarity done" style={{color:def.colorDark}}>✓ ¡Conseguida!</div>
+              p.fading
+                ? <div className="medal-rarity" style={{color:'#E65100'}}>⚠️ En riesgo — ¡practica!</div>
+                : <div className="medal-rarity done" style={{color:def.colorDark}}>✓ ¡Conseguida!</div>
+            ) : p.lost ? (
+              <div className="medal-prog">
+                <div className="medal-lost-txt">💔 En peligro por no practicar</div>
+                <span className="medal-prog-txt">Practica para recuperarla</span>
+              </div>
             ) : (
               <div className="medal-prog">
                 <div className="medal-prog-bar"><span style={{width:p.pct+'%', background:def.color}}></span></div>
@@ -596,4 +637,4 @@ function TodayPracticeCard({ student }) {
   );
 }
 
-Object.assign(window, { StudentDashboard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase, StudentAlertModal, ProgressExplainer, ExplainerBody, TodayPracticeCard });
+Object.assign(window, { StudentDashboard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase, AchievementWarning, StudentAlertModal, ProgressExplainer, ExplainerBody, TodayPracticeCard });

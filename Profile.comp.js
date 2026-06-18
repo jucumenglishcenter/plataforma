@@ -46,6 +46,7 @@ function StudentProfile({ user, onBack }) {
             <div className="sec-title">🏆 Mis logros</div>
             <span className="sec-meta">{earnedMedals(student).length}/{Object.keys(ACHIEVEMENT_DEFS).length} conseguidos</span>
           </div>
+          {window.AchievementWarning && <AchievementWarning student={student} />}
           <MedalShowcase student={student} defs={ACHIEVEMENT_DEFS} />
         </div>
       </div>
