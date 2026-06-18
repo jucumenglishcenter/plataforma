@@ -168,7 +168,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
   const [showReport, setShowReport] = React.useState(false);
   React.useEffect(() => { document.body.setAttribute('data-level', group.level); return () => document.body.removeAttribute('data-level'); }, [group.level]);
 
-  const groupAvg = Math.round(members.reduce((s,x)=>s+getStudentMastery(x).pct,0)/members.length);
+  const groupAvg = members.length ? Math.round(members.reduce((s,x)=>s+getStudentMastery(x).pct,0)/members.length) : 0;
   const sorted = [...members].sort((a, b) => getStudentMastery(b).pct - getStudentMastery(a).pct);
 
   if (showReport) return <GroupReport groupId={groupId} onBack={() => setShowReport(false)} />;

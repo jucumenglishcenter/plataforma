@@ -886,8 +886,35 @@ function getStudentReadiness(student) {
     }
   } catch {}
 
-  const overall = taskCompliance == null ? practiceAvg : Math.round(practiceAvg * 0.7 + taskCompliance * 0.3);
-  return { competencies: comp, practiceAvg, taskCompliance, overall, apt: overall >= 75, threshold: 75 };
+  /* ── Cumplimiento general (REESTRUCTURADO) ──────────────────────────
+   * El antiguo "overall" promediaba solo las competencias tocadas, así que
+   * 2 actividades sueltas daban ~30%. Ahora se basa en el AVANCE REAL sobre
+   * TODO el módulo activo (cobertura de temas), la calidad de lo hecho, la
+   * constancia, y penaliza la inactividad. Las tareas suman de forma acotada.
+   *   No se puede estar "75% listo" sin haber cubierto buena parte de los temas. */
+  const coverageAll = m.coverage / 100;   // actividades hechas ÷ total del módulo (todas las competencias)
+  const quality = (m.quality || 0) / 100;  // promedio de aciertos de lo hecho
+  // base = avance × dominio (si solo vio el 5% del módulo, la base ronda 5%)
+  let base = coverageAll * (0.6 + 0.4 * quality) * 100; // la calidad modula, no infla
+  base = base * constancyFactor;                          // constancia (0.8–1.05)
+
+  // penalización por inactividad: días sin practicar restan
+  const inactive = typeof student.lastActiveDays === 'number' ? student.lastActiveDays : 0;
+  let inactivityFactor = 1;
+  if (inactive >= 14) inactivityFactor = 0.55;
+  else if (inactive >= 7) inactivityFactor = 0.7;
+  else if (inactive >= 4) inactivityFactor = 0.85;
+  base = base * inactivityFactor;
+
+  // las tareas suman de forma acotada y proporcional (máx 15 puntos de empuje)
+  let overall = base;
+  if (taskCompliance != null) overall = base * 0.85 + Math.min(taskCompliance, base + 25) * 0.15;
+
+  overall = Math.max(0, Math.min(100, Math.round(overall)));
+  // tope de seguridad: sin cubrir la mayoría del módulo no se puede ser "apto"
+  const apt = overall >= 75 && coverageAll >= 0.6;
+  return { competencies: comp, practiceAvg, taskCompliance, overall, apt, threshold: 75,
+           coverage: m.coverage, quality: m.quality, daysInactive: inactive };
 }
 
 /* ── Registro de notas (boletín consolidado) ─────────────────────────

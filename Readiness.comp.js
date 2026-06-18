@@ -48,6 +48,14 @@ function ReadinessCard({ student, forTeacher }) {
         </div>
       </div>
 
+      <div style={{display:'flex', gap:8, flexWrap:'wrap', marginBottom:12, fontSize:11.5, fontWeight:700}}>
+        <span className="mm-chip" style={{background:'#F0F0EA', color:'#555'}}>📈 Avance del módulo: {r.coverage ?? 0}%</span>
+        {typeof r.daysInactive === 'number' && r.daysInactive >= 4 &&
+          <span className="mm-chip" style={{background:'#FFEBEE', color:'#C62828'}}>⚠ {r.daysInactive} días sin practicar</span>}
+        {r.coverage != null && r.coverage < 60 &&
+          <span className="mm-chip" style={{background:'#FFF8E1', color:'#E65100'}}>Aún no cubre la mayoría de los temas</span>}
+      </div>
+
       {COMPETENCIES.map(c => <CompBar key={c.key} icon={c.icon} label={c.label} value={r.competencies[c.key]} />)}
 
       {r.taskCompliance != null && <CompBar icon="📝" label="Cumplimiento de tareas" value={r.taskCompliance} />}

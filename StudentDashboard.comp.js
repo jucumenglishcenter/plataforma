@@ -186,6 +186,8 @@ function StudentDashboard({ user, onLogout }) {
           </div>
         </div>
 
+        <ProgressExplainer studentId={student.id} />
+
         <div style={{marginTop:18}}><ReadinessCard student={student} /></div>
 
         <div className="kpi-grid">
@@ -482,4 +484,40 @@ function StudentAlertModal({ kind, student, onClose }) {
   );
 }
 
-Object.assign(window, { StudentDashboard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase, StudentAlertModal });
+function ProgressExplainer({ studentId }) {
+  const key = 'jucum_explainer_dismissed_' + studentId;
+  const [open, setOpen] = React.useState(() => { try { return !localStorage.getItem(key); } catch { return true; } });
+  const [expanded, setExpanded] = React.useState(false);
+  if (!open) return (
+    <div style={{marginTop:18, textAlign:'right'}}>
+      <button className="att-btn" onClick={() => setExpanded(e => !e)} style={{fontSize:12}}>❔ ¿Cómo funciona mi avance?</button>
+      {expanded && <div style={{marginTop:8}}><ExplainerBody /></div>}
+    </div>
+  );
+  return (
+    <div className="scard" style={{marginTop:18, background:'#FFF8E8', borderColor:'#F4C430'}}>
+      <div className="sec-head">
+        <div className="sec-title">📣 ¿Cómo crece (o baja) tu avance?</div>
+        <button className="modal-close" onClick={() => { try { localStorage.setItem(key, '1'); } catch {} setOpen(false); }}>✕</button>
+      </div>
+      <ExplainerBody />
+      <div style={{marginTop:10, fontSize:12, color:'#7A5C00'}}>Puedes volver a leer esto cuando quieras con el botón “❔ ¿Cómo funciona mi avance?”.</div>
+    </div>
+  );
+}
+
+function ExplainerBody() {
+  return (
+    <div style={{fontSize:13.5, lineHeight:1.65, color:'var(--text)'}}>
+      <p style={{margin:'0 0 10px'}}>Tu <b>barra de avance no es fija: sube y baja según tu constancia.</b> No basta con hacer una actividad una vez — lo que más cuenta es <b>practicar un poco cada día</b>.</p>
+      <div style={{display:'grid', gap:8}}>
+        <div style={{display:'flex', gap:10, alignItems:'flex-start'}}><span style={{fontSize:18}}>📈</span><div><b>Sube</b> cuando practicas seguido, avanzas en los temas del módulo y entregas tus tareas.</div></div>
+        <div style={{display:'flex', gap:10, alignItems:'flex-start'}}><span style={{fontSize:18}}>📉</span><div><b>Baja</b> si dejas de practicar varios días: a los 4 días empieza a bajar, y más aún a los 7 o más.</div></div>
+        <div style={{display:'flex', gap:10, alignItems:'flex-start'}}><span style={{fontSize:18}}>🎯</span><div>Para estar <b>listo para tu examen</b> necesitas llegar al <b>75%</b> y haber cubierto la mayoría de los temas — no solo unas pocas actividades.</div></div>
+        <div style={{display:'flex', gap:10, alignItems:'flex-start'}}><span style={{fontSize:18}}>🌱</span><div>Empezar un hábito cuesta. Si te cuesta arrancar, hazlo <b>fácil</b>: 10 minutos al día, siempre a la misma hora. ¡Tú puedes!</div></div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { StudentDashboard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase, StudentAlertModal, ProgressExplainer, ExplainerBody });
