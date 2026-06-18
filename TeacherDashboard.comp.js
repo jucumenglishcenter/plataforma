@@ -444,6 +444,8 @@ function StudentDetail({ studentId, onBack }) {
 
       <ModuleChecklist stu={stu} group={group} />
 
+      <div style={{marginTop:18}}><ReadinessCard student={stu} forTeacher /></div>
+
       <div className="two-col">
         <div className="scard">
           <PracticeChart stu={stu} level={level} />

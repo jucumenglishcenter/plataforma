@@ -819,6 +819,77 @@ function getComplianceRanking(groupId) {
     .sort((a, b) => b.score - a.score || b.streak - a.streak || b.xp - a.xp);
 }
 
-window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getMotivation, getStudentMastery, getComplianceRanking };
+/* ── Competencias + "Listo para el examen" ───────────────────────────
+ * Cada competencia sube con la CONSTANCIA (cobertura × aciertos × constancia),
+ * no por hacer una actividad una sola vez. Speaking además suma con las
+ * evaluaciones de Speaking del profesor.
+ * "Listo" (apto) = overall ≥ 75%, donde overall combina práctica (70%) y
+ * cumplimiento de tareas (30%). El profesor tiene la última palabra. */
+const COMPETENCIES = [
+  { key:'listening', label:'Comprensión auditiva', icon:'🎧', types:['listening'] },
+  { key:'reading',   label:'Comprensión lectora',  icon:'📖', types:['reading'] },
+  { key:'grammar',   label:'Gramática',            icon:'📝', types:['grammar','summary'] },
+  { key:'speaking',  label:'Speaking',             icon:'🗣️', types:['story'] },
+];
+
+function getStudentReadiness(student) {
+  if (!student) return { competencies:{}, practiceAvg:0, taskCompliance:null, overall:0, apt:false, threshold:75 };
+  const prog = getStudentProgress(student.id);
+  const completed = prog.completed || {};
+  const mods = MODULE_CATALOG[student.level] || [];
+  const m = getStudentMastery(student);
+  const constancyFactor = 0.8 + 0.2 * Math.min(1, (m.active7 || 0) / 5);
+
+  const comp = {};
+  COMPETENCIES.forEach(c => {
+    let total = 0, done = 0, sSum = 0, sN = 0;
+    mods.forEach(mod => (mod.activities || []).forEach(a => {
+      if (!c.types.includes(a.type)) return;
+      total++;
+      const e = completed[`${mod.id}:${a.id}`];
+      if (e) {
+        done++;
+        if (typeof e.score === 'number') { const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100); sSum += pct; sN++; }
+        else { sSum += 70; sN++; }
+      }
+    }));
+    const coverage = total ? done / total : 0;
+    const quality = sN ? (sSum / sN) / 100 : 0;
+    comp[c.key] = total === 0 ? null : Math.round(coverage * quality * 100 * constancyFactor);
+  });
+
+  // Speaking también suma con las evaluaciones de Speaking del profesor
+  try {
+    const evals = (JSON.parse(localStorage.getItem('jucum_evaluations_v1') || '{}')[student.id]) || [];
+    const sp = evals.map(e => e.ratings && e.ratings.speaking).filter(v => typeof v === 'number');
+    if (sp.length) {
+      const evalScore = Math.round((sp.reduce((a, b) => a + b, 0) / sp.length) / 5 * 100);
+      comp.speaking = comp.speaking == null ? evalScore : Math.round(comp.speaking * 0.5 + evalScore * 0.5);
+    }
+  } catch {}
+
+  const compVals = COMPETENCIES.map(c => comp[c.key]).filter(v => typeof v === 'number');
+  const practiceAvg = compVals.length ? Math.round(compVals.reduce((a, b) => a + b, 0) / compVals.length) : 0;
+
+  // cumplimiento de tareas asignadas
+  let taskCompliance = null;
+  try {
+    const assigns = JSON.parse(localStorage.getItem('jucum_assignments_v1') || '[]');
+    const subs = JSON.parse(localStorage.getItem('jucum_submissions_v1') || '{}');
+    const mine = assigns.filter(a => {
+      const targeted = Array.isArray(a.targetStudentIds) && a.targetStudentIds.length > 0;
+      return targeted ? a.targetStudentIds.includes(student.id) : a.groupId === student.group;
+    });
+    if (mine.length) {
+      const sub = mine.filter(a => (subs[a.id] || {})[student.id]).length;
+      taskCompliance = Math.round(sub / mine.length * 100);
+    }
+  } catch {}
+
+  const overall = taskCompliance == null ? practiceAvg : Math.round(practiceAvg * 0.7 + taskCompliance * 0.3);
+  return { competencies: comp, practiceAvg, taskCompliance, overall, apt: overall >= 75, threshold: 75 };
+}
+
+window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness };
 
 window.JUCUM_DATA.getStudentLog = getStudentLog;

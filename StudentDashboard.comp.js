@@ -180,6 +180,8 @@ function StudentDashboard({ user, onLogout }) {
           </div>
         </div>
 
+        <div style={{marginTop:18}}><ReadinessCard student={student} /></div>
+
         <div className="kpi-grid">
           <div className="kpi"><div className="kpi-ico">📦</div><div className="kpi-num">{student.completedModules}</div><div className="kpi-lbl">Módulos completos</div></div>
           <div className="kpi"><div className="kpi-ico">📊</div><div className="kpi-num">{student.avgScore}%</div><div className="kpi-lbl">Promedio</div></div>
