@@ -890,6 +890,107 @@ function getStudentReadiness(student) {
   return { competencies: comp, practiceAvg, taskCompliance, overall, apt: overall >= 75, threshold: 75 };
 }
 
-window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness };
+/* ── Registro de notas (boletín consolidado) ─────────────────────────
+ * Junta como evidencia del avance: resultados de exámenes, tareas calificadas
+ * y evaluaciones presenciales. Lee los cachés de localStorage. */
+function getStudentGrades(student) {
+  if (!student) return [];
+  const out = [];
+  // Exámenes
+  try {
+    const wins = JSON.parse(localStorage.getItem('jucum_exam_windows_v1') || '[]');
+    const exams = JSON.parse(localStorage.getItem('jucum_exams_v1') || '[]');
+    wins.forEach(w => {
+      const res = (w.results || {})[student.id];
+      if (res && (typeof res.grade === 'number' || typeof res.passed === 'boolean')) {
+        const ex = exams.find(e => e.id === w.examId);
+        out.push({ kind:'exam', icon:'🎓', title: ex?.title || 'Examen', date: res.gradedAt,
+                   grade: (typeof res.grade === 'number' ? res.grade : null), passed: res.passed, feedback: res.feedback });
+      }
+    });
+  } catch {}
+  // Tareas calificadas
+  try {
+    const assigns = JSON.parse(localStorage.getItem('jucum_assignments_v1') || '[]');
+    const subs = JSON.parse(localStorage.getItem('jucum_submissions_v1') || '{}');
+    assigns.forEach(a => {
+      const s = (subs[a.id] || {})[student.id];
+      if (s && s.status === 'graded' && typeof s.grade === 'number') {
+        out.push({ kind:'task', icon:'📝', title: a.title, date: s.gradedAt || s.submittedAt, grade: s.grade, feedback: s.feedback });
+      }
+    });
+  } catch {}
+  // Evaluaciones presenciales
+  try {
+    const evals = (JSON.parse(localStorage.getItem('jucum_evaluations_v1') || '{}')[student.id]) || [];
+    evals.forEach(e => {
+      const r = e.ratings || {};
+      const present = ['speaking','listening','comprehension'].filter(k => typeof r[k] === 'number');
+      const avg5 = present.length ? present.reduce((a,k) => a + r[k], 0) / present.length : null;
+      out.push({ kind:'eval', icon:'📊', title:'Evaluación presencial', date: e.date,
+                 grade: avg5 != null ? Math.round(avg5 / 5 * 100) : null,
+                 stars: present.map(k => ({ k, v: r[k] })), feedback: e.feedback });
+    });
+  } catch {}
+  return out.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+}
+
+/* Práctica del mes actual: días estudiados vs meta (~5 de cada 7 días) + minutos */
+function getStudentMonthlyPractice(student) {
+  const prog = getStudentProgress(student.id);
+  const completed = prog.completed || {};
+  const now = new Date();
+  const y = now.getFullYear(), mo = now.getMonth();
+  const monthStart = new Date(y, mo, 1);
+  const elapsedDays = Math.floor((now - monthStart) / 86400000) + 1;
+  const days = new Set();
+  let minutes = 0;
+  Object.values(completed).forEach(e => {
+    if (!e || !e.date) return;
+    const d = new Date(e.date);
+    if (d.getFullYear() === y && d.getMonth() === mo) { days.add(String(e.date).slice(0, 10)); minutes += e.minutes || 0; }
+  });
+  const targetDays = Math.max(1, Math.round(elapsedDays * 5 / 7));
+  const daysStudied = days.size;
+  const pct = Math.min(100, Math.round(daysStudied / targetDays * 100));
+  return { daysStudied, targetDays, elapsedDays, minutes, pct };
+}
+
+/* Tendencia por competencia: compara la primera mitad vs la última mitad de
+ * los resultados con nota, en orden de fecha (¿mejoró o retrocedió?). */
+function getStudentTrends(student) {
+  const prog = getStudentProgress(student.id);
+  const completed = prog.completed || {};
+  const mods = MODULE_CATALOG[student.level] || [];
+  const typeOf = {};
+  mods.forEach(m => (m.activities || []).forEach(a => typeOf[`${m.id}:${a.id}`] = a.type));
+  const series = { listening: [], reading: [], grammar: [], speaking: [] };
+  Object.entries(completed).forEach(([k, e]) => {
+    if (!e || typeof e.score !== 'number' || !e.date) return;
+    const t = typeOf[k];
+    let comp = t === 'listening' ? 'listening' : t === 'reading' ? 'reading' : (t === 'grammar' || t === 'summary') ? 'grammar' : t === 'story' ? 'speaking' : null;
+    if (!comp) return;
+    const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100);
+    series[comp].push({ date: e.date, pct });
+  });
+  try {
+    const evals = (JSON.parse(localStorage.getItem('jucum_evaluations_v1') || '{}')[student.id]) || [];
+    evals.forEach(ev => { if (ev.ratings && typeof ev.ratings.speaking === 'number') series.speaking.push({ date: ev.date, pct: ev.ratings.speaking / 5 * 100 }); });
+  } catch {}
+  const out = {};
+  COMPETENCIES.forEach(c => {
+    const arr = (series[c.key] || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    if (arr.length < 2) { out[c.key] = { dir: 'na', count: arr.length }; return; }
+    const half = Math.max(1, Math.floor(arr.length / 2));
+    const firstAvg = Math.round(arr.slice(0, half).reduce((s, x) => s + x.pct, 0) / half);
+    const lastSlice = arr.slice(-half);
+    const lastAvg = Math.round(lastSlice.reduce((s, x) => s + x.pct, 0) / lastSlice.length);
+    const delta = lastAvg - firstAvg;
+    out[c.key] = { first: firstAvg, last: lastAvg, delta, dir: delta >= 5 ? 'up' : delta <= -5 ? 'down' : 'flat', count: arr.length };
+  });
+  return out;
+}
+
+window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness, getStudentGrades, getStudentMonthlyPractice, getStudentTrends };
 
 window.JUCUM_DATA.getStudentLog = getStudentLog;

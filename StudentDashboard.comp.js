@@ -99,6 +99,7 @@ function StudentDashboard({ user, onLogout }) {
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('forum');}}>💬 Foro</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('tasks');}}>📝 Tareas</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('exam');}}>🎓 Examen</a>
+          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('report');}}>📄 Mi reporte</a>
           <NotifBell userId={student.id} onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); else if (n.link === 'tasks') setView('tasks'); else if (n.link === 'exam') setView('exam'); }} />
           <div className="user-pill">
             <div className="ava" style={{background:`linear-gradient(135deg,${level.color}80,${level.dark})`}}>
@@ -116,6 +117,8 @@ function StudentDashboard({ user, onLogout }) {
         <StudentAssignments user={user} onBack={() => setView('dashboard')} />
       ) : view === 'exam' ? (
         <StudentExams user={user} onBack={() => setView('dashboard')} />
+      ) : view === 'report' ? (
+        <StudentReport student={student} onBack={() => setView('dashboard')} />
       ) : view === 'forum' ? (
         <>
           <button className="back-btn" onClick={() => setView('dashboard')} style={{padding:'10px 28px 0'}}>← Volver al panel</button>
@@ -191,6 +194,8 @@ function StudentDashboard({ user, onLogout }) {
           <div className="kpi"><div className="kpi-ico">🏆</div><div className="kpi-num">{earnedMedals(student).length}</div><div className="kpi-lbl">Logros</div></div>
           <div className="kpi"><div className="kpi-ico">⏱️</div><div className="kpi-num">{Math.floor(student.totalMinutes/60)}h {student.totalMinutes%60}m</div><div className="kpi-lbl">Tiempo total</div></div>
         </div>
+        <div style={{marginTop:18}}><GradesRecord student={student} /></div>
+
         <div className="scard" style={{marginTop:18}}>
           <div className="sec-head">
             <div className="sec-title">📊 Evaluaciones del profesor</div>

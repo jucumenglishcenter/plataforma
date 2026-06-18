@@ -406,6 +406,7 @@ function StudentDetail({ studentId, onBack }) {
   const mastery = getStudentMastery(stu);
   const [resetting, setResetting] = React.useState(false);
   const Gate = window.TeacherPasswordGate;
+  const [showReport, setShowReport] = React.useState(false);
   const doReset = () => {
     if (window.JUCUM_SB) window.JUCUM_SB.update('users', stu.id, { password: '1234' }).catch(e => console.warn(e.message));
     setResetting(false);
@@ -415,6 +416,8 @@ function StudentDetail({ studentId, onBack }) {
   const level = LEVELS[stu.level];
   const myLog = window.JUCUM_DATA.getStudentLog ? window.JUCUM_DATA.getStudentLog(stu.id) : ACTIVITY_LOG.filter(a => a.studentId === stu.id);
   React.useEffect(() => { document.body.setAttribute('data-level', stu.level); return () => document.body.removeAttribute('data-level'); }, [stu.level]);
+
+  if (showReport) return <StudentReport student={stu} onBack={() => setShowReport(false)} forTeacher />;
 
   return (
     <>
@@ -430,6 +433,7 @@ function StudentDetail({ studentId, onBack }) {
           <div className="sh-user">@{stu.username} · {group.schedule}</div>
         </div>
         <div className="sh-actions">
+          <button className="btn-soft" onClick={() => setShowReport(true)}>📄 Reporte de avance</button>
           <button className="btn-soft">📧 Contactar</button>
           <button className="btn-soft" onClick={() => setResetting(true)}>🔑 Resetear contraseña</button>
         </div>
@@ -472,6 +476,8 @@ function StudentDetail({ studentId, onBack }) {
           ? <ActivityByDay events={myLog} />
           : <div className="empty-state"><div className="icon">📭</div>Sin actividad registrada todavía.</div>}
       </div>
+
+      <div style={{marginTop:18}}><GradesRecord student={stu} forTeacher /></div>
 
       <div className="scard" style={{marginTop:18}}>
         <div className="sec-head">
