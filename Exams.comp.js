@@ -1,0 +1,402 @@
+/* Bloque J · Exámenes — UI profesor + alumno
+ * Profesor: define exámenes (varias partes/competencias con su HTML), abre el
+ * "momento" para un grupo/alumnos, ve preparación (apto ≥75%), habilita a quien
+ * decida pese a no llegar (última palabra), y registra resultado.
+ * Alumno: ve su examen solo cuando está abierto y es apto/habilitado; abre cada
+ * parte; sube material (ej. audio de Speaking); ve su resultado.
+ */
+
+const { useState: exUseState } = React;
+
+function compLabel(key) {
+  const c = (window.JUCUM_DATA.COMPETENCIES || []).find(x => x.key === key);
+  return c ? `${c.icon} ${c.label}` : '📑 ' + key;
+}
+const COMP_OPTIONS = [
+  { key:'listening', l:'🎧 Comprensión auditiva' },
+  { key:'reading',   l:'📖 Comprensión lectora' },
+  { key:'grammar',   l:'📝 Gramática' },
+  { key:'speaking',  l:'🗣️ Speaking' },
+  { key:'writing',   l:'✍️ Writing' },
+  { key:'other',     l:'📑 Otra' },
+];
+
+/* ═══════════════ PROFESOR ═══════════════ */
+function TeacherExams({ onBack }) {
+  const { LEVELS } = window.JUCUM_DATA;
+  const X = window.JUCUM_EXAMS;
+  const [tab, setTab] = exUseState('windows');
+  const [editing, setEditing] = exUseState(null); // 'new' | exam
+  const [opening, setOpening] = exUseState(false);
+  const [tick, setTick] = exUseState(0);
+  const refresh = () => setTick(t => t + 1);
+
+  const exams = X.getExams();
+  const windows = X.getWindows();
+
+  return (
+    <main>
+      <button className="back-btn" onClick={onBack}>← Volver al panel</button>
+      <div className="welcome teacher">
+        <div className="welcome-text">
+          <div className="eyebrow">🎓 Exámenes</div>
+          <h1>Exámenes de avance</h1>
+          <p>Define tus exámenes (un HTML por competencia) y abre el momento cuando toque. La plataforma marca apto al 75%, pero tú decides quién rinde.</p>
+        </div>
+        <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+          <button className="btn-settings" onClick={() => setEditing('new')}>+ Definir examen</button>
+          <button className="btn-settings" onClick={() => setOpening(true)} disabled={exams.length===0}>📅 Abrir examen</button>
+        </div>
+      </div>
+
+      <div className="mm-tabs">
+        <button className={`mm-tab ${tab==='windows'?'on':''}`} onClick={() => setTab('windows')}>📅 Activos <span className="mm-count">{windows.length}</span></button>
+        <button className={`mm-tab ${tab==='define'?'on':''}`} onClick={() => setTab('define')}>📑 Definidos <span className="mm-count">{exams.length}</span></button>
+      </div>
+
+      {tab === 'define' ? (
+        exams.length === 0
+          ? <div className="scard"><div className="empty-state"><div className="icon">📑</div>Aún no defines exámenes. Crea el primero.</div></div>
+          : <div className="mm-list">
+              {exams.map(e => (
+                <div key={e.id} className="scard mm-card">
+                  <div className="mm-emoji">📑</div>
+                  <div className="mm-info">
+                    <div className="mm-name">{e.title}</div>
+                    <div className="mm-meta">{LEVELS[e.level]?.code || e.level} · {(e.parts||[]).length} parte{(e.parts||[]).length===1?'':'s'} · {(e.moduleIds||[]).length} módulo(s)</div>
+                    <div className="mm-topics">{(e.parts||[]).map((p,i) => <span key={i} className="mm-chip">{compLabel(p.competency)}</span>)}</div>
+                  </div>
+                  <div className="mm-actions">
+                    <button className="att-btn" onClick={() => setEditing(e)}>✏️ Editar</button>
+                    <button className="att-btn" style={{borderColor:'#EF9A9A',color:'#C62828'}} onClick={() => { if (confirm('¿Eliminar este examen y sus ventanas?')) { X.deleteExam(e.id); refresh(); } }}>🗑</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+      ) : (
+        windows.length === 0
+          ? <div className="scard"><div className="empty-state"><div className="icon">📅</div>No has abierto ningún examen. Usa “Abrir examen”.</div></div>
+          : <div style={{display:'flex', flexDirection:'column', gap:14}}>
+              {windows.map(w => <WindowCard key={w.id} w={w} onChange={refresh} />)}
+            </div>
+      )}
+
+      {editing && <ExamForm exam={editing==='new'?null:editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />}
+      {opening && <WindowForm onClose={() => setOpening(false)} onSaved={() => { setOpening(false); setTab('windows'); refresh(); }} />}
+    </main>
+  );
+}
+
+function WindowCard({ w, onChange }) {
+  const { STUDENTS, GROUPS, LEVELS, getStudentReadiness } = window.JUCUM_DATA;
+  const X = window.JUCUM_EXAMS;
+  const exam = X.getExam(w.examId);
+  const group = GROUPS.find(g => g.id === w.groupId);
+  const recips = X.recipientsOfWindow(w, STUDENTS);
+  const [grading, setGrading] = exUseState(null);
+  const closed = w.closesAt && new Date(w.closesAt) < new Date();
+
+  return (
+    <div className="scard">
+      <div className="sec-head">
+        <div className="sec-title">📑 {exam?.title || 'Examen'}</div>
+        <button className="att-btn" style={{borderColor:'#EF9A9A',color:'#C62828'}} onClick={() => { if (confirm('¿Eliminar esta apertura de examen?')) { X.deleteWindow(w.id); onChange(); } }}>🗑</button>
+      </div>
+      <div className="mm-meta" style={{marginBottom:10}}>
+        {group ? `${LEVELS[group.level]?.emoji||''} ${group.name}` : 'grupo'} · {recips.length} alumno(s)
+        {w.closesAt && <span style={{color: closed?'#C62828':'#E65100', fontWeight:800}}> · ⏰ {closed?'Cerró':'Cierra'} {new Date(w.closesAt).toLocaleString('es-PE',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>}
+      </div>
+
+      <div className="row-flex" style={{marginBottom:12}}>
+        <button className={`preset ${w.isOpen?'on':''}`} onClick={() => { X.setWindowOpen(w.id, true); onChange(); }}>🟢 Abierto</button>
+        <button className={`preset ${!w.isOpen?'on':''}`} onClick={() => { X.setWindowOpen(w.id, false); onChange(); }}>⚪ Cerrado</button>
+        <span className="settings-hint" style={{margin:0}}>{w.isOpen ? 'Los alumnos aptos (o habilitados) ya pueden verlo.' : 'Oculto para los alumnos.'}</span>
+      </div>
+
+      <div className="sm-list">
+        {recips.map(s => {
+          const r = getStudentReadiness(s);
+          const overridden = (w.allowOverrides||[]).includes(s.id);
+          const canTake = r.apt || overridden;
+          const res = (w.results||{})[s.id];
+          const sub = (w.submissions||{})[s.id];
+          const level = LEVELS[s.level];
+          return (
+            <div key={s.id} className="sm-row" style={{flexWrap:'wrap'}}>
+              <div className="st-ava" style={{background:`linear-gradient(135deg,${level.color}80,${level.dark})`}}>{s.fullName.split(' ').map(n=>n[0]).slice(0,2).join('')}</div>
+              <div className="sm-info">
+                <div className="sm-name">{s.fullName}</div>
+                <div className="sm-meta">Preparación {r.overall}% · {r.apt ? '✅ apto' : '⚠ no apto'}{sub ? ' · entregó material' : ''}</div>
+              </div>
+              {res
+                ? <span className="mm-chip" style={{background: res.passed?'#E8F5E9':'#FFEBEE', color: res.passed?'#2E7D32':'#C62828'}}>{res.passed?'Aprobó':'Reprobó'}{typeof res.grade==='number'?` · ${res.grade}`:''}</span>
+                : <label className="check-row" title="Habilitar pese a no llegar al 75%"><input type="checkbox" checked={canTake} disabled={r.apt} onChange={() => { X.toggleOverride(w.id, s.id); onChange(); }} /><span style={{fontSize:12}}>{r.apt ? 'Apto' : 'Habilitar'}</span></label>}
+              <button className="att-btn" onClick={() => setGrading(s)}>📊 Resultado</button>
+              {sub && sub.attachments?.length > 0 && (
+                <div className="att-list" style={{flexBasis:'100%', marginTop:8}}>
+                  {sub.attachments.map((a,i) => <window.TaskAttachmentChip key={i} att={a} />)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {grading && <ExamGradeModal w={w} student={grading} onClose={() => { setGrading(null); onChange(); }} />}
+    </div>
+  );
+}
+
+function ExamGradeModal({ w, student, onClose }) {
+  const res = (w.results||{})[student.id] || {};
+  const [grade, setGrade] = exUseState(typeof res.grade==='number'?res.grade:75);
+  const [withGrade, setWithGrade] = exUseState(typeof res.grade==='number' || true);
+  const [passed, setPassed] = exUseState(res.passed ?? true);
+  const [feedback, setFeedback] = exUseState(res.feedback || '');
+  const save = () => { window.JUCUM_EXAMS.gradeExam(w.id, student.id, withGrade?grade:null, passed, feedback.trim()); onClose(); };
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal settings-modal" style={{maxWidth:520}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-head"><div className="modal-title">📊 Resultado · {student.fullName}</div><button className="modal-close" onClick={onClose}>✕</button></div>
+        <div className="modal-body">
+          <div className="settings-block">
+            <div className="preset-row">
+              <button className={`preset ${passed?'on':''}`} onClick={()=>setPassed(true)}>✅ Aprobó</button>
+              <button className={`preset ${!passed?'on':''}`} onClick={()=>setPassed(false)}>❌ Reprobó</button>
+            </div>
+          </div>
+          <div className="settings-block">
+            <label className="check-row"><input type="checkbox" checked={withGrade} onChange={e=>setWithGrade(e.target.checked)} /><span>Ponerle nota</span></label>
+            {withGrade && <div className="row-flex" style={{marginTop:8}}><input type="range" min="0" max="100" value={grade} onChange={e=>setGrade(parseInt(e.target.value))} className="slider-input" /><div className="target-val">{grade}<span>/100</span></div></div>}
+          </div>
+          <div className="settings-block">
+            <div className="settings-label">Retroalimentación</div>
+            <textarea className="eval-textarea" rows={3} value={feedback} onChange={e=>setFeedback(e.target.value)} placeholder="Comentarios para el alumno…" />
+          </div>
+          <div className="modal-actions"><button className="btn-cancel" onClick={onClose}>Cancelar</button><button className="btn-save" onClick={save}>💾 Enviar resultado</button></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExamForm({ exam, onClose, onSaved }) {
+  const { LEVELS, MODULE_CATALOG } = window.JUCUM_DATA;
+  const [title, setTitle] = exUseState(exam?.title || '');
+  const [level, setLevel] = exUseState(exam?.level || 'pre-a1');
+  const [moduleIds, setModuleIds] = exUseState(exam?.moduleIds || []);
+  const [parts, setParts] = exUseState(exam?.parts?.length ? exam.parts.map(p=>({...p})) : [{ competency:'listening', name:'', url:'' }]);
+  const [err, setErr] = exUseState('');
+  const mods = MODULE_CATALOG[level] || [];
+
+  const toggleMod = (id) => setModuleIds(m => m.includes(id) ? m.filter(x=>x!==id) : [...m, id]);
+  const setPart = (i,k,v) => { const n=[...parts]; n[i]={...n[i],[k]:v}; setParts(n); };
+  const addPart = () => setParts([...parts, { competency:'reading', name:'', url:'' }]);
+  const delPart = (i) => setParts(parts.filter((_,j)=>j!==i));
+
+  const save = () => {
+    if (!title.trim()) { setErr('Ponle un título al examen.'); return; }
+    if (parts.some(p => !p.url.trim())) { setErr('Cada parte necesita la URL de su HTML.'); return; }
+    const data = { level, title: title.trim(), moduleIds,
+      parts: parts.map(p => ({ competency:p.competency, name:(p.name||'').trim()||compLabel(p.competency), url:p.url.trim() })) };
+    if (exam) window.JUCUM_EXAMS.updateExam(exam.id, data); else window.JUCUM_EXAMS.createExam(data);
+    onSaved();
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal settings-modal" style={{maxWidth:680}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-head"><div className="modal-title">{exam?'✏️ Editar examen':'📑 Nuevo examen'}</div><button className="modal-close" onClick={onClose}>✕</button></div>
+        <div className="modal-body">
+          {err && <div className="err" style={{marginBottom:12}}>⚠ {err}</div>}
+          <div className="settings-block">
+            <div className="settings-label">Título</div>
+            <input className="input-text" style={{width:'100%'}} value={title} onChange={e=>setTitle(e.target.value)} placeholder="Ej: Examen de avance · Módulo 1" />
+          </div>
+          <div className="settings-block">
+            <div className="settings-label">Nivel</div>
+            <div className="preset-row">
+              {Object.entries(LEVELS).map(([k,lv]) => <button key={k} className={`preset ${level===k?'on':''}`} onClick={()=>{ setLevel(k); setModuleIds([]); }}>{lv.emoji} {lv.code}</button>)}
+            </div>
+          </div>
+          <div className="settings-block">
+            <div className="settings-label">Módulos que cubre (uno o varios)</div>
+            <div style={{display:'grid', gap:6}}>
+              {mods.map(m => <label key={m.id} className="check-row"><input type="checkbox" checked={moduleIds.includes(m.id)} onChange={()=>toggleMod(m.id)} /><span>{m.emoji} {m.name}</span></label>)}
+              {mods.length===0 && <div className="settings-hint">Ese nivel no tiene módulos.</div>}
+            </div>
+          </div>
+          <div className="settings-block">
+            <div className="settings-label">Partes del examen (un HTML por competencia)</div>
+            <div className="mm-acts">
+              {parts.map((p,i) => (
+                <div key={i} className="mm-act-row" style={{gridTemplateColumns:'190px 1fr 1.3fr auto'}}>
+                  <select className="input-text" value={p.competency} onChange={e=>setPart(i,'competency',e.target.value)}>
+                    {COMP_OPTIONS.map(c => <option key={c.key} value={c.key}>{c.l}</option>)}
+                  </select>
+                  <input className="input-text" placeholder="Nombre (opcional)" value={p.name} onChange={e=>setPart(i,'name',e.target.value)} />
+                  <input className="input-text" placeholder="URL del HTML (GitHub Pages)" value={p.url} onChange={e=>setPart(i,'url',e.target.value)} />
+                  <button type="button" className="att-btn" style={{borderColor:'#EF9A9A',color:'#C62828'}} onClick={()=>delPart(i)}>✕</button>
+                </div>
+              ))}
+            </div>
+            <div className="mm-add-row"><button type="button" className="att-btn" onClick={addPart}>+ Agregar parte</button></div>
+          </div>
+          <div className="modal-actions"><button className="btn-cancel" onClick={onClose}>Cancelar</button><button className="btn-save" onClick={save}>{exam?'💾 Guardar':'📑 Crear examen'}</button></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WindowForm({ onClose, onSaved }) {
+  const { GROUPS, STUDENTS, LEVELS } = window.JUCUM_DATA;
+  const X = window.JUCUM_EXAMS;
+  const exams = X.getExams();
+  const [examId, setExamId] = exUseState(exams[0]?.id || '');
+  const [groupId, setGroupId] = exUseState(GROUPS[0]?.id || '');
+  const [mode, setMode] = exUseState('group');
+  const [picked, setPicked] = exUseState([]);
+  const [closesAt, setClosesAt] = exUseState('');
+  const [openNow, setOpenNow] = exUseState(true);
+  const [err, setErr] = exUseState('');
+  const groupStudents = STUDENTS.filter(s => s.group === groupId);
+
+  const save = () => {
+    if (!examId) { setErr('Elige un examen.'); return; }
+    if (mode==='students' && picked.length===0) { setErr('Elige al menos un alumno.'); return; }
+    X.createWindow({ examId, groupId, targetStudentIds: mode==='students'?picked:[], isOpen: openNow, closesAt: closesAt?new Date(closesAt).toISOString():null });
+    onSaved();
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal settings-modal" style={{maxWidth:600}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-head"><div className="modal-title">📅 Abrir examen</div><button className="modal-close" onClick={onClose}>✕</button></div>
+        <div className="modal-body">
+          {err && <div className="err" style={{marginBottom:12}}>⚠ {err}</div>}
+          <div className="settings-block">
+            <div className="settings-label">Examen</div>
+            <select className="input-text" style={{width:'100%'}} value={examId} onChange={e=>setExamId(e.target.value)}>
+              {exams.map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
+            </select>
+          </div>
+          <div className="settings-block">
+            <div className="settings-label">Grupo</div>
+            <select className="input-text" style={{width:'100%'}} value={groupId} onChange={e=>{ setGroupId(e.target.value); setPicked([]); }}>
+              {GROUPS.map(g => <option key={g.id} value={g.id}>{LEVELS[g.level]?.emoji} {g.name}</option>)}
+            </select>
+          </div>
+          <div className="settings-block">
+            <div className="settings-label">¿A quién?</div>
+            <div className="preset-row">
+              <button className={`preset ${mode==='group'?'on':''}`} onClick={()=>setMode('group')}>👥 Todo el grupo</button>
+              <button className={`preset ${mode==='students'?'on':''}`} onClick={()=>setMode('students')}>🎯 Alumnos puntuales</button>
+            </div>
+            {mode==='students' && <div style={{marginTop:10, display:'grid', gap:6, maxHeight:200, overflowY:'auto'}}>
+              {groupStudents.map(s => <label key={s.id} className="check-row"><input type="checkbox" checked={picked.includes(s.id)} onChange={()=>setPicked(p=>p.includes(s.id)?p.filter(x=>x!==s.id):[...p,s.id])} /><span>{s.fullName}</span></label>)}
+            </div>}
+          </div>
+          <div className="settings-block">
+            <div className="settings-label">Cierre automático (opcional)</div>
+            <input type="datetime-local" className="input-text" value={closesAt} onChange={e=>setClosesAt(e.target.value)} />
+          </div>
+          <div className="settings-block">
+            <label className="check-row"><input type="checkbox" checked={openNow} onChange={e=>setOpenNow(e.target.checked)} /><span>Abrir ahora (visible para los alumnos aptos de inmediato)</span></label>
+          </div>
+          <div className="modal-actions"><button className="btn-cancel" onClick={onClose}>Cancelar</button><button className="btn-save" onClick={save}>📅 Abrir examen</button></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════ ALUMNO ═══════════════ */
+function StudentExams({ user, onBack }) {
+  const { STUDENTS } = window.JUCUM_DATA;
+  const X = window.JUCUM_EXAMS;
+  const student = STUDENTS.find(s => s.id === user.studentId) || STUDENTS[0];
+  const [tick, setTick] = exUseState(0);
+  const windows = X.openWindowsForStudent(student);
+
+  return (
+    <main>
+      <button className="back-btn" onClick={onBack}>← Volver al panel</button>
+      <div className="welcome">
+        <div className="welcome-text">
+          <div className="eyebrow">🎓 Examen</div>
+          <h1>Mi examen de avance</h1>
+          <p>Tu examen aparece aquí cuando el profesor lo habilita y alcanzas tu preparación.</p>
+        </div>
+      </div>
+
+      {windows.length === 0 ? (
+        <>
+          <div className="scard" style={{marginTop:18}}><div className="empty-state"><div className="icon">🎓</div>Por ahora no tienes ningún examen habilitado. Tu profesor lo abrirá cuando corresponda — sigue practicando para llegar listo.</div></div>
+          <div style={{marginTop:14}}><window.ReadinessCard student={student} /></div>
+        </>
+      ) : (
+        <div style={{marginTop:18, display:'flex', flexDirection:'column', gap:14}}>
+          {windows.map(w => <StudentExamCard key={w.id} w={w} student={student} onChange={()=>setTick(t=>t+1)} />)}
+        </div>
+      )}
+    </main>
+  );
+}
+
+function StudentExamCard({ w, student, onChange }) {
+  const X = window.JUCUM_EXAMS;
+  const exam = X.getExam(w.examId);
+  const canTake = X.canTakeWindow(student, w);
+  const res = (w.results||{})[student.id];
+  const sub = (w.submissions||{})[student.id];
+  const [attachments, setAttachments] = exUseState(sub?.attachments || []);
+  if (!exam) return null;
+
+  if (!canTake) {
+    return (
+      <div className="scard">
+        <div className="sec-head"><div className="sec-title">🔒 {exam.title}</div><span className="mm-chip" style={{background:'#FFF8E1',color:'#E65100'}}>Aún no habilitado</span></div>
+        <div className="fpost-body" style={{marginBottom:10}}>Tu examen está abierto, pero todavía no alcanzas el <b>75% de cumplimiento</b> para rendirlo. La preparación sube con la <b>constancia</b>: practica cada día y entrega tus tareas. ¡Tú puedes! 💪</div>
+        <window.ReadinessCard student={student} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="scard">
+      <div className="sec-head">
+        <div className="sec-title">🎓 {exam.title}</div>
+        {res
+          ? <span className="mm-chip" style={{background: res.passed?'#E8F5E9':'#FFEBEE', color: res.passed?'#2E7D32':'#C62828'}}>{res.passed?'Aprobaste':'No aprobaste'}{typeof res.grade==='number'?` · ${res.grade}/100`:''}</span>
+          : <span className="mm-chip" style={{background:'#E8F5E9',color:'#2E7D32'}}>✓ Habilitado</span>}
+      </div>
+
+      {res && res.feedback && <div className="eval-feedback" style={{marginBottom:10}}><div className="eval-fb-lbl">📝 Del profesor</div><div className="eval-fb-text">{res.feedback}</div></div>}
+
+      <div className="al-items">
+        {(exam.parts||[]).map((p,i) => {
+          const href = X.examPartLink(p, exam.id, student.id);
+          return (
+            <a key={i} className={`al-item ${href?'open':'locked'}`} href={href||undefined} target={href?'_blank':undefined} rel="noreferrer">
+              <span className="al-num">{i+1}</span>
+              <span className="al-name">{p.name || compLabel(p.competency)}</span>
+              {href ? <span className="al-arr">↗</span> : <span className="al-score" style={{background:'#EEE',color:'#999'}}>sin URL</span>}
+            </a>
+          );
+        })}
+      </div>
+
+      <div style={{marginTop:12, paddingTop:12, borderTop:'1px dashed var(--border)'}}>
+        <div className="eval-fb-lbl">Subir material (opcional · ej. audio de tu Speaking)</div>
+        <window.TaskFilePicker attachments={attachments} setAttachments={setAttachments} allowRecord={true} />
+        <div style={{display:'flex', justifyContent:'flex-end', marginTop:10}}>
+          <button className="btn-save" onClick={() => { X.submitExam(w.id, student.id, { attachments }); onChange(); }}>{sub?'🔄 Actualizar entrega':'📨 Enviar material'}</button>
+        </div>
+        {!res && <div className="settings-hint" style={{marginTop:8}}>Al terminar, tu resultado será enviado por el profesor más adelante.</div>}
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { TeacherExams, StudentExams, WindowCard, ExamGradeModal, ExamForm, WindowForm, StudentExamCard });

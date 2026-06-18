@@ -98,7 +98,8 @@ function StudentDashboard({ user, onLogout }) {
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('profile');}}>👤 Mi perfil</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('forum');}}>💬 Foro</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('tasks');}}>📝 Tareas</a>
-          <NotifBell userId={student.id} onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); else if (n.link === 'tasks') setView('tasks'); }} />
+          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('exam');}}>🎓 Examen</a>
+          <NotifBell userId={student.id} onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); else if (n.link === 'tasks') setView('tasks'); else if (n.link === 'exam') setView('exam'); }} />
           <div className="user-pill">
             <div className="ava" style={{background:`linear-gradient(135deg,${level.color}80,${level.dark})`}}>
               {student.fullName.split(' ').map(n=>n[0]).slice(0,2).join('')}
@@ -113,6 +114,8 @@ function StudentDashboard({ user, onLogout }) {
         <StudentProfile user={user} onBack={() => setView('dashboard')} />
       ) : view === 'tasks' ? (
         <StudentAssignments user={user} onBack={() => setView('dashboard')} />
+      ) : view === 'exam' ? (
+        <StudentExams user={user} onBack={() => setView('dashboard')} />
       ) : view === 'forum' ? (
         <>
           <button className="back-btn" onClick={() => setView('dashboard')} style={{padding:'10px 28px 0'}}>← Volver al panel</button>

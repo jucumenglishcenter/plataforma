@@ -33,6 +33,7 @@ function TeacherDashboard({ onLogout }) {
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'manage'});}}>⚙️ Grupos</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'students'});}}>👥 Alumnos</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'promote'});}}>🎓 Avance</a>
+          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'exams'});}}>📑 Exámenes</a>
           <NotifBell userId="teacher" />
           <div className="user-pill">
             <div className="ava" style={{background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>P</div>
@@ -56,6 +57,8 @@ function TeacherDashboard({ onLogout }) {
         <ManageStudents onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'promote' ? (
         <LevelPromotion onBack={() => setView({kind:'groups'})} />
+      ) : view.kind === 'exams' ? (
+        <TeacherExams onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'forum' ? (
         <>
           <button className="back-btn" onClick={() => setView({kind:'groups'})} style={{padding:'10px 28px 0'}}>← Volver al panel</button>

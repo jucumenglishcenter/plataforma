@@ -130,6 +130,22 @@
       });
       write('jucum_submissions_v1', sMap);
     } catch (e) { console.warn('hydrate tasks:', e.message); }
+
+    // exámenes (definiciones + ventanas)
+    try {
+      const [{ data: exs }, { data: wins }] = await Promise.all([
+        sb.from('exams').select('*'),
+        sb.from('exam_windows').select('*'),
+      ]);
+      write('jucum_exams_v1', (exs || []).map(e => ({
+        id: e.id, level: e.level, moduleIds: e.module_ids || [], title: e.title, parts: e.parts || [], date: e.created_at,
+      })));
+      write('jucum_exam_windows_v1', (wins || []).map(w => ({
+        id: w.id, examId: w.exam_id, groupId: w.group_id, targetStudentIds: w.target_student_ids || [],
+        isOpen: w.is_open, closesAt: w.closes_at, allowOverrides: w.allow_overrides || [],
+        results: w.results || {}, submissions: w.submissions || {}, date: w.created_at,
+      })));
+    } catch (e) { console.warn('hydrate exams:', e.message); }
   }
 
   /* ── PUSH helpers (fire-and-forget; UI already updated localStorage) ── */
@@ -210,6 +226,7 @@
     pushEvaluation, pushPost, pushReply, pushPin, deletePostDb, deleteReplyDb, pushLike, pushMute,
     pushModule, deleteModuleDb, fetchModules, computeStats,
     pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb,
+    pushExam, deleteExamDb, pushWindow, deleteWindowDb,
   };
 
   /* ── Tareas ── */
@@ -251,6 +268,26 @@
       feedback: sub.feedback || null, graded_at: sub.gradedAt,
     }).eq('assignment_id', assignmentId).eq('student_id', studentId));
   }
+
+  /* ── Exámenes ── */
+  function pushExam(e) {
+    safe(SB().from('exams').upsert({
+      id: e.id, level: e.level || null, module_ids: e.moduleIds || [], title: e.title, parts: e.parts || [],
+    }));
+  }
+  function deleteExamDb(id) { safe(SB().from('exams').delete().eq('id', id)); }
+  async function pushWindow(w) {
+    const subs = { ...(w.submissions || {}) };
+    for (const sid of Object.keys(subs)) {
+      if (subs[sid] && subs[sid].attachments) subs[sid] = { ...subs[sid], attachments: await uploadAttachments(`examenes/${sid}`, subs[sid].attachments) };
+    }
+    safe(SB().from('exam_windows').upsert({
+      id: w.id, exam_id: w.examId, group_id: w.groupId || null, target_student_ids: w.targetStudentIds || [],
+      is_open: !!w.isOpen, closes_at: w.closesAt || null, allow_overrides: w.allowOverrides || [],
+      results: w.results || {}, submissions: subs,
+    }));
+  }
+  function deleteWindowDb(id) { safe(SB().from('exam_windows').delete().eq('id', id)); }
 
   /* ── Stats: derive avgScore / streak / totalMinutes / completedModules /
    *    lastActiveDays / achievements from the hydrated progress cache.
