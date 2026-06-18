@@ -199,10 +199,30 @@ function groupsReadyForExam() {
   }).filter(Boolean);
 }
 
+/* El profesor avisa a un grupo que su examen está próximo (recordando el 75%) */
+function notifyExamSoon(groupId) {
+  const D = window.JUCUM_DATA;
+  if (!D || !window.JUCUM_NOTIF) return 0;
+  const members = D.STUDENTS.filter(s => s.group === groupId);
+  members.forEach(s => {
+    const r = D.getStudentReadiness(s);
+    const apt = r.overall >= 75;
+    window.JUCUM_NOTIF.pushNotif(s.id, {
+      type: 'assignment',
+      title: '🎓 ¡Tu examen se acerca!',
+      body: apt
+        ? `Vas listo (${r.overall}% de cumplimiento). Repasa y prepárate para demostrar cuánto dominas. ¡Tú puedes!`
+        : `Pronto rendirás tu examen de avance. Recuerda: necesitas al menos 75% de cumplimiento para ser apto (vas en ${r.overall}%). Practica con constancia esta semana.`,
+      link: 'exam',
+    });
+  });
+  return members.length;
+}
+
 window.JUCUM_EXAMS = {
   getExams, getExam, createExam, updateExam, deleteExam,
   getWindows, createWindow, saveWindow, deleteWindow, recipientsOfWindow,
   openWindowsForStudent, canTakeWindow, toggleOverride, setWindowOpen,
   submitExam, gradeExam, publishResults, unpublishResults, partWeight,
-  groupsReadyForExam, examPartLink,
+  groupsReadyForExam, notifyExamSoon, examPartLink,
 };

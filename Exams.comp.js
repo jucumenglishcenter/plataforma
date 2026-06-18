@@ -34,7 +34,7 @@ function examDiagnosis(student, r) {
   return `Reforzar ${weak.map(x => `${x.c.label} (${x.v}%)`).join(' y ')}. Sugerir práctica enfocada antes del próximo examen.`;
 }
 
-function TeacherExams({ onBack }) {
+function TeacherExams({ onBack, canDefine }) {
   const { LEVELS } = window.JUCUM_DATA;
   const X = window.JUCUM_EXAMS;
   const [tab, setTab] = exUseState('windows');
@@ -53,23 +53,23 @@ function TeacherExams({ onBack }) {
         <div className="welcome-text">
           <div className="eyebrow">🎓 Exámenes</div>
           <h1>Exámenes de avance</h1>
-          <p>Define tus exámenes (un HTML por competencia) y abre el momento cuando toque. La plataforma marca apto al 75%, pero tú decides quién rinde.</p>
+          <p>{canDefine ? 'Define tus exámenes (un HTML por competencia). La plataforma marca apto al 75%.' : 'Abre el examen para tu grupo cuando toque, califica y comparte resultados. Solo Desarrollo define el contenido.'}</p>
         </div>
         <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
-          <button className="btn-settings" onClick={() => setEditing('new')}>+ Definir examen</button>
+          {canDefine && <button className="btn-settings" onClick={() => setEditing('new')}>+ Definir examen</button>}
           <button className="btn-settings" onClick={() => setOpening(true)} disabled={exams.length===0}>📅 Abrir examen</button>
         </div>
       </div>
 
       <div className="mm-tabs">
         <button className={`mm-tab ${tab==='windows'?'on':''}`} onClick={() => setTab('windows')}>📅 Activos <span className="mm-count">{windows.length}</span></button>
-        <button className={`mm-tab ${tab==='define'?'on':''}`} onClick={() => setTab('define')}>📑 Definidos <span className="mm-count">{exams.length}</span></button>
-        <button className={`mm-tab ${tab==='weights'?'on':''}`} onClick={() => setTab('weights')}>⚖️ Peso examen</button>
+        {canDefine && <button className={`mm-tab ${tab==='define'?'on':''}`} onClick={() => setTab('define')}>📑 Definidos <span className="mm-count">{exams.length}</span></button>}
+        {canDefine && <button className={`mm-tab ${tab==='weights'?'on':''}`} onClick={() => setTab('weights')}>⚖️ Peso examen</button>}
       </div>
 
       <ExamReadyBanner />
 
-      {tab === 'weights' ? <ModuleWeightPanel /> : tab === 'define' ? (
+      {tab === 'weights' && canDefine ? <ModuleWeightPanel /> : tab === 'define' && canDefine ? (
         exams.length === 0
           ? <div className="scard"><div className="empty-state"><div className="icon">📑</div>Aún no defines exámenes. Crea el primero.</div></div>
           : <div className="mm-list">
@@ -112,8 +112,9 @@ function ExamReadyBanner() {
       <div className="sec-head"><div className="sec-title" style={{color:'#2E7D32'}}>🎯 Listos para examen</div></div>
       <div style={{fontSize:13, lineHeight:1.55, color:'#1B5E20'}}>
         {ready.map(g => (
-          <div key={g.group.id} style={{marginBottom:4}}>
-            <b>{g.group.name}</b>: {g.ready}/{g.total} alumnos superaron el 75% de cumplimiento (promedio {g.pct}%).
+          <div key={g.group.id} style={{display:'flex', alignItems:'center', gap:10, marginBottom:6, flexWrap:'wrap'}}>
+            <span><b>{g.group.name}</b>: {g.ready}/{g.total} alumnos superaron el 75% (promedio {g.pct}%).</span>
+            <button className="att-btn" onClick={() => { const n = window.JUCUM_EXAMS.notifyExamSoon(g.group.id); alert(`🔔 Aviso enviado a ${n} alumno(s) de ${g.group.name}: su examen se acerca (recordándoles el 75%).`); }}>🔔 Avisar examen próximo</button>
           </div>
         ))}
         <div style={{marginTop:6}}>Este grupo ya invirtió el trabajo y la constancia necesarios. Es buen momento para tomarles un examen y que <b>demuestren cuánto del módulo dominan</b> — una oportunidad para que ellos (y sus familias) vean su avance reflejado. 💪</div>

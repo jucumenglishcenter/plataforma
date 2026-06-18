@@ -33,7 +33,6 @@ function TeacherDashboard({ onLogout, user }) {
           <a className={`nav-link ${view.kind==='tasks'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'tasks'});}}>📝 Tareas</a>
           <a className={`nav-link ${view.kind==='attendance'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'attendance'});}}>📋 Asistencia</a>
           <a className={`nav-link ${view.kind==='exams'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'exams'});}}>📑 Exámenes</a>
-          <a className={`nav-link ${view.kind==='manage'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'manage'});}}>⚙️ Grupos</a>
           <NotifBell userId="teacher" />
           <div className="user-pill">
             <div className="ava" style={{background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>{(teacherName.split(' ').map(n=>n[0]).slice(0,2).join('')||'JM').toUpperCase()}</div>
@@ -238,6 +237,8 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
       </div>
 
       <GroupModulesQuick groupId={groupId} />
+
+      <WeeklyPlan groupId={groupId} />
 
       <div className="student-table">
         <div className="st-head">
