@@ -31,7 +31,7 @@ function ManageStudents({ onBack }) {
   const doResetPassword = (s) => {
     if (window.JUCUM_SB) window.JUCUM_SB.update('users', s.id, { password: '1234' }).catch(e => console.warn(e.message));
     setResetting(null);
-    alert(`Contraseña de ${s.fullName} reseteada a "1234".\n\nPídele que la cambie en su primer ingreso.`);
+    alert(`✅ Contraseña de ${s.fullName} reseteada a "1234".\n\n⚠ IMPORTANTE: pídele que al ingresar la cambie por una que pueda recordar, y que la anote en un lugar seguro para no volver a tener problemas.`);
   };
 
   return (

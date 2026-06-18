@@ -20,21 +20,19 @@ function TeacherDashboard({ onLogout }) {
     <>
       <header className="app-header">
         <div className="app-logo">
-          <img src="logo-jucum.png" alt="JUCUM EC" />
+          <img src="../../assets/logo-jucum.png" alt="JUCUM EC" />
           <div className="pgtitle">Panel del Profesor</div>
         </div>
         <div className="app-right">
           <span className="role-pill t">👨‍🏫 Profesor</span>
           <TeacherForumNav onOpen={(gid)=>setView({kind:'forum', group:gid})} />
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'class'});}}>🏫 Clase</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'evaluate'});}}>📊 Evaluar</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'tasks'});}}>📝 Tareas</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'modules'});}}>📦 Módulos</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'materials'});}}>📚 Materiales</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'manage'});}}>⚙️ Grupos</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'students'});}}>👥 Alumnos</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'promote'});}}>🎓 Avance</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'exams'});}}>📑 Exámenes</a>
+          <a className={`nav-link ${['groups','group','student'].includes(view.kind)?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'groups'});}}>👥 Mis grupos</a>
+          <a className={`nav-link ${view.kind==='class'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'class'});}}>🏫 Clase</a>
+          <a className={`nav-link ${view.kind==='evaluate'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'evaluate'});}}>📊 Evaluar</a>
+          <a className={`nav-link ${view.kind==='tasks'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'tasks'});}}>📝 Tareas</a>
+          <a className={`nav-link ${view.kind==='attendance'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'attendance'});}}>📋 Asistencia</a>
+          <a className={`nav-link ${view.kind==='exams'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'exams'});}}>📑 Exámenes</a>
+          <a className={`nav-link ${view.kind==='manage'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'manage'});}}>⚙️ Grupos</a>
           <NotifBell userId="teacher" />
           <div className="user-pill">
             <div className="ava" style={{background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>P</div>
@@ -48,6 +46,8 @@ function TeacherDashboard({ onLogout }) {
         <TeacherEvaluate onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'tasks' ? (
         <TeacherAssignments onBack={() => setView({kind:'groups'})} />
+      ) : view.kind === 'attendance' ? (
+        <TeacherAttendance onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'manage' ? (
         <ManageGroups onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'modules' ? (
@@ -162,6 +162,52 @@ function GroupsView({ stats, onSelectGroup }) {
 
 /* ─── Group detail (one group, students inside) ───────────────────── */
 
+/* Panel SIEMPRE visible para prender/apagar módulos del grupo sin entrar a un modal */
+function GroupModulesQuick({ groupId }) {
+  const { MODULE_CATALOG, getGroupSettings, setGroupSettings, GROUPS } = window.JUCUM_DATA;
+  const group = GROUPS.find(g => g.id === groupId);
+  const modules = MODULE_CATALOG[group.level] || [];
+  const [s, setS] = React.useState(() => getGroupSettings(groupId));
+  const toggle = (id) => {
+    const set = new Set(s.activeModuleIds || []);
+    if (set.has(id)) set.delete(id); else set.add(id);
+    const ids = modules.filter(x => set.has(x.id)).map(x => x.id);
+    const next = { ...s, activeModuleIds: ids, activeModuleId: ids[0] || null };
+    setS(next); setGroupSettings(groupId, next);
+  };
+  const activeCount = (s.activeModuleIds || []).length;
+
+  return (
+    <div className="scard" style={{marginBottom:16}}>
+      <div className="sec-head">
+        <div className="sec-title">📦 Módulos del grupo</div>
+        <span className="sec-meta">{activeCount} activo{activeCount===1?'':'s'} · prende/apaga al instante</span>
+      </div>
+      {modules.length === 0 ? <div className="settings-hint">Este nivel no tiene módulos cargados.</div> : (
+        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))', gap:10}}>
+          {modules.map(m => {
+            const on = (s.activeModuleIds || []).includes(m.id);
+            return (
+              <div key={m.id} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 14px',border:'1.5px solid '+(on?'#A5D6A7':'#E6E3DA'),borderRadius:10,background:on?'#F0FAF1':'#fff'}}>
+                <span style={{fontSize:20}}>{m.emoji}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontFamily:"'Fredoka',sans-serif",fontWeight:600,fontSize:13,color:'var(--text)'}}>{m.name}</div>
+                  <div style={{fontSize:11,color:on?'#2E7D32':'var(--text-soft)',fontWeight:700,marginTop:1}}>{on ? '🟢 Activo' : '⚪ Apagado'} · {m.activities.length} act.</div>
+                </div>
+                <button type="button" onClick={()=>toggle(m.id)} aria-label={on?'Apagar':'Prender'}
+                        style={{width:48,height:27,borderRadius:14,border:'none',cursor:'pointer',background:on?'#2EA84B':'#CFCFC8',position:'relative',transition:'background .15s',flexShrink:0,padding:0}}>
+                  <span style={{position:'absolute',top:3,left:on?24:3,width:21,height:21,borderRadius:'50%',background:'#fff',transition:'left .15s',boxShadow:'0 1px 3px rgba(0,0,0,0.3)'}}></span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {activeCount === 0 && <div className="settings-hint" style={{marginTop:8,color:'#C62828',fontWeight:700}}>⚠ Sin módulos activos, los alumnos no verán actividades.</div>}
+    </div>
+  );
+}
+
 function GroupDetail({ groupId, onBack, onSelectStudent }) {
   const { GROUPS, STUDENTS, LEVELS, getStudentMastery } = window.JUCUM_DATA;
   const group = GROUPS.find(g => g.id === groupId);
@@ -189,6 +235,8 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
         <button className="btn-settings" onClick={() => setShowReport(true)} style={{marginLeft:8}}>📄 Reporte PDF</button>
       </div>
 
+      <GroupModulesQuick groupId={groupId} />
+
       <div className="student-table">
         <div className="st-head">
           <div className="col-name">Alumno</div>
@@ -213,8 +261,13 @@ function GroupSettingsModal({ groupId, level, onClose }) {
   const group = GROUPS.find(g => g.id === groupId);
   const modules = MODULE_CATALOG[group.level] || [];
   const [s, setS] = React.useState(() => getGroupSettings(groupId));
+  const { updateGroup } = window.JUCUM_DATA;
+  const [info, setInfo] = React.useState({ name: group.name, schedule: group.schedule, startDate: group.startDate });
   const save = () => {
     setGroupSettings(groupId, s);
+    if (updateGroup && (info.name !== group.name || info.schedule !== group.schedule || info.startDate !== group.startDate)) {
+      updateGroup(groupId, { name: info.name, schedule: info.schedule, startDate: info.startDate });
+    }
     onClose();
   };
   return (
@@ -226,6 +279,16 @@ function GroupSettingsModal({ groupId, level, onClose }) {
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
+
+          <div className="settings-block">
+            <div className="settings-label">✏️ Información del grupo</div>
+            <div className="settings-hint">Cambios simples como nombre, horario o fecha de inicio.</div>
+            <div style={{display:'grid', gap:8, marginTop:6}}>
+              <input className="input-text" value={info.name} onChange={e=>setInfo({...info, name:e.target.value})} placeholder="Nombre del grupo" />
+              <input className="input-text" value={info.schedule} onChange={e=>setInfo({...info, schedule:e.target.value})} placeholder="Horario (ej: Lun y Mié 6–8pm)" />
+              <div className="row-flex"><span className="settings-hint" style={{margin:0}}>Inicio:</span><input type="date" className="input-text" value={info.startDate || ''} onChange={e=>setInfo({...info, startDate:e.target.value})} /></div>
+            </div>
+          </div>
 
           <div className="settings-block">
             <div className="settings-label">📦 Módulos activos del grupo</div>
@@ -413,7 +476,7 @@ function StudentDetail({ studentId, onBack }) {
   const doReset = () => {
     if (window.JUCUM_SB) window.JUCUM_SB.update('users', stu.id, { password: '1234' }).catch(e => console.warn(e.message));
     setResetting(false);
-    alert(`Contraseña de ${stu.fullName} reseteada a "1234".`);
+    alert(`✅ Contraseña de ${stu.fullName} reseteada a "1234".\n\n⚠ IMPORTANTE: pídele que al ingresar la cambie por una que pueda recordar, y que la anote en un lugar seguro para no volver a tener problemas.`);
   };
   const group = GROUPS.find(g => g.id === stu.group);
   const level = LEVELS[stu.level];

@@ -22,6 +22,18 @@ const COMP_OPTIONS = [
 ];
 
 /* ═══════════════ PROFESOR ═══════════════ */
+
+/* Mini-diagnóstico por alumno (competencias más débiles) para crear estrategias */
+function examDiagnosis(student, r) {
+  const D = window.JUCUM_DATA;
+  const comps = (D.COMPETENCIES || []).map(c => ({ c, v: r.competencies?.[c.key] }))
+    .filter(x => typeof x.v === 'number').sort((a,b) => a.v - b.v);
+  if (comps.length === 0) return 'Sin datos suficientes para diagnosticar.';
+  const weak = comps.filter(x => x.v < 60).slice(0,2);
+  if (weak.length === 0) return `Domina bien sus competencias (más baja: ${comps[0].c.label} ${comps[0].v}%). Reforzar para perfeccionar.`;
+  return `Reforzar ${weak.map(x => `${x.c.label} (${x.v}%)`).join(' y ')}. Sugerir práctica enfocada antes del próximo examen.`;
+}
+
 function TeacherExams({ onBack }) {
   const { LEVELS } = window.JUCUM_DATA;
   const X = window.JUCUM_EXAMS;
@@ -54,6 +66,8 @@ function TeacherExams({ onBack }) {
         <button className={`mm-tab ${tab==='define'?'on':''}`} onClick={() => setTab('define')}>📑 Definidos <span className="mm-count">{exams.length}</span></button>
         <button className={`mm-tab ${tab==='weights'?'on':''}`} onClick={() => setTab('weights')}>⚖️ Peso examen</button>
       </div>
+
+      <ExamReadyBanner />
 
       {tab === 'weights' ? <ModuleWeightPanel /> : tab === 'define' ? (
         exams.length === 0
@@ -88,6 +102,26 @@ function TeacherExams({ onBack }) {
   );
 }
 
+/* Aviso al profesor: grupos cuyo cumplimiento cruzó el 75% → listos para examen */
+function ExamReadyBanner() {
+  const X = window.JUCUM_EXAMS;
+  const ready = (X.groupsReadyForExam ? X.groupsReadyForExam() : []).filter(g => g.crossed);
+  if (ready.length === 0) return null;
+  return (
+    <div className="scard" style={{margin:'14px 0', background:'#E8F5E9', borderColor:'#A5D6A7'}}>
+      <div className="sec-head"><div className="sec-title" style={{color:'#2E7D32'}}>🎯 Listos para examen</div></div>
+      <div style={{fontSize:13, lineHeight:1.55, color:'#1B5E20'}}>
+        {ready.map(g => (
+          <div key={g.group.id} style={{marginBottom:4}}>
+            <b>{g.group.name}</b>: {g.ready}/{g.total} alumnos superaron el 75% de cumplimiento (promedio {g.pct}%).
+          </div>
+        ))}
+        <div style={{marginTop:6}}>Este grupo ya invirtió el trabajo y la constancia necesarios. Es buen momento para tomarles un examen y que <b>demuestren cuánto del módulo dominan</b> — una oportunidad para que ellos (y sus familias) vean su avance reflejado. 💪</div>
+      </div>
+    </div>
+  );
+}
+
 function WindowCard({ w, onChange }) {
   const { STUDENTS, GROUPS, LEVELS, getStudentReadiness } = window.JUCUM_DATA;
   const X = window.JUCUM_EXAMS;
@@ -114,20 +148,35 @@ function WindowCard({ w, onChange }) {
         <span className="settings-hint" style={{margin:0}}>{w.isOpen ? 'Los alumnos aptos (o habilitados) ya pueden verlo.' : 'Oculto para los alumnos.'}</span>
       </div>
 
+      <div className="row-flex" style={{marginBottom:12}}>
+        {w.published
+          ? <><span className="mm-chip" style={{background:'#E8F5E9',color:'#2E7D32'}}>✅ Resultados compartidos</span><button className="att-btn" onClick={()=>{ X.unpublishResults(w.id); onChange(); }}>Ocultar resultados</button></>
+          : <button className="btn-save" onClick={()=>{ if(confirm('¿Compartir las notas con los alumnos? Recibirán su resultado y retroalimentación.')){ X.publishResults(w.id); onChange(); } }}>📤 Compartir resultados</button>}
+        <span className="settings-hint" style={{margin:0}}>{w.published ? 'Los alumnos ya ven su nota.' : 'Calificas en privado; comparte cuando decidas.'}</span>
+      </div>
+
       <div className="sm-list">
-        {recips.map(s => {
+        {[...recips].sort((a,b) => {
+          const ga = (w.results||{})[a.id], gb = (w.results||{})[b.id];
+          const va = typeof ga?.grade==='number' ? ga.grade : (ga?.passed ? 1 : -1);
+          const vb = typeof gb?.grade==='number' ? gb.grade : (gb?.passed ? 1 : -1);
+          return vb - va;
+        }).map((s, rank) => {
           const r = getStudentReadiness(s);
           const overridden = (w.allowOverrides||[]).includes(s.id);
           const canTake = r.apt || overridden;
           const res = (w.results||{})[s.id];
           const sub = (w.submissions||{})[s.id];
           const level = LEVELS[s.level];
+          const diag = examDiagnosis(s, r);
           return (
             <div key={s.id} className="sm-row" style={{flexWrap:'wrap'}}>
+              {res && <span style={{fontWeight:800, color:'#888', width:22, textAlign:'center'}}>{rank+1}</span>}
               <div className="st-ava" style={{background:`linear-gradient(135deg,${level.color}80,${level.dark})`}}>{s.fullName.split(' ').map(n=>n[0]).slice(0,2).join('')}</div>
               <div className="sm-info">
                 <div className="sm-name">{s.fullName}</div>
                 <div className="sm-meta">Preparación {r.overall}% · {r.apt ? '✅ apto' : '⚠ no apto'}{sub ? ' · entregó material' : ''}</div>
+                {res && <div className="sm-meta" style={{color:'#1565C0'}}>🧩 {diag}</div>}
               </div>
               {res
                 ? <span className="mm-chip" style={{background: res.passed?'#E8F5E9':'#FFEBEE', color: res.passed?'#2E7D32':'#C62828'}}>{res.passed?'Aprobó':'Reprobó'}{typeof res.grade==='number'?` · ${res.grade}`:''}</span>
@@ -228,15 +277,17 @@ function ExamForm({ exam, onClose, onSaved }) {
             </div>
           </div>
           <div className="settings-block">
-            <div className="settings-label">Partes del examen (un HTML por competencia)</div>
+            <div className="settings-label">Partes del examen (un HTML por competencia · peso opcional)</div>
+            <div className="settings-hint" style={{marginBottom:6}}>Si dejas los pesos vacíos, todas las partes valen igual. Si los llenas, se reparten proporcionalmente.</div>
             <div className="mm-acts">
               {parts.map((p,i) => (
-                <div key={i} className="mm-act-row" style={{gridTemplateColumns:'190px 1fr 1.3fr auto'}}>
+                <div key={i} className="mm-act-row" style={{gridTemplateColumns:'170px 1fr 1.2fr 90px auto'}}>
                   <select className="input-text" value={p.competency} onChange={e=>setPart(i,'competency',e.target.value)}>
                     {COMP_OPTIONS.map(c => <option key={c.key} value={c.key}>{c.l}</option>)}
                   </select>
                   <input className="input-text" placeholder="Nombre (opcional)" value={p.name} onChange={e=>setPart(i,'name',e.target.value)} />
                   <input className="input-text" placeholder="URL del HTML (GitHub Pages)" value={p.url} onChange={e=>setPart(i,'url',e.target.value)} />
+                  <input className="input-text" type="number" min="0" max="100" placeholder="Peso %" title="Peso de esta parte (%)" value={p.weight ?? ''} onChange={e=>setPart(i,'weight', e.target.value===''?'':parseInt(e.target.value)||0)} />
                   <button type="button" className="att-btn" style={{borderColor:'#EF9A9A',color:'#C62828'}} onClick={()=>delPart(i)}>✕</button>
                 </div>
               ))}
@@ -351,7 +402,7 @@ function StudentExamCard({ w, student, onChange }) {
   const X = window.JUCUM_EXAMS;
   const exam = X.getExam(w.examId);
   const canTake = X.canTakeWindow(student, w);
-  const res = (w.results||{})[student.id];
+  const res = w.published ? (w.results||{})[student.id] : null;
   const sub = (w.submissions||{})[student.id];
   const [attachments, setAttachments] = exUseState(sub?.attachments || []);
   if (!exam) return null;

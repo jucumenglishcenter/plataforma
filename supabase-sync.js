@@ -143,9 +143,20 @@
       write('jucum_exam_windows_v1', (wins || []).map(w => ({
         id: w.id, examId: w.exam_id, groupId: w.group_id, targetStudentIds: w.target_student_ids || [],
         isOpen: w.is_open, closesAt: w.closes_at, allowOverrides: w.allow_overrides || [],
-        results: w.results || {}, submissions: w.submissions || {}, date: w.created_at,
+        results: w.results || {}, submissions: w.submissions || {}, published: w.published || false, date: w.created_at,
       })));
     } catch (e) { console.warn('hydrate exams:', e.message); }
+
+    // asistencia
+    try {
+      const { data: att } = await sb.from('attendance').select('*');
+      const map = {};
+      (att || []).forEach(r => {
+        map[r.date] = map[r.date] || {};
+        map[r.date][r.student_id] = { status: r.status, participation: r.participation || 0, note: r.note || '', groupId: r.group_id };
+      });
+      write('jucum_attendance_v1', map);
+    } catch (e) { console.warn('hydrate attendance:', e.message); }
   }
 
   /* ── PUSH helpers (fire-and-forget; UI already updated localStorage) ── */
@@ -227,6 +238,7 @@
     pushModule, deleteModuleDb, fetchModules, computeStats,
     pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb,
     pushExam, deleteExamDb, pushWindow, deleteWindowDb,
+    pushAttendance, pushSurvey,
   };
 
   /* ── Tareas ── */
@@ -284,10 +296,27 @@
     safe(SB().from('exam_windows').upsert({
       id: w.id, exam_id: w.examId, group_id: w.groupId || null, target_student_ids: w.targetStudentIds || [],
       is_open: !!w.isOpen, closes_at: w.closesAt || null, allow_overrides: w.allowOverrides || [],
-      results: w.results || {}, submissions: subs,
+      results: w.results || {}, submissions: subs, published: !!w.published,
     }));
   }
   function deleteWindowDb(id) { safe(SB().from('exam_windows').delete().eq('id', id)); }
+
+  /* ── Asistencia ── */
+  function pushAttendance(date, groupId, studentId, rec) {
+    safe(SB().from('attendance').upsert({
+      id: `att-${date}-${studentId}`, date, group_id: groupId || null, student_id: studentId,
+      status: rec.status || 'asistio', participation: rec.participation || 0, note: rec.note || null, updated_at: new Date().toISOString(),
+    }));
+  }
+
+  /* ── Encuesta de satisfacción ── */
+  function pushSurvey(studentId, rec) {
+    safe(SB().from('surveys').insert({
+      id: `sv-${studentId}-${Date.now()}`, student_id: studentId,
+      satisfaction: rec.satisfaction || null, recommend: rec.recommend || null,
+      continue_plan: rec.continue_plan || null, suggestion: rec.suggestion || null,
+    }));
+  }
 
   /* ── Stats: derive avgScore / streak / totalMinutes / completedModules /
    *    lastActiveDays / achievements from the hydrated progress cache.

@@ -27,9 +27,10 @@
     if (error) throw error;
     if (!data) return { ok: false, reason: 'Usuario no encontrado.' };
     if (data.password !== password) return { ok: false, reason: 'Contraseña incorrecta.' };
+    const role = data.is_admin ? 'admin' : data.role;
     const session = {
-      role: data.role,
-      studentId: data.role === 'student' ? data.id : null,
+      role,
+      studentId: role === 'student' ? data.id : null,
       name: data.full_name,
       username: data.username,
       level: data.level,

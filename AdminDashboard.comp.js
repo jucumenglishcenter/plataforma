@@ -19,15 +19,16 @@ function AdminDashboard({ user, onLogout }) {
     <>
       <header className="app-header">
         <div className="app-logo">
-          <img src="logo-jucum.png" alt="JUCUM EC" />
+          <img src="../../assets/logo-jucum.png" alt="JUCUM EC" />
           <div className="pgtitle">Administración</div>
         </div>
         <div className="app-right">
           <span className="role-pill t">🛠️ Administrador</span>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('payments');}} style={{position:'relative'}}>💳 Pagos{pending.length > 0 && <span className="nav-dot">{pending.length > 9 ? '9+' : pending.length}</span>}</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('students');}}>👥 Alumnos</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('config');}}>⚙️ Configuración</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('account');}}>🔑 Mi cuenta</a>
+          <a className={`nav-link ${view==='payments'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('payments');}} style={{position:'relative'}}>💳 Pagos{pending.length > 0 && <span className="nav-dot">{pending.length > 9 ? '9+' : pending.length}</span>}</a>
+          <a className={`nav-link ${view==='students'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('students');}}>👥 Alumnos</a>
+          <a className={`nav-link ${view==='attendance'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('attendance');}}>📋 Asistencia</a>
+          <a className={`nav-link ${view==='config'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('config');}}>⚙️ Configuración</a>
+          <a className={`nav-link ${view==='account'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('account');}}>🔑 Mi cuenta</a>
           <NotifBell userId="admin" onNotifClick={(n)=> n.link==='payments' && setView('payments')} />
           <div className="user-pill"><div className="ava" style={{background:'linear-gradient(135deg,#5C6BC0,#283593)'}}>A</div><span>Admin</span></div>
           <button className="logout-btn" onClick={onLogout} title="Cerrar sesión">⎋ Salir</button>
@@ -35,6 +36,7 @@ function AdminDashboard({ user, onLogout }) {
       </header>
 
       {view === 'students' ? <AdminStudents onChange={refresh} />
+        : view === 'attendance' ? <AdminAttendance />
         : view === 'config' ? <AdminConfig onChange={refresh} />
         : view === 'account' ? <AdminAccount user={user} />
         : <AdminPayments onChange={refresh} />}

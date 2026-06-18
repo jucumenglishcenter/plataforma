@@ -32,6 +32,8 @@ body{font-family:'Nunito',sans-serif;background:var(--bg-tint);color:var(--text)
 
 .nav-link{display:inline-flex;align-items:center;gap:4px;padding:7px 12px;border-radius:8px;text-decoration:none;color:#555;font-size:12.5px;font-weight:700;transition:all 0.15s;font-family:'Nunito',sans-serif;}
 .nav-link:hover{background:#FAFAF6;color:#1F3A8A;}
+.nav-link.active{background:#1F3A8A;color:#fff;box-shadow:0 2px 8px rgba(31,58,138,0.25);}
+.nav-link.active:hover{background:#16306f;color:#fff;}
 
 .nav-dot{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:#E11930;color:#fff;font-size:9.5px;font-weight:800;margin-left:5px;vertical-align:middle;border:1.5px solid #fff;box-shadow:0 1px 3px rgba(225,25,48,0.4);}
 .foro-dd{position:relative;}
@@ -938,10 +940,14 @@ main{max-width:1100px;margin:0 auto;padding:28px 24px 80px;}
 <script src="teacher-tools.js"></script>
 <script src="assignments.js"></script>
 <script src="exams.js"></script>
+<script src="attendance.js"></script>
+<script src="survey.js"></script>
 <script type="text/babel" src="Evaluations.comp.js"></script>
 <script type="text/babel" src="Assignments.comp.js"></script>
 <script type="text/babel" src="Readiness.comp.js"></script>
 <script type="text/babel" src="Exams.comp.js"></script>
+<script type="text/babel" src="Attendance.comp.js"></script>
+<script type="text/babel" src="Survey.comp.js"></script>
 <script type="text/babel" src="Grades.comp.js"></script>
 <script type="text/babel" src="StudentReport.comp.js"></script>
 <script type="text/babel" src="ManageGroups.comp.js"></script>
@@ -962,6 +968,7 @@ main{max-width:1100px;margin:0 auto;padding:28px 24px 80px;}
 <script type="text/babel" src="TeacherClass.comp.js"></script>
 <script type="text/babel" src="StudentDashboard.comp.js"></script>
 <script type="text/babel" src="TeacherDashboard.comp.js"></script>
+<script type="text/babel" src="DevDashboard.comp.js"></script>
 <script type="text/babel" src="App.comp.js"></script>
 <script src="inactivity.js"></script>
 </body>

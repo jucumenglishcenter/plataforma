@@ -55,7 +55,7 @@ function createWindow(data) {
   const w = {
     id: 'ew-' + Date.now(), date: new Date().toISOString(),
     targetStudentIds: [], isOpen: false, closesAt: null,
-    allowOverrides: [], results: {}, submissions: {}, ...data,
+    allowOverrides: [], results: {}, submissions: {}, published: false, ...data,
   };
   // notificar si se abre de una vez
   saveWindow(w);
@@ -137,12 +137,44 @@ function gradeExam(windowId, studentId, grade, passed, feedback) {
   w.results = w.results || {};
   w.results[studentId] = { grade: (typeof grade === 'number' ? grade : null), passed: !!passed, feedback: feedback || '', gradedAt: new Date().toISOString() };
   saveWindow(w);
-  if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(studentId, {
+  // Si los resultados YA están publicados, notifica el cambio al alumno;
+  // si no, el profesor califica en privado y luego pulsa "Compartir resultados".
+  if (w.published && window.JUCUM_NOTIF) notifyResult(studentId, w.results[studentId]);
+}
+
+function notifyResult(studentId, res) {
+  if (!window.JUCUM_NOTIF || !res) return;
+  window.JUCUM_NOTIF.pushNotif(studentId, {
     type: 'teacher-feedback',
-    title: passed ? '🎉 ¡Aprobaste tu examen!' : '📋 Resultado de tu examen',
-    body: (typeof grade === 'number' ? `Obtuviste ${grade}/100. ` : '') + (feedback || (passed ? '¡Felicitaciones!' : 'Revisa la retroalimentación.')),
+    title: res.passed ? '🎉 ¡Aprobaste tu examen!' : '📋 Resultado de tu examen',
+    body: (typeof res.grade === 'number' ? `Obtuviste ${res.grade}/100. ` : '') + (res.feedback || (res.passed ? '¡Felicitaciones!' : 'Revisa la retroalimentación.')),
     link: 'exam',
   });
+}
+
+/* El profesor comparte los resultados con los alumnos cuando lo decide */
+function publishResults(windowId) {
+  const w = loadWindows().find(x => x.id === windowId);
+  if (!w) return;
+  w.published = true;
+  saveWindow(w);
+  Object.entries(w.results || {}).forEach(([sid, res]) => notifyResult(sid, res));
+}
+function unpublishResults(windowId) {
+  const w = loadWindows().find(x => x.id === windowId);
+  if (!w) return;
+  w.published = false;
+  saveWindow(w);
+}
+
+/* Peso de una parte (por defecto reparte igual entre las partes) */
+function partWeight(exam, idx) {
+  const parts = exam?.parts || [];
+  const explicit = parts.map(p => (typeof p.weight === 'number' ? p.weight : null));
+  const anySet = explicit.some(w => w != null && w > 0);
+  if (!anySet) return parts.length ? Math.round(100 / parts.length) : 0;
+  const sum = explicit.reduce((a, w) => a + (w || 0), 0) || 1;
+  return Math.round((explicit[idx] || 0) / sum * 100);
 }
 
 /* Link de una parte del examen (modo examen: sin cooldown, no registra práctica) */
@@ -152,9 +184,25 @@ function examPartLink(part, examId, studentId) {
   return `${part.url}${sep}jucum_exam=1&jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent('exam-' + examId)}&jucum_act=${encodeURIComponent(part.competency)}`;
 }
 
+/* Grupos cuyo promedio de cumplimiento cruzó el 75% → listos para examen.
+ * Devuelve [{ group, ready, total, pct }] para avisar al profesor. */
+function groupsReadyForExam() {
+  const D = window.JUCUM_DATA;
+  if (!D) return [];
+  return (D.GROUPS || []).map(g => {
+    const members = D.STUDENTS.filter(s => s.group === g.id);
+    if (!members.length) return null;
+    const readies = members.map(s => D.getStudentReadiness(s));
+    const ready = readies.filter(r => r.overall >= 75).length;
+    const pct = Math.round(readies.reduce((a, r) => a + r.overall, 0) / members.length);
+    return { group: g, ready, total: members.length, pct, crossed: ready / members.length >= 0.6 };
+  }).filter(Boolean);
+}
+
 window.JUCUM_EXAMS = {
   getExams, getExam, createExam, updateExam, deleteExam,
   getWindows, createWindow, saveWindow, deleteWindow, recipientsOfWindow,
   openWindowsForStudent, canTakeWindow, toggleOverride, setWindowOpen,
-  submitExam, gradeExam, examPartLink,
+  submitExam, gradeExam, publishResults, unpublishResults, partWeight,
+  groupsReadyForExam, examPartLink,
 };

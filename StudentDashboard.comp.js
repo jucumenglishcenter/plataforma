@@ -15,6 +15,10 @@ function StudentDashboard({ user, onLogout }) {
   const activeModule = activeModules[0] || allModules[0];
   const [view, setView] = React.useState('dashboard');
   const [showOnb, setShowOnb] = React.useState(() => !localStorage.getItem(`jucum_onboarded_${user.studentId}`));
+  const [surveyDue, setSurveyDue] = React.useState(false);
+  React.useEffect(() => {
+    try { if (window.JUCUM_SURVEY) setSurveyDue(window.JUCUM_SURVEY.isSurveyDue(student)); } catch {}
+  }, [student && student.id]);
   const [alertKind, setAlertKind] = React.useState(null);
   const [fTick, setFTick] = React.useState(0);
   React.useEffect(() => {
@@ -37,7 +41,10 @@ function StudentDashboard({ user, onLogout }) {
   const xp = getStudentXP(student);
   const xpInfo = getStudentLevel(xp);
 
-  React.useEffect(() => { document.body.setAttribute('data-level', student.level); }, [student.level]);
+  React.useEffect(() => {
+    document.body.setAttribute('data-level', student.level);
+    try { if (window.JUCUM_ATT) window.JUCUM_ATT.maybeGrantWeeklyReward(student); } catch {}
+  }, [student.level]);
 
   // Practice reminder — fires once per day if behind on daily target
   React.useEffect(() => {
@@ -103,22 +110,23 @@ function StudentDashboard({ user, onLogout }) {
   return (
     <>
       {showOnb && <Onboarding studentId={user.studentId} onClose={() => setShowOnb(false)} />}
+      {!showOnb && surveyDue && <SurveyModal student={student} onDone={() => setSurveyDue(false)} />}
       {!showOnb && celebrate && <PayCelebration payment={celebrate} onClose={closeCelebrate} />}
       {!showOnb && !celebrate && alertKind && <StudentAlertModal kind={alertKind} student={student} onClose={() => setAlertKind(null)} />}
       <header className="app-header">
         <div className="app-logo">
-          <img src="logo-jucum.png" alt="JUCUM EC" />
+          <img src="../../assets/logo-jucum.png" alt="JUCUM EC" />
           <div className="pgtitle">Mi panel de aprendizaje</div>
         </div>
         <div className="app-right">
           <span className="role-pill s">🎓 Alumno</span>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('profile');}}>👤 Mi perfil</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();openForum();}} style={{position:'relative'}}>💬 Foro{forumUnread > 0 && <span className="nav-dot">{forumUnread > 9 ? '9+' : forumUnread}</span>}</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('tasks');}}>📝 Tareas</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('exam');}}>🎓 Examen</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('diagnosis');}}>📈 ¿Cómo voy?</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('report');}}>📄 Mi reporte</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('payments');}} style={{position:'relative', color:(acct.blocked||acct.state==='por_vencer')?'#C62828':undefined}}>💳 Pagos{(acct.blocked||acct.state==='por_vencer') && <span className="nav-dot">!</span>}</a>
+          <a className={`nav-link ${view==='profile'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('profile');}}>👤 Mi perfil</a>
+          <a className={`nav-link ${view==='forum'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();openForum();}} style={{position:'relative'}}>💬 Foro{forumUnread > 0 && <span className="nav-dot">{forumUnread > 9 ? '9+' : forumUnread}</span>}</a>
+          <a className={`nav-link ${view==='tasks'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('tasks');}}>📝 Tareas</a>
+          <a className={`nav-link ${view==='exam'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('exam');}}>🎓 Examen</a>
+          <a className={`nav-link ${view==='diagnosis'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('diagnosis');}}>📈 ¿Cómo voy?</a>
+          <a className={`nav-link ${view==='report'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('report');}}>📄 Mi reporte</a>
+          <a className={`nav-link ${view==='payments'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('payments');}} style={{position:'relative', color:(acct.blocked||acct.state==='por_vencer')?'#C62828':undefined}}>💳 Pagos{(acct.blocked||acct.state==='por_vencer') && <span className="nav-dot">!</span>}</a>
           <NotifBell userId={student.id} onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); else if (n.link === 'tasks') setView('tasks'); else if (n.link === 'exam') setView('exam'); }} />
           <div className="user-pill">
             <div className="ava" style={{background:`linear-gradient(135deg,${level.color}80,${level.dark})`}}>
@@ -220,6 +228,8 @@ function StudentDashboard({ user, onLogout }) {
         </div>
 
         <ProgressExplainer studentId={student.id} />
+
+        <div style={{marginTop:18}}><StudentAttendanceCard student={student} /></div>
 
         <div style={{marginTop:18}}><ReadinessCard student={student} /></div>
 
