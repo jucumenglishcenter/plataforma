@@ -27,6 +27,7 @@ function TeacherDashboard({ onLogout }) {
           <span className="role-pill t">👨‍🏫 Profesor</span>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'forum'});}}>💬 Foro</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'evaluate'});}}>📊 Evaluar</a>
+          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'tasks'});}}>📝 Tareas</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'modules'});}}>📦 Módulos</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'manage'});}}>⚙️ Grupos</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'students'});}}>👥 Alumnos</a>
@@ -42,6 +43,8 @@ function TeacherDashboard({ onLogout }) {
 
       {view.kind === 'evaluate' ? (
         <TeacherEvaluate onBack={() => setView({kind:'groups'})} />
+      ) : view.kind === 'tasks' ? (
+        <TeacherAssignments onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'manage' ? (
         <ManageGroups onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'modules' ? (

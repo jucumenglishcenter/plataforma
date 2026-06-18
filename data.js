@@ -608,6 +608,14 @@ function getStudentXP(student) {
   }
   xp += Math.min(student.streak || 0, 14) * 30;
   xp += (student.achievements?.length || 0) * 50;
+  // XP por tareas entregadas (gamificación: cada entrega suma; +20 si fue bien calificada)
+  try {
+    const subs = JSON.parse(localStorage.getItem('jucum_submissions_v1') || '{}');
+    Object.values(subs).forEach(byStu => {
+      const s = byStu && byStu[student.id];
+      if (s) { xp += 40; if (typeof s.grade === 'number' && s.grade >= 70) xp += 20; }
+    });
+  } catch {}
   return xp;
 }
 

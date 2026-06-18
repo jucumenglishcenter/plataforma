@@ -107,6 +107,29 @@
     const mutesMap = {};
     (mutes || []).forEach(m => mutesMap[m.user_id] = m.until);
     write(KEYS.mutes, mutesMap);
+
+    // tareas (assignments + submissions)
+    try {
+      const [{ data: assigns }, { data: subs }] = await Promise.all([
+        sb.from('assignments').select('*'),
+        sb.from('submissions').select('*'),
+      ]);
+      const aArr = (assigns || []).map(a => ({
+        id: a.id, groupId: a.group_id, targetStudentIds: a.target_student_ids || [],
+        title: a.title, description: a.description, dueAt: a.due_at, gradable: a.gradable,
+        attachments: a.attachments || [], xp: a.xp ?? 40, date: a.created_at,
+      }));
+      write('jucum_assignments_v1', aArr);
+      const sMap = {};
+      (subs || []).forEach(s => {
+        sMap[s.assignment_id] = sMap[s.assignment_id] || {};
+        sMap[s.assignment_id][s.student_id] = {
+          id: s.id, submittedAt: s.submitted_at, text: s.text, attachments: s.attachments || [],
+          status: s.status, grade: s.grade, feedback: s.feedback, gradedAt: s.graded_at,
+        };
+      });
+      write('jucum_submissions_v1', sMap);
+    } catch (e) { console.warn('hydrate tasks:', e.message); }
   }
 
   /* ── PUSH helpers (fire-and-forget; UI already updated localStorage) ── */
@@ -186,7 +209,48 @@
     hydrate, pushSettings, pushProgress, pushNotif, markNotifRead, markAllNotifRead,
     pushEvaluation, pushPost, pushReply, pushPin, deletePostDb, deleteReplyDb, pushLike, pushMute,
     pushModule, deleteModuleDb, fetchModules, computeStats,
+    pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb,
   };
+
+  /* ── Tareas ── */
+  async function uploadAttachments(folder, attachments) {
+    const out = [];
+    for (const a of (attachments || [])) {
+      if (!a || !a.dataUrl) { out.push(a); continue; }
+      try {
+        const blob = await (await fetch(a.dataUrl)).blob();
+        const path = `${folder}/${Date.now()}-${a.name}`;
+        const { error } = await SB().storage.from(window.JUCUM_CONFIG.STORAGE_BUCKET).upload(path, blob, { upsert: true });
+        if (!error) {
+          const { data } = SB().storage.from(window.JUCUM_CONFIG.STORAGE_BUCKET).getPublicUrl(path);
+          out.push({ kind: a.kind, url: data.publicUrl, name: a.name, size: a.size });
+        } else { out.push(a); }
+      } catch { out.push(a); }
+    }
+    return out;
+  }
+  function pushAssignment(a) {
+    safe(SB().from('assignments').insert({
+      id: a.id, group_id: a.groupId || null, target_student_ids: a.targetStudentIds || [],
+      title: a.title, description: a.description || null, due_at: a.dueAt || null,
+      gradable: !!a.gradable, attachments: a.attachments || [], xp: a.xp ?? 40,
+    }));
+  }
+  function deleteAssignmentDb(id) { safe(SB().from('assignments').delete().eq('id', id)); }
+  async function pushSubmission(assignmentId, studentId, sub) {
+    const uploaded = await uploadAttachments(`tareas/${studentId}`, sub.attachments);
+    safe(SB().from('submissions').upsert({
+      id: sub.id, assignment_id: assignmentId, student_id: studentId,
+      submitted_at: sub.submittedAt, text: sub.text || null, attachments: uploaded,
+      status: sub.status || 'submitted',
+    }, { onConflict: 'assignment_id,student_id' }));
+  }
+  function gradeSubmissionDb(assignmentId, studentId, sub) {
+    safe(SB().from('submissions').update({
+      status: 'graded', grade: (typeof sub.grade === 'number' ? sub.grade : null),
+      feedback: sub.feedback || null, graded_at: sub.gradedAt,
+    }).eq('assignment_id', assignmentId).eq('student_id', studentId));
+  }
 
   /* ── Stats: derive avgScore / streak / totalMinutes / completedModules /
    *    lastActiveDays / achievements from the hydrated progress cache.
