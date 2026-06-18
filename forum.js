@@ -6,6 +6,43 @@
 const FORUM_KEY  = 'jucum_forum_v1';
 const MUTES_KEY  = 'jucum_mutes_v1';
 const LIKES_KEY  = 'jucum_likes_v1';
+const FSEEN_KEY  = 'jucum_forum_seen_v1';
+
+/* ── "Visto" del foro por usuario+grupo (para el punto rojo del botón Foro) ── */
+function getForumSeen() {
+  try { return JSON.parse(localStorage.getItem(FSEEN_KEY) || '{}'); } catch { return {}; }
+}
+function markForumSeen(userId, groupId) {
+  if (!userId || !groupId) return;
+  const all = getForumSeen();
+  all[userId] = all[userId] || {};
+  all[userId][groupId] = new Date().toISOString();
+  localStorage.setItem(FSEEN_KEY, JSON.stringify(all));
+}
+function forumUnreadCount(userId, groupId) {
+  if (!userId || !groupId) return 0;
+  const seen = (getForumSeen()[userId] || {})[groupId] || '1970-01-01T00:00:00.000Z';
+  const forum = getGroupForum(groupId);
+  let n = 0;
+  (forum.posts || []).forEach(p => {
+    if (p.date > seen && p.authorId !== userId) n++;
+    (p.replies || []).forEach(r => { if (r.date > seen && r.authorId !== userId) n++; });
+  });
+  return n;
+}
+function findPostById(postId) {
+  const data = loadForum();
+  for (const gid of Object.keys(data)) {
+    const p = (data[gid].posts || []).find(p => p.id === postId);
+    if (p) return { post: p, groupId: gid };
+  }
+  return null;
+}
+function _forumName(userId) {
+  if (userId === 'teacher') return 'El profesor';
+  try { const s = (window.JUCUM_DATA.STUDENTS || []).find(s => s.id === userId); return s ? s.fullName.split(' ')[0] : 'Alguien'; }
+  catch { return 'Alguien'; }
+}
 
 function loadForum() {
   try { return JSON.parse(localStorage.getItem(FORUM_KEY) || '{}'); }
@@ -38,10 +75,24 @@ function toggleLike(postId, userId) {
   const all = getLikes();
   all[postId] = all[postId] || [];
   const i = all[postId].indexOf(userId);
+  let added = false;
   if (i >= 0) all[postId].splice(i, 1);
-  else all[postId].push(userId);
+  else { all[postId].push(userId); added = true; }
   localStorage.setItem(LIKES_KEY, JSON.stringify(all));
   if (window.JUCUM_SYNC) window.JUCUM_SYNC.pushLike(postId, userId, all[postId].includes(userId));
+  // Aviso en la campanita del AUTOR cuando reaccionan a SU publicación
+  if (added && window.JUCUM_NOTIF) {
+    const found = findPostById(postId);
+    const p = found && found.post;
+    if (p && p.authorId && p.authorId !== userId && p.authorRole === 'student') {
+      window.JUCUM_NOTIF.pushNotif(p.authorId, {
+        type: 'forum-like',
+        title: `❤️ A ${_forumName(userId)} le gustó tu publicación`,
+        body: `Reaccionó a “${p.title}” en el foro.`,
+        link: 'forum',
+      });
+    }
+  }
   return all[postId];
 }
 function postLikes(postId) {
@@ -80,6 +131,16 @@ function addReply(groupId, postId, reply) {
   p.replies.push(newReply);
   saveForum(data);
   if (window.JUCUM_SYNC) window.JUCUM_SYNC.pushReply(postId, newReply);
+  // Aviso en la campanita del AUTOR cuando responden a SU publicación
+  if (window.JUCUM_NOTIF && p.authorId && p.authorId !== reply.authorId && p.authorRole === 'student') {
+    const snippet = (reply.body || '').slice(0, 80);
+    window.JUCUM_NOTIF.pushNotif(p.authorId, {
+      type: 'forum-reply',
+      title: `💬 ${reply.authorName} respondió tu publicación`,
+      body: `En “${p.title}”: ${snippet}${(reply.body || '').length > 80 ? '…' : ''}`,
+      link: 'forum',
+    });
+  }
 }
 function togglePin(groupId, postId) {
   const data = loadForum();
@@ -160,4 +221,5 @@ seedSampleForum();
 window.JUCUM_FORUM = {
   getGroupForum, createPost, addReply, togglePin, deletePost, deleteReply,
   isMuted, setMute, getMutes, toggleLike, postLikes,
+  markForumSeen, forumUnreadCount, findPostById,
 };

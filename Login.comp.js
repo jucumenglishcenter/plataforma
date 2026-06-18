@@ -18,7 +18,7 @@ function Login({ onLogin }) {
       try {
         const res = await window.JUCUM_SB.login(username, password);
         if (!res.ok) { setErr(res.reason || 'Usuario o contraseña incorrectos.'); setBusy(false); return; }
-        if (role === 'teacher' && res.session.role !== 'teacher') { setErr('Esa cuenta no es de profesor.'); setBusy(false); return; }
+        if (role === 'teacher' && res.session.role !== 'teacher' && res.session.role !== 'admin') { setErr('Esa cuenta no es de profesor ni administrador.'); setBusy(false); return; }
         if (role === 'student' && res.session.role !== 'student') { setErr('Esa cuenta es de profesor. Cambia a la pestaña Profesor.'); setBusy(false); return; }
         onLogin(res.session);
       } catch (e2) {

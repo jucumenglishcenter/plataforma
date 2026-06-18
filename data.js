@@ -1018,6 +1018,67 @@ function getStudentTrends(student) {
   return out;
 }
 
+/* ── Nota final por módulo (cumplimiento + examen) ───────────────────
+ * El alumno ve, por cada módulo de su nivel: su % de cumplimiento (avance),
+ * su resultado en el examen de ese módulo, y una NOTA FINAL en porcentaje:
+ *   final = cumplimiento × (1 − pesoExamen) + notaExamen × pesoExamen
+ * El profesor define el peso del examen por módulo (por defecto 35%, porque
+ * se valora más la práctica). ≥75% = aprobado. */
+const MODGRADE_KEY = 'jucum_module_grade_cfg_v1';
+function getModuleExamWeight(moduleId) {
+  try { const m = JSON.parse(localStorage.getItem(MODGRADE_KEY) || '{}'); return (m[moduleId] && typeof m[moduleId].examWeight === 'number') ? m[moduleId].examWeight : 35; }
+  catch { return 35; }
+}
+function setModuleExamWeight(moduleId, w) {
+  let m = {}; try { m = JSON.parse(localStorage.getItem(MODGRADE_KEY) || '{}'); } catch {}
+  m[moduleId] = { ...(m[moduleId] || {}), examWeight: Math.max(0, Math.min(100, Math.round(w))) };
+  localStorage.setItem(MODGRADE_KEY, JSON.stringify(m));
+  try { if (window.JUCUM_SB) window.JUCUM_SB.getClient().from('app_settings').upsert({ key:'module_grade_cfg', value:m }, { onConflict:'key' }).then(()=>{},()=>{}); } catch {}
+}
+function getModuleStats(student, module) {
+  const completed = (getStudentProgress(student.id) || {}).completed || {};
+  let total = 0, done = 0, sSum = 0, sN = 0;
+  (module.activities || []).forEach(a => {
+    total++;
+    const e = completed[`${module.id}:${a.id}`];
+    if (e) { done++; if (typeof e.score === 'number') { const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100); sSum += pct; sN++; } else { sSum += 70; sN++; } }
+  });
+  const coverage = total ? done / total : 0;
+  const quality = sN ? (sSum / sN) / 100 : 0;
+  const cumplimiento = Math.round(coverage * (0.6 + 0.4 * quality) * 100);
+  return { total, done, coverage: Math.round(coverage * 100), quality: Math.round(quality * 100), cumplimiento };
+}
+function getModuleExamResult(student, moduleId) {
+  try {
+    const wins = JSON.parse(localStorage.getItem('jucum_exam_windows_v1') || '[]');
+    const exams = JSON.parse(localStorage.getItem('jucum_exams_v1') || '[]');
+    let best = null;
+    wins.forEach(w => {
+      const ex = exams.find(e => e.id === w.examId);
+      if (!ex || !(ex.moduleIds || []).includes(moduleId)) return;
+      const r = (w.results || {})[student.id];
+      if (!r) return;
+      const cand = { grade: (typeof r.grade === 'number' ? r.grade : null), passed: r.passed, gradedAt: r.gradedAt || '', title: ex.title, feedback: r.feedback };
+      if (!best || (cand.gradedAt || '') > (best.gradedAt || '')) best = cand;
+    });
+    return best;
+  } catch { return null; }
+}
+function getModuleFinalGrade(student, module) {
+  const stats = getModuleStats(student, module);
+  const exam = getModuleExamResult(student, module.id);
+  const examWeight = getModuleExamWeight(module.id);
+  const w = examWeight / 100;
+  const hasExam = !!(exam && typeof exam.grade === 'number');
+  const finalPct = hasExam ? Math.round(stats.cumplimiento * (1 - w) + exam.grade * w) : stats.cumplimiento;
+  return { stats, exam, examWeight, finalPct, approved: finalPct >= 75, hasExam };
+}
+
 window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness, getStudentGrades, getStudentMonthlyPractice, getStudentTrends };
 
 window.JUCUM_DATA.getStudentLog = getStudentLog;
+window.JUCUM_DATA.getModuleExamWeight = getModuleExamWeight;
+window.JUCUM_DATA.setModuleExamWeight = setModuleExamWeight;
+window.JUCUM_DATA.getModuleStats = getModuleStats;
+window.JUCUM_DATA.getModuleExamResult = getModuleExamResult;
+window.JUCUM_DATA.getModuleFinalGrade = getModuleFinalGrade;

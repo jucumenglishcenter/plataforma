@@ -52,9 +52,10 @@ function TeacherExams({ onBack }) {
       <div className="mm-tabs">
         <button className={`mm-tab ${tab==='windows'?'on':''}`} onClick={() => setTab('windows')}>📅 Activos <span className="mm-count">{windows.length}</span></button>
         <button className={`mm-tab ${tab==='define'?'on':''}`} onClick={() => setTab('define')}>📑 Definidos <span className="mm-count">{exams.length}</span></button>
+        <button className={`mm-tab ${tab==='weights'?'on':''}`} onClick={() => setTab('weights')}>⚖️ Peso examen</button>
       </div>
 
-      {tab === 'define' ? (
+      {tab === 'weights' ? <ModuleWeightPanel /> : tab === 'define' ? (
         exams.length === 0
           ? <div className="scard"><div className="empty-state"><div className="icon">📑</div>Aún no defines exámenes. Crea el primero.</div></div>
           : <div className="mm-list">
@@ -330,6 +331,8 @@ function StudentExams({ user, onBack }) {
         </div>
       </div>
 
+      <ModuleResultsBlock student={student} />
+
       {windows.length === 0 ? (
         <>
           <div className="scard" style={{marginTop:18}}><div className="empty-state"><div className="icon">🎓</div>Por ahora no tienes ningún examen habilitado. Tu profesor lo abrirá cuando corresponda — sigue practicando para llegar listo.</div></div>
@@ -399,4 +402,74 @@ function StudentExamCard({ w, student, onChange }) {
   );
 }
 
-Object.assign(window, { TeacherExams, StudentExams, WindowCard, ExamGradeModal, ExamForm, WindowForm, StudentExamCard });
+/* Panel del profesor: peso del examen en la nota final por módulo */
+function ModuleWeightPanel() {
+  const { LEVELS, MODULE_CATALOG, getModuleExamWeight, setModuleExamWeight } = window.JUCUM_DATA;
+  const [level, setLevel] = exUseState('pre-a1');
+  const [, setTick] = exUseState(0);
+  const mods = MODULE_CATALOG[level] || [];
+  return (
+    <div className="scard">
+      <div className="sec-head"><div className="sec-title">⚖️ Peso del examen en la nota final</div><span className="sec-meta">Por módulo · el resto es práctica</span></div>
+      <div className="settings-hint" style={{marginBottom:12}}>Define cuánto pesa el examen en la <b>nota final</b> de cada módulo; el resto es el <b>cumplimiento</b> (práctica diaria). Recomendado <b>35%</b> — valoramos más la práctica constante.</div>
+      <div className="preset-row" style={{marginBottom:14}}>
+        {Object.entries(LEVELS).map(([k,lv])=><button key={k} className={`preset ${level===k?'on':''}`} onClick={()=>setLevel(k)}>{lv.emoji} {lv.code}</button>)}
+      </div>
+      <div style={{display:'grid', gap:12}}>
+        {mods.map(m=>{
+          const w = getModuleExamWeight(m.id);
+          return (
+            <div key={m.id} className="row-flex" style={{gap:12}}>
+              <span style={{fontSize:22}}>{m.emoji}</span>
+              <div style={{flex:1, minWidth:120}}>
+                <div style={{fontWeight:700, fontSize:13}}>{m.name}</div>
+                <div className="settings-hint" style={{margin:0}}>Examen {w}% · Práctica {100-w}%</div>
+              </div>
+              <input type="range" min="0" max="100" step="5" value={w} className="slider-input" style={{maxWidth:170}} onChange={e=>{ setModuleExamWeight(m.id, parseInt(e.target.value)); setTick(t=>t+1); }} />
+              <div className="target-val" style={{minWidth:64, fontSize:18}}>{w}<span>%</span></div>
+            </div>
+          );
+        })}
+        {mods.length===0 && <div className="settings-hint">Ese nivel no tiene módulos.</div>}
+      </div>
+    </div>
+  );
+}
+
+/* Bloque del alumno: resultados y nota final por módulo */
+function ModuleResultsBlock({ student }) {
+  const { MODULE_CATALOG, getModuleFinalGrade } = window.JUCUM_DATA;
+  const mods = MODULE_CATALOG[student.level] || [];
+  if (!mods.length) return null;
+  return (
+    <div className="scard" style={{marginTop:18}}>
+      <div className="sec-head">
+        <div className="sec-title">📋 Mis resultados por módulo</div>
+        <span className="sec-meta">Nota final = práctica + examen · ✅ ≥75%</span>
+      </div>
+      <div style={{display:'grid', gap:10}}>
+        {mods.map(m => {
+          const g = getModuleFinalGrade(student, m);
+          const color = g.approved ? '#2EA84B' : '#C62828';
+          return (
+            <div key={m.id} className="modres" style={{borderLeft:`4px solid ${color}`}}>
+              <div className="modres-emo">{m.emoji}</div>
+              <div className="modres-info">
+                <div className="modres-name">{m.name}</div>
+                <div className="modres-sub">Cumplimiento {g.stats.cumplimiento}% · {g.hasExam ? `Examen ${g.exam.grade}/100` : 'Examen pendiente'} · peso examen {g.examWeight}%</div>
+                <div className="modres-bar"><span style={{width:g.finalPct+'%', background:color}}></span></div>
+              </div>
+              <div className="modres-final">
+                <div className="modres-pct" style={{color}}>{g.finalPct}%</div>
+                <div className="modres-badge" style={{background: g.approved?'#E8F5E9':'#FFEBEE', color}}>{g.approved?'✓ Aprobado':'✗ No aprob.'}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="settings-hint" style={{marginTop:10}}>La <b>nota final</b> de cada módulo combina tu <b>cumplimiento</b> (práctica diaria y temas cubiertos) con la nota de tu <b>examen</b>. Como valoramos más la práctica, el examen pesa solo una parte. Llega al <b>75%</b> para aprobar. 💪</div>
+    </div>
+  );
+}
+
+Object.assign(window, { TeacherExams, StudentExams, WindowCard, ExamGradeModal, ExamForm, WindowForm, StudentExamCard, ModuleWeightPanel, ModuleResultsBlock });

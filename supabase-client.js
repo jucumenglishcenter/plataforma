@@ -31,6 +31,7 @@
       role: data.role,
       studentId: data.role === 'student' ? data.id : null,
       name: data.full_name,
+      username: data.username,
       level: data.level,
       groupId: data.group_id,
     };

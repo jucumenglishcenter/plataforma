@@ -22,6 +22,13 @@ function Forum({ user, groupOverride }) {
   }, []);
 
   const group = GROUPS.find(g => g.id === selectedGroup);
+
+  // Al abrir/cambiar de grupo, marcamos el foro como "visto" (apaga el punto rojo)
+  fUseEffect(() => {
+    const me = isTeacher ? 'teacher' : user.studentId;
+    if (selectedGroup) F.markForumSeen(me, selectedGroup);
+  }, [selectedGroup, tick]);
+
   if (!group) return <main><div className="empty-state">No tienes grupo asignado.</div></main>;
 
   const level = LEVELS[group.level];

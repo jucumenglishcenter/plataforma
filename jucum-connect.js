@@ -34,7 +34,13 @@
   var SUPABASE_URL = 'https://dwwzkzuonltaavzhvilu.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_6pruJuV5P2cMVWqd8Wt8gg_UAtuEj_m';
 
-  var WARN_AFTER_SEC   = 3 * 60;  // 3 min sin actividad → aviso
+  // Lecturas y stories son de LECTURA TRANQUILA: no requieren mover el mouse,
+  // así que el aviso de inactividad se relaja muchísimo (no interrumpe al que
+  // lee con calma). El resto de materiales (gramática, listening, resúmenes)
+  // sí interactúan, así que mantienen el aviso normal a los 3 min.
+  var KIND = String(new URLSearchParams(location.search).get('jucum_kind') || '').toLowerCase();
+  var IS_READING = /read|story|lectura|dialog/.test(KIND);
+  var WARN_AFTER_SEC   = IS_READING ? 30 * 60 : 3 * 60;  // sin actividad → aviso
   var CLOSE_AFTER_SEC  = 5 * 60;  // +5 min sin responder → fin de práctica
   var AUTO_DONE_SEC    = 4 * 60;  // stories: completar tras 4 min activos
   var COOLDOWN_MS      = 20 * 60 * 1000; // 20 min entre intentos: no deja reintentar ni re-registra
@@ -47,9 +53,12 @@
   var teacher = q.get('jucum_teacher') === '1'; // profesor: vista libre para dar clase
   var exam = q.get('jucum_exam') === '1';       // alumno rindiendo examen (no registra como práctica)
   var demo = !uid || teacher || exam; // sin uid / profesor / examen → no registra avance
+  var groupId = q.get('jucum_group') || '';
+  var matName = q.get('jucum_name') || '';
+  if (teacher) WARN_AFTER_SEC = 60 * 60; // el profesor da su clase libremente, sin avisos de inactividad
 
   function load(cb) {
-    if (demo) return cb(); // en modo prueba no hace falta Supabase
+    if (demo && !teacher) return cb(); // prueba/examen sin profesor: sin Supabase
     if (window.supabase) return cb();
     var s = document.createElement('script');
     s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
@@ -59,6 +68,21 @@
 
   function start() {
     var sb = demo ? null : window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    // Cliente para registrar el USO DE CLASE del profesor (bitácora)
+    var classSb = (teacher && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+    var CLASS_MIN_SEC = 5 * 60;
+    var classId = 'cl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+    var classStartISO = new Date().toISOString();
+    function logClass() {
+      if (!teacher || !classSb || activeSec < CLASS_MIN_SEC) return;
+      classSb.from('teacher_class_log').upsert({
+        id: classId, date: new Date().toISOString().slice(0, 10),
+        started_at: classStartISO, ended_at: new Date().toISOString(),
+        minutes: Math.round(activeSec / 60), group_id: groupId || null,
+        material_name: matName || (modId + ' · ' + actId), module_id: modId,
+        activity_id: actId, type: KIND || '', source: 'auto',
+      }, { onConflict: 'id' }).then(function () {}, function () {});
+    }
 
     // ── Cooldown de 20 min entre intentos de la MISMA práctica ──
     var COOLDOWN_KEY = 'jucum_cooldown_' + (uid || 'demo') + '_' + modId + '_' + actId;
@@ -121,7 +145,8 @@
       if (!warned && idleSec < WARN_AFTER_SEC) {
         if (!done) {
           activeSec++; // solo cuenta mientras está activo y sin aviso pendiente
-          if (activeSec >= AUTO_DONE_SEC) complete(null); // stories/diálogos
+          if (activeSec >= AUTO_DONE_SEC && !teacher && !exam) complete(null); // stories/diálogos
+          if (teacher && activeSec % 60 === 0) logClass();
         }
       } else if (!warned && idleSec >= WARN_AFTER_SEC) {
         warned = true;
@@ -277,6 +302,7 @@
 
     // Guardar tiempo parcial al salir (si leyó al menos 1 min y no completó)
     window.addEventListener('beforeunload', function () {
+      if (teacher) { logClass(); return; }
       if (done || sessionClosed || activeSec < 60) return;
       pushProgress(0, Math.round(activeSec / 60));
     });

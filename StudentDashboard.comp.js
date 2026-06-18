@@ -16,6 +16,22 @@ function StudentDashboard({ user, onLogout }) {
   const [view, setView] = React.useState('dashboard');
   const [showOnb, setShowOnb] = React.useState(() => !localStorage.getItem(`jucum_onboarded_${user.studentId}`));
   const [alertKind, setAlertKind] = React.useState(null);
+  const [fTick, setFTick] = React.useState(0);
+  React.useEffect(() => {
+    const onStorage = (e) => { if (e.key && (e.key.startsWith('jucum_forum') || e.key.startsWith('jucum_likes'))) setFTick(t => t + 1); };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+  const forumUnread = window.JUCUM_FORUM ? window.JUCUM_FORUM.forumUnreadCount(student.id, student.group) : 0;
+  const openForum = () => {
+    if (window.JUCUM_FORUM) window.JUCUM_FORUM.markForumSeen(student.id, student.group);
+    setFTick(t => t + 1);
+    setView('forum');
+  };
+  const P = window.JUCUM_PAY;
+  const acct = P ? P.getAccountStatus(student) : { state:'al_dia', blocked:false, daysLeft:null, payDay:5 };
+  const [celebrate, setCelebrate] = React.useState(() => P ? P.pendingConfirmCelebration(student.id) : null);
+  const closeCelebrate = () => { if (celebrate && P) P.markCelebrationSeen(celebrate.id); setCelebrate(null); };
 
   // Gamification stats
   const xp = getStudentXP(student);
@@ -87,19 +103,22 @@ function StudentDashboard({ user, onLogout }) {
   return (
     <>
       {showOnb && <Onboarding studentId={user.studentId} onClose={() => setShowOnb(false)} />}
-      {!showOnb && alertKind && <StudentAlertModal kind={alertKind} student={student} onClose={() => setAlertKind(null)} />}
+      {!showOnb && celebrate && <PayCelebration payment={celebrate} onClose={closeCelebrate} />}
+      {!showOnb && !celebrate && alertKind && <StudentAlertModal kind={alertKind} student={student} onClose={() => setAlertKind(null)} />}
       <header className="app-header">
         <div className="app-logo">
-          <img src="../../assets/logo-jucum.png" alt="JUCUM EC" />
+          <img src="logo-jucum.png" alt="JUCUM EC" />
           <div className="pgtitle">Mi panel de aprendizaje</div>
         </div>
         <div className="app-right">
           <span className="role-pill s">🎓 Alumno</span>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('profile');}}>👤 Mi perfil</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('forum');}}>💬 Foro</a>
+          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();openForum();}} style={{position:'relative'}}>💬 Foro{forumUnread > 0 && <span className="nav-dot">{forumUnread > 9 ? '9+' : forumUnread}</span>}</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('tasks');}}>📝 Tareas</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('exam');}}>🎓 Examen</a>
+          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('diagnosis');}}>📈 ¿Cómo voy?</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('report');}}>📄 Mi reporte</a>
+          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView('payments');}} style={{position:'relative', color:(acct.blocked||acct.state==='por_vencer')?'#C62828':undefined}}>💳 Pagos{(acct.blocked||acct.state==='por_vencer') && <span className="nav-dot">!</span>}</a>
           <NotifBell userId={student.id} onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); else if (n.link === 'tasks') setView('tasks'); else if (n.link === 'exam') setView('exam'); }} />
           <div className="user-pill">
             <div className="ava" style={{background:`linear-gradient(135deg,${level.color}80,${level.dark})`}}>
@@ -111,7 +130,13 @@ function StudentDashboard({ user, onLogout }) {
         </div>
       </header>
 
-      {view === 'profile' ? (
+      {acct.state === 'por_vencer' && view !== 'payments' && <PayReminderBar status={acct} onGo={() => setView('payments')} />}
+
+      {acct.blocked && view !== 'payments' ? (
+        <PayBlockGate status={acct} onGo={() => setView('payments')} />
+      ) : view === 'payments' ? (
+        <StudentPayments user={user} onBack={() => setView('dashboard')} />
+      ) : view === 'profile' ? (
         <StudentProfile user={user} onBack={() => setView('dashboard')} />
       ) : view === 'tasks' ? (
         <StudentAssignments user={user} onBack={() => setView('dashboard')} />
@@ -119,6 +144,8 @@ function StudentDashboard({ user, onLogout }) {
         <StudentExams user={user} onBack={() => setView('dashboard')} />
       ) : view === 'report' ? (
         <StudentReport student={student} onBack={() => setView('dashboard')} />
+      ) : view === 'diagnosis' ? (
+        <StudentDiagnosis user={user} onBack={() => setView('dashboard')} />
       ) : view === 'forum' ? (
         <>
           <button className="back-btn" onClick={() => setView('dashboard')} style={{padding:'10px 28px 0'}}>← Volver al panel</button>
@@ -139,6 +166,12 @@ function StudentDashboard({ user, onLogout }) {
             <div className="streak-lbl">días<br/>seguidos</div>
           </div>
         </div>
+
+        {/* ── Mascota Neuro ── */}
+        <div style={{marginTop:18}}><MascotCard student={student} /></div>
+
+        {/* ── Práctica de hoy ── */}
+        <div style={{marginTop:18}}><TodayPracticeCard student={student} /></div>
 
         {/* ── Bloque C · Gamification ── */}
         <div className="gami-row">
@@ -327,7 +360,7 @@ function linkFor(a, mod, studentId) {
   if (base === '#') return '#';
   // Adjunta la identidad para que jucum-connect.js registre el progreso
   const sep = base.includes('?') ? '&' : '?';
-  return `${base}${sep}jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent(mod.id)}&jucum_act=${encodeURIComponent(a.id)}`;
+  return `${base}${sep}jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent(mod.id)}&jucum_act=${encodeURIComponent(a.id)}&jucum_kind=${encodeURIComponent(a.type||'')}`;
 }
 
 /* ─── Bloque C · gamification components ─── */
@@ -520,4 +553,37 @@ function ExplainerBody() {
   );
 }
 
-Object.assign(window, { StudentDashboard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase, StudentAlertModal, ProgressExplainer, ExplainerBody });
+/* Propuesta de práctica del día (genérica o la que dejó el profesor) */
+function TodayPracticeCard({ student }) {
+  const TT = window.JUCUM_TT; if (!TT) return null;
+  const { items, isGeneric } = TT.getTodayPracticeForStudent(student);
+  const D = window.JUCUM_DATA;
+  const mods = D.MODULE_CATALOG[student.level] || [];
+  const dayName = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'][new Date().getDay()];
+  if (!items || !items.length) return null;
+  return (
+    <div className="scard" style={{background:'#F0F7FF', borderColor:'#90CAF9'}}>
+      <div className="sec-head">
+        <div className="sec-title">🗓️ Tu práctica de hoy</div>
+        <span className="sec-meta">{isGeneric ? 'Sugerencia del día' : '⭐ Dejada por tu profesor'} · {dayName}</span>
+      </div>
+      <div className="next-row">
+        {items.map((it, i) => {
+          const mod = mods.find(m => m.id === it.moduleId);
+          const a = mod && (mod.activities || []).find(x => x.id === it.activityId);
+          const href = (mod && a) ? linkFor(a, mod, student.id) : null;
+          const inner = (<>
+            <span className="next-ico">{typeIcon(it.type)}</span>
+            <div className="next-info"><b>{it.label}</b><span>{isGeneric ? 'Recomendado para ti' : 'Indicado por tu profesor'}</span></div>
+            {href && <span className="next-arr">→</span>}
+          </>);
+          return href
+            ? <a key={i} className="next-card" href={href}>{inner}</a>
+            : <div key={i} className="next-card" style={{cursor:'default'}}>{inner}</div>;
+        })}
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { StudentDashboard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase, StudentAlertModal, ProgressExplainer, ExplainerBody, TodayPracticeCard });

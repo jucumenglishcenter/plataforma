@@ -84,7 +84,7 @@ function StudentReport({ student, onBack, forTeacher }) {
       </div>
 
       <div className="report-head">
-        <img src="../../assets/logo-jucum.png" alt="JUCUM EC" style={{height:64}} />
+        <img src="logo-jucum.png" alt="JUCUM EC" style={{height:64}} />
         <div>
           <div className="report-title">Reporte de avance</div>
           <div className="report-sub">{level.emoji} {student.fullName} · {level.code} · {group?.name || ''}</div>

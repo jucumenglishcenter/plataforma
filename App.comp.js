@@ -98,7 +98,7 @@ function App() {
   if (!ready) {
     return (
       <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:14,fontFamily:'Nunito,sans-serif',color:'#777'}}>
-        <img src="../../assets/logo-jucum.png" alt="JUCUM EC" style={{height:80}} />
+        <img src="logo-jucum.png" alt="JUCUM EC" style={{height:80}} />
         <div style={{fontWeight:700}}>Conectando con la base de datos…</div>
       </div>
     );
@@ -108,6 +108,7 @@ function App() {
   }
 
   if (!user) return <Login onLogin={onLogin} />;
+  if (user.role === 'admin') return <AdminDashboard user={user} onLogout={onLogout} />;
   if (user.role === 'teacher') return <TeacherDashboard onLogout={onLogout} />;
   return <StudentDashboard user={user} onLogout={onLogout} />;
 }

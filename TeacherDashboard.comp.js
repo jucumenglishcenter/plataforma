@@ -20,12 +20,13 @@ function TeacherDashboard({ onLogout }) {
     <>
       <header className="app-header">
         <div className="app-logo">
-          <img src="../../assets/logo-jucum.png" alt="JUCUM EC" />
+          <img src="logo-jucum.png" alt="JUCUM EC" />
           <div className="pgtitle">Panel del Profesor</div>
         </div>
         <div className="app-right">
           <span className="role-pill t">👨‍🏫 Profesor</span>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'forum'});}}>💬 Foro</a>
+          <TeacherForumNav onOpen={(gid)=>setView({kind:'forum', group:gid})} />
+          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'class'});}}>🏫 Clase</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'evaluate'});}}>📊 Evaluar</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'tasks'});}}>📝 Tareas</a>
           <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setView({kind:'modules'});}}>📦 Módulos</a>
@@ -53,6 +54,8 @@ function TeacherDashboard({ onLogout }) {
         <ManageModules onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'materials' ? (
         <TeacherMaterials onBack={() => setView({kind:'groups'})} />
+      ) : view.kind === 'class' ? (
+        <TeacherClass onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'students' ? (
         <ManageStudents onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'promote' ? (
@@ -62,7 +65,7 @@ function TeacherDashboard({ onLogout }) {
       ) : view.kind === 'forum' ? (
         <>
           <button className="back-btn" onClick={() => setView({kind:'groups'})} style={{padding:'10px 28px 0'}}>← Volver al panel</button>
-          <Forum user={{ role:'teacher' }} />
+          <Forum user={{ role:'teacher' }} groupOverride={view.group} />
         </>
       ) : (
       <main>
@@ -467,6 +470,8 @@ function StudentDetail({ studentId, onBack }) {
         </div>
       </div>
 
+      {window.TeacherStudentNotes && <TeacherStudentNotes studentId={stu.id} />}
+
       <div className="scard" style={{marginTop:18}}>
         <div className="sec-head">
           <div className="sec-title">Historial de actividad</div>
@@ -761,4 +766,43 @@ function ActivityByDay({ events }) {
   );
 }
 
-Object.assign(window, { TeacherDashboard, GroupsView, GroupDetail, GroupSettingsModal, StudentDetail, DiagnoseStudent, ActivityByDay, PracticeChart, BreakdownRow, DetailModal, StudentRow });
+/* Botón "Foro" del profesor con desplegable por grupo + punto rojo de no-leídos */
+function TeacherForumNav({ onOpen }) {
+  const { GROUPS, LEVELS } = window.JUCUM_DATA;
+  const F = window.JUCUM_FORUM;
+  const [open, setOpen] = React.useState(false);
+  const [, setTick] = React.useState(0);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    const onStorage = (e) => { if (e.key && (e.key.startsWith('jucum_forum') || e.key.startsWith('jucum_likes'))) setTick(t => t + 1); };
+    const onClickOut = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    window.addEventListener('storage', onStorage);
+    document.addEventListener('mousedown', onClickOut);
+    return () => { window.removeEventListener('storage', onStorage); document.removeEventListener('mousedown', onClickOut); };
+  }, []);
+  const counts = GROUPS.map(g => ({ g, n: F ? F.forumUnreadCount('teacher', g.id) : 0 }));
+  const totalUnread = counts.reduce((s, c) => s + c.n, 0);
+  return (
+    <div className="foro-dd" ref={ref}>
+      <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault();setOpen(o=>!o);}} style={{position:'relative'}}>
+        💬 Foro ▾{totalUnread > 0 && <span className="nav-dot">{totalUnread > 9 ? '9+' : totalUnread}</span>}
+      </a>
+      {open && (
+        <div className="foro-menu">
+          <div className="foro-menu-head">Foros por grupo</div>
+          {counts.map(({ g, n }) => (
+            <button key={g.id} className="foro-menu-item" onClick={() => { setOpen(false); onOpen(g.id); }}>
+              <span className="foro-menu-emo">{LEVELS[g.level].emoji}</span>
+              <span className="foro-menu-name">{g.name}</span>
+              {n > 0
+                ? <span className="foro-menu-badge">{n > 9 ? '9+' : n} nuevo{n === 1 ? '' : 's'}</span>
+                : <span className="foro-menu-none">al día</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+Object.assign(window, { TeacherDashboard, TeacherForumNav, GroupsView, GroupDetail, GroupSettingsModal, StudentDetail, DiagnoseStudent, ActivityByDay, PracticeChart, BreakdownRow, DetailModal, StudentRow });

@@ -21,7 +21,7 @@ function GroupReport({ groupId, onBack }) {
       </div>
 
       <div className="report-head">
-        <img src="../../assets/logo-jucum.png" alt="JUCUM EC" style={{height:64}} />
+        <img src="logo-jucum.png" alt="JUCUM EC" style={{height:64}} />
         <div>
           <div className="report-title">Reporte de grupo</div>
           <div className="report-sub">{level.emoji} {group.name} · {group.schedule}</div>
