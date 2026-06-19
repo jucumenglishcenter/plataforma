@@ -138,8 +138,8 @@
 
   /* Link a un material en MODO PROFESOR (sin restricción; registra uso de clase) */
   function teacherMaterialLink(activity, mod, groupId) {
-    const base = activity.url || { story:'../story/index.html', reading:'../reading/index.html', listening:'../listening/index.html' }[activity.type] || '#';
-    if (base === '#') return null;
+    const base = activity.url || null; // sin url real → material aún no disponible
+    if (!base) return null;
     const sep = base.includes('?') ? '&' : '?';
     const name = encodeURIComponent(`${mod ? mod.name + ' · ' : ''}${activity.name}`);
     return `${base}${sep}jucum_teacher=1&jucum_uid=teacher&jucum_group=${encodeURIComponent(groupId||'')}&jucum_mod=${encodeURIComponent(mod?mod.id:'')}&jucum_act=${encodeURIComponent(activity.id)}&jucum_kind=${encodeURIComponent(activity.type||'')}&jucum_name=${name}`;

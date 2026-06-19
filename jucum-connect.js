@@ -40,6 +40,9 @@
   // sí interactúan, así que mantienen el aviso normal a los 3 min.
   var KIND = String(new URLSearchParams(location.search).get('jucum_kind') || '').toLowerCase();
   var IS_READING = /read|story|lectura|dialog/.test(KIND);
+  // Las STORIES y diálogos son lectura pura: NO tienen límite de uso (ni aviso de
+  // inactividad ni bloqueo entre intentos). Solo monitoreamos el tiempo de lectura.
+  var IS_STORY = /story|dialog/.test(KIND);
   var WARN_AFTER_SEC   = IS_READING ? 30 * 60 : 3 * 60;  // sin actividad → aviso
   var CLOSE_AFTER_SEC  = 5 * 60;  // +5 min sin responder → fin de práctica
   var AUTO_DONE_SEC    = 4 * 60;  // stories: completar tras 4 min activos
@@ -91,8 +94,8 @@
       return t ? Math.max(0, COOLDOWN_MS - (Date.now() - t)) : 0;
     }
     // Si la terminó hace menos de 20 min → bloquear y mostrar cuenta regresiva
-    // (el profesor en modo libre y el alumno en examen NUNCA tienen cooldown)
-    if (!teacher && !exam && cooldownLeft() > 0) { showCooldownGate(); return; }
+    // (el profesor, el examen y las STORIES nunca tienen cooldown: leer es libre)
+    if (!teacher && !exam && !IS_STORY && cooldownLeft() > 0) { showCooldownGate(); return; }
     var activeSec = 0;          // segundos de práctica real acumulados
     var idleSec = 0;            // segundos sin actividad
     var done = false;           // ya registrado
@@ -112,6 +115,39 @@
       ? 'Modo prueba: abriste el material fuera de la plataforma, el tiempo NO se registra.'
       : 'Tiempo activo de práctica (se registra en tu progreso).';
     document.body.appendChild(chip);
+
+    // ── Chip ARRASTRABLE (en clase, al hacer zoom estorba: que se pueda mover) ──
+    (function makeDraggable(el) {
+      var POS_KEY = 'jucum_chip_pos';
+      try {
+        var saved = JSON.parse(localStorage.getItem(POS_KEY) || 'null');
+        if (saved && typeof saved.left === 'number') {
+          el.style.left = saved.left + 'px'; el.style.top = saved.top + 'px';
+          el.style.right = 'auto'; el.style.bottom = 'auto';
+        }
+      } catch (e) {}
+      el.style.cursor = 'grab'; el.style.touchAction = 'none';
+      el.title = (el.title ? el.title + ' · ' : '') + 'Arrástrame para moverme';
+      var dragging = false, sx = 0, sy = 0, ox = 0, oy = 0;
+      el.addEventListener('pointerdown', function (e) {
+        dragging = true; el.style.cursor = 'grabbing';
+        var r = el.getBoundingClientRect(); ox = r.left; oy = r.top; sx = e.clientX; sy = e.clientY;
+        el.style.left = ox + 'px'; el.style.top = oy + 'px'; el.style.right = 'auto'; el.style.bottom = 'auto';
+        try { el.setPointerCapture(e.pointerId); } catch (e2) {}
+      });
+      el.addEventListener('pointermove', function (e) {
+        if (!dragging) return;
+        var nx = Math.max(4, Math.min(window.innerWidth - el.offsetWidth - 4, ox + (e.clientX - sx)));
+        var ny = Math.max(4, Math.min(window.innerHeight - el.offsetHeight - 4, oy + (e.clientY - sy)));
+        el.style.left = nx + 'px'; el.style.top = ny + 'px';
+      });
+      function end() {
+        if (!dragging) return; dragging = false; el.style.cursor = 'grab';
+        try { localStorage.setItem(POS_KEY, JSON.stringify({ left: parseInt(el.style.left, 10), top: parseInt(el.style.top, 10) })); } catch (e) {}
+      }
+      el.addEventListener('pointerup', end);
+      el.addEventListener('pointercancel', end);
+    })(chip);
 
     function fmt(sec) {
       return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
@@ -141,6 +177,23 @@
 
     setInterval(function () {
       if (sessionClosed) return;
+      // ── STORIES/diálogos: lectura SIN LÍMITE ──
+      // Cuenta el tiempo mientras la pestaña esté visible; nunca interrumpe,
+      // nunca bloquea. Solo registra el tiempo de lectura (lo que monitoreamos).
+      if (IS_STORY) {
+        if (document.visibilityState !== 'hidden') {
+          activeSec++;
+          if (!done && activeSec >= AUTO_DONE_SEC && !teacher && !exam) {
+            done = true; // marcada como practicada (desbloquea la siguiente) — sin cooldown ni tarjeta
+            if (!demo) pushProgress(100, Math.max(1, Math.round(activeSec / 60)));
+          }
+          // refresca el tiempo de lectura cada 2 min para que el profesor lo vea
+          if (!demo && done && activeSec % 120 === 0) pushProgress(100, Math.round(activeSec / 60));
+          if (teacher && activeSec % 60 === 0) logClass();
+        }
+        updateChip();
+        return;
+      }
       idleSec++;
       if (!warned && idleSec < WARN_AFTER_SEC) {
         if (!done) {
@@ -303,6 +356,7 @@
     // Guardar tiempo parcial al salir (si leyó al menos 1 min y no completó)
     window.addEventListener('beforeunload', function () {
       if (teacher) { logClass(); return; }
+      if (IS_STORY) { if (!demo && activeSec >= 60) pushProgress(100, Math.round(activeSec / 60)); return; }
       if (done || sessionClosed || activeSec < 60) return;
       pushProgress(0, Math.round(activeSec / 60));
     });

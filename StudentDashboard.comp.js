@@ -315,8 +315,20 @@ function ModuleProgress({ mod, progress, pct, doneCount, studentId, freeUnlock, 
 
 function ChecklistRow({ it, mod, studentId }) {
   const { a, i, done, status } = it;
+  const href = status !== 'locked' ? linkFor(a, mod, studentId) : null;
+  // Abierto pero sin material configurado todavía → "en preparación" (no es clic).
+  if (status !== 'locked' && !done && !href) {
+    return (
+      <div className="al-item open" style={{opacity:.65, cursor:'default'}} title="Este material aún no está disponible. Pronto lo activaremos.">
+        <span className="al-num">{i+1}</span>
+        <span className="al-ico">{typeIcon(a.type)}</span>
+        <span className="al-name">{a.name}</span>
+        <span className="al-score" style={{background:'#EEEAE0', color:'#8A7F6A'}}>📚 En preparación</span>
+      </div>
+    );
+  }
   return (
-    <a href={status!=='locked' ? linkFor(a, mod, studentId) : undefined}
+    <a href={status!=='locked' ? (href || undefined) : undefined}
        className={`al-item ${status}`}>
       <span className="al-num">{status==='done' ? '✓' : status==='locked' ? '🔒' : i+1}</span>
       <span className="al-ico">{typeIcon(a.type)}</span>
@@ -352,10 +364,11 @@ function TopicGroup({ num, name, items, mod, studentId }) {
 
 function typeIcon(t) { return { story:'📗', reading:'📖', listening:'🎧', grammar:'📝', summary:'📚', quizlet:'🃏' }[t] || '📄'; }
 function linkFor(a, mod, studentId) {
-  // a.url = la URL real del material en GitHub Pages (se configura por actividad).
-  // Si no hay url, usa la muestra local del UI kit.
-  const base = a.url || { story:'../story/index.html', reading:'../reading/index.html', listening:'../listening/index.html' }[a.type] || '#';
-  if (base === '#') return '#';
+  // a.url = la URL real del material en GitHub Pages (se configura por actividad
+  // al importar el catálogo). Sin url, el material aún NO está disponible: no
+  // generamos enlace para no mandar al alumno a una página inexistente (404).
+  if (!a.url) return null;
+  const base = a.url;
   // Adjunta la identidad para que jucum-connect.js registre el progreso
   const sep = base.includes('?') ? '&' : '?';
   return `${base}${sep}jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent(mod.id)}&jucum_act=${encodeURIComponent(a.id)}&jucum_kind=${encodeURIComponent(a.type||'')}`;

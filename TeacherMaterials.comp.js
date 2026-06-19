@@ -12,7 +12,9 @@ function tmTypeIcon(t) {
 
 /* URL del material en modo profesor (libre, sin registrar) */
 function tmLink(a, mod) {
-  const base = a.url || { story:'../story/index.html', reading:'../reading/index.html', listening:'../listening/index.html' }[a.type] || null;
+  // Sin url real, el material aún no está disponible (no usamos muestras locales
+  // que no existen en producción).
+  const base = a.url || null;
   if (!base) return null;
   const sep = base.includes('?') ? '&' : '?';
   return `${base}${sep}jucum_teacher=1&jucum_mod=${encodeURIComponent(mod.id)}&jucum_act=${encodeURIComponent(a.id)}`;
@@ -22,7 +24,7 @@ function tmLink(a, mod) {
 function TmModule({ mod, defaultOpen }) {
   const [open, setOpen] = tmUseState(!!defaultOpen);
   const acts = mod.activities || [];
-  const withUrl = acts.filter(a => a.url || ['story','reading','listening'].includes(a.type)).length;
+  const withUrl = acts.filter(a => a.url).length;
 
   // agrupar consecutivas por a.group (tema)
   const segments = [];
@@ -40,7 +42,7 @@ function TmModule({ mod, defaultOpen }) {
       <a key={a.id} className={`al-item ${href ? 'open' : 'locked'}`} href={href || undefined} target={href ? '_blank' : undefined} rel="noreferrer">
         <span className="al-ico">{tmTypeIcon(a.type)}</span>
         <span className="al-name">{a.name}</span>
-        {href ? <span className="al-arr">↗</span> : <span className="al-score" style={{background:'#EEE',color:'#999'}}>sin URL</span>}
+        {href ? <span className="al-arr">↗</span> : <span className="al-score" style={{background:'#EEEAE0',color:'#8A7F6A'}}>📚 en preparación</span>}
       </a>
     );
   };
