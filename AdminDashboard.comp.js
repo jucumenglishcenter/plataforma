@@ -30,6 +30,7 @@ function AdminDashboard({ user, onLogout }) {
           <a className={`nav-link ${view==='students'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('students');}}>👥 Alumnos</a>
           <a className={`nav-link ${view==='inscripciones'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('inscripciones');}} style={{position:'relative'}}>📝 Inscripciones{regPend > 0 && <span className="nav-dot">{regPend > 9 ? '9+' : regPend}</span>}</a>
           <a className={`nav-link ${view==='attendance'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('attendance');}}>📋 Asistencia</a>
+          <a className={`nav-link ${view==='retencion'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('retencion');}}>📉 Retención</a>
           <a className={`nav-link ${view==='config'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('config');}}>⚙️ Configuración</a>
           <a className={`nav-link ${view==='account'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('account');}}>🔑 Mi cuenta</a>
           <NotifBell userId="admin" onNotifClick={(n)=> n.link==='payments' && setView('payments')} />
@@ -41,6 +42,7 @@ function AdminDashboard({ user, onLogout }) {
       {view === 'students' ? <AdminStudents onChange={refresh} />
         : view === 'inscripciones' ? <InscripcionesView />
         : view === 'attendance' ? <AdminAttendance />
+        : view === 'retencion' ? <RetentionView />
         : view === 'config' ? <AdminConfig onChange={refresh} />
         : view === 'account' ? <AdminAccount user={user} />
         : <AdminPayments onChange={refresh} />}
@@ -54,7 +56,7 @@ function AdminPayments({ onChange }) {
   const payments = P.getAllPayments();
   const [filter, setFilter] = React.useState('por_confirmar');
   const [shot, setShot] = React.useState(null);
-  const nameOf = (sid) => (D.STUDENTS.find(s => s.id === sid) || {}).fullName || sid;
+  const nameOf = (sid) => (D.STUDENTS.find(s => s.id === sid) || {}).fullName || null;
   const groupOf = (sid) => { const s = D.STUDENTS.find(s => s.id === sid); const g = s && D.GROUPS.find(g => g.id === s.group); return g ? g.name : ''; };
   const list = payments.filter(p => filter === 'todos' ? true : p.status === filter);
   const counts = {
@@ -88,7 +90,7 @@ function AdminPayments({ onChange }) {
               <div key={p.id} className="scard" style={{padding:14}}>
                 <div className="row-flex" style={{gap:12, flexWrap:'wrap'}}>
                   <div style={{flex:1, minWidth:200}}>
-                    <div style={{fontWeight:800, fontSize:14}}>{nameOf(p.studentId)} <span style={{fontWeight:600, color:'var(--text-soft)', fontSize:12}}>· {groupOf(p.studentId)}</span></div>
+                    <div style={{fontWeight:800, fontSize:14}}>{nameOf(p.studentId) || `Alumno · DNI ${p.dni||'—'}`} <span style={{fontWeight:600, color:'var(--text-soft)', fontSize:12}}>· {groupOf(p.studentId)}</span></div>
                     <div className="sm-meta">{P.labelMode(p.mode)} · DNI {p.dni} · periodo {p.period}{p.amount?` · ${cfg.currency} ${p.amount}`:''}</div>
                     <div className="sm-meta">Registrado {new Date(p.registeredAt).toLocaleString('es-PE',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}{p.confirmedAt?` · confirmado ${new Date(p.confirmedAt).toLocaleDateString('es-PE')}`:''}</div>
                   </div>

@@ -14,9 +14,13 @@
     'jucum_student_progress_v1','jucum_attendance_v1','jucum_assignments_v1',
     'jucum_submissions_v1','jucum_exams_v1','jucum_exam_windows_v1',
     'jucum_surveys_v1','jucum_league_v1','jucum_notifications_v1','jucum_evaluations_v1',
+    'jucum_payments_v1','jucum_registrations_v1','jucum_churn_v1','jucum_pay_config_v1',
   ];
 
   const isDemo = () => { try { return localStorage.getItem(DEMO_FLAG) === '1'; } catch { return false; } };
+  // En modo demostración, desconectamos Supabase por completo para que NADA
+  // toque tu base real y los datos ficticios no sean sobrescritos por la nube.
+  if (isDemo()) { try { window.JUCUM_SB = null; } catch {} }
   function hash(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0;return Math.abs(h);}
   function rng(seed){let x=seed||1;return()=>{x=(x*1103515245+12345)&0x7fffffff;return x/0x7fffffff;};}
   const iso = (d) => d.toISOString();
@@ -108,9 +112,65 @@
     localStorage.setItem('jucum_surveys_v1', JSON.stringify(all));
   }
 
+  function seedPayments(D) {
+    const MODES = ['mensual','modulo','total'];
+    const period = new Date().toISOString().slice(0,7);
+    const arr = [];
+    D.STUDENTS.forEach((s, idx) => {
+      const r = rng(hash(s.id+'pay'));
+      // algunos NO pagaron este periodo → quedarán "por vencer" (semana de pago)
+      if (idx % 6 === 2) return;
+      const mode = s.level === 'pre-a1' ? 'mensual' : MODES[Math.floor(r()*MODES.length)];
+      // estado: la mayoría confirmado, algunos por confirmar, alguno rechazado
+      let status = 'confirmado';
+      if (idx % 5 === 0) status = 'por_confirmar';
+      else if (idx % 7 === 0) status = 'rechazado';
+      const regAt = new Date(Date.now() - Math.floor(r()*20)*DAY).toISOString();
+      arr.push({
+        id:'pay-demo-'+s.id, studentId:s.id, dni:String(70000000+Math.floor(r()*9999999)),
+        mode, level:s.level, moduleId:null, amount: mode==='mensual'?120:mode==='modulo'?200:600,
+        period, screenshot:null, status,
+        note: status==='rechazado'?'El voucher no es legible, vuelve a subirlo.':'',
+        registeredAt: regAt, confirmedAt: status==='confirmado'?regAt:null,
+      });
+    });
+    localStorage.setItem('jucum_payments_v1', JSON.stringify(arr));
+  }
+
   function seedAll() {
     const D = window.JUCUM_DATA; if (!D) return;
-    seedAttendance(D); seedTasks(D); seedExams(D); seedSurveys(D);
+    seedAttendance(D); seedTasks(D); seedExams(D); seedSurveys(D); seedPayments(D);
+    seedInscripciones(D); seedChurn(D); seedPayConfig(D);
+  }
+
+  /* Control de pagos ACTIVADO + día de pago hace 3 días → algunos en "semana de pago" */
+  function seedPayConfig(D) {
+    const today = new Date().getDate();
+    const payDay = Math.max(1, Math.min(28, today - 3));
+    localStorage.setItem('jucum_pay_config_v1', JSON.stringify({
+      enforce: true, payDay, currency: 'S/', graceDays: 7, exceptions: {},
+      amounts: { 'pre-a1':{mensual:120}, 'a1':{mensual:150,modulo:250}, 'a2':{mensual:150,modulo:250} },
+    }));
+  }
+
+  /* Inscripciones pendientes del link de autoregistro (ejemplos) */
+  function seedInscripciones(D) {
+    const now = Date.now();
+    const regs = [
+      { id:'reg-demo-1', fullName:'Camila Ríos', email:'camila.rios@email.com', age:24, dni:'72119045', payMode:'mensual', level:'pre-a1', status:'pendiente', createdAt:new Date(now-2*DAY).toISOString() },
+      { id:'reg-demo-2', fullName:'Diego Salas', email:'diego.salas@email.com', age:15, dni:'81230456', guardianName:'María Salas', guardianDni:'40118822', payMode:'total', level:'pre-a1', status:'pendiente', createdAt:new Date(now-1*DAY).toISOString() },
+      { id:'reg-demo-3', fullName:'Valeria Núñez', email:'valeria.n@email.com', age:30, dni:'45992011', payMode:'modulo', level:'a1', status:'pendiente', createdAt:new Date(now-5*3600*1000).toISOString() },
+    ];
+    localStorage.setItem('jucum_registrations_v1', JSON.stringify(regs));
+  }
+
+  /* Bajas históricas (para que el panel de retención tenga datos) */
+  function seedChurn(D) {
+    const now = Date.now();
+    const picks = D.STUDENTS.slice(-3);
+    const reasons = ['tiempo','economico','desmotivado'];
+    const churn = picks.map((s,i) => ({ studentId:'baja-'+i, name:['Rosa Medina','Kevin Paredes','Lucero Vega'][i]||s.fullName, level:s.level, groupName:'', reason:reasons[i], note:'', date:new Date(now-(7+i*9)*DAY).toISOString() }));
+    localStorage.setItem('jucum_churn_v1', JSON.stringify(churn));
   }
 
   /* Activar modo demostración: ignora Supabase y siembra todo */

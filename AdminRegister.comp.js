@@ -99,6 +99,8 @@ function RegisterStudentForm({ onClose, onDone, prefill }) {
 function InscripcionesView() {
   const D = window.JUCUM_DATA; const R = window.JUCUM_REG;
   const [, setTick] = rgUseState(0);
+  const [copied, setCopied] = rgUseState(false);
+  const regLink = (location.origin && location.origin !== 'null' ? location.origin : 'https://jucum-english-center.netlify.app') + location.pathname.replace(/[^/]*$/, '') + 'registro.html';
   const refresh = () => setTick(t => t + 1);
   const [approving, setApproving] = rgUseState(null);
   const pend = R.listRegistrations('pendiente');
@@ -114,7 +116,17 @@ function InscripcionesView() {
         </div>
       </div>
 
-      <div className="scard" style={{marginTop:18}}>
+      <div className="scard" style={{marginTop:18, background:'#EEF2FB', borderColor:'#C9D4F0'}}>
+        <div className="sec-head"><div className="sec-title">🔗 Link de autoregistro</div></div>
+        <div className="settings-hint" style={{marginBottom:8}}>Comparte este link con quien quiera inscribirse. Llenan sus datos y suben su voucher, y aparecen aquí abajo para aprobar.</div>
+        <div className="row-flex" style={{gap:8, flexWrap:'wrap'}}>
+          <input className="input-text" readOnly value={regLink} onFocus={e=>e.target.select()} style={{flex:1, minWidth:240, fontSize:13}} />
+          <button className="btn-save" onClick={()=>{ try{ navigator.clipboard.writeText(regLink); setCopied(true); setTimeout(()=>setCopied(false),1500);}catch(e){} }}>{copied?'✅ Copiado':'📋 Copiar link'}</button>
+          <a className="att-btn" href={regLink} target="_blank" rel="noreferrer">Abrir</a>
+        </div>
+      </div>
+
+      <div className="scard" style={{marginTop:14}}>
         <div className="sec-head"><div className="sec-title">Pendientes</div></div>
         {pend.length === 0 ? <div className="empty-state"><div className="icon">📝</div>No hay inscripciones pendientes. Comparte el link de registro con tus alumnos.</div> : (
           <div className="sm-list">

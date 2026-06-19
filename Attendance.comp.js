@@ -103,6 +103,7 @@ function TeacherAttendance({ onBack }) {
 function AdminAttendance() {
   const { GROUPS, STUDENTS, LEVELS } = window.JUCUM_DATA;
   const A = window.JUCUM_ATT;
+  const [open, setOpen] = atUseState(null);
   const [groupId, setGroupId] = atUseState('all');
   const list = (groupId === 'all' ? STUDENTS : STUDENTS.filter(s => s.group === groupId))
     .map(s => ({ s, sum: A.getStudentSummary(s.id, 60) }))
@@ -146,7 +147,7 @@ function AdminAttendance() {
               const risk = sum.streakAbsent >= 2 || (sum.pct != null && sum.pct < 70);
               const group = GROUPS.find(g => g.id === s.group);
               return (
-                <div key={s.id} className="sm-row" style={{flexWrap:'wrap', background: risk?'#FFF6F6':undefined}}>
+                <div key={s.id} className="sm-row" style={{flexWrap:'wrap', background: risk?'#FFF6F6':undefined, cursor:'pointer'}} onClick={()=>setOpen(s)}>
                   <div className="st-ava" style={{background:`linear-gradient(135deg,${level.color}80,${level.dark})`}}>{s.fullName.split(' ').map(n=>n[0]).slice(0,2).join('')}</div>
                   <div className="sm-info">
                     <div className="sm-name">{risk && '⚠ '}{s.fullName}</div>
@@ -159,6 +160,7 @@ function AdminAttendance() {
             })}
         </div>
       </div>
+      {open && window.StudentDataModal && <window.StudentDataModal student={open} onClose={()=>setOpen(null)} />}
     </main>
   );
 }
