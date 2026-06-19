@@ -374,7 +374,7 @@
       s.completedModules = completedModules;
       s.lastActiveDays = lastTs
         ? Math.max(0, Math.round((Date.parse(dayStr(Date.now())) - Date.parse(dayStr(lastTs))) / DAY))
-        : 99;
+        : 0; // alumno nuevo sin práctica todavía: NO mostrar "hace 99 días" ni alarma
       s.achievements = ach;
     });
   }

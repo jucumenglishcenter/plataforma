@@ -21,6 +21,7 @@
       currency: 'S/',
       totalMonths: 2,            // "pago total" válido los primeros 2 meses del módulo
       exceptions: {},            // { studentId: díaDePago }
+      exemptGroups: [],          // ids de grupos exonerados de pago (convenio). También se exoneran automáticamente los grupos con "Homeschool"/"Convenio" en el nombre.
       amounts: {                 // montos por nivel (los define el admin)
         'pre-a1': { mensual: 0 },
         'a1':     { mensual: 0, modulo: 0 },
@@ -147,16 +148,31 @@
     return c.exceptions[studentId] || c.payDay;
   }
 
+  /* ¿El grupo del alumno está exonerado de pagos? (convenio Homeschool)
+   * Se exonera si: (a) su grupo está en cfg.exemptGroups, o
+   *                (b) el nombre del grupo contiene "Homeschool" o "Convenio". */
+  function isExemptGroup(student, cfg) {
+    if (!student) return false;
+    const list = (cfg && cfg.exemptGroups) || [];
+    if (student.group && list.includes(student.group)) return true;
+    try {
+      const g = (window.JUCUM_DATA.GROUPS || []).find(x => x.id === student.group);
+      if (g && /homeschool|convenio/i.test(g.name || '')) return true;
+    } catch (e) {}
+    return false;
+  }
+
   /* Estado de cuenta del alumno respecto a su pago del periodo actual */
   function getAccountStatus(student) {
     const sid = student.id;
     const cfg = getConfig();
-    // Si el control de pagos no está activo, nadie se bloquea (evita bloquear a
-    // todos el día que se despliega; el admin lo activa cuando esté listo).
-    if (!cfg.enforce) {
+    // Si el control de pagos no está activo, O el grupo está exonerado (convenio
+    // Homeschool), nadie se bloquea.
+    if (!cfg.enforce || isExemptGroup(student, cfg)) {
       return { state: 'al_dia', daysLeft: null, payDay: payDayFor(sid), dueDate: null,
         blocked: false, pending: false, rejected: false, confirmed: null,
-        period: currentPeriod(), currency: cfg.currency, phone: ATTN_PHONE, enforced: false };
+        period: currentPeriod(), currency: cfg.currency, phone: ATTN_PHONE, enforced: false,
+        exempt: isExemptGroup(student, cfg) };
     }
     const period = currentPeriod();
     const mine = loadPayments().filter(p => p.studentId === sid);
