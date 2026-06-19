@@ -215,48 +215,27 @@ function StudentDashboard({ user, onLogout }) {
           </div>
         </div>
 
+        {/* ── Motivación: no pierdas tu avance + compite sano ── */}
+        <AchievementWarning student={student} />
+
+        <div className="gami-row" style={{gridTemplateColumns:'1fr 1fr', marginTop:18}}>
+          <StreakCard streak={student.streak} />
+          <RankCard student={student} groupName={group.name} />
+        </div>
+
         <ProgressExplainer studentId={student.id} />
 
-        {/* ════════ ZONA 3 · MI PROGRESO (plegable, abierta) ════════ */}
-        <Collapsible title="📊 Mi progreso" meta="Examen · logros · juego" defaultOpen={true}>
-          <div style={{marginBottom:18}}><ReadinessCard student={student} /></div>
-
-          <div className="gami-row" style={{marginTop:0}}>
-            <XpCard xp={xp} xpInfo={xpInfo} student={student} />
-            <StreakCard streak={student.streak} />
-            <RankCard student={student} groupName={group.name} />
-          </div>
-
-          <div className="scard" style={{marginTop:18}}>
-            <div className="sec-head">
-              <div className="sec-title">🏆 Mis logros</div>
-              <span className="sec-meta">{earnedMedals(student).length} / {Object.keys(ACHIEVEMENT_DEFS).length} conseguidos</span>
+        {/* Acceso a lo "acumulado" (nivel, medallas, liga) → Mi perfil */}
+        <div className="scard" style={{marginTop:18}}>
+          <button type="button" onClick={()=>setView('profile')} style={{display:'flex',alignItems:'center',gap:11,width:'100%',border:'none',background:'none',cursor:'pointer',textAlign:'left',padding:0,fontFamily:'inherit'}}>
+            <span style={{fontSize:24}}>🏅</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontFamily:"'Fredoka',sans-serif",fontWeight:600,fontSize:15,color:'var(--text)'}}>Tu nivel, medallas y liga semanal</div>
+              <div style={{fontSize:12,color:'var(--text-soft)',fontWeight:600}}>Míralas en Mi perfil</div>
             </div>
-            <AchievementWarning student={student} />
-            <MedalShowcase student={student} defs={ACHIEVEMENT_DEFS} />
-          </div>
-        </Collapsible>
-
-        {/* ════════ ZONA 4 · MÁS (plegable, cerrada) ════════ */}
-        <Collapsible title="📋 Asistencia, notas y evaluaciones" meta="Tu historial" defaultOpen={false}>
-          <StudentAttendanceCard student={student} />
-
-          <div className="kpi-grid">
-            <div className="kpi"><div className="kpi-ico">📦</div><div className="kpi-num">{student.completedModules}</div><div className="kpi-lbl">Módulos completos</div></div>
-            <div className="kpi"><div className="kpi-ico">🏆</div><div className="kpi-num">{earnedMedals(student).length}</div><div className="kpi-lbl">Logros</div></div>
-            <div className="kpi"><div className="kpi-ico">⏱️</div><div className="kpi-num">{Math.floor(student.totalMinutes/60)}h {student.totalMinutes%60}m</div><div className="kpi-lbl">Tiempo total</div></div>
-          </div>
-
-          <div style={{marginTop:18}}><GradesRecord student={student} /></div>
-
-          <div className="scard" style={{marginTop:18}}>
-            <div className="sec-head">
-              <div className="sec-title">📊 Evaluaciones del profesor</div>
-              <span className="sec-meta">Speaking · Listening · Comprehension</span>
-            </div>
-            <StudentEvaluations studentId={student.id} isStudent={true} />
-          </div>
-        </Collapsible>
+            <span style={{color:'var(--lp)',fontWeight:800,fontSize:20}}>→</span>
+          </button>
+        </div>
       </main>
       )}
     </>

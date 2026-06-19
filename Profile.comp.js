@@ -52,11 +52,18 @@ function StudentProfile({ user, onBack }) {
       </div>
 
       <div className="scard" style={{marginTop:18}}>
+        <div className="sec-head"><div className="sec-title">📝 Mi asistencia</div></div>
+        <StudentAttendanceCard student={student} />
+      </div>
+
+      <div style={{marginTop:18}}><GradesRecord student={student} /></div>
+
+      <div className="scard" style={{marginTop:18}}>
         <div className="sec-head"><div className="sec-title">📊 Evaluaciones del profesor</div></div>
         <StudentEvaluations studentId={student.id} isStudent={true} />
       </div>
 
-      {showPwd && <ChangePasswordModal onClose={() => setShowPwd(false)} />}
+      {showPwd && <ChangePasswordModal username={student.username} onClose={() => setShowPwd(false)} />}
     </main>
   );
 }
@@ -90,19 +97,31 @@ function WeeklyLeague({ student }) {
 }
 
 /* Mejora D · Change password UI (functional with Supabase later) */
-function ChangePasswordModal({ onClose }) {
+function ChangePasswordModal({ onClose, username }) {
   const [cur, setCur] = prUseState('');
   const [next, setNext] = prUseState('');
   const [confirm, setConfirm] = prUseState('');
   const [msg, setMsg] = prUseState(null);
+  const [busy, setBusy] = prUseState(false);
 
-  const save = () => {
+  const save = async () => {
     if (!cur) { setMsg({ kind:'err', text:'Ingresa tu contraseña actual.' }); return; }
     if (next.length < 4) { setMsg({ kind:'err', text:'La nueva contraseña debe tener al menos 4 caracteres.' }); return; }
     if (next !== confirm) { setMsg({ kind:'err', text:'Las contraseñas no coinciden.' }); return; }
-    // In prototype mode passwords aren't really stored per-user.
-    setMsg({ kind:'ok', text:'✓ Contraseña actualizada. (Se hará efectiva al conectar Supabase — en el prototipo la contraseña sigue siendo 1234.)' });
-    setTimeout(onClose, 2600);
+    if (window.JUCUM_SB && username) {
+      setBusy(true);
+      try {
+        const sb = window.JUCUM_SB.getClient();
+        const { data } = await sb.from('users').select('password').eq('username', username).maybeSingle();
+        if (!data || data.password !== cur) { setMsg({ kind:'err', text:'Tu contraseña actual no es correcta.' }); setBusy(false); return; }
+        await sb.from('users').update({ password: next }).eq('username', username);
+        setMsg({ kind:'ok', text:'✓ Contraseña actualizada. Únala la próxima vez que ingreses.' });
+        setTimeout(onClose, 2200);
+      } catch (e) { setMsg({ kind:'err', text:'Error: ' + e.message }); setBusy(false); }
+      return;
+    }
+    setMsg({ kind:'ok', text:'✓ (modo local) Contraseña actualizada.' });
+    setTimeout(onClose, 2200);
   };
 
   return (
@@ -128,7 +147,7 @@ function ChangePasswordModal({ onClose }) {
           </div>
           <div className="modal-actions">
             <button className="btn-cancel" onClick={onClose}>Cancelar</button>
-            <button className="btn-save" onClick={save}>💾 Guardar</button>
+            <button className="btn-save" onClick={save} disabled={busy}>{busy ? 'Guardando…' : '💾 Guardar'}</button>
           </div>
         </div>
       </div>
