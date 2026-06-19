@@ -219,10 +219,57 @@ function notifyExamSoon(groupId) {
   return members.length;
 }
 
+/* ── Panel por módulo (profesor): anuncio con fecha + publicación ──────
+ * Correlación: Desarrollo DEFINE el examen (createExam, ligado a moduleIds).
+ * El profesor solo lo ANUNCIA (con fecha → notifica a los alumnos) y luego lo
+ * PUBLICA (abre la ventana para el grupo). */
+const EANN_KEY = 'jucum_exam_announce_v1';
+function loadAnn() { try { return JSON.parse(localStorage.getItem(EANN_KEY) || '{}'); } catch { return {}; } }
+function saveAnn(a) { localStorage.setItem(EANN_KEY, JSON.stringify(a)); }
+function getAnnouncement(groupId, moduleId) { return loadAnn()[groupId + ':' + moduleId] || null; }
+
+/* Examen DEFINIDO (por Desarrollo) que cubre este módulo */
+function examForModule(moduleId, level) {
+  return loadExams().find(e => (e.moduleIds || []).includes(moduleId) && (!level || e.level === level)) || null;
+}
+/* Ventana de examen (grupo completo) para un examen + grupo */
+function windowForExamGroup(examId, groupId) {
+  return loadWindows().find(w => w.examId === examId && w.groupId === groupId && !((w.targetStudentIds || []).length)) || null;
+}
+
+/* ETAPA 1 · Anunciar: avisa a los alumnos del grupo cuándo será su examen */
+function announceExam(groupId, moduleId, examId, dateStr) {
+  const D = window.JUCUM_DATA; if (!D) return 0;
+  const ann = loadAnn();
+  ann[groupId + ':' + moduleId] = { date: dateStr || null, examId: examId || null, announcedAt: new Date().toISOString() };
+  saveAnn(ann);
+  const group = D.GROUPS.find(g => g.id === groupId);
+  const mod = (D.MODULE_CATALOG[group?.level] || []).find(m => m.id === moduleId);
+  const modName = mod?.name || 'tu módulo';
+  const fecha = dateStr ? new Date(dateStr + 'T00:00:00').toLocaleDateString('es-PE', { weekday:'long', day:'numeric', month:'long' }) : null;
+  const members = D.STUDENTS.filter(s => s.group === groupId);
+  members.forEach(s => {
+    const r = D.getStudentReadiness(s);
+    const apt = r.overall >= 75;
+    if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(s.id, {
+      type: 'assignment',
+      title: '📣 Examen programado',
+      body: `Tu examen de "${modName}"${fecha ? ` será el ${fecha}` : ' se acerca'}. ` +
+        (apt ? '¡Vas listo! Repasa y prepárate. 💪' : `Recuerda: necesitas 75% de cumplimiento para rendirlo (vas en ${r.overall}%). Practica con constancia esta semana.`),
+      link: 'exam',
+    });
+  });
+  return members.length;
+}
+function cancelAnnouncement(groupId, moduleId) {
+  const a = loadAnn(); delete a[groupId + ':' + moduleId]; saveAnn(a);
+}
+
 window.JUCUM_EXAMS = {
   getExams, getExam, createExam, updateExam, deleteExam,
   getWindows, createWindow, saveWindow, deleteWindow, recipientsOfWindow,
   openWindowsForStudent, canTakeWindow, toggleOverride, setWindowOpen,
   submitExam, gradeExam, publishResults, unpublishResults, partWeight,
   groupsReadyForExam, notifyExamSoon, examPartLink,
+  examForModule, windowForExamGroup, getAnnouncement, announceExam, cancelAnnouncement,
 };

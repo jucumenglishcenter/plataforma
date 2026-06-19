@@ -176,6 +176,9 @@ function StudentDashboard({ user, onLogout }) {
           </div>
         </div>
 
+        {/* — Mascota Neuro: al inicio, da la bienvenida y refleja su ánimo — */}
+        <div style={{marginTop:18}}><MascotCard student={student} /></div>
+
         {/* ════════ ZONA 1 · HOY ════════ */}
         {/* Lo primero que ve el alumno: su práctica del día y su meta. */}
         <div style={{marginTop:18}}><TodayPracticeCard student={student} /></div>
@@ -232,8 +235,6 @@ function StudentDashboard({ user, onLogout }) {
             <AchievementWarning student={student} />
             <MedalShowcase student={student} defs={ACHIEVEMENT_DEFS} />
           </div>
-
-          <div style={{marginTop:18}}><MascotCard student={student} /></div>
         </Collapsible>
 
         {/* ════════ ZONA 4 · MÁS (plegable, cerrada) ════════ */}

@@ -37,7 +37,7 @@ function examDiagnosis(student, r) {
 function TeacherExams({ onBack, canDefine }) {
   const { LEVELS } = window.JUCUM_DATA;
   const X = window.JUCUM_EXAMS;
-  const [tab, setTab] = exUseState('windows');
+  const [tab, setTab] = exUseState('modules');
   const [editing, setEditing] = exUseState(null); // 'new' | exam
   const [opening, setOpening] = exUseState(false);
   const [tick, setTick] = exUseState(0);
@@ -62,14 +62,15 @@ function TeacherExams({ onBack, canDefine }) {
       </div>
 
       <div className="mm-tabs">
-        <button className={`mm-tab ${tab==='windows'?'on':''}`} onClick={() => setTab('windows')}>📅 Activos <span className="mm-count">{windows.length}</span></button>
+        <button className={`mm-tab ${tab==='modules'?'on':''}`} onClick={() => setTab('modules')}>📚 Por módulo</button>
+        <button className={`mm-tab ${tab==='windows'?'on':''}`} onClick={() => setTab('windows')}>📅 Aperturas <span className="mm-count">{windows.length}</span></button>
         {canDefine && <button className={`mm-tab ${tab==='define'?'on':''}`} onClick={() => setTab('define')}>📑 Definidos <span className="mm-count">{exams.length}</span></button>}
         {canDefine && <button className={`mm-tab ${tab==='weights'?'on':''}`} onClick={() => setTab('weights')}>⚖️ Peso examen</button>}
       </div>
 
       <ExamReadyBanner />
 
-      {tab === 'weights' && canDefine ? <ModuleWeightPanel /> : tab === 'define' && canDefine ? (
+      {tab === 'modules' ? <ModuleExamPanel onChange={refresh} /> : tab === 'weights' && canDefine ? <ModuleWeightPanel /> : tab === 'define' && canDefine ? (
         exams.length === 0
           ? <div className="scard"><div className="empty-state"><div className="icon">📑</div>Aún no defines exámenes. Crea el primero.</div></div>
           : <div className="mm-list">
@@ -502,18 +503,23 @@ function ModuleResultsBlock({ student }) {
       <div style={{display:'grid', gap:10}}>
         {mods.map(m => {
           const g = getModuleFinalGrade(student, m);
-          const color = g.approved ? '#2EA84B' : '#C62828';
+          // Solo hay veredicto (Aprobado/No aprobado) si YA rindió un examen.
+          // Sin examen publicado, el módulo está "en progreso", nunca "no aprobado".
+          const hasVerdict = g.hasExam;
+          const color = !hasVerdict ? '#E68A00' : (g.approved ? '#2EA84B' : '#C62828');
+          const badgeBg = !hasVerdict ? '#FFF8E1' : (g.approved ? '#E8F5E9' : '#FFEBEE');
+          const badgeTxt = !hasVerdict ? '⏳ Pendiente' : (g.approved ? '✓ Aprobado' : '✗ No aprob.');
           return (
             <div key={m.id} className="modres" style={{borderLeft:`4px solid ${color}`}}>
               <div className="modres-emo">{m.emoji}</div>
               <div className="modres-info">
                 <div className="modres-name">{m.name}</div>
-                <div className="modres-sub">Cumplimiento {g.stats.cumplimiento}% · {g.hasExam ? `Examen ${g.exam.grade}/100` : 'Examen pendiente'} · peso examen {g.examWeight}%</div>
+                <div className="modres-sub">Avance {g.stats.cumplimiento}% · {g.hasExam ? `Examen ${g.exam.grade}/100` : 'Examen no rendido aún'} · peso examen {g.examWeight}%</div>
                 <div className="modres-bar"><span style={{width:g.finalPct+'%', background:color}}></span></div>
               </div>
               <div className="modres-final">
                 <div className="modres-pct" style={{color}}>{g.finalPct}%</div>
-                <div className="modres-badge" style={{background: g.approved?'#E8F5E9':'#FFEBEE', color}}>{g.approved?'✓ Aprobado':'✗ No aprob.'}</div>
+                <div className="modres-badge" style={{background: badgeBg, color}}>{badgeTxt}</div>
               </div>
             </div>
           );
@@ -524,4 +530,86 @@ function ModuleResultsBlock({ student }) {
   );
 }
 
-Object.assign(window, { TeacherExams, StudentExams, WindowCard, ExamGradeModal, ExamForm, WindowForm, StudentExamCard, ModuleWeightPanel, ModuleResultsBlock });
+Object.assign(window, { TeacherExams, StudentExams, WindowCard, ExamGradeModal, ExamForm, WindowForm, StudentExamCard, ModuleWeightPanel, ModuleResultsBlock, ModuleExamPanel, ModuleExamRow });
+
+/* ═══ Panel del profesor: exámenes por módulo (anunciar + publicar) ═══ */
+function ModuleExamPanel({ onChange }) {
+  const { GROUPS, LEVELS, MODULE_CATALOG } = window.JUCUM_DATA;
+  const [groupId, setGroupId] = exUseState(GROUPS[0]?.id || '');
+  const [, setTick] = exUseState(0);
+  const refresh = () => { setTick(t => t + 1); onChange && onChange(); };
+  const group = GROUPS.find(g => g.id === groupId);
+  const mods = group ? (MODULE_CATALOG[group.level] || []) : [];
+  if (!GROUPS.length) return <div className="scard"><div className="empty-state"><div className="icon">👥</div>No hay grupos todavía.</div></div>;
+  return (
+    <div className="scard">
+      <div className="sec-head">
+        <div className="sec-title">📅 Exámenes por módulo</div>
+        <span className="sec-meta">Anuncia la fecha · publica cuando toque</span>
+      </div>
+      <div className="settings-hint" style={{marginBottom:10}}>Desarrollo sube el examen de cada módulo. Tú solo lo <b>anuncias</b> (con fecha → les llega aviso) y lo <b>publicas</b> (lo abre para el grupo).</div>
+      <div className="preset-row" style={{flexWrap:'wrap', marginBottom:14}}>
+        {GROUPS.map(g => <button key={g.id} className={`preset ${groupId===g.id?'on':''}`} onClick={()=>setGroupId(g.id)}>{LEVELS[g.level]?.emoji} {g.name}</button>)}
+      </div>
+      {mods.length===0 ? <div className="settings-hint">Este grupo no tiene módulos.</div> : (
+        <div style={{display:'flex', flexDirection:'column', gap:10}}>
+          {mods.map(m => <ModuleExamRow key={m.id} module={m} group={group} onChange={refresh} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModuleExamRow({ module, group, onChange }) {
+  const X = window.JUCUM_EXAMS;
+  const exam = X.examForModule(module.id, group.level);
+  const win = exam ? X.windowForExamGroup(exam.id, group.id) : null;
+  const ann = X.getAnnouncement(group.id, module.id);
+  const [date, setDate] = exUseState(ann?.date || '');
+  const isOpen = !!(win && win.isOpen);
+
+  const doAnnounce = () => {
+    const n = X.announceExam(group.id, module.id, exam?.id || null, date || null);
+    alert(`📣 Aviso enviado a ${n} alumno(s) de ${group.name}.` + (date ? ` Fecha: ${new Date(date+'T00:00:00').toLocaleDateString('es-PE')}` : ''));
+    onChange();
+  };
+  const doPublish = () => {
+    if (!exam) return;
+    if (win) X.setWindowOpen(win.id, true);
+    else X.createWindow({ examId: exam.id, groupId: group.id, isOpen: true });
+    onChange();
+  };
+  const doClose = () => { if (win) { X.setWindowOpen(win.id, false); onChange(); } };
+
+  return (
+    <div style={{border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px'}}>
+      <div style={{display:'flex', alignItems:'center', gap:10, marginBottom: exam ? 10 : 0}}>
+        <span style={{fontSize:22}}>{module.emoji}</span>
+        <div style={{flex:1, minWidth:0}}>
+          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14}}>{module.name}</div>
+          <div className="settings-hint" style={{margin:0}}>
+            {exam ? <>Examen: <b>{exam.title}</b></> : <span style={{color:'#C62828'}}>⏳ Desarrollo aún no subió el examen de este módulo</span>}
+          </div>
+        </div>
+        {exam && <span className="mm-chip" style={{background: isOpen?'#E8F5E9':'#FAFAF6', color: isOpen?'#2E7D32':'#777'}}>{isOpen?'🟢 Publicado':'⚪ Sin publicar'}</span>}
+      </div>
+
+      {exam && (
+        <div style={{display:'grid', gap:10}}>
+          <div className="row-flex" style={{gap:8, flexWrap:'wrap'}}>
+            <span style={{fontSize:12, fontWeight:800, color:'#1F3A8A', minWidth:78}}>1 · Anuncio</span>
+            <input type="date" className="input-text" style={{width:170}} value={date} onChange={e=>setDate(e.target.value)} />
+            <button className="att-btn" onClick={doAnnounce}>📣 {ann?'Re-anunciar':'Anunciar a los alumnos'}</button>
+            {ann && <span className="settings-hint" style={{margin:0}}>✓ Anunciado{ann.date?` para ${new Date(ann.date+'T00:00:00').toLocaleDateString('es-PE')}`:''}</span>}
+          </div>
+          <div className="row-flex" style={{gap:8, flexWrap:'wrap'}}>
+            <span style={{fontSize:12, fontWeight:800, color:'#1F3A8A', minWidth:78}}>2 · Publicar</span>
+            <button className={`preset ${isOpen?'on':''}`} onClick={doPublish}>🟢 Publicar examen</button>
+            <button className={`preset ${!isOpen?'on':''}`} onClick={doClose} disabled={!win}>⚪ Despublicar</button>
+            <span className="settings-hint" style={{margin:0}}>{isOpen?'Los alumnos aptos ya lo ven.':'Aún oculto para los alumnos.'}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
