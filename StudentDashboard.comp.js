@@ -3,8 +3,12 @@
 function StudentDashboard({ user, onLogout }) {
   const { STUDENTS, GROUPS, LEVELS, MODULE_CATALOG, ACHIEVEMENT_DEFS, getGroupSettings, getStudentProgress, getStudentXP, getStudentLevel, MEDAL_RARITY, RARITY_STYLE, earnedMedals } = window.JUCUM_DATA;
   const student = STUDENTS.find(s => s.id === user.studentId) || STUDENTS[0];
-  const group = GROUPS.find(g => g.id === student.group);
-  const level = LEVELS[student.level];
+  const group = student ? GROUPS.find(g => g.id === student.group) : null;
+  const level = student ? LEVELS[student.level] : null;
+  // Blindaje: si el alumno no tiene grupo/nivel válido, mensaje amable (no pantalla en blanco).
+  if (!student || !group || !level) {
+    return <StudentNoGroup onLogout={onLogout} student={student} />;
+  }
   const settings = getGroupSettings(student.group);
   const progress = getStudentProgress(student.id);
   const allModules = MODULE_CATALOG[student.level] || [];
@@ -640,6 +644,37 @@ function TodayPracticeCard({ student }) {
   );
 }
 
+/* Pantalla amable cuando el alumno aún no tiene grupo/nivel asignado. */
+function StudentNoGroup({ onLogout, student }) {
+  return (
+    <>
+      <header className="app-header">
+        <div className="app-logo">
+          <img src={window.JUCUM_LOGO || 'logo-jucum.png'} alt="JUCUM EC" />
+          <div className="pgtitle">Mi panel de aprendizaje</div>
+        </div>
+        <div className="app-right">
+          <span className="role-pill s">🎓 Alumno</span>
+          <button className="logout-btn" onClick={onLogout} title="Cerrar sesión">⎂ Salir</button>
+        </div>
+      </header>
+      <main>
+        <div className="scard" style={{marginTop:24, textAlign:'center', padding:'44px 24px'}}>
+          <div style={{fontSize:52, marginBottom:12}}>🎒</div>
+          <div className="sec-title" style={{justifyContent:'center', display:'flex'}}>
+            {student && student.fullName ? `¡Hola, ${student.fullName.split(' ')[0]}!` : '¡Hola!'}
+          </div>
+          <p style={{marginTop:12, color:'var(--text-soft)', maxWidth:460, margin:'12px auto 0', lineHeight:1.6}}>
+            Tu cuenta está activa, pero todavía <b>no estás asignado/a a ningún grupo</b>.
+            Pídele a tu profesor que te agregue a tu grupo para ver tus módulos y
+            empezar a practicar. 🌱
+          </p>
+        </div>
+      </main>
+    </>
+  );
+}
+
 /* Une "¿Cómo voy?" + "Mi reporte" en una sola entrada con sub-pestañas. */
 function StudentAvance({ user, student, onBack }) {
   const [tab, setTab] = React.useState('diag');
@@ -669,4 +704,4 @@ function Collapsible({ title, meta, defaultOpen, children }) {
   );
 }
 
-Object.assign(window, { StudentDashboard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase, AchievementWarning, StudentAlertModal, ProgressExplainer, ExplainerBody, TodayPracticeCard, Collapsible, StudentAvance });
+Object.assign(window, { StudentDashboard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase, AchievementWarning, StudentAlertModal, ProgressExplainer, ExplainerBody, TodayPracticeCard, Collapsible, StudentAvance, StudentNoGroup });
