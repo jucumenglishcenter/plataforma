@@ -120,8 +120,79 @@
     return stu;
   }
 
+  /* ── Autoinscripción de alumnos EXISTENTES (página pública) ──
+   * Crea el acceso directamente y devuelve usuario+contraseña. No requiere
+   * aprobación ni voucher. Es seguro en registro.html (no usa JUCUM_DATA). */
+
+  /* Lista de grupos para que el alumno elija el suyo */
+  async function listGroupsPublic() {
+    if (!window.JUCUM_SB) return [];
+    try {
+      const { data } = await window.JUCUM_SB.getClient()
+        .from('groups').select('*').order('level', { ascending: true });
+      return (data || []).map(g => ({ id: g.id, level: g.level, name: g.name, schedule: g.schedule }));
+    } catch (e) { console.warn('grupos:', e.message); return []; }
+  }
+
+  /* Genera un usuario único consultando la base real (y el caché si existe) */
+  async function usernameFromCloud(fullName) {
+    const base = (fullName || 'alumno').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z\s]/g, '').trim().split(/\s+/);
+    const u = base.length >= 2 ? `${base[0]}.${base[1]}` : (base[0] || 'alumno');
+    const taken = new Set();
+    if (window.JUCUM_SB) {
+      try { const { data } = await window.JUCUM_SB.getClient().from('users').select('username');
+        (data || []).forEach(r => taken.add((r.username || '').toLowerCase())); } catch {}
+    }
+    (window.JUCUM_DATA?.STUDENTS || []).forEach(s => taken.add((s.username || '').toLowerCase()));
+    let cand = u, n = 1; while (taken.has(cand)) cand = u + (++n);
+    return cand;
+  }
+
+  /* Devuelve la cuenta existente con ese DNI, si la hay (anti-duplicado) */
+  async function findStudentByDni(dni) {
+    if (!window.JUCUM_SB || !dni) return null;
+    try {
+      const { data } = await window.JUCUM_SB.getClient().from('users')
+        .select('username, full_name').eq('dni', String(dni).trim());
+      return (data && data.length) ? data[0] : null;
+    } catch { return null; }
+  }
+
+  async function selfEnrollExistingStudent(data) {
+    const username = data.username || await usernameFromCloud(data.fullName);
+    const password = (data.password || '').trim() || '1234';
+    if (window.JUCUM_SB) {
+      const row = await window.JUCUM_SB.insert('users', {
+        username, full_name: data.fullName, role: 'student', level: data.level, group_id: data.group,
+        starred: false, password, email: data.email || null, age: data.age || null, dni: data.dni || null,
+        guardian_name: data.guardianName || null, guardian_dni: data.guardianDni || null, phone: data.phone || null,
+      });
+      // Deja constancia para la administración (inscripción ya aprobada)
+      try {
+        await window.JUCUM_SB.getClient().from('registrations').insert({
+          id: 'reg-' + Date.now(), full_name: data.fullName, email: data.email || null, age: data.age || null,
+          dni: data.dni || null, guardian_name: data.guardianName || null, guardian_dni: data.guardianDni || null,
+          phone: data.phone || null, level: data.level || null, group_id: data.group || null,
+          status: 'aprobado', note: 'Autoinscripción · alumno existente',
+        });
+      } catch (e) { console.warn('selfEnroll reg:', e.message); }
+      // Refresca el caché local si la app está abierta en este equipo
+      if (window.JUCUM_DATA && row) {
+        window.JUCUM_DATA.STUDENTS.push({
+          id: row.id || ('s' + Date.now()), username, fullName: data.fullName, level: data.level, group: data.group,
+          email: data.email, age: data.age, dni: data.dni, guardianName: data.guardianName, starred: false,
+          completedModules: 0, avgScore: 0, streak: 0, lastActiveDays: 0, totalMinutes: 0, achievements: [],
+        });
+        if (window.JUCUM_DATA.saveStudents) window.JUCUM_DATA.saveStudents(window.JUCUM_DATA.STUDENTS);
+      }
+    }
+    return { username, password };
+  }
+
   window.JUCUM_REG = {
     listRegistrations, pendingCount, submitRegistration, rejectRegistration,
     createStudentDirect, approveRegistration, usernameFrom, cloudLoadRegistrations,
+    listGroupsPublic, usernameFromCloud, findStudentByDni, selfEnrollExistingStudent,
   };
 })();

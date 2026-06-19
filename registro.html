@@ -34,6 +34,27 @@
   .phone{display:inline-block;margin-top:6px;font-weight:800;color:var(--primary-d);font-size:18px;}
   .hint{font-size:12.5px;color:var(--soft);margin-top:6px;}
   .voucher-prev{height:54px;border-radius:8px;border:1px solid var(--line);}
+  /* Selector de ruta */
+  .choice{display:flex;flex-direction:column;gap:12px;margin-top:6px;}
+  .choice-btn{display:flex;align-items:flex-start;gap:13px;text-align:left;width:100%;padding:18px;border:1.5px solid var(--line);border-radius:14px;background:#fff;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .05s;}
+  .choice-btn:hover{border-color:var(--primary);box-shadow:0 6px 18px rgba(31,58,138,.10);}
+  .choice-btn:active{transform:translateY(1px);}
+  .choice-ic{font-size:30px;line-height:1;flex:none;}
+  .choice-t{display:block;font-weight:900;font-size:16px;color:var(--primary-d);}
+  .choice-d{display:block;font-size:13px;color:var(--soft);margin-top:3px;}
+  .back{display:inline-flex;align-items:center;gap:5px;background:none;border:none;color:var(--primary);font-weight:800;font-size:13.5px;cursor:pointer;padding:0;margin-bottom:6px;}
+  .tag{display:inline-block;font-size:11.5px;font-weight:800;padding:3px 9px;border-radius:999px;margin-bottom:10px;}
+  .tag.alumno{background:#E6F4EA;color:#1B7A3D;}
+  .tag.nuevo{background:#EEF2FB;color:var(--primary-d);}
+  /* Credenciales */
+  .cred{background:#F4F6FC;border:1.5px dashed var(--primary);border-radius:14px;padding:16px;margin:14px 0;text-align:left;}
+  .cred-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;}
+  .cred-row+.cred-row{border-top:1px solid var(--line);}
+  .cred-k{font-size:12.5px;font-weight:800;color:var(--soft);}
+  .cred-v{font-size:18px;font-weight:900;color:var(--primary-d);font-family:ui-monospace,Menlo,Consolas,monospace;}
+  .copy-btn{margin-top:8px;width:100%;padding:11px;border:1.5px solid var(--primary);border-radius:10px;background:#fff;color:var(--primary);font-weight:800;font-size:13.5px;cursor:pointer;}
+  .copy-btn.done{background:#E6F4EA;border-color:#1B7A3D;color:#1B7A3D;}
+  .note-box{background:#FFF8E8;border:1px solid #F4C430;border-radius:12px;padding:12px;font-size:13px;text-align:left;margin-top:6px;}
 </style>
 </head>
 <body>
@@ -43,7 +64,76 @@
     <div style="font-weight:900;color:var(--primary-d);letter-spacing:.5px;">JUCUM ENGLISH CENTER</div>
   </div>
 
-  <div class="card" id="form-card">
+  <!-- PASO 0 · ELECCIÓN -->
+  <div class="card" id="choose-card">
+    <h1>¡Bienvenido! 👋</h1>
+    <p class="sub">Para empezar, cuéntanos cómo quieres continuar:</p>
+    <div class="choice">
+      <button class="choice-btn" id="path-alumno">
+        <span class="choice-ic">🎓</span>
+        <span>
+          <span class="choice-t">Ya estudio en JUCUM</span>
+          <span class="choice-d">Crea tu acceso a la plataforma: elige tu grupo y recibe tu usuario y contraseña al instante. No necesitas subir captura.</span>
+        </span>
+      </button>
+      <button class="choice-btn" id="path-nuevo">
+        <span class="choice-ic">✨</span>
+        <span>
+          <span class="choice-t">Quiero inscribirme</span>
+          <span class="choice-d">Es mi primera vez en JUCUM. Envío mis datos y mi voucher; la administración revisa y me asigna mi grupo.</span>
+        </span>
+      </button>
+    </div>
+    <div class="hint" style="margin-top:16px;">¿Ya tienes usuario y contraseña? <a href="index.html" style="color:var(--primary);font-weight:800;">Inicia sesión aquí</a>.</div>
+  </div>
+
+  <!-- ALUMNO EXISTENTE -->
+  <div class="card" id="existing-card" style="display:none;">
+    <button class="back" id="back-a">← Volver</button>
+    <span class="tag alumno">🎓 Alumno actual de JUCUM</span>
+    <h1>Crea tu acceso</h1>
+    <p class="sub">Elige tu grupo y completa tus datos. Al terminar recibirás tu usuario y contraseña.</p>
+
+    <label class="req">🧑‍💼 Nombre completo</label>
+    <input id="a_fullName" placeholder="Ej: Ana Pérez García" />
+
+    <label class="req">👥 Tu grupo</label>
+    <select id="a_group"><option value="">Cargando grupos…</option></select>
+    <div class="hint" id="a_groupHint">Selecciona el grupo en el que ya estudias.</div>
+
+    <div class="row">
+      <div><label>📧 Correo electrónico</label><input id="a_email" type="email" placeholder="tucorreo@…" /></div>
+      <div><label class="req">🙍 Edad</label><input id="a_age" type="number" min="3" max="99" placeholder="Edad" /></div>
+    </div>
+
+    <label class="req">✏️ Número de DNI</label>
+    <input id="a_dni" placeholder="Tu DNI" />
+
+    <div id="a_guardianBox" class="guardian" style="display:none;">
+      <div style="font-weight:800;font-size:13px;margin-bottom:6px;">👨‍👩‍👧 Eres menor de edad — datos del apoderado</div>
+      <label class="req">Nombre del apoderado</label>
+      <input id="a_guardianName" placeholder="Nombre completo del apoderado" />
+      <label>DNI del apoderado</label>
+      <input id="a_guardianDni" placeholder="DNI del apoderado" />
+    </div>
+
+    <label>📱 Teléfono / WhatsApp</label>
+    <input id="a_phone" placeholder="Para contactarte" />
+
+    <label class="req">🔑 Crea tu contraseña</label>
+    <input id="a_pass" type="password" placeholder="Mínimo 4 caracteres" />
+    <label class="req">🔑 Repite tu contraseña</label>
+    <input id="a_pass2" type="password" placeholder="Escríbela otra vez" />
+    <div class="hint">Tu usuario se genera con tu nombre. Podrás cambiar tu contraseña cuando quieras desde tu perfil.</div>
+
+    <div id="a_err" class="err" style="display:none;"></div>
+    <button class="btn" id="a_submit">Crear mi acceso →</button>
+  </div>
+
+  <!-- INSCRIPCIÓN NUEVA -->
+  <div class="card" id="new-card" style="display:none;">
+    <button class="back" id="back-n">← Volver</button>
+    <span class="tag nuevo">✨ Nueva inscripción</span>
     <h1>Ficha de inscripción</h1>
     <p class="sub">Completa tus datos para inscribirte. La administración revisará tu información y te asignará tu grupo.</p>
 
@@ -86,12 +176,27 @@
     <div class="hint">Tus datos solo se usan para tu inscripción en JUCUM English Center.</div>
   </div>
 
+  <!-- OK · INSCRIPCIÓN NUEVA -->
   <div class="card ok-screen" id="ok-card" style="display:none;">
     <div class="big">🎉</div>
     <h2>¡Registro completo!</h2>
     <p class="sub">Recibimos tu inscripción. La administración revisará tus datos y tu voucher, y te asignará tu grupo. Pronto te contactaremos.</p>
     <p style="margin:14px 0 2px;font-weight:700;">¿Tienes alguna duda? Escríbenos:</p>
     <a class="phone" id="phoneLink" href="#">+51 935 972 183</a>
+  </div>
+
+  <!-- OK · ALUMNO EXISTENTE (CREDENCIALES) -->
+  <div class="card ok-screen" id="ok-cred" style="display:none;">
+    <div class="big">✅</div>
+    <h2>¡Tu acceso está listo!</h2>
+    <p class="sub">Guarda estos datos. Los usarás para entrar a la plataforma.</p>
+    <div class="cred">
+      <div class="cred-row"><span class="cred-k">👤 Usuario</span><span class="cred-v" id="cred-user">—</span></div>
+      <div class="cred-row"><span class="cred-k">🔑 Contraseña</span><span class="cred-v" id="cred-pass">—</span></div>
+    </div>
+    <button class="copy-btn" id="copyCred">📋 Copiar usuario y contraseña</button>
+    <div class="note-box">💡 Puedes <b>cambiar tu contraseña cuando quieras</b> desde <b>Mi perfil → 🔑 Cambiar contraseña</b> una vez que ingreses.</div>
+    <a class="btn" href="index.html" style="display:block;text-align:center;text-decoration:none;">Ir a iniciar sesión →</a>
   </div>
 </div>
 
@@ -103,25 +208,111 @@
   document.getElementById('phoneLink').textContent = ATTN_PHONE;
   document.getElementById('phoneLink').href = 'https://wa.me/' + ATTN_PHONE.replace(/[^0-9]/g,'');
 
+  function show(id){ ['choose-card','existing-card','new-card','ok-card','ok-cred'].forEach(function(x){
+    document.getElementById(x).style.display = (x===id) ? '' : 'none'; }); window.scrollTo(0,0); }
+
+  // ── Selector de ruta ──
+  document.getElementById('path-alumno').addEventListener('click', function(){ show('existing-card'); loadGroups(); });
+  document.getElementById('path-nuevo').addEventListener('click', function(){ show('new-card'); });
+  document.getElementById('back-a').addEventListener('click', function(){ show('choose-card'); });
+  document.getElementById('back-n').addEventListener('click', function(){ show('choose-card'); });
+
+  function showErr(boxId, m){ var e=document.getElementById(boxId); e.textContent='⚠ '+m; e.style.display='block'; }
+  function hideErr(boxId){ document.getElementById(boxId).style.display='none'; }
+  function v(id){ return document.getElementById(id).value.trim(); }
+
+  // Apoderado (menor de edad) en ambos formularios
+  function wireMinor(ageId, boxId){
+    var el = document.getElementById(ageId);
+    el.addEventListener('input', function(){
+      var minor = el.value !== '' && Number(el.value) < 18;
+      document.getElementById(boxId).style.display = minor ? 'block' : 'none';
+    });
+  }
+  wireMinor('a_age','a_guardianBox');
+  wireMinor('age','guardianBox');
+
+  // ════════════════ ALUMNO EXISTENTE ════════════════
+  var groupsCache = [];
+  async function loadGroups(){
+    var sel = document.getElementById('a_group');
+    if (groupsCache.length){ return; }
+    try {
+      groupsCache = await window.JUCUM_REG.listGroupsPublic();
+    } catch(e){ groupsCache = []; }
+    if (!groupsCache.length){
+      sel.innerHTML = '<option value="">No se pudieron cargar los grupos</option>';
+      document.getElementById('a_groupHint').innerHTML = 'No pudimos cargar los grupos. Escríbenos por <a href="'+document.getElementById('phoneLink').href+'" style="color:var(--primary);font-weight:800;">WhatsApp</a> y te ayudamos.';
+      return;
+    }
+    var levelName = { 'pre-a1':'Pre-A1', 'a1':'A1', 'a2':'A2', 'b1':'B1' };
+    sel.innerHTML = '<option value="">Elige tu grupo…</option>' + groupsCache.map(function(g){
+      var lvl = levelName[g.level] || (g.level||'').toUpperCase();
+      var sched = g.schedule ? ' · ' + g.schedule : '';
+      return '<option value="'+g.id+'">'+lvl+' — '+(g.name||'Grupo')+sched+'</option>';
+    }).join('');
+  }
+
+  document.getElementById('a_submit').addEventListener('click', async function(){
+    hideErr('a_err');
+    if (!v('a_fullName')) return showErr('a_err','Escribe tu nombre completo.');
+    if (!v('a_group'))    return showErr('a_err','Selecciona tu grupo.');
+    if (!v('a_age'))      return showErr('a_err','Indica tu edad.');
+    if (!v('a_dni'))      return showErr('a_err','Escribe tu número de DNI.');
+    var minor = Number(v('a_age')) < 18;
+    if (minor && !v('a_guardianName')) return showErr('a_err','Como eres menor de edad, indica el nombre de tu apoderado.');
+    var p1 = document.getElementById('a_pass').value, p2 = document.getElementById('a_pass2').value;
+    if (p1.length < 4) return showErr('a_err','Tu contraseña debe tener al menos 4 caracteres.');
+    if (p1 !== p2)     return showErr('a_err','Las contraseñas no coinciden.');
+
+    var grp = groupsCache.find(function(g){ return g.id === v('a_group'); });
+    var btn = this; btn.disabled = true; btn.textContent = 'Creando tu acceso…';
+    try {
+      // Anti-duplicado: ¿este DNI ya tiene cuenta?
+      var existing = await window.JUCUM_REG.findStudentByDni(v('a_dni'));
+      if (existing){
+        btn.disabled = false; btn.textContent = 'Crear mi acceso →';
+        return showErr('a_err','Parece que ya tienes una cuenta (usuario: '+existing.username+'). Si olvidaste tu contraseña, escríbenos por WhatsApp '+ATTN_PHONE+'.');
+      }
+      var cred = await window.JUCUM_REG.selfEnrollExistingStudent({
+        fullName: v('a_fullName'), email: v('a_email'), age: Number(v('a_age'))||null, dni: v('a_dni'),
+        guardianName: v('a_guardianName'), guardianDni: v('a_guardianDni'), phone: v('a_phone'),
+        group: grp ? grp.id : v('a_group'), level: grp ? grp.level : null, password: p1,
+      });
+      document.getElementById('cred-user').textContent = cred.username;
+      document.getElementById('cred-pass').textContent = cred.password;
+      show('ok-cred');
+    } catch (err){
+      btn.disabled = false; btn.textContent = 'Crear mi acceso →';
+      showErr('a_err','No se pudo crear tu acceso. Revisa tu conexión e inténtalo de nuevo.');
+    }
+  });
+
+  document.getElementById('copyCred').addEventListener('click', function(){
+    var u = document.getElementById('cred-user').textContent;
+    var p = document.getElementById('cred-pass').textContent;
+    var txt = 'JUCUM English Center\nUsuario: '+u+'\nContraseña: '+p;
+    var btn = this;
+    navigator.clipboard.writeText(txt).then(function(){
+      btn.textContent = '✓ ¡Copiado!'; btn.classList.add('done');
+      setTimeout(function(){ btn.textContent='📋 Copiar usuario y contraseña'; btn.classList.remove('done'); }, 2200);
+    }).catch(function(){ btn.textContent='Usuario: '+u+' · Contraseña: '+p; });
+  });
+
+  // ════════════════ INSCRIPCIÓN NUEVA ════════════════
   var payMode = 'mensual';
-  document.querySelectorAll('.mode').forEach(function(m){
+  document.querySelectorAll('#modes .mode').forEach(function(m){
     m.addEventListener('click', function(){
-      document.querySelectorAll('.mode').forEach(function(x){x.classList.remove('on');});
+      document.querySelectorAll('#modes .mode').forEach(function(x){x.classList.remove('on');});
       m.classList.add('on'); payMode = m.dataset.mode;
     });
   });
-  document.querySelector('.mode[data-mode="mensual"]').classList.add('on');
-
-  var ageEl = document.getElementById('age');
-  ageEl.addEventListener('input', function(){
-    var minor = ageEl.value !== '' && Number(ageEl.value) < 18;
-    document.getElementById('guardianBox').style.display = minor ? 'block' : 'none';
-  });
+  document.querySelector('#modes .mode[data-mode="mensual"]').classList.add('on');
 
   var voucherData = null;
   document.getElementById('voucher').addEventListener('change', function(e){
     var f = e.target.files[0]; if (!f) return;
-    if (f.size > 50*1024*1024) { showErr('El archivo supera los 50 MB.'); e.target.value=''; return; }
+    if (f.size > 50*1024*1024) { showErr('err','El archivo supera los 50 MB.'); e.target.value=''; return; }
     var fr = new FileReader();
     fr.onload = function(){ voucherData = fr.result;
       var prev = document.getElementById('voucherPrev');
@@ -130,30 +321,24 @@
     fr.readAsDataURL(f);
   });
 
-  function showErr(m){ var e=document.getElementById('err'); e.textContent='⚠ '+m; e.style.display='block'; }
-  function hideErr(){ document.getElementById('err').style.display='none'; }
-  function val(id){ return document.getElementById(id).value.trim(); }
-
   document.getElementById('submitBtn').addEventListener('click', async function(){
-    hideErr();
-    if (!val('fullName')) return showErr('Escribe tu nombre completo.');
-    if (!val('age')) return showErr('Indica tu edad.');
-    if (!val('dni')) return showErr('Escribe tu número de DNI.');
-    var minor = Number(val('age')) < 18;
-    if (minor && !val('guardianName')) return showErr('Como eres menor de edad, indica el nombre de tu apoderado.');
+    hideErr('err');
+    if (!v('fullName')) return showErr('err','Escribe tu nombre completo.');
+    if (!v('age')) return showErr('err','Indica tu edad.');
+    if (!v('dni')) return showErr('err','Escribe tu número de DNI.');
+    var minor = Number(v('age')) < 18;
+    if (minor && !v('guardianName')) return showErr('err','Como eres menor de edad, indica el nombre de tu apoderado.');
     var btn = this; btn.disabled = true; btn.textContent = 'Enviando…';
     try {
       await window.JUCUM_REG.submitRegistration({
-        fullName: val('fullName'), email: val('email'), age: Number(val('age')) || null, dni: val('dni'),
-        guardianName: val('guardianName'), guardianDni: val('guardianDni'), phone: val('phone'),
+        fullName: v('fullName'), email: v('email'), age: Number(v('age')) || null, dni: v('dni'),
+        guardianName: v('guardianName'), guardianDni: v('guardianDni'), phone: v('phone'),
         payMode: payMode, voucher: voucherData,
       });
-      document.getElementById('form-card').style.display = 'none';
-      document.getElementById('ok-card').style.display = 'block';
-      window.scrollTo(0,0);
+      show('ok-card');
     } catch (err) {
       btn.disabled = false; btn.textContent = 'Enviar mi inscripción →';
-      showErr('No se pudo enviar. Revisa tu conexión e inténtalo de nuevo.');
+      showErr('err','No se pudo enviar. Revisa tu conexión e inténtalo de nuevo.');
     }
   });
 </script>
