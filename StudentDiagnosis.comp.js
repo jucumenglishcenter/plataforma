@@ -9,7 +9,7 @@ const DIAG_RECS = {
   speaking:  { t:'Practica tu speaking',           b:'Lee en voz alta los diálogos y grábate. Aprovecha las evaluaciones de Speaking del profesor.' },
 };
 
-function StudentDiagnosis({ user, onBack }) {
+function StudentDiagnosis({ user, onBack, topTabs }) {
   const D = window.JUCUM_DATA;
   const student = D.STUDENTS.find(s => s.id === user.studentId) || D.STUDENTS[0];
   const r = D.getStudentReadiness(student);
@@ -54,6 +54,7 @@ function StudentDiagnosis({ user, onBack }) {
   return (
     <main>
       <button className="back-btn" onClick={onBack}>← Volver al panel</button>
+      {topTabs}
       <div className="welcome" style={{background:`linear-gradient(135deg,${level.color},${level.dark})`}}>
         <div className="welcome-text">
           <div className="eyebrow">{level.emoji} {level.code} · 📈 ¿Cómo voy?</div>

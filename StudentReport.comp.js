@@ -65,7 +65,7 @@ function TrendBadge({ tr }) {
   return <span style={{fontSize:11.5, color:m.c, fontWeight:800}}>{m.a} {m.t} <span style={{color:'#9E9E9E', fontWeight:600}}>({tr.first}%→{tr.last}%)</span></span>;
 }
 
-function StudentReport({ student, onBack, forTeacher }) {
+function StudentReport({ student, onBack, forTeacher, topTabs }) {
   const D = window.JUCUM_DATA;
   const group = D.GROUPS.find(g => g.id === student.group);
   const level = D.LEVELS[student.level];
@@ -79,6 +79,7 @@ function StudentReport({ student, onBack, forTeacher }) {
     <main className="report-page">
       <div className="no-print" style={{display:'flex', gap:10, alignItems:'center', marginBottom:16}}>
         <button className="back-btn" onClick={onBack} style={{marginBottom:0}}>← Volver</button>
+        {topTabs}
         <div style={{flex:1}}></div>
         <button className="btn-save" onClick={() => window.print()}>🖨 Imprimir / Guardar PDF</button>
       </div>

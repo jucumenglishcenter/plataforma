@@ -71,7 +71,7 @@ function Login({ onLogin }) {
         <div className="field">
           <label>Usuario</label>
           <input type="text" value={username} onChange={e=>setUsername(e.target.value)}
-                 placeholder={role==='student' ? 'leo.cruz' : 'profesor'}
+                 placeholder={role==='student' ? 'tu.usuario' : 'usuario'}
                  autoComplete="username" />
         </div>
         <div className="field">

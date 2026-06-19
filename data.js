@@ -14,6 +14,11 @@ const LEVELS = {
 const GROUPS_KEY = 'jucum_groups_v1';
 const STUDENTS_KEY = 'jucum_students_v1';
 
+/* ¿Estamos en modo demostración? Solo entonces se carga el roster ficticio.
+ * En uso real (con Supabase) la base arranca vacía y App.jsx la rellena desde
+ * la nube; si la nube falla, se ve "sin datos" en vez de alumnos inventados. */
+const _DEMO_ON = (() => { try { return localStorage.getItem('jucum_demo_mode') === '1'; } catch { return false; } })();
+
 function loadGroups(defaultGroups) {
   try {
     const saved = JSON.parse(localStorage.getItem(GROUPS_KEY) || 'null');
@@ -63,12 +68,14 @@ function isEligibleForExam(student) {
   );
 }
 
-const DEFAULT_GROUPS = [
+/* Grupos de DEMOSTRACIÓN (solo se usan con el modo demo activo). */
+const DEMO_GROUPS = [
   { id: 'g1', level: 'pre-a1', name: 'Pre-A1 · Lunes & Miércoles', schedule: '6:00pm – 7:30pm', startDate: '2026-03-04' },
   { id: 'g2', level: 'pre-a1', name: 'Pre-A1 · Sábados',           schedule: '10:00am – 1:00pm', startDate: '2026-03-07' },
   { id: 'g3', level: 'a1',     name: 'A1 · Martes & Jueves',       schedule: '7:00pm – 8:30pm', startDate: '2026-02-10' },
   { id: 'g4', level: 'a2',     name: 'A2 · Viernes',               schedule: '6:30pm – 9:00pm', startDate: '2026-01-16' },
 ];
+const DEFAULT_GROUPS = _DEMO_ON ? DEMO_GROUPS : [];
 
 const GROUPS = loadGroups(DEFAULT_GROUPS);
 
@@ -270,7 +277,7 @@ function getStudentLog(studentId) {
   return events.sort((a, b) => b.date.localeCompare(a.date));
 }
 
-const STUDENTS = [
+const DEMO_STUDENTS = [
   /* Pre-A1 · Grupo 1 — Lunes y Miércoles */
   makeStudent('s01','leo.cruz','Leonardo Cruz','pre-a1','g1',{completedModules:2,avgScore:92,streak:5,lastActiveDays:0,totalMinutes:380,achievements:['first','streak','literal','identity','family','perfect'],starred:true}),
   makeStudent('s02','ana.flores','Ana Flores','pre-a1','g1',{completedModules:2,avgScore:88,streak:3,lastActiveDays:1,totalMinutes:290,achievements:['first','streak','literal','identity']}),
@@ -305,8 +312,11 @@ const STUDENTS = [
   makeStudent('s25','ricardo.solano','Ricardo Solano','a2','g4',{completedModules:0,avgScore:0,streak:0,lastActiveDays:18,totalMinutes:15,achievements:[]}),
 ];
 
-/* Recent activity log — last 30 events across all students */
-const ACTIVITY_LOG = [
+/* Roster real: vacío salvo en modo demo. App.jsx lo rellena desde Supabase. */
+const STUDENTS = loadStudents(_DEMO_ON ? DEMO_STUDENTS : []);
+
+/* Recent activity log — solo demostración (en uso real sale del progreso real) */
+const DEMO_ACTIVITY_LOG = [
   { studentId:'s04', type:'reading', module:'Personal Identity', detail:'Story 4 · Kind People', score:7, max:7, date:'2026-05-13 14:32' },
   { studentId:'s04', type:'achievement', detail:'Pensamiento Crítico 🎓', date:'2026-05-13 14:33' },
   { studentId:'s21', type:'listening', module:'Services & Support', detail:'Activity 8 · Hard', score:9, max:10, date:'2026-05-13 13:15' },
@@ -323,6 +333,7 @@ const ACTIVITY_LOG = [
   { studentId:'s12', type:'grammar', module:'Essential Actions', detail:'Wh- Questions · Fill In', score:11, max:12, date:'2026-05-11 11:40' },
   { studentId:'s21', type:'reading', module:'Services & Support', detail:'Story 2', score:7, max:7, date:'2026-05-10 20:10' },
 ];
+const ACTIVITY_LOG = _DEMO_ON ? DEMO_ACTIVITY_LOG : [];
 
 /* Logros coherentes y CON PROGRESO.
  * Cada uno: icon, name, how (cómo ganarlo, da dirección al alumno),

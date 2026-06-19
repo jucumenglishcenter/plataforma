@@ -581,7 +581,7 @@ function DiagnoseStudent({ stu }) {
   else if (stu.streak >= 3) strengths.push({title:'Constante', body:`${stu.streak} días de práctica seguidos.`});
   if (stu.totalMinutes >= 500) strengths.push({title:'Dedicación alta', body:`${Math.floor(stu.totalMinutes/60)}h ${stu.totalMinutes%60}m de práctica acumulada.`});
   if (stu.achievements.includes('perfect'))  strengths.push({title:'Perfección alcanzada', body:'Completó al menos un quiz sin errores.'});
-  if (stu.achievements.includes('critical')) strengths.push({title:'Pensamiento crítico', body:'Lee entre líneas — capta mensajes implícitos del autor.'});
+  if (stu.avgScore >= 92) strengths.push({title:'Pensamiento crítico', body:'Promedio muy alto — capta mensajes implícitos del autor.'});
   if (stu.completedModules >= 2) strengths.push({title:'Avance sólido', body:`Ya completó ${stu.completedModules} módulos.`});
 
   if (stu.lastActiveDays >= 14) weaknesses.push({title:'Inactividad crítica', body:`Sin conectarse hace ${stu.lastActiveDays} días. Riesgo de pérdida de hábito y olvido del vocabulario.`});
@@ -590,8 +590,8 @@ function DiagnoseStudent({ stu }) {
   else if (stu.avgScore > 0 && stu.avgScore < 70) weaknesses.push({title:'Comprensión irregular', body:`Promedio de ${stu.avgScore}% — entiende lo literal pero falla en inferencias.`});
   if (stu.totalMinutes < 60 && stu.lastActiveDays >= 3) weaknesses.push({title:'Exposición muy baja', body:`Solo ${stu.totalMinutes} min totales de práctica. Krashen necesita volumen de input.`});
   if (stu.completedModules === 0 && stu.totalMinutes > 30) weaknesses.push({title:'No completa módulos', body:'Empieza pero no termina. Sugerir cerrar cada módulo antes de pasar al siguiente.'});
-  if (!stu.achievements.includes('inferential') && stu.completedModules >= 1) weaknesses.push({title:'Inferencia pendiente', body:'No ha desbloqueado el logro de inferencia. Le cuesta deducir lo no explícito.'});
-  if (!stu.achievements.includes('critical') && stu.avgScore >= 80) weaknesses.push({title:'Pensamiento crítico pendiente', body:'Domina lo literal pero aún no capta el mensaje del autor.'});
+  if (stu.avgScore > 0 && stu.avgScore < 75 && stu.completedModules >= 1) weaknesses.push({title:'Inferencia pendiente', body:'Aún le cuesta deducir lo no explícito — reforzar preguntas inferenciales.'});
+  if (stu.avgScore >= 80 && stu.avgScore < 90) weaknesses.push({title:'Pensamiento crítico pendiente', body:'Domina lo literal pero aún no capta del todo el mensaje del autor.'});
   if (stu.streak === 0 && stu.lastActiveDays >= 2) weaknesses.push({title:'Sin racha', body:'No mantiene continuidad. La práctica espaciada > sesiones intensas esporádicas.'});
 
   if (stu.lastActiveDays >= 7) plan.push({priority:'🔴', title:'Re-engagement inmediato', body:'Contactarlo por WhatsApp. Revisar si hay barreras (acceso, motivación, dificultad).'});
@@ -599,10 +599,10 @@ function DiagnoseStudent({ stu }) {
     plan.push({priority:'🔴', title:'Refuerzo de vocabulario', body:'Sesiones diarias de 10 min en Quizlet — set "Vocabulario 1" del nivel.'});
     plan.push({priority:'🟡', title:'Reescuchar listening', body:'Cada actividad puede oírse varias veces — sugerirle bajar la velocidad a 0.6×.'});
   }
-  if (!stu.achievements.includes('inferential')) {
+  if (stu.avgScore > 0 && stu.avgScore < 78) {
     plan.push({priority:'🟡', title:'Trabajar inferencias', body:'Leer Story 4 del módulo y hacer las 3 preguntas inferenciales del quiz — explicar cómo se deduce cada respuesta.'});
   }
-  if (!stu.achievements.includes('critical') && stu.avgScore >= 80) {
+  if (stu.avgScore >= 80 && stu.avgScore < 90) {
     plan.push({priority:'🟢', title:'Pensamiento crítico', body:'Discutir el mensaje de cada historia en clase. "¿Qué quiere decir el autor con esto?"'});
   }
   if (stu.completedModules === 0) plan.push({priority:'🟡', title:'Cerrar primer módulo', body:'Animarlo a completar Personal Identity al 100%. Refuerzo positivo al desbloquear el primer logro.'});

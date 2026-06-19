@@ -124,8 +124,7 @@ function StudentDashboard({ user, onLogout }) {
           <a className={`nav-link ${view==='forum'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();openForum();}} style={{position:'relative'}}>💬 Foro{forumUnread > 0 && <span className="nav-dot">{forumUnread > 9 ? '9+' : forumUnread}</span>}</a>
           <a className={`nav-link ${view==='tasks'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('tasks');}}>📝 Tareas</a>
           <a className={`nav-link ${view==='exam'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('exam');}}>🎓 Examen</a>
-          <a className={`nav-link ${view==='diagnosis'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('diagnosis');}}>📈 ¿Cómo voy?</a>
-          <a className={`nav-link ${view==='report'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('report');}}>📄 Mi reporte</a>
+          <a className={`nav-link ${(view==='diagnosis'||view==='report'||view==='avance')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('avance');}}>📈 Mi avance</a>
           <a className={`nav-link ${view==='payments'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('payments');}} style={{position:'relative', color:(acct.blocked||acct.state==='por_vencer')?'#C62828':undefined}}>💳 Pagos{(acct.blocked||acct.state==='por_vencer') && <span className="nav-dot">!</span>}</a>
           <NotifBell userId={student.id} onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); else if (n.link === 'tasks') setView('tasks'); else if (n.link === 'exam') setView('exam'); }} />
           <div className="user-pill">
@@ -150,10 +149,8 @@ function StudentDashboard({ user, onLogout }) {
         <StudentAssignments user={user} onBack={() => setView('dashboard')} />
       ) : view === 'exam' ? (
         <StudentExams user={user} onBack={() => setView('dashboard')} />
-      ) : view === 'report' ? (
-        <StudentReport student={student} onBack={() => setView('dashboard')} />
-      ) : view === 'diagnosis' ? (
-        <StudentDiagnosis user={user} onBack={() => setView('dashboard')} />
+      ) : (view === 'avance' || view === 'report' || view === 'diagnosis') ? (
+        <StudentAvance user={user} student={student} onBack={() => setView('dashboard')} />
       ) : view === 'forum' ? (
         <>
           <button className="back-btn" onClick={() => setView('dashboard')} style={{padding:'10px 28px 0'}}>← Volver al panel</button>
@@ -175,27 +172,9 @@ function StudentDashboard({ user, onLogout }) {
           </div>
         </div>
 
-        {/* ── Mascota Neuro ── */}
-        <div style={{marginTop:18}}><MascotCard student={student} /></div>
-
-        {/* ── Práctica de hoy ── */}
+        {/* ════════ ZONA 1 · HOY ════════ */}
+        {/* Lo primero que ve el alumno: su práctica del día y su meta. */}
         <div style={{marginTop:18}}><TodayPracticeCard student={student} /></div>
-
-        {/* ── Bloque C · Gamification ── */}
-        <div className="gami-row">
-          <XpCard xp={xp} xpInfo={xpInfo} student={student} />
-          <StreakCard streak={student.streak} />
-          <RankCard student={student} groupName={group.name} />
-        </div>
-
-        <div className="scard" style={{marginTop:18}}>
-          <div className="sec-head">
-            <div className="sec-title">🏆 Mis logros</div>
-            <span className="sec-meta">{earnedMedals(student).length} / {Object.keys(ACHIEVEMENT_DEFS).length} conseguidos</span>
-          </div>
-          <AchievementWarning student={student} />
-          <MedalShowcase student={student} defs={ACHIEVEMENT_DEFS} />
-        </div>
 
         <div className="two-col" style={{gridTemplateColumns:'1fr 2fr'}}>
           <div className="scard daily-card">
@@ -208,6 +187,7 @@ function StudentDashboard({ user, onLogout }) {
             </div>
           </div>
 
+          {/* ════════ ZONA 2 · MI MÓDULO ════════ */}
           <div className="scard">
             <div className="sec-head">
               <div className="sec-title">{activeModules.length > 1 ? 'Mis módulos activos' : 'Mi módulo activo'}</div>
@@ -230,25 +210,48 @@ function StudentDashboard({ user, onLogout }) {
 
         <ProgressExplainer studentId={student.id} />
 
-        <div style={{marginTop:18}}><StudentAttendanceCard student={student} /></div>
+        {/* ════════ ZONA 3 · MI PROGRESO (plegable, abierta) ════════ */}
+        <Collapsible title="📊 Mi progreso" meta="Examen · logros · juego" defaultOpen={true}>
+          <div style={{marginBottom:18}}><ReadinessCard student={student} /></div>
 
-        <div style={{marginTop:18}}><ReadinessCard student={student} /></div>
-
-        <div className="kpi-grid">
-          <div className="kpi"><div className="kpi-ico">📦</div><div className="kpi-num">{student.completedModules}</div><div className="kpi-lbl">Módulos completos</div></div>
-          <div className="kpi"><div className="kpi-ico">📊</div><div className="kpi-num">{student.avgScore}%</div><div className="kpi-lbl">Promedio</div></div>
-          <div className="kpi"><div className="kpi-ico">🏆</div><div className="kpi-num">{earnedMedals(student).length}</div><div className="kpi-lbl">Logros</div></div>
-          <div className="kpi"><div className="kpi-ico">⏱️</div><div className="kpi-num">{Math.floor(student.totalMinutes/60)}h {student.totalMinutes%60}m</div><div className="kpi-lbl">Tiempo total</div></div>
-        </div>
-        <div style={{marginTop:18}}><GradesRecord student={student} /></div>
-
-        <div className="scard" style={{marginTop:18}}>
-          <div className="sec-head">
-            <div className="sec-title">📊 Evaluaciones del profesor</div>
-            <span className="sec-meta">Speaking · Listening · Comprehension</span>
+          <div className="gami-row" style={{marginTop:0}}>
+            <XpCard xp={xp} xpInfo={xpInfo} student={student} />
+            <StreakCard streak={student.streak} />
+            <RankCard student={student} groupName={group.name} />
           </div>
-          <StudentEvaluations studentId={student.id} isStudent={true} />
-        </div>
+
+          <div className="scard" style={{marginTop:18}}>
+            <div className="sec-head">
+              <div className="sec-title">🏆 Mis logros</div>
+              <span className="sec-meta">{earnedMedals(student).length} / {Object.keys(ACHIEVEMENT_DEFS).length} conseguidos</span>
+            </div>
+            <AchievementWarning student={student} />
+            <MedalShowcase student={student} defs={ACHIEVEMENT_DEFS} />
+          </div>
+
+          <div style={{marginTop:18}}><MascotCard student={student} /></div>
+        </Collapsible>
+
+        {/* ════════ ZONA 4 · MÁS (plegable, cerrada) ════════ */}
+        <Collapsible title="📋 Asistencia, notas y evaluaciones" meta="Tu historial" defaultOpen={false}>
+          <StudentAttendanceCard student={student} />
+
+          <div className="kpi-grid">
+            <div className="kpi"><div className="kpi-ico">📦</div><div className="kpi-num">{student.completedModules}</div><div className="kpi-lbl">Módulos completos</div></div>
+            <div className="kpi"><div className="kpi-ico">🏆</div><div className="kpi-num">{earnedMedals(student).length}</div><div className="kpi-lbl">Logros</div></div>
+            <div className="kpi"><div className="kpi-ico">⏱️</div><div className="kpi-num">{Math.floor(student.totalMinutes/60)}h {student.totalMinutes%60}m</div><div className="kpi-lbl">Tiempo total</div></div>
+          </div>
+
+          <div style={{marginTop:18}}><GradesRecord student={student} /></div>
+
+          <div className="scard" style={{marginTop:18}}>
+            <div className="sec-head">
+              <div className="sec-title">📊 Evaluaciones del profesor</div>
+              <span className="sec-meta">Speaking · Listening · Comprehension</span>
+            </div>
+            <StudentEvaluations studentId={student.id} isStudent={true} />
+          </div>
+        </Collapsible>
       </main>
       )}
     </>
@@ -570,7 +573,7 @@ function StudentAlertModal({ kind, student, onClose }) {
 
 function ProgressExplainer({ studentId }) {
   const key = 'jucum_explainer_dismissed_' + studentId;
-  const [open, setOpen] = React.useState(() => { try { return !localStorage.getItem(key); } catch { return true; } });
+  const [open, setOpen] = React.useState(false); // por defecto plegado: aparece como enlace discreto
   const [expanded, setExpanded] = React.useState(false);
   if (!open) return (
     <div style={{marginTop:18, textAlign:'right'}}>
@@ -637,4 +640,33 @@ function TodayPracticeCard({ student }) {
   );
 }
 
-Object.assign(window, { StudentDashboard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase, AchievementWarning, StudentAlertModal, ProgressExplainer, ExplainerBody, TodayPracticeCard });
+/* Une "¿Cómo voy?" + "Mi reporte" en una sola entrada con sub-pestañas. */
+function StudentAvance({ user, student, onBack }) {
+  const [tab, setTab] = React.useState('diag');
+  const tabs = (
+    <div className="mm-tabs" style={{margin:'0 0 4px'}}>
+      <button className={`mm-tab ${tab==='diag'?'on':''}`} onClick={()=>setTab('diag')}>📈 ¿Cómo voy?</button>
+      <button className={`mm-tab ${tab==='report'?'on':''}`} onClick={()=>setTab('report')}>📄 Mi reporte</button>
+    </div>
+  );
+  return tab === 'diag'
+    ? <StudentDiagnosis user={user} onBack={onBack} topTabs={tabs} />
+    : <StudentReport student={student} onBack={onBack} topTabs={tabs} />;
+}
+
+/* Sección plegable reutilizable — agrupa lo secundario sin saturar el panel. */
+function Collapsible({ title, meta, defaultOpen, children }) {
+  const [open, setOpen] = React.useState(!!defaultOpen);
+  return (
+    <div className="collapse" style={{marginTop:18}}>
+      <button type="button" className="collapse-head" onClick={() => setOpen(o => !o)}>
+        <span className="collapse-title">{title}</span>
+        {meta && <span className="collapse-meta">{meta}</span>}
+        <span className={`collapse-arr ${open ? 'open' : ''}`}>▾</span>
+      </button>
+      {open && <div className="collapse-body">{children}</div>}
+    </div>
+  );
+}
+
+Object.assign(window, { StudentDashboard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase, AchievementWarning, StudentAlertModal, ProgressExplainer, ExplainerBody, TodayPracticeCard, Collapsible, StudentAvance });
