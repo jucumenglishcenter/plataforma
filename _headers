@@ -1,0 +1,8 @@
+# Netlify · evita que el navegador de los alumnos cachee código viejo.
+# Con esto, cada vez que actualices, TODOS ven la última versión sin tener
+# que usar incógnito ni borrar caché. (No requiere mantenimiento.)
+/*
+  Cache-Control: no-cache, max-age=0, must-revalidate
+
+/index.html
+  Cache-Control: no-cache, no-store, max-age=0, must-revalidate

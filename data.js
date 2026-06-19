@@ -17,7 +17,7 @@ const STUDENTS_KEY = 'jucum_students_v1';
 /* ¿Estamos en modo demostración? Solo entonces se carga el roster ficticio.
  * En uso real (con Supabase) la base arranca vacía y App.jsx la rellena desde
  * la nube; si la nube falla, se ve "sin datos" en vez de alumnos inventados. */
-const _DEMO_ON = (() => { try { return localStorage.getItem('jucum_demo_mode') === '1'; } catch { return false; } })();
+const _DEMO_ON = false; // Modo demostración eliminado: la base real siempre manda.
 
 function loadGroups(defaultGroups) {
   try {
@@ -724,44 +724,7 @@ function getGroupRanking(groupId) {
  * varias semanas y competencias, para que "Mi evolución" muestre una curva real
  * y todas las secciones tengan datos. Solo en modo local (sin Supabase). */
 function seedDemoProgress() {
-  if (window.JUCUM_SB && localStorage.getItem('jucum_demo_mode') !== '1') return; // nube: datos reales
-  if (localStorage.getItem(PROGRESS_KEY)) return; // ya sembrado
-  const DAY = 86400000;
-  const seeded = {};
-  for (const s of STUDENTS) {
-    const r = rng(hash(s.id));
-    const mods = MODULE_CATALOG[s.level] || [];
-    if (mods.length === 0) continue;
-    // ventana de actividad: ~8 semanas, empezando hace 56 días
-    const weeks = 8;
-    // perfil del alumno: cobertura objetivo y calidad media derivadas de sus stats
-    const targetCoverage = Math.min(1, 0.25 + (s.avgScore/100) * 0.7 * (s.completedModules>0?1:0.7));
-    const baseQuality = Math.max(45, Math.min(96, s.avgScore - 12)); // arranca más bajo y mejora
-    const improves = r() < 0.7; // la mayoría mejora con el tiempo
-    const completed = {};
-    // módulos a cubrir: los completos + el actual en progreso
-    const modsToFill = mods.slice(0, Math.max(1, Math.min(mods.length, s.completedModules + 1)));
-    modsToFill.forEach((mod, mi) => {
-      const acts = mod.activities || [];
-      const isCurrent = mi === s.completedModules;
-      const cover = isCurrent ? targetCoverage : 1; // módulos previos completos
-      acts.forEach((a, ai) => {
-        if (r() > cover) return;
-        // fecha: distribuida por el avance dentro de la ventana
-        const progressFrac = (mi + (ai/Math.max(1,acts.length))) / Math.max(1, modsToFill.length);
-        const weekIdx = Math.min(weeks-1, Math.floor(progressFrac * weeks + r()*1.2));
-        const daysAgo = (weeks - weekIdx) * 7 - Math.floor(r()*6);
-        const date = new Date(Date.now() - Math.max(0, daysAgo) * DAY);
-        // calidad sube con el tiempo si el alumno mejora
-        const trend = improves ? (weekIdx/weeks)*22 - 8 : (1-weekIdx/weeks)*10 - 4;
-        const score = Math.max(40, Math.min(100, Math.round(baseQuality + trend + (r()*16-8))));
-        completed[`${mod.id}:${a.id}`] = { score, minutes: Math.floor(5 + r()*14), date: date.toISOString() };
-      });
-    });
-    const lastDate = Object.values(completed).reduce((mx,e)=> e.date>mx?e.date:mx, '');
-    seeded[s.id] = { completed, todayMinutes: s.lastActiveDays===0 ? Math.floor(r()*18) : 0, lastDay: (lastDate||new Date().toISOString()).slice(0,10) };
-  }
-  localStorage.setItem(PROGRESS_KEY, JSON.stringify(seeded));
+  return; // Modo demostración eliminado: nunca se siembran datos ficticios.
 }
 seedDemoProgress();
 
