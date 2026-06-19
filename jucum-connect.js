@@ -46,6 +46,11 @@
   var WARN_AFTER_SEC   = IS_READING ? 30 * 60 : 3 * 60;  // sin actividad → aviso
   var CLOSE_AFTER_SEC  = 5 * 60;  // +5 min sin responder → fin de práctica
   var AUTO_DONE_SEC    = 4 * 60;  // stories: completar tras 4 min activos
+  // Tope de lectura que cuenta para el reporte (en stories). El contador en
+  // pantalla sigue corriendo normal —el alumno no lo nota—, pero al progreso
+  // solo se registran como máximo estos minutos. Que lea de más es bienvenido,
+  // simplemente no suma extra al reporte.
+  var READING_CAP_MIN  = 30;
   var COOLDOWN_MS      = 20 * 60 * 1000; // 20 min entre intentos: no deja reintentar ni re-registra
 
   // ── Leer identidad desde la URL ──
@@ -183,12 +188,13 @@
       if (IS_STORY) {
         if (document.visibilityState !== 'hidden') {
           activeSec++;
+          var capMin = Math.min(READING_CAP_MIN, Math.round(activeSec / 60)); // tope silencioso para el reporte
           if (!done && activeSec >= AUTO_DONE_SEC && !teacher && !exam) {
             done = true; // marcada como practicada (desbloquea la siguiente) — sin cooldown ni tarjeta
-            if (!demo) pushProgress(100, Math.max(1, Math.round(activeSec / 60)));
+            if (!demo) pushProgress(100, Math.max(1, capMin));
           }
-          // refresca el tiempo de lectura cada 2 min para que el profesor lo vea
-          if (!demo && done && activeSec % 120 === 0) pushProgress(100, Math.round(activeSec / 60));
+          // refresca el tiempo de lectura cada 2 min (hasta el tope) para que el profesor lo vea
+          if (!demo && done && activeSec % 120 === 0 && Math.round(activeSec / 60) <= READING_CAP_MIN) pushProgress(100, capMin);
           if (teacher && activeSec % 60 === 0) logClass();
         }
         updateChip();
@@ -356,7 +362,7 @@
     // Guardar tiempo parcial al salir (si leyó al menos 1 min y no completó)
     window.addEventListener('beforeunload', function () {
       if (teacher) { logClass(); return; }
-      if (IS_STORY) { if (!demo && activeSec >= 60) pushProgress(100, Math.round(activeSec / 60)); return; }
+      if (IS_STORY) { if (!demo && activeSec >= 60) pushProgress(100, Math.min(READING_CAP_MIN, Math.round(activeSec / 60))); return; }
       if (done || sessionClosed || activeSec < 60) return;
       pushProgress(0, Math.round(activeSec / 60));
     });
