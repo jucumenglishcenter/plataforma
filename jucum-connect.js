@@ -15,8 +15,10 @@
      (el tiempo inactivo nunca se registra como lectura).
    - Al terminar registra puntuación + minutos en Supabase y muestra una
      tarjeta con FRASE MOTIVACIONAL según el puntaje (motiva si va bien o mal).
-   - COOLDOWN 20 min: tras terminar, no deja reintentar la MISMA práctica ni
-     re-registra avance hasta que pasen 20 min (evita repetirla a la carrera).
+   - 1 intento que cuenta + mejora a la semana: la nota se registra al primer
+     intento; repetir esa MISMA práctica dentro de la semana NO cambia la nota
+     (el alumno puede practicar igual, libremente). Pasados 7 días, puede
+     reintentarla y nos quedamos con la MEJOR nota.
    - Si el material se abre SIN ?jucum_uid (fuera de la plataforma), entra en
      MODO PRUEBA: el contador y el aviso de inactividad funcionan igual, pero
      NO se registra nada en la nube.
@@ -43,7 +45,7 @@
   // Las STORIES y diálogos son lectura pura: NO tienen límite de uso (ni aviso de
   // inactividad ni bloqueo entre intentos). Solo monitoreamos el tiempo de lectura.
   var IS_STORY = /story|dialog/.test(KIND);
-  var WARN_AFTER_SEC   = IS_READING ? 30 * 60 : 3 * 60;  // sin actividad → aviso
+  var WARN_AFTER_SEC   = IS_READING ? 30 * 60 : 10 * 60; // sin actividad → solo PAUSA el conteo (sin cartel, sin cerrar)
   var CLOSE_AFTER_SEC  = 5 * 60;  // +5 min sin responder → fin de práctica
   var AUTO_DONE_SEC    = 4 * 60;  // stories: completar tras 4 min activos
   // Tope de lectura que cuenta para el reporte (en stories). El contador en
@@ -51,7 +53,9 @@
   // solo se registran como máximo estos minutos. Que lea de más es bienvenido,
   // simplemente no suma extra al reporte.
   var READING_CAP_MIN  = 30;
-  var COOLDOWN_MS      = 20 * 60 * 1000; // 20 min entre intentos: no deja reintentar ni re-registra
+  // Mejora de nota: la práctica se registra al primer intento; recién a la SEMANA
+  // puede reintentarla para mejorar (nos quedamos con la mejor nota).
+  var RETRY_AFTER_MS   = 7 * 24 * 60 * 60 * 1000;
 
   // ── Leer identidad desde la URL ──
   var q = new URLSearchParams(location.search);
@@ -92,21 +96,15 @@
       }, { onConflict: 'id' }).then(function () {}, function () {});
     }
 
-    // ── Cooldown de 20 min entre intentos de la MISMA práctica ──
-    var COOLDOWN_KEY = 'jucum_cooldown_' + (uid || 'demo') + '_' + modId + '_' + actId;
-    function cooldownLeft() {
-      var t = parseInt(localStorage.getItem(COOLDOWN_KEY) || '0', 10);
-      return t ? Math.max(0, COOLDOWN_MS - (Date.now() - t)) : 0;
-    }
-    // Si la terminó hace menos de 20 min → bloquear y mostrar cuenta regresiva
-    // (el profesor, el examen y las STORIES nunca tienen cooldown: leer es libre)
-    if (!teacher && !exam && !IS_STORY && cooldownLeft() > 0) { showCooldownGate(); return; }
+    // ── Intentos: 1 registro por práctica, mejorable a la SEMANA ──
+    // Guardamos cuándo se hizo el primer intento. Dentro de la semana, repetir
+    // la práctica NO cambia la nota (igual puede practicar libremente). Pasada
+    // la semana, puede reintentar y nos quedamos con la MEJOR nota.
+    var ATTEMPT_KEY = 'jucum_attempt_' + (uid || 'demo') + '_' + modId + '_' + actId;
     var activeSec = 0;          // segundos de práctica real acumulados
     var idleSec = 0;            // segundos sin actividad
-    var done = false;           // ya registrado
-    var sessionClosed = false;  // abandonó y no respondió
-    var warned = false;
-    var modal = null;
+    var done = false;           // ya registrado en esta sesión
+    var paused = false;         // conteo pausado por inactividad (sin cerrar nada)
 
     // ── Chip flotante con el tiempo activo ──
     var chip = document.createElement('div');
@@ -160,12 +158,12 @@
     function updateChip() {
       var t = document.getElementById('jec-conn-time');
       if (t) t.textContent = fmt(activeSec);
-      if (warned || sessionClosed) {
-        chip.style.background = '#9E9E9E';
-        chip.firstChild.textContent = '⏸';
-      } else if (done) {
+      if (done) {
         chip.style.background = '#2EA84B';
         chip.firstChild.textContent = '✓';
+      } else if (paused) {
+        chip.style.background = '#9E9E9E';
+        chip.firstChild.textContent = '⏸';
       } else {
         chip.style.background = '#1F3A8A';
         chip.firstChild.textContent = '⏱';
@@ -173,15 +171,10 @@
     }
 
     ['mousemove','mousedown','keydown','scroll','touchstart','click'].forEach(function (ev) {
-      document.addEventListener(ev, function () {
-        if (sessionClosed) return;
-        idleSec = 0;
-        if (warned) return; // con el aviso abierto, solo el botón reanuda
-      }, { passive: true });
+      document.addEventListener(ev, function () { idleSec = 0; }, { passive: true });
     });
 
     setInterval(function () {
-      if (sessionClosed) return;
       // ── STORIES/diálogos: lectura SIN LÍMITE ──
       // Cuenta el tiempo mientras la pestaña esté visible; nunca interrumpe,
       // nunca bloquea. Solo registra el tiempo de lectura (lo que monitoreamos).
@@ -200,59 +193,65 @@
         updateChip();
         return;
       }
+      // ── Resto de materiales (prácticas, gramática, listening, resúmenes) ──
+      // La inactividad solo PAUSA el conteo (sin cartel, sin cerrar la práctica).
+      // Al volver a moverse/escribir, idleSec se reinicia y el conteo se reanuda solo.
       idleSec++;
-      if (!warned && idleSec < WARN_AFTER_SEC) {
-        if (!done) {
-          activeSec++; // solo cuenta mientras está activo y sin aviso pendiente
-          if (activeSec >= AUTO_DONE_SEC && !teacher && !exam) complete(null); // stories/diálogos
-          if (teacher && activeSec % 60 === 0) logClass();
-        }
-      } else if (!warned && idleSec >= WARN_AFTER_SEC) {
-        warned = true;
-        idleSec = 0;
-        showWarning();
-      } else if (warned && idleSec >= CLOSE_AFTER_SEC) {
-        closeSession();
-      } else if (warned) {
-        updateCountdown(CLOSE_AFTER_SEC - idleSec);
+      paused = idleSec >= WARN_AFTER_SEC;
+      if (!done && !paused) {
+        activeSec++;
+        if (teacher && activeSec % 60 === 0) logClass();
       }
       updateChip();
     }, 1000);
 
-    function resume() {
-      warned = false;
-      idleSec = 0;
-      hideWarning();
-      updateChip();
-    }
-
-    function closeSession() {
-      sessionClosed = true;
-      hideWarning();
-      updateChip();
-      // registra solo el tiempo activo real acumulado (si llegó al menos a 1 min)
-      if (!done && activeSec >= 60) pushProgress(0, Math.round(activeSec / 60));
-      banner('⏸ Práctica pausada por inactividad. El tiempo sin actividad no cuenta. Recarga la página para continuar.');
-    }
-
     function complete(score) {
-      if (done || sessionClosed) return;
+      if (done) return;
       done = true;
       updateChip();
       var minutes = Math.max(1, Math.round(activeSec / 60));
       var pct = score == null ? 100 : score;
-      var blocked = cooldownLeft() > 0; // reintento dentro de los 20 min → no registra
-      var statusMsg;
-      if (blocked) {
-        statusMsg = '⏳ Este intento no cuenta — espera 20 min entre intentos para que tu avance valga.';
-        showResultCard(pct, statusMsg, score != null);
+
+      if (demo) {
+        showResultCard(pct, '🧪 Modo prueba · ' + minutes + ' min' + (score != null ? ' · ' + pct + '%' : '') + ' (no se registró)', score != null);
         return;
       }
-      localStorage.setItem(COOLDOWN_KEY, String(Date.now())); // inicia el cooldown
-      statusMsg = demo
-        ? '🧪 Modo prueba · ' + minutes + ' min' + (score != null ? ' · ' + pct + '%' : '') + ' (no se registró)'
-        : '✅ Práctica registrada · ' + minutes + ' min' + (score != null ? ' · ' + pct + '%' : '');
-      pushProgress(pct, minutes, function () { showResultCard(pct, statusMsg, score != null); });
+
+      var firstTs = parseInt(localStorage.getItem(ATTEMPT_KEY) || '0', 10);
+      var now = Date.now();
+      // Dentro de la semana del primer intento → practica libre, pero la nota NO cambia.
+      if (firstTs && (now - firstTs) < RETRY_AFTER_MS) {
+        var fecha = new Date(firstTs + RETRY_AFTER_MS).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' });
+        showResultCard(pct, '📌 Tu nota guardada se mantiene. Podrás intentar mejorarla a partir del ' + fecha + '. ¡Mientras tanto, sigue practicando!', score != null);
+        return;
+      }
+      // Primer intento, o ya pasó la semana → registra quedándonos con la MEJOR nota.
+      improveProgress(pct, minutes, function (prev) {
+        localStorage.setItem(ATTEMPT_KEY, String(now)); // (re)inicia la ventana de una semana
+        var msg;
+        if (prev == null) msg = '✅ Práctica registrada · ' + minutes + ' min' + (score != null ? ' · ' + pct + '%' : '');
+        else if (score != null && pct > prev) msg = '🎉 ¡Mejoraste tu nota! Antes ' + prev + '% → ahora ' + pct + '%.';
+        else if (score != null) msg = '👍 Lo intentaste de nuevo. Tu mejor nota (' + prev + '%) se mantiene.';
+        else msg = '✅ Práctica registrada · ' + minutes + ' min';
+        showResultCard(pct, msg, score != null);
+      });
+    }
+
+    // Registra el progreso quedándonos con la MEJOR nota (nunca baja una nota previa).
+    function improveProgress(score, minutes, cb) {
+      sb.from('progress').select('score,minutes').eq('user_id', uid).eq('module_id', modId).eq('activity_id', actId).maybeSingle()
+        .then(function (r) {
+          var row = r && r.data;
+          var prev = (row && row.score != null) ? row.score : null;
+          var best = (prev == null) ? score : Math.max(prev, score);
+          var mins = Math.max(minutes, (row && row.minutes) ? row.minutes : 0);
+          sb.from('progress').upsert({
+            user_id: uid, module_id: modId, activity_id: actId,
+            score: best, minutes: mins, completed_at: new Date().toISOString()
+          }, { onConflict: 'user_id,module_id,activity_id' }).then(function () { cb(prev); }, function () { cb(prev); });
+        }, function () {
+          pushProgress(score, minutes); cb(null); // si falla la lectura, registra igual
+        });
     }
 
     function pushProgress(score, minutes, ok) {
@@ -270,28 +269,6 @@
     window.addEventListener('jucum:done', function (e) {
       complete((e.detail && e.detail.score != null) ? e.detail.score : 80);
     });
-
-    // ── UI: aviso de inactividad ──
-    function showWarning() {
-      if (modal) return;
-      modal = document.createElement('div');
-      modal.id = 'jec-conn-modal';
-      modal.innerHTML =
-        '<div style="background:#fff;border-radius:18px;padding:30px 26px 24px;max-width:360px;width:90%;text-align:center;box-shadow:0 14px 48px rgba(0,0,0,0.4);font-family:system-ui,sans-serif;">' +
-        '<div style="font-size:52px;margin-bottom:6px;">😴</div>' +
-        '<div style="font-weight:800;font-size:20px;color:#1F3A8A;margin-bottom:8px;">¿Sigues practicando?</div>' +
-        '<div style="font-size:13px;line-height:1.6;color:#444;margin-bottom:16px;">No detectamos actividad. El tiempo dejó de contar.<br>La práctica se cerrará en <b id="jec-conn-count" style="color:#E11930;font-family:monospace;">5:00</b>.</div>' +
-        '<button id="jec-conn-btn" style="padding:12px 26px;border:none;border-radius:24px;background:#1F3A8A;color:#fff;font-weight:800;font-size:14px;cursor:pointer;">Sí, sigo aquí ✓</button>' +
-        '</div>';
-      modal.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.72);z-index:999999;display:flex;align-items:center;justify-content:center;';
-      document.body.appendChild(modal);
-      document.getElementById('jec-conn-btn').onclick = resume;
-    }
-    function updateCountdown(sec) {
-      var el = document.getElementById('jec-conn-count');
-      if (el) el.textContent = Math.floor(sec/60) + ':' + String(sec%60).padStart(2,'0');
-    }
-    function hideWarning() { if (modal) { modal.remove(); modal = null; } }
 
     function toast(msg) {
       var t = document.createElement('div');
@@ -333,37 +310,11 @@
       var b = document.getElementById('jec-rc-btn');
       if (b) b.onclick = function () { ov.remove(); };
     }
-    // ── Compuerta de cooldown (bloquea reintento antes de 20 min) ──
-    function showCooldownGate() {
-      var gate = document.createElement('div');
-      gate.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.93);z-index:1000000;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;padding:16px;';
-      gate.innerHTML =
-        '<div style="background:#fff;border-radius:20px;padding:34px 28px;max-width:380px;width:100%;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,0.5);">' +
-        '<div style="font-size:54px;margin-bottom:8px;">⏳</div>' +
-        '<div style="font-weight:800;font-size:21px;color:#1F3A8A;margin-bottom:8px;">Ya practicaste esto recién</div>' +
-        '<div style="font-size:13.5px;line-height:1.6;color:#444;margin-bottom:18px;">Para que tu avance valga, espera un momento antes de reintentarla. Mientras tanto, ¡prueba otra actividad de tu módulo!</div>' +
-        '<div style="font-size:12px;color:#777;margin-bottom:4px;">Podrás reintentarla en</div>' +
-        '<div id="jec-cd" style="font:800 36px monospace;color:#E11930;margin-bottom:18px;">20:00</div>' +
-        '<button id="jec-cd-back" style="padding:12px 26px;border:none;border-radius:24px;background:#1F3A8A;color:#fff;font-weight:800;font-size:14px;cursor:pointer;">← Volver</button>' +
-        '</div>';
-      document.body.appendChild(gate);
-      var back = document.getElementById('jec-cd-back');
-      if (back) back.onclick = function () { if (history.length > 1) history.back(); else window.close(); };
-      function tick() {
-        var left = cooldownLeft();
-        if (left <= 0) { location.reload(); return; }
-        var el = document.getElementById('jec-cd');
-        if (el) el.textContent = Math.floor(left / 60000) + ':' + String(Math.floor((left % 60000) / 1000)).padStart(2, '0');
-      }
-      tick();
-      setInterval(tick, 1000);
-    }
-
-    // Guardar tiempo parcial al salir (si leyó al menos 1 min y no completó)
+    // Guardar tiempo parcial al salir (si practicó al menos 1 min y no completó)
     window.addEventListener('beforeunload', function () {
       if (teacher) { logClass(); return; }
       if (IS_STORY) { if (!demo && activeSec >= 60) pushProgress(100, Math.min(READING_CAP_MIN, Math.round(activeSec / 60))); return; }
-      if (done || sessionClosed || activeSec < 60) return;
+      if (done || activeSec < 60) return;
       pushProgress(0, Math.round(activeSec / 60));
     });
   }
