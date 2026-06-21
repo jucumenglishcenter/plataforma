@@ -6,6 +6,7 @@
  */
 (function () {
   const DP_KEY  = 'jucum_daily_practice_v1';   // { [groupId]: { [weekday]: [items] } }
+  const DPR_KEY = 'jucum_directed_practice_v1'; // [ {id, groupId, openDate, dueDate, activities, bonusXp, createdAt} ]
   const CL_KEY  = 'jucum_class_log_v1';         // array de usos de material en clase
   const NOTE_KEY= 'jucum_teacher_notes_v1';     // array de notas
   const REM_KEY = 'jucum_teacher_reminders_v1'; // array de recordatorios
@@ -54,6 +55,60 @@
     } catch {}
     if (!out.length) out.push({ moduleId: null, activityId: null, label: 'Practica al menos 15 minutos hoy en cualquier actividad de tu módulo.', type: 'grammar' });
     return out;
+  }
+
+  /* ── Práctica dirigida (bloque con ventana de días + bono) ───────── */
+  function getDirectedAll() { return j(DPR_KEY, []); }
+  function saveDirected(a) { w(DPR_KEY, a); cloudSetting('directed_practice', a); }
+  function addDirected(dp) {
+    const all = getDirectedAll();
+    const e = { id: 'dp-' + Date.now() + '-' + Math.random().toString(36).slice(2,5),
+      groupId: dp.groupId || null,
+      openDate: dp.openDate || new Date().toISOString().slice(0,10),
+      dueDate: dp.dueDate || null,
+      activities: dp.activities || [],          // [{moduleId, activityId, label, type}]
+      bonusXp: dp.bonusXp != null ? dp.bonusXp : 30,
+      title: dp.title || 'Práctica dirigida',
+      createdAt: new Date().toISOString() };
+    all.unshift(e); saveDirected(all); return e.id;
+  }
+  function updateDirected(id, partial) { const a = getDirectedAll(); const i = a.findIndex(x => x.id === id); if (i >= 0) { a[i] = { ...a[i], ...partial }; saveDirected(a); } }
+  function deleteDirected(id) { saveDirected(getDirectedAll().filter(d => d.id !== id)); }
+  function getDirectedForGroup(groupId) { return getDirectedAll().filter(d => d.groupId === groupId).sort((a,b)=>String(b.openDate).localeCompare(String(a.openDate))); }
+  /* Estado de un bloque para un alumno, calculado desde su progreso real. */
+  function directedStatusForStudent(dp, student) {
+    const D = window.JUCUM_DATA;
+    const prog = D.getStudentProgress(student.id);
+    const acts = dp.activities || [];
+    const total = acts.length;
+    const thr = D.passThreshold ? D.passThreshold(student.level) : 0;
+    let done = 0, passed = 0, lastDate = null;
+    acts.forEach(a => {
+      const e = prog.completed && prog.completed[`${a.moduleId}:${a.activityId}`];
+      if (e) {
+        done++;
+        const sc = typeof e.score === 'number' ? (e.score > 10 ? e.score : e.score * 10) : 100;
+        if (sc >= thr) passed++;
+        if (e.date && (!lastDate || e.date > lastDate)) lastDate = e.date;
+      }
+    });
+    const today = new Date().toISOString().slice(0,10);
+    const overdue = !!dp.dueDate && today > dp.dueDate;
+    const upcoming = !!dp.openDate && today < dp.openDate;
+    const allPassed = total > 0 && passed >= total;
+    const onTime = allPassed && (!dp.dueDate || (lastDate && lastDate <= dp.dueDate));
+    let state = 'active';
+    if (upcoming) state = 'upcoming';
+    else if (onTime) state = 'completed';
+    else if (overdue) state = 'overdue';
+    const daysLeft = dp.dueDate ? Math.ceil((new Date(dp.dueDate + 'T23:59:59') - new Date()) / 86400000) : null;
+    return { done, passed, total, state, daysLeft, onTime, bonusXp: dp.bonusXp };
+  }
+  /* Bloques visibles para el alumno (ya abiertos), más recientes primero. */
+  function getActiveDirectedForStudent(student) {
+    if (!student) return [];
+    const today = new Date().toISOString().slice(0,10);
+    return getDirectedForGroup(student.group).filter(d => !d.openDate || today >= d.openDate);
   }
 
   /* ── Bitácora de clase (qué trabajó el profesor y cuánto tiempo) ──── */
@@ -132,6 +187,7 @@
     await cloudLoadClassLog();
     if (!window.JUCUM_SB) return;
     try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','daily_practice').maybeSingle(); if (data && data.value) w(DP_KEY, data.value); } catch(e){}
+    try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','directed_practice').maybeSingle(); if (data && Array.isArray(data.value)) w(DPR_KEY, data.value); } catch(e){}
     try { const rows = await window.JUCUM_SB.all('teacher_notes'); if (Array.isArray(rows)) saveNotes(rows.map(r=>({ id:r.id, date:r.created_at, studentId:r.student_id, groupId:r.group_id, kind:r.kind, text:r.text, tag:r.tag })).sort((a,b)=>String(b.date).localeCompare(String(a.date)))); } catch(e){}
     try { const rows = await window.JUCUM_SB.all('teacher_reminders'); if (Array.isArray(rows)) w(REM_KEY, rows.map(r=>({ id:r.id, date:r.created_at, groupId:r.group_id, text:r.text, due:r.due, done:r.done }))); } catch(e){}
   }
@@ -149,6 +205,7 @@
 
   window.JUCUM_TT = {
     getDailyPractice, setDailyPractice, getTodayPracticeForStudent, genericPractice,
+    getDirectedAll, addDirected, updateDirected, deleteDirected, getDirectedForGroup, directedStatusForStudent, getActiveDirectedForStudent,
     getClassLog, logClassMaterial, deleteClassEntry, getClassLogForMonth, getClassLogForDay, cloudLoadClassLog, cloudLoadAll,
     addNote, updateNote, deleteNote, getStudentNotes, getGeneralNotes, getNotes,
     getReminders, addReminder, toggleReminder, deleteReminder,

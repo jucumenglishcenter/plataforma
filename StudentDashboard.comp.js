@@ -176,6 +176,12 @@ function StudentDashboard({ user, onLogout }) {
           </div>
         </div>
 
+        {/* — Práctica dirigida: bloque con ventana de días (si hay) — */}
+        {(() => {
+          const dps = window.JUCUM_TT ? window.JUCUM_TT.getActiveDirectedForStudent(student) : [];
+          return dps.length ? <div style={{marginTop:18, display:'flex', flexDirection:'column', gap:12}}>{dps.map(dp => <DirectedPracticeCard key={dp.id} dp={dp} student={student} />)}</div> : null;
+        })()}
+
         {/* — Mascota Neuro: al inicio, da la bienvenida y refleja su ánimo — */}
         <div style={{marginTop:18}}><MascotCard student={student} /></div>
 
@@ -333,6 +339,7 @@ function ChecklistRow({ it, mod, studentId }) {
       <span className="al-num">{status==='done' ? '✓' : status==='locked' ? '🔒' : i+1}</span>
       <span className="al-ico">{typeIcon(a.type)}</span>
       <span className="al-name">{a.name}</span>
+      <PhaseTags a={a} />
       {done && <span className="al-score">{done.score}{typeof done.score === 'number' && done.score <= 10 ? '' : '%'}</span>}
       {status==='open' && <span className="al-arr">→</span>}
     </a>
@@ -363,6 +370,81 @@ function TopicGroup({ num, name, items, mod, studentId }) {
 }
 
 function typeIcon(t) { return { story:'📗', reading:'📖', listening:'🎧', grammar:'📝', summary:'📚', quizlet:'🃏' }[t] || '📄'; }
+/* Tarjeta de práctica dirigida en el panel del alumno (ventana + avance + estados) */
+function DirectedPracticeCard({ dp, student }) {
+  const D = window.JUCUM_DATA, TT = window.JUCUM_TT;
+  const mods = D.MODULE_CATALOG[student.level] || [];
+  const prog = D.getStudentProgress(student.id);
+  const st = TT.directedStatusForStudent(dp, student);
+  const fmt = (d) => d ? new Date(d+'T12:00:00').toLocaleDateString('es-PE',{day:'numeric',month:'short'}) : '—';
+  const pct = st.total ? Math.round(st.done/st.total*100) : 0;
+  const theme = st.state==='completed' ? {bg:'linear-gradient(120deg,#E8F5E9,#F4FBF4)',bd:'#A5D6A7',bar:'#2EA84B',badge:'#2E7D32',badgeBg:'#E8F5E9'}
+    : st.state==='overdue' ? {bg:'linear-gradient(120deg,#FBE9E9,#FEF6F5)',bd:'#F1B0AA',bar:'#E08A82',badge:'#C0392B',badgeBg:'#FDEBEA'}
+    : {bg:'linear-gradient(120deg,#FFF6E0,#FFFDF6)',bd:'#F0C66B',bar:'#F9A825',badge:'#B26A00',badgeBg:'#FFF3D6'};
+  const stateLabel = st.state==='completed' ? `${st.done}/${st.total} · completada ✓`
+    : st.state==='overdue' ? `${st.done}/${st.total} · vencida`
+    : `${st.done}/${st.total} · ${st.daysLeft!=null ? (st.daysLeft<=0?'vence hoy':`te quedan ${st.daysLeft} día${st.daysLeft===1?'':'s'}`) : 'en progreso'}`;
+  const winLabel = st.state==='completed' ? 'Completada a tiempo' : `Abrió ${fmt(dp.openDate)} · vence ${fmt(dp.dueDate)}`;
+  const ico = st.state==='completed' ? '🎉' : st.state==='overdue' ? '⏰' : '📌';
+  return (
+    <div className="scard" style={{padding:0, overflow:'hidden', borderColor:theme.bd}}>
+      <div style={{padding:'14px 16px', display:'flex', alignItems:'center', gap:12, background:theme.bg, borderBottom:`1px solid ${theme.bd}`}}>
+        <span style={{fontSize:24}}>{ico}</span>
+        <div style={{flex:1, minWidth:0}}>
+          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15.5}}>{dp.title || 'Práctica dirigida'}</div>
+          <div style={{fontSize:12.5, color:'var(--text-soft)', fontWeight:700, marginTop:1}}>{winLabel}</div>
+        </div>
+        <span style={{fontSize:11.5, fontWeight:800, padding:'5px 11px', borderRadius:20, whiteSpace:'nowrap', color:theme.badge, background:theme.badgeBg, border:`1px solid ${theme.bd}`}}>{stateLabel}</span>
+      </div>
+      <div style={{height:9, background:'#EFE9DB'}}><div style={{height:'100%', width:pct+'%', background:theme.bar, transition:'width .4s'}}></div></div>
+      <div style={{padding:'12px 14px', display:'flex', flexDirection:'column', gap:7}}>
+        {(dp.activities||[]).map((it, idx) => {
+          const mod = mods.find(m=>m.id===it.moduleId);
+          const a = mod && (mod.activities||[]).find(x=>x.id===it.activityId);
+          const done = !!(prog.completed && prog.completed[`${it.moduleId}:${it.activityId}`]);
+          const href = a ? linkFor(a, mod, student.id) : null;
+          const Tag = href ? 'a' : 'div';
+          return (
+            <Tag key={idx} href={href||undefined} className={`al-item ${done?'done':'open'}`}>
+              <span className="al-num">{done?'✓':idx+1}</span>
+              <span className="al-ico">{typeIcon(it.type)}</span>
+              <span className="al-name">{it.label || (a&&a.name) || 'Actividad'}</span>
+              {!done && href && <span className="al-arr">→</span>}
+            </Tag>
+          );
+        })}
+      </div>
+      {st.state==='completed' && dp.bonusXp>0 && st.onTime ? (
+        <div style={{padding:'11px 14px', borderTop:'1px dashed #A5D6A7', display:'flex', alignItems:'center', gap:9, fontSize:12.5}}>
+          <span style={{fontSize:18}}>🎁</span>
+          <span style={{flex:1, fontWeight:700, color:'#1B5E20'}}>¡Bono ganado! Terminaste a tiempo y aprobado</span>
+          <span style={{fontWeight:800, color:'#1B5E20', background:'#fff', border:'1px solid #A5D6A7', padding:'3px 10px', borderRadius:14}}>+{dp.bonusXp} XP</span>
+        </div>
+      ) : st.state==='overdue' ? (
+        <div style={{padding:'10px 14px', borderTop:'1px dashed #F1B0AA', fontSize:12, color:'var(--text-soft)'}}>No se bloquea: puedes terminarla, pero ya no cuenta para el bono.</div>
+      ) : dp.bonusXp>0 ? (
+        <div style={{padding:'11px 14px', borderTop:`1px dashed ${theme.bd}`, display:'flex', alignItems:'center', gap:9, fontSize:12.5}}>
+          <span style={{fontSize:18}}>🎁</span>
+          <span style={{flex:1, fontWeight:700, color:theme.badge}}>Bono por terminar a tiempo y aprobado</span>
+          <span style={{fontWeight:800, color:theme.badge, background:'#fff', border:`1px solid ${theme.bd}`, padding:'3px 10px', borderRadius:14}}>+{dp.bonusXp} XP</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+/* Etiqueta P1/P2/P3 + 🏠Casa/🏫Clase según la metodología del teacher */
+function PhaseTags({ a }) {
+  const D = window.JUCUM_DATA;
+  const meta = D.activityMeta ? D.activityMeta(a) : null;
+  if (!meta || (!meta.phase && !meta.location)) return null;
+  const loc = meta.location ? D.LOCATION_LABEL[meta.location] : null;
+  return (
+    <span className="phase-tags" style={{display:'inline-flex',gap:5,alignItems:'center',flexShrink:0}}>
+      {meta.phase && <span style={{fontSize:10.5,fontWeight:800,letterSpacing:'.02em',padding:'2px 7px',borderRadius:9,background:'#EDEAF7',color:'#5B3FA0'}}>{meta.phase}</span>}
+      {loc && <span title={loc.txt} style={{fontSize:10.5,fontWeight:800,letterSpacing:'.02em',padding:'2px 7px',borderRadius:9,background:loc.bg,color:loc.fg,whiteSpace:'nowrap'}}>{loc.ico} {loc.txt}</span>}
+    </span>
+  );
+}
 function linkFor(a, mod, studentId) {
   // a.url = la URL real del material en GitHub Pages (se configura por actividad
   // al importar el catálogo). Sin url, el material aún NO está disponible: no
@@ -697,4 +779,4 @@ function Collapsible({ title, meta, defaultOpen, children }) {
   );
 }
 
-Object.assign(window, { StudentDashboard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase, AchievementWarning, StudentAlertModal, ProgressExplainer, ExplainerBody, TodayPracticeCard, Collapsible, StudentAvance, StudentNoGroup });
+Object.assign(window, { StudentDashboard, DirectedPracticeCard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase, AchievementWarning, StudentAlertModal, ProgressExplainer, ExplainerBody, TodayPracticeCard, Collapsible, StudentAvance, StudentNoGroup });

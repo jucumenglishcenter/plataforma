@@ -1125,6 +1125,56 @@ function getModuleFinalGrade(student, module) {
 
 window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getAchievementAlert, achievementDecayFactor, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness, getStudentGrades, getStudentMonthlyPractice, getStudentTrends };
 
+/* ── Metodología del teacher: fase de práctica (P1/P2/P3) + dónde se hace ──
+ * Confirmado por el teacher:
+ *   P1 Fill-In  = 100% casa
+ *   P2 Identify = casa (puede arrancarse en clase)
+ *   P3 Transform= sobre todo en clase, sobrantes opcionales
+ *   Grammar Summary = pasos 1-3 en casa (GS1) + pasos 4-5 en clase (GS2)
+ *   Story + diálogo = en clase (el diálogo nunca es tarea)
+ *   Reading / Listening = casa (reading siempre incluido)
+ * Se deriva de type/name; el catálogo puede sobreescribir con a.phase / a.location. */
+function activityMeta(a) {
+  if (!a) return { phase: null, location: null };
+  const name = String(a.name || '').toLowerCase();
+  const t = a.type;
+  let phase = a.phase || null;        // 'P1' | 'P2' | 'P3'
+  let location = a.location || null;  // 'home' | 'class' | 'optional' | 'home+class'
+  if (t === 'grammar') {
+    if (!phase) {
+      if (/fill\s*in|completar|rellena/.test(name)) phase = 'P1';
+      else if (/identif/.test(name)) phase = 'P2';
+      else if (/transform/.test(name)) phase = 'P3';
+    }
+    if (!location) location = phase === 'P3' ? 'class' : 'home';
+  } else if (t === 'summary') {
+    location = location || 'home+class';
+  } else if (t === 'story') {
+    location = location || 'class';
+  } else if (t === 'reading' || t === 'listening') {
+    location = location || 'home';
+  }
+  return { phase, location };
+}
+const LOCATION_LABEL = {
+  home:         { ico: '🏠',   txt: 'Casa',         bg: '#E8F5E9', fg: '#2E7D32' },
+  class:        { ico: '🧑‍🏫',   txt: 'En clase',     bg: '#E3F2FD', fg: '#1565C0' },
+  optional:     { ico: '✨',   txt: 'Opcional',     bg: '#F3E5F5', fg: '#7B1FA2' },
+  'home+class': { ico: '🏠→🧑‍🏫', txt: 'Casa + clase', bg: '#FFF8E1', fg: '#B26A00' },
+};
+/* Secuencia fija de una clase en vivo (metodología del teacher).
+ * Pre-A1 no lleva Writing. */
+const CLASS_SEQUENCE = [
+  { step: 1, ico: '📗', name: 'Story',           desc: 'Input: se relee en ciclos (1ª/2ª/3ª lectura), nunca de un solo uso.' },
+  { step: 2, ico: '📚', name: 'Grammar Review',  desc: 'GS2: se repite el paso 3 y se enseñan en vivo los pasos 4–5. Primer contacto real con la estructura.' },
+  { step: 3, ico: '💬', name: 'Dialogue',        desc: 'Práctica de habla. El diálogo nunca se manda de tarea.' },
+  { step: 4, ico: '📝', name: 'Grammar Practice',desc: 'Se trabaja P3 (Transform) en clase; P1/P2 vienen de casa.' },
+  { step: 5, ico: '✍️', name: 'Writing',         desc: 'Producción escrita. (Pre-A1 no lo incluye.)' },
+];
+window.JUCUM_DATA.activityMeta = activityMeta;
+window.JUCUM_DATA.LOCATION_LABEL = LOCATION_LABEL;
+window.JUCUM_DATA.CLASS_SEQUENCE = CLASS_SEQUENCE;
+
 window.JUCUM_DATA.getStudentLog = getStudentLog;
 window.JUCUM_DATA.inGraceWeek = inGraceWeek;
 window.JUCUM_DATA.getModuleExamWeight = getModuleExamWeight;

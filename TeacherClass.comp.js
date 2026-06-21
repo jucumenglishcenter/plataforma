@@ -8,6 +8,19 @@
 const WD_NAMES = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
 const WD_SHORT = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const typeIco = (t) => ({ story:'📗', reading:'📖', listening:'🎧', grammar:'📝', summary:'📚', quizlet:'🃏' })[t] || '📄';
+/* Etiqueta compacta P1/P2/P3 + 🏠/🏫 (metodología del teacher) */
+function MethodTags({ a }) {
+  const D = window.JUCUM_DATA;
+  const meta = D.activityMeta ? D.activityMeta(a) : null;
+  if (!meta || (!meta.phase && !meta.location)) return null;
+  const loc = meta.location ? D.LOCATION_LABEL[meta.location] : null;
+  return (
+    <span style={{display:'inline-flex',gap:5,alignItems:'center',marginLeft:6}}>
+      {meta.phase && <span style={{fontSize:10,fontWeight:800,padding:'1px 6px',borderRadius:8,background:'#EDEAF7',color:'#5B3FA0'}}>{meta.phase}</span>}
+      {loc && <span title={loc.txt} style={{fontSize:10,fontWeight:800,padding:'1px 6px',borderRadius:8,background:loc.bg,color:loc.fg,whiteSpace:'nowrap'}}>{loc.ico} {loc.txt}</span>}
+    </span>
+  );
+}
 
 function TeacherClass({ onBack }) {
   const { GROUPS, LEVELS } = window.JUCUM_DATA;
@@ -29,6 +42,8 @@ function TeacherClass({ onBack }) {
 
       <div className="mm-tabs" style={{flexWrap:'wrap'}}>
         <button className={`mm-tab ${tab==='daily'?'on':''}`} onClick={()=>setTab('daily')}>📅 Práctica del día</button>
+        <button className={`mm-tab ${tab==='directed'?'on':''}`} onClick={()=>setTab('directed')}>📌 Práctica dirigida</button>
+        <button className={`mm-tab ${tab==='seq'?'on':''}`} onClick={()=>setTab('seq')}>🧭 Secuencia de clase</button>
         <button className={`mm-tab ${tab==='materials'?'on':''}`} onClick={()=>setTab('materials')}>📚 Materiales</button>
         <button className={`mm-tab ${tab==='log'?'on':''}`} onClick={()=>setTab('log')}>📆 Bitácora</button>
         <button className={`mm-tab ${tab==='notes'?'on':''}`} onClick={()=>setTab('notes')}>📝 Notas</button>
@@ -36,6 +51,8 @@ function TeacherClass({ onBack }) {
       </div>
 
       {tab==='daily' ? <DailyPracticePanel onChange={refresh} />
+        : tab==='directed' ? <DirectedPracticePanel onChange={refresh} />
+        : tab==='seq' ? <ClassSequencePanel />
         : tab==='materials' ? <TeacherMaterialsBrowser />
         : tab==='log' ? <ClassLogPanel onChange={refresh} />
         : tab==='notes' ? <TeacherNotesPanel onChange={refresh} />
@@ -44,7 +61,154 @@ function TeacherClass({ onBack }) {
   );
 }
 
+/* ── 0 · Secuencia de clase (guía de metodología) ─────────────────── */
+function ClassSequencePanel() {
+  const D = window.JUCUM_DATA;
+  const seq = D.CLASS_SEQUENCE || [];
+  const stepBg = { 1:'#2EA84B', 2:'#2196F3', 3:'#7B1FA2', 4:'#F9A825', 5:'#E11930' };
+  return (
+    <div>
+      <div className="scard" style={{marginBottom:14}}>
+        <div className="settings-hint">Tu secuencia fija para una clase en vivo. La plataforma la respeta: el orden de las prácticas y dónde se hace cada una sigue esta lógica. <b>Pre-A1 no incluye Writing.</b></div>
+      </div>
+      <div className="scard" style={{marginBottom:14}}>
+        <div className="sec-head"><div className="sec-title">🧭 Orden de la clase</div><span className="sec-meta">{seq.length} pasos</span></div>
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          {seq.map(s => (
+            <div key={s.step} style={{display:'flex',gap:13,alignItems:'flex-start',padding:'12px 14px',border:'1px solid var(--line,#E8E5DC)',borderLeft:`5px solid ${stepBg[s.step]}`,borderRadius:12,background:'#fff'}}>
+              <span style={{flexShrink:0,width:30,height:30,borderRadius:9,background:stepBg[s.step],color:'#fff',fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center'}}>{s.step}</span>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:800,fontSize:15}}>{s.ico} {s.name}</div>
+                <div style={{fontSize:13.5,color:'var(--text-soft,#5C5C66)',lineHeight:1.45,marginTop:2}}>{s.desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="scard">
+        <div className="sec-head"><div className="sec-title">📍 Dónde se hace cada práctica</div></div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          {[
+            { p:'P1', n:'Fill-In', loc:'home' },
+            { p:'P2', n:'Identify', loc:'home' },
+            { p:'P3', n:'Transform', loc:'class' },
+            { p:'GS', n:'Grammar Summary', loc:'home+class' },
+          ].map(x => {
+            const loc = D.LOCATION_LABEL[x.loc];
+            return (
+              <div key={x.p} style={{display:'flex',alignItems:'center',gap:9,padding:'11px 13px',border:'1px solid var(--line,#E8E5DC)',borderRadius:11,background:'#fff'}}>
+                <span style={{fontSize:11,fontWeight:800,padding:'2px 7px',borderRadius:8,background:'#EDEAF7',color:'#5B3FA0'}}>{x.p}</span>
+                <span style={{fontWeight:700,fontSize:13.5,flex:1}}>{x.n}</span>
+                <span style={{fontSize:11,fontWeight:800,padding:'2px 8px',borderRadius:8,background:loc.bg,color:loc.fg,whiteSpace:'nowrap'}}>{loc.ico} {loc.txt}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="settings-hint" style={{marginTop:12}}>P2 puede arrancarse en clase; los sobrantes de P3 quedan como práctica opcional en casa. El diálogo nunca se manda de tarea.</div>
+      </div>
+    </div>
+  );
+}
+
 /* ── 1 · Práctica del día ──────────────────────────────────────────── */
+/* ── Práctica dirigida (bloque con ventana de días + bono) ── */
+function DirectedPracticePanel({ onChange }) {
+  const { GROUPS, LEVELS, MODULE_CATALOG } = window.JUCUM_DATA;
+  const TT = window.JUCUM_TT;
+  const [groupId, setGroupId] = React.useState(GROUPS[0]?.id || '');
+  const today = new Date().toISOString().slice(0,10);
+  const [openDate, setOpenDate] = React.useState(today);
+  const [dueDate, setDueDate] = React.useState('');
+  const [picked, setPicked] = React.useState([]);
+  const [bonus, setBonus] = React.useState(30);
+  const [, setTick] = React.useState(0);
+  const group = GROUPS.find(g => g.id === groupId);
+  const mods = group ? (MODULE_CATALOG[group.level] || []) : [];
+  const list = TT.getDirectedForGroup(groupId);
+
+  const isPicked = (mid, aid) => picked.some(p => p.moduleId===mid && p.activityId===aid);
+  const togglePick = (mod, a) => setPicked(p => isPicked(mod.id, a.id)
+    ? p.filter(x => !(x.moduleId===mod.id && x.activityId===a.id))
+    : [...p, { moduleId:mod.id, activityId:a.id, label:`${a.name}${a.group?' · '+a.group:''}`, type:a.type }]);
+  const create = () => {
+    if (!groupId || picked.length===0) return;
+    TT.addDirected({ groupId, openDate, dueDate: dueDate||null, activities:picked, bonusXp:parseInt(bonus)||0 });
+    setPicked([]); setDueDate(''); setBonus(30); setTick(t=>t+1); onChange && onChange();
+  };
+  const remove = (id) => { if (confirm('¿Eliminar esta práctica dirigida?')) { TT.deleteDirected(id); setTick(t=>t+1); onChange && onChange(); } };
+  const fmt = (d) => d ? new Date(d+'T12:00:00').toLocaleDateString('es-PE',{day:'numeric',month:'short'}) : '—';
+
+  return (
+    <div>
+      <div className="scard" style={{marginBottom:14}}>
+        <div className="settings-hint" style={{marginBottom:10}}>Crea un <b>bloque de práctica</b> que dura varios días: elige grupo, fechas de <b>apertura</b> y <b>cierre</b>, y marca las actividades. El alumno la ve en su panel con su reloj, la hace a su ritmo y gana un <b>bono</b> si la termina a tiempo y aprobada.</div>
+        <div className="row-flex" style={{gap:10, flexWrap:'wrap', alignItems:'flex-end'}}>
+          <div><div className="settings-label">Grupo</div><select className="input-text" style={{maxWidth:240}} value={groupId} onChange={e=>{setGroupId(e.target.value); setPicked([]);}}>{GROUPS.map(g => <option key={g.id} value={g.id}>{LEVELS[g.level]?.emoji} {g.name}</option>)}</select></div>
+          <div><div className="settings-label">Abre</div><input type="date" className="input-text" style={{maxWidth:160}} value={openDate} onChange={e=>setOpenDate(e.target.value)} /></div>
+          <div><div className="settings-label">Vence</div><input type="date" className="input-text" style={{maxWidth:160}} value={dueDate} onChange={e=>setDueDate(e.target.value)} /></div>
+          <div><div className="settings-label">Bono XP</div><input type="number" min="0" className="input-text" style={{maxWidth:90}} value={bonus} onChange={e=>setBonus(e.target.value)} /></div>
+        </div>
+      </div>
+
+      <div className="scard" style={{marginBottom:14}}>
+        <div className="sec-head"><div className="sec-title">📝 Actividades del bloque</div><span className="sec-meta">{picked.length} elegida{picked.length===1?'':'s'}</span></div>
+        {mods.length===0 ? <div className="settings-hint">Este grupo no tiene módulos en su nivel.</div> : (
+          <div style={{display:'grid', gap:8}}>
+            {mods.map(mod => <DPPickModule key={mod.id} mod={mod} isPicked={isPicked} togglePick={togglePick} />)}
+          </div>
+        )}
+        <div style={{display:'flex', justifyContent:'flex-end', marginTop:14}}>
+          <button className="btn-save" disabled={picked.length===0} style={picked.length===0?{opacity:.5}:undefined} onClick={create}>Crear práctica dirigida</button>
+        </div>
+      </div>
+
+      <div className="scard">
+        <div className="sec-head"><div className="sec-title">📌 Prácticas dirigidas de {group?.name||''}</div><span className="sec-meta">{list.length}</span></div>
+        {list.length===0 ? <div className="empty-state"><div className="icon">📌</div>Aún no creaste ninguna para este grupo.</div> : (
+          <div className="sm-list">
+            {list.map(d => {
+              const todayS = new Date().toISOString().slice(0,10);
+              const st = d.openDate>todayS ? {t:'Próxima',c:'#7B1FA2'} : (d.dueDate && d.dueDate<todayS ? {t:'Cerrada',c:'#C0392B'} : {t:'Activa',c:'#B26A00'});
+              return (
+                <div key={d.id} className="sm-row">
+                  <span style={{fontSize:18}}>📌</span>
+                  <div className="sm-info">
+                    <div className="sm-name">{(d.activities||[]).length} actividad{(d.activities||[]).length===1?'':'es'} · 🎁 +{d.bonusXp} XP</div>
+                    <div className="sm-meta">Abre {fmt(d.openDate)} · vence {fmt(d.dueDate)} · <span style={{color:st.c,fontWeight:800}}>{st.t}</span></div>
+                  </div>
+                  <button className="ftool del" onClick={()=>remove(d.id)}>🗑</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+function DPPickModule({ mod, isPicked, togglePick }) {
+  const [open, setOpen] = React.useState(false);
+  const n = (mod.activities||[]).filter(a => isPicked(mod.id, a.id)).length;
+  return (
+    <div className="tg">
+      <button type="button" className="tg-head" onClick={()=>setOpen(o=>!o)}>
+        <span className="tg-num">{mod.emoji}</span>
+        <span className="tg-name">{mod.name}</span>
+        {n>0 && <span className="tg-meta">{n} elegida{n===1?'':'s'}</span>}
+        <span className={`tg-arr ${open?'open':''}`}>▾</span>
+      </button>
+      {open && <div className="tg-items">
+        {(mod.activities||[]).map(a => (
+          <label key={a.id} className="check-row" style={{padding:'5px 4px'}}>
+            <input type="checkbox" checked={isPicked(mod.id,a.id)} onChange={()=>togglePick(mod,a)} />
+            <span>{typeIco(a.type)} {a.name}{a.group?<span style={{color:'var(--text-soft)'}}> · {a.group}</span>:''}<MethodTags a={a} /></span>
+          </label>
+        ))}
+      </div>}
+    </div>
+  );
+}
+
 function DailyPracticePanel({ onChange }) {
   const { GROUPS, LEVELS, MODULE_CATALOG } = window.JUCUM_DATA;
   const TT = window.JUCUM_TT;
@@ -111,7 +275,7 @@ function DPModule({ mod, has, toggle }) {
         {(mod.activities||[]).map(a => (
           <label key={a.id} className="check-row" style={{padding:'5px 4px'}}>
             <input type="checkbox" checked={has(mod.id,a.id)} onChange={()=>toggle(mod,a)} />
-            <span>{typeIco(a.type)} {a.name}{a.group?<span style={{color:'var(--text-soft)'}}> · {a.group}</span>:''}</span>
+            <span>{typeIco(a.type)} {a.name}{a.group?<span style={{color:'var(--text-soft)'}}> · {a.group}</span>:''}<MethodTags a={a} /></span>
           </label>
         ))}
       </div>}
@@ -144,7 +308,7 @@ function TeacherMaterialsBrowser() {
                 return (
                   <a key={a.id} className={`al-item ${href?'open':'locked'}`} href={href||undefined} target={href?'_blank':undefined} rel="noreferrer">
                     <span className="al-ico">{typeIco(a.type)}</span>
-                    <span className="al-name">{a.name}{a.group?<span style={{color:'var(--text-soft)',fontWeight:600}}> · {a.group}</span>:''}</span>
+                    <span className="al-name">{a.name}{a.group?<span style={{color:'var(--text-soft)',fontWeight:600}}> · {a.group}</span>:''}<MethodTags a={a} /></span>
                     {href ? <span className="al-arr">↗</span> : <span className="al-score" style={{background:'#EEE',color:'#999'}}>sin URL</span>}
                   </a>
                 );
@@ -405,4 +569,4 @@ function TeacherStudentNotes({ studentId }) {
   );
 }
 
-Object.assign(window, { TeacherClass, DailyPracticePanel, TeacherMaterialsBrowser, ClassLogPanel, TeacherNotesPanel, RemindersPanel, NoteList, TeacherStudentNotes });
+Object.assign(window, { TeacherClass, ClassSequencePanel, DirectedPracticePanel, DPPickModule, DailyPracticePanel, TeacherMaterialsBrowser, ClassLogPanel, TeacherNotesPanel, RemindersPanel, NoteList, TeacherStudentNotes });
