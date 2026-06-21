@@ -64,7 +64,7 @@ function isEligibleForExam(student) {
   if (mods.length === 0) return false;
   const progress = getStudentProgress(student.id);
   return mods.every(m =>
-    m.activities.every(a => progress.completed[`${m.id}:${a.id}`])
+    m.activities.every(a => entryPassed(progress.completed[`${m.id}:${a.id}`], student.level, student.group))
   );
 }
 
@@ -371,7 +371,7 @@ function _medalCurrent(student, metric) {
   const prog = (typeof getStudentProgress === 'function' ? getStudentProgress(student.id) : null) || { completed: {} };
   const entries = Object.values(prog.completed || {});
   switch (metric) {
-    case 'practices': return entries.length;
+    case 'practices': return entries.filter(e => entryPassed(e, student.level, student.group)).length;
     case 'streak':    return student.streak || 0;
     case 'minutes':   return student.totalMinutes || 0;
     case 'perfect':   return entries.filter(e => typeof e.score === 'number' && e.score >= 100).length;
@@ -601,6 +601,94 @@ function setGroupSettings(groupId, partial) {
   return next;
 }
 
+/* ── PASO 2 · Umbral de aprobación por nivel (anti-farmeo) ────────────
+ * Decisión del teacher: la exigencia sube de nivel en nivel.
+ *   Pre-A1 75% · A1 78% · A2 85%  (A2 más alto: rumbo a exámenes internacionales)
+ * El profesor puede ajustar cada umbral. Se guarda local + nube (app_settings).
+ *
+ * REGLA CLAVE — "recálculo de historial": el aprobado/reprobado NO se congela
+ * al momento de hacer la actividad, se vuelve a juzgar SIEMPRE contra el umbral
+ * vigente (entryPassed mira la nota guardada). Así, cuando el teacher sube el
+ * umbral, todo el ranking se corrige solo y Mijhael deja de estar 1° sin migrar
+ * un solo dato. */
+const PASS_THRESHOLD_KEY = 'jucum_pass_threshold_v1';
+const DEFAULT_PASS_THRESHOLD = { 'pre-a1': 75, 'a1': 78, 'a2': 85 };
+/* Estructura guardada: { 'pre-a1':75, 'a1':78, 'a2':85, __groups: { <groupId>: 80 } }
+ * - Las claves de nivel son el ESTÁNDAR base (rigor creciente del nivel).
+ * - __groups guarda OVERRIDES por grupo. Si un grupo no está en __groups,
+ *   hereda el umbral de su nivel. Borrar el override = volver a heredar. */
+function getPassThresholds() {
+  try {
+    const s = JSON.parse(localStorage.getItem(PASS_THRESHOLD_KEY) || 'null');
+    if (s && typeof s === 'object') return { ...DEFAULT_PASS_THRESHOLD, ...s, __groups: { ...(s.__groups || {}) } };
+  } catch {}
+  return { ...DEFAULT_PASS_THRESHOLD, __groups: {} };
+}
+/* Umbral efectivo: override del grupo si existe, si no el del nivel. */
+function passThreshold(level, groupId) {
+  const t = getPassThresholds();
+  if (groupId && t.__groups && t.__groups[groupId] != null) return t.__groups[groupId];
+  return t[level] != null ? t[level] : 75;
+}
+function _savePassThresholds(t) {
+  localStorage.setItem(PASS_THRESHOLD_KEY, JSON.stringify(t));
+  try { if (window.JUCUM_SB) window.JUCUM_SB.getClient().from('app_settings').upsert({ key: 'pass_threshold', value: t }, { onConflict: 'key' }).then(() => {}, () => {}); } catch {}
+  return t;
+}
+/* Estándar del NIVEL (base que heredan todos sus grupos). */
+function setPassThreshold(level, value) {
+  const t = getPassThresholds();
+  t[level] = Math.max(0, Math.min(100, Math.round(value)));
+  return _savePassThresholds(t);
+}
+/* Override de un GRUPO. value=null/undefined ⇒ borra el override (vuelve a heredar). */
+function setGroupThreshold(groupId, value) {
+  const t = getPassThresholds();
+  t.__groups = t.__groups || {};
+  if (value == null) delete t.__groups[groupId];
+  else t.__groups[groupId] = Math.max(0, Math.min(100, Math.round(value)));
+  return _savePassThresholds(t);
+}
+/* Override crudo del grupo (null si hereda). Para la UI del profesor. */
+function getGroupThreshold(groupId) {
+  const t = getPassThresholds();
+  return (t.__groups && t.__groups[groupId] != null) ? t.__groups[groupId] : null;
+}
+/* Carga best-effort del umbral desde la nube (multi-dispositivo) */
+async function loadPassThresholdsFromCloud() {
+  if (!window.JUCUM_SB) return;
+  try {
+    const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key', 'pass_threshold').maybeSingle();
+    if (data && data.value && typeof data.value === 'object') {
+      localStorage.setItem(PASS_THRESHOLD_KEY, JSON.stringify({ ...DEFAULT_PASS_THRESHOLD, ...data.value, __groups: { ...(data.value.__groups || {}) } }));
+    }
+  } catch {}
+}
+
+/* Normaliza una nota a porcentaje 0-100.
+ * Convención de la plataforma: notas >10 = porcentaje (0-100); ≤10 = escala /10.
+ * Devuelve null si la actividad no tiene nota (story / diálogo / quizlet). */
+function scorePct(score) {
+  if (typeof score !== 'number') return null;
+  return score > 10 ? Math.min(100, Math.round(score)) : Math.min(100, Math.round((score / 10) * 100));
+}
+/* Nivel al que pertenece un módulo (para juzgar contra su umbral) */
+function levelOfModule(moduleId) {
+  for (const lvl of Object.keys(MODULE_CATALOG)) {
+    if ((MODULE_CATALOG[lvl] || []).some(m => m.id === moduleId)) return lvl;
+  }
+  return null;
+}
+/* ¿Esta actividad cuenta como APROBADA (= completada)?
+ * - Sin nota (participación: story/quizlet) → siempre cuenta como hecha.
+ * - Con nota → solo si llega al umbral del nivel. Se juzga en cada lectura. */
+function entryPassed(entry, level, groupId) {
+  if (!entry) return false;
+  const pct = scorePct(entry.score);
+  if (pct === null) return true;                 // participación
+  return pct >= passThreshold(level || 'pre-a1', groupId);
+}
+
 /* ── Student progress (which activities completed) ───────────────── */
 const PROGRESS_KEY = 'jucum_student_progress_v1';
 function getStudentProgress(studentId) {
@@ -613,13 +701,33 @@ function markActivityComplete(studentId, moduleId, activityId, score, minutes) {
   try { all = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); } catch {}
   const prev = all[studentId] || { completed: {}, todayMinutes: 0, lastDay: null };
   const key = `${moduleId}:${activityId}`;
-  prev.completed[key] = { score, minutes, date: new Date().toISOString() };
+  /* PASO 2 · En un reintento se conserva la MEJOR nota (el alumno no pierde por
+   * volver a intentar). Los minutos se acumulan (esfuerzo real). */
+  const existing = prev.completed[key];
+  let finalScore = score;
+  const newPct = scorePct(score);
+  const oldPct = existing ? scorePct(existing.score) : null;
+  if (existing && typeof oldPct === 'number' && typeof newPct === 'number' && oldPct >= newPct) {
+    finalScore = existing.score;
+  }
+  const finalMin = (existing && typeof existing.minutes === 'number' ? existing.minutes : 0) + (minutes || 0);
+  const _stu = STUDENTS.find(s => s.id === studentId) || {};
+  const level = _stu.level || levelOfModule(moduleId) || 'pre-a1';
+  const pct = scorePct(finalScore);
+  prev.completed[key] = {
+    score: finalScore,
+    minutes: finalMin,
+    date: new Date().toISOString(),
+    attempts: (existing && existing.attempts ? existing.attempts : 0) + 1,
+    pct,
+    passed: entryPassed({ score: finalScore }, level, _stu.group),   // hint; el valor real se re-juzga al leer
+  };
   const today = new Date().toISOString().slice(0, 10);
   if (prev.lastDay !== today) { prev.todayMinutes = 0; prev.lastDay = today; }
-  prev.todayMinutes += minutes;
+  prev.todayMinutes += (minutes || 0);
   all[studentId] = prev;
   localStorage.setItem(PROGRESS_KEY, JSON.stringify(all));
-  if (window.JUCUM_SYNC) window.JUCUM_SYNC.pushProgress(studentId, moduleId, activityId, score, minutes);
+  if (window.JUCUM_SYNC) window.JUCUM_SYNC.pushProgress(studentId, moduleId, activityId, finalScore, finalMin);
   return prev;
 }
 
@@ -642,9 +750,12 @@ function getStudentXP(student) {
     const mods = MODULE_CATALOG[student.level] || [];
     const mod = mods.find(m => m.id === modId);
     const act = mod?.activities.find(a => a.id === actId);
+    const entry = progress.completed[key];
+    /* PASO 2 · Anti-farmeo: si la actividad tiene nota y quedó BAJO el umbral,
+     * solo da puntos de PARTICIPACIÓN (+5). Para ganar de verdad hay que aprobar. */
+    if (!entryPassed(entry, student.level, student.group)) { xp += 5; continue; }
     if (!act) { xp += 10; continue; }
     const base = XP_BASE[act.type] || 10;
-    const entry = progress.completed[key];
     // score normalization: numbers >10 = percent (0-100); ≤10 = like /7 or /10 → assume max 10
     let bonusPct = 0.5;
     if (typeof entry.score === 'number') {
@@ -654,6 +765,8 @@ function getStudentXP(student) {
   }
   xp += Math.min(student.streak || 0, 14) * 30;
   xp += (student.achievements?.length || 0) * 50;
+  // PASO 2 · Bono por terminar la práctica dirigida a tiempo Y aprobada
+  xp += getDirectedBonusXP(student);
   // XP por tareas entregadas (gamificación: cada entrega suma; +20 si fue bien calificada)
   try {
     const subs = JSON.parse(localStorage.getItem('jucum_submissions_v1') || '{}');
@@ -663,6 +776,21 @@ function getStudentXP(student) {
     });
   } catch {}
   return xp;
+}
+
+/* Suma de bonos de prácticas dirigidas COMPLETADAS a tiempo y aprobadas.
+ * Lee el estado real desde JUCUM_TT (que ya usa passThreshold). */
+function getDirectedBonusXP(student) {
+  try {
+    const TT = window.JUCUM_TT;
+    if (!TT || !TT.getActiveDirectedForStudent) return 0;
+    let xp = 0;
+    TT.getActiveDirectedForStudent(student).forEach(dp => {
+      const st = TT.directedStatusForStudent(dp, student);
+      if (st && st.state === 'completed' && st.onTime && dp.bonusXp > 0) xp += dp.bonusXp;
+    });
+    return xp;
+  } catch { return 0; }
 }
 
 /* Level tiers: each level needs (level+1)*50 XP cumulatively.
@@ -827,7 +955,8 @@ function getStudentMastery(student) {
   scope.forEach(m => (m.activities || []).forEach(a => {
     total++;
     const e = completed[`${m.id}:${a.id}`];
-    if (e) {
+    // PASO 2 · solo cuenta como hecha si APROBÓ (o es participación sin nota)
+    if (e && entryPassed(e, student.level, student.group)) {
       done++;
       if (typeof e.score === 'number') {
         const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100);
@@ -894,7 +1023,7 @@ function getStudentReadiness(student) {
       if (!c.types.includes(a.type)) return;
       total++;
       const e = completed[`${mod.id}:${a.id}`];
-      if (e) {
+      if (e && entryPassed(e, student.level, student.group)) {
         done++;
         if (typeof e.score === 'number') { const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100); sSum += pct; sN++; }
         else { sSum += 70; sN++; }
@@ -1090,7 +1219,7 @@ function getModuleStats(student, module) {
   (module.activities || []).forEach(a => {
     total++;
     const e = completed[`${module.id}:${a.id}`];
-    if (e) { done++; if (typeof e.score === 'number') { const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100); sSum += pct; sN++; } else { sSum += 70; sN++; } }
+    if (e && entryPassed(e, student.level, student.group)) { done++; if (typeof e.score === 'number') { const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100); sSum += pct; sN++; } else { sSum += 70; sN++; } }
   });
   const coverage = total ? done / total : 0;
   const quality = sN ? (sSum / sN) / 100 : 0;
@@ -1123,7 +1252,58 @@ function getModuleFinalGrade(student, module) {
   return { stats, exam, examWeight, finalPct, approved: finalPct >= 75, hasExam };
 }
 
-window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getAchievementAlert, achievementDecayFactor, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness, getStudentGrades, getStudentMonthlyPractice, getStudentTrends };
+/* ── PASO 2 · Detección "rápido y mal" (🚩 solo para el profesor) ─────
+ * Marca al alumno que completa MUCHAS actividades en un mismo día con notas
+ * por debajo del umbral (el caso real de Mijhael: 6 en 1 día, prom. bajo).
+ * No castiga la prisa en sí — solo la prisa CON malas notas. */
+function getFarmingFlag(student) {
+  if (!student) return null;
+  const completed = (getStudentProgress(student.id) || {}).completed || {};
+  const thr = passThreshold(student.level, student.group);
+  const byDay = {};
+  Object.values(completed).forEach(e => {
+    const pct = scorePct(e && e.score);
+    if (pct === null || !e.date) return;          // solo actividades con nota
+    const d = String(e.date).slice(0, 10);
+    (byDay[d] = byDay[d] || []).push(pct);
+  });
+  let worst = null;
+  Object.entries(byDay).forEach(([day, arr]) => {
+    if (arr.length < 4) return;                    // "muchas" el mismo día
+    const failed = arr.filter(p => p < thr).length;
+    const avg = Math.round(arr.reduce((a, b) => a + b, 0) / arr.length);
+    const failRate = failed / arr.length;
+    if (failed >= 3 || (failRate >= 0.5 && avg < thr)) {
+      const cand = { day, count: arr.length, failed, avg, failRate, threshold: thr };
+      if (!worst || cand.failed > worst.failed || (cand.failed === worst.failed && cand.count > worst.count)) worst = cand;
+    }
+  });
+  return worst ? { flagged: true, ...worst } : null;
+}
+
+/* Actividades con nota BAJO el umbral que el alumno debería repetir.
+ * Alimenta el aviso amable del panel del alumno ("repítelas para aprobar"). */
+function getActivitiesToImprove(student) {
+  if (!student) return [];
+  const completed = (getStudentProgress(student.id) || {}).completed || {};
+  const thr = passThreshold(student.level, student.group);
+  const out = [];
+  Object.entries(completed).forEach(([k, e]) => {
+    const pct = scorePct(e && e.score);
+    if (pct === null) return;
+    if (pct < thr) {
+      const [moduleId, activityId] = k.split(':');
+      const mod = (MODULE_CATALOG[student.level] || []).find(m => m.id === moduleId);
+      const act = mod && (mod.activities || []).find(a => a.id === activityId);
+      out.push({ moduleId, activityId, pct, name: act ? act.name : activityId, type: act ? act.type : '', moduleName: mod ? mod.name : '' });
+    }
+  });
+  return out.sort((a, b) => a.pct - b.pct);
+}
+
+window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getAchievementAlert, achievementDecayFactor, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness, getStudentGrades, getStudentMonthlyPractice, getStudentTrends,
+  /* PASO 2 · umbral + anti-farmeo */
+  passThreshold, getPassThresholds, setPassThreshold, setGroupThreshold, getGroupThreshold, loadPassThresholdsFromCloud, scorePct, entryPassed, getDirectedBonusXP, getFarmingFlag, getActivitiesToImprove };
 
 /* ── Metodología del teacher: fase de práctica (P1/P2/P3) + dónde se hace ──
  * Confirmado por el teacher:

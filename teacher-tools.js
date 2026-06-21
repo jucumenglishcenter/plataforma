@@ -81,7 +81,7 @@
     const prog = D.getStudentProgress(student.id);
     const acts = dp.activities || [];
     const total = acts.length;
-    const thr = D.passThreshold ? D.passThreshold(student.level) : 0;
+    const thr = D.passThreshold ? D.passThreshold(student.level, student.group) : 0;
     let done = 0, passed = 0, lastDate = null;
     acts.forEach(a => {
       const e = prog.completed && prog.completed[`${a.moduleId}:${a.activityId}`];

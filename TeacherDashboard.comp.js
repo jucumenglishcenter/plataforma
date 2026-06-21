@@ -263,10 +263,14 @@ function GroupSettingsModal({ groupId, level, onClose }) {
   const group = GROUPS.find(g => g.id === groupId);
   const modules = MODULE_CATALOG[group.level] || [];
   const [s, setS] = React.useState(() => getGroupSettings(groupId));
-  const { updateGroup } = window.JUCUM_DATA;
+  const { updateGroup, passThreshold, getPassThresholds, setPassThreshold, setGroupThreshold, getGroupThreshold } = window.JUCUM_DATA;
   const [info, setInfo] = React.useState({ name: group.name, schedule: group.schedule, startDate: group.startDate });
+  const levelBase = getPassThresholds()[group.level];                 // estándar del nivel
+  const [ownThr, setOwnThr] = React.useState(() => getGroupThreshold(groupId) != null);  // ¿override propio?
+  const [thr, setThr] = React.useState(() => { const g = getGroupThreshold(groupId); return g != null ? g : levelBase; });
   const save = () => {
     setGroupSettings(groupId, s);
+    if (setGroupThreshold) setGroupThreshold(groupId, ownThr ? thr : null);  // null = vuelve a heredar
     if (updateGroup && (info.name !== group.name || info.schedule !== group.schedule || info.startDate !== group.startDate)) {
       updateGroup(groupId, { name: info.name, schedule: info.schedule, startDate: info.startDate });
     }
@@ -345,6 +349,33 @@ function GroupSettingsModal({ groupId, level, onClose }) {
                 <button key={v} className={`preset ${s.dailyTargetMin === v ? 'on' : ''}`} onClick={() => setS({...s, dailyTargetMin: v})}>{v} min</button>
               ))}
             </div>
+          </div>
+
+          <div className="settings-block">
+            <div className="settings-label">✅ Umbral de aprobación · {group.name}</div>
+            <div className="settings-hint">Nota mínima para que una práctica cuente como <b>aprobada</b>. Por debajo queda "a mejorar": da pocos puntos y <b>no marca completado</b> (frena el farmeo).</div>
+            <label style={{display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background: ownThr ? '#FFF8E8' : '#F4F1EA', border:'1px solid '+(ownThr?'#F0C66B':'#E3DDD0'), borderRadius:10, cursor:'pointer', marginBottom: ownThr ? 12 : 0}}>
+              <input type="checkbox" checked={ownThr} onChange={e => { const on = e.target.checked; setOwnThr(on); if (on && thr == null) setThr(levelBase); else if (!on) setThr(levelBase); }} style={{width:18, height:18}} />
+              <span style={{flex:1, fontSize:13, fontWeight:700, color:'var(--text)'}}>Usar umbral propio para este grupo</span>
+              {!ownThr && <span style={{fontSize:12, fontWeight:800, color:'#8A7F6A'}}>Hereda del nivel {group.level.toUpperCase()}: {levelBase}%</span>}
+            </label>
+            {ownThr ? (
+              <>
+                <div className="row-flex">
+                  <input type="range" min="50" max="100" step="1" value={thr}
+                         onChange={e => setThr(parseInt(e.target.value))} className="slider-input" />
+                  <div className="target-val">{thr}<span>%</span></div>
+                </div>
+                <div className="preset-row">
+                  {[75, 78, 85, 90].map(v => (
+                    <button key={v} className={`preset ${thr === v ? 'on' : ''}`} onClick={() => setThr(v)}>{v}%</button>
+                  ))}
+                </div>
+                <div className="settings-hint" style={{marginTop:8}}>Base del nivel {group.level.toUpperCase()}: <b>{levelBase}%</b>. Útil si este grupo va a otro ritmo (módulo distinto, nivelación). Al guardar, el ranking se recalcula al instante.</div>
+              </>
+            ) : (
+              <div className="settings-hint" style={{marginTop:8}}>Este grupo usa el estándar del nivel ({levelBase}%). Recomendado: mantén la herencia salvo que el grupo lo necesite.</div>
+            )}
           </div>
 
           <div className="settings-block">

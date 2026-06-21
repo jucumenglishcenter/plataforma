@@ -1,7 +1,7 @@
 /* Student dashboard — Bloque A · with active module + daily target + activity checklist */
 
 function StudentDashboard({ user, onLogout }) {
-  const { STUDENTS, GROUPS, LEVELS, MODULE_CATALOG, ACHIEVEMENT_DEFS, getGroupSettings, getStudentProgress, getStudentXP, getStudentLevel, MEDAL_RARITY, RARITY_STYLE, earnedMedals } = window.JUCUM_DATA;
+  const { STUDENTS, GROUPS, LEVELS, MODULE_CATALOG, ACHIEVEMENT_DEFS, getGroupSettings, getStudentProgress, getStudentXP, getStudentLevel, MEDAL_RARITY, RARITY_STYLE, earnedMedals, entryPassed } = window.JUCUM_DATA;
   const student = STUDENTS.find(s => s.id === user.studentId) || STUDENTS[0];
   const group = student ? GROUPS.find(g => g.id === student.group) : null;
   const level = student ? LEVELS[student.level] : null;
@@ -98,7 +98,7 @@ function StudentDashboard({ user, onLogout }) {
   }, [student.id]);
 
   const activities = activeModule?.activities || [];
-  const doneCount = activities.filter(a => progress.completed[`${activeModule?.id}:${a.id}`]).length;
+  const doneCount = activities.filter(a => entryPassed(progress.completed[`${activeModule?.id}:${a.id}`], student.level, student.group)).length;
   const pctModule = activities.length ? Math.round((doneCount/activities.length)*100) : 0;
 
   const todayMin = progress.todayMinutes || 0;
@@ -182,6 +182,14 @@ function StudentDashboard({ user, onLogout }) {
           return dps.length ? <div style={{marginTop:18, display:'flex', flexDirection:'column', gap:12}}>{dps.map(dp => <DirectedPracticeCard key={dp.id} dp={dp} student={student} />)}</div> : null;
         })()}
 
+        {/* — PASO 2 · Aviso amable "por mejorar" (nunca el 🚩 rojo del profesor) — */}
+        <ImproveBanner student={student} onGo={(it) => {
+          const mod = (MODULE_CATALOG[student.level] || []).find(m => m.id === it.moduleId);
+          const a = mod && (mod.activities || []).find(x => x.id === it.activityId);
+          const href = a ? linkFor(a, mod, student.id) : null;
+          if (href) window.location.href = href;
+        }} />
+
         {/* — Mascota Neuro: al inicio, da la bienvenida y refleja su ánimo — */}
         <div style={{marginTop:18}}><MascotCard student={student} /></div>
 
@@ -210,7 +218,7 @@ function StudentDashboard({ user, onLogout }) {
               <div className="empty-state"><div className="icon">📦</div>El profesor aún no activa ningún módulo.</div>
             ) : activeModules.map((mod, mi) => {
               const acts = mod.activities || [];
-              const dc = acts.filter(a => progress.completed[`${mod.id}:${a.id}`]).length;
+              const dc = acts.filter(a => entryPassed(progress.completed[`${mod.id}:${a.id}`], student.level, student.group)).length;
               const pc = acts.length ? Math.round((dc/acts.length)*100) : 0;
               return (
                 <div key={mod.id} style={mi > 0 ? {marginTop:16, paddingTop:16, borderTop:'1px dashed var(--border)'} : undefined}>
@@ -289,14 +297,21 @@ function ModuleProgress({ mod, progress, pct, doneCount, studentId, freeUnlock, 
             // status per activity: sequential unlock always applies; 'free' opens all,
             // 'custom' additionally opens the teacher-enabled checklist
             const enabledSet = new Set(unlockedActivities || []);
+            const D = window.JUCUM_DATA;
+            const stu = D.STUDENTS.find(s => s.id === studentId);
+            const lvl = stu ? stu.level : 'pre-a1';
+            const grp = stu ? stu.group : null;
             const items = mod.activities.map((a, i) => {
               const done = progress.completed[`${mod.id}:${a.id}`];
+              const passed = done ? D.entryPassed(done, lvl, grp) : false;
               const prevDone = i === 0 || progress.completed[`${mod.id}:${mod.activities[i-1].id}`];
               const teacherOpen = freeUnlock || unlockMode === 'free' ||
                 (unlockMode === 'custom' && enabledSet.has(`${mod.id}:${a.id}`));
               const alwaysOpen = a.open === true; // marcado en el catálogo ("open": true)
               const locked = !done && !prevDone && !teacherOpen && !alwaysOpen;
-              return { a, i, done, status: done ? 'done' : locked ? 'locked' : 'open' };
+              // PASO 2 · hecho pero bajo el umbral → "a mejorar" (redo), no cuenta como ✓
+              const status = done ? (passed ? 'done' : 'redo') : locked ? 'locked' : 'open';
+              return { a, i, done, passed, status };
             });
             // group consecutive items that share a.group into expandable topics
             const segments = [];
@@ -320,7 +335,7 @@ function ModuleProgress({ mod, progress, pct, doneCount, studentId, freeUnlock, 
 }
 
 function ChecklistRow({ it, mod, studentId }) {
-  const { a, i, done, status } = it;
+  const { a, i, done, passed, status } = it;
   const href = status !== 'locked' ? linkFor(a, mod, studentId) : null;
   // Abierto pero sin material configurado todavía → "en preparación" (no es clic).
   if (status !== 'locked' && !done && !href) {
@@ -331,6 +346,22 @@ function ChecklistRow({ it, mod, studentId }) {
         <span className="al-name">{a.name}</span>
         <span className="al-score" style={{background:'#EEEAE0', color:'#8A7F6A'}}>📚 En preparación</span>
       </div>
+    );
+  }
+  // PASO 2 · "a mejorar" — hecho bajo el umbral: no marca ✓, invita a repetir.
+  if (status === 'redo') {
+    const pct = typeof done.score === 'number' ? (done.score > 10 ? Math.round(done.score) : Math.round(done.score*10)) : null;
+    return (
+      <a href={href || undefined} className="al-item open"
+         style={{background:'#FFF7E8', borderColor:'#F0C66B'}}
+         title="Tu nota quedó bajo el umbral de aprobación. Repítela para aprobar y ganar tus puntos.">
+        <span className="al-num" style={{background:'#F9A825', color:'#fff', borderColor:'#c98a00'}}>!</span>
+        <span className="al-ico">{typeIcon(a.type)}</span>
+        <span className="al-name">{a.name}</span>
+        <PhaseTags a={a} />
+        {pct != null && <span className="al-score" style={{background:'#FDEBEA', color:'#C0392B'}}>{pct}%</span>}
+        <span style={{fontSize:11, fontWeight:800, color:'#fff', background:'#F9A825', padding:'3px 10px', borderRadius:13, whiteSpace:'nowrap'}}>🔁 Repetir</span>
+      </a>
     );
   }
   return (
@@ -348,9 +379,9 @@ function ChecklistRow({ it, mod, studentId }) {
 
 /* Tema numerado expandible — replica el patrón "Práctica de Gramática → Temas del módulo" */
 function TopicGroup({ num, name, items, mod, studentId }) {
-  const doneCount = items.filter(it => it.done).length;
+  const doneCount = items.filter(it => it.passed).length;
   const allDone = doneCount === items.length;
-  const anyOpen = items.some(it => it.status === 'open');
+  const anyOpen = items.some(it => it.status === 'open' || it.status === 'redo');
   const [open, setOpen] = React.useState(anyOpen);
   return (
     <div className={`tg ${allDone ? 'tg-done' : ''}`}>
@@ -522,6 +553,41 @@ function RankCard({ student, groupName }) {
             <span className="rank-xp">{r.score}%</span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/* PASO 2 · Aviso amable para el alumno: actividades por mejorar (repetir para aprobar).
+ * NUNCA muestra el 🚩 rojo (ese es solo del profesor): tono positivo y accionable. */
+function ImproveBanner({ student, onGo }) {
+  const { getActivitiesToImprove, passThreshold } = window.JUCUM_DATA;
+  const items = getActivitiesToImprove ? getActivitiesToImprove(student) : [];
+  if (!items.length) return null;
+  const thr = passThreshold(student.level, student.group);
+  const top = items.slice(0, 3);
+  return (
+    <div style={{marginTop:18, border:'1px solid #F0C66B', background:'linear-gradient(120deg,#FFF8E8,#FFFdf6)', borderRadius:14, padding:'14px 16px'}}>
+      <div style={{display:'flex', alignItems:'center', gap:9, marginBottom:8}}>
+        <span style={{fontSize:20}}>🔁</span>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:800, color:'#9c5d00', fontSize:14.5}}>Tienes {items.length} práctica{items.length===1?'':'s'} por mejorar</div>
+          <div style={{fontSize:12.5, color:'#B26A00', fontWeight:600}}>Repítelas para aprobar (umbral {thr}%) y ganar tus puntos completos. ¡Tú puedes! 🌱</div>
+        </div>
+      </div>
+      <div style={{display:'flex', flexDirection:'column', gap:7}}>
+        {top.map((it, i) => (
+          <button key={i} type="button" onClick={() => onGo && onGo(it)}
+            style={{display:'flex', alignItems:'center', gap:10, textAlign:'left', cursor:'pointer', background:'#fff', border:'1px solid #F0C66B', borderRadius:10, padding:'9px 12px', fontFamily:'inherit'}}>
+            <span style={{fontSize:16}}>{typeIcon(it.type)}</span>
+            <span style={{flex:1, fontWeight:700, fontSize:13, color:'var(--text)'}}>{it.name}</span>
+            <span style={{fontSize:11, fontWeight:800, color:'#C0392B', background:'#FDEBEA', padding:'2px 8px', borderRadius:9}}>{it.pct}%</span>
+            <span style={{fontSize:11, fontWeight:800, color:'#fff', background:'#F9A825', padding:'3px 10px', borderRadius:13}}>Repetir</span>
+          </button>
+        ))}
+        {items.length > top.length && (
+          <div style={{fontSize:12, color:'#B26A00', fontWeight:700, paddingLeft:2}}>+{items.length - top.length} más por mejorar</div>
+        )}
       </div>
     </div>
   );
@@ -779,4 +845,4 @@ function Collapsible({ title, meta, defaultOpen, children }) {
   );
 }
 
-Object.assign(window, { StudentDashboard, DirectedPracticeCard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase, AchievementWarning, StudentAlertModal, ProgressExplainer, ExplainerBody, TodayPracticeCard, Collapsible, StudentAvance, StudentNoGroup });
+Object.assign(window, { StudentDashboard, DirectedPracticeCard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase, AchievementWarning, ImproveBanner, StudentAlertModal, ProgressExplainer, ExplainerBody, TodayPracticeCard, Collapsible, StudentAvance, StudentNoGroup });
