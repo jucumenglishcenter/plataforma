@@ -29,8 +29,7 @@ function TeacherDashboard({ onLogout, user }) {
           <a className={`nav-link ${['groups','group','student'].includes(view.kind)?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'groups'});}}>👥 Mis grupos</a>
           <a className={`nav-link ${view.kind==='class'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'class'});}}>🏫 Clase</a>
           <a className={`nav-link ${view.kind==='tasks'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'tasks'});}}>📝 Prácticas</a>
-          <a className={`nav-link ${view.kind==='evaluate'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'evaluate'});}}>📊 Evaluar</a>
-          <a className={`nav-link ${view.kind==='exams'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'exams'});}}>📑 Exámenes</a>
+          <a className={`nav-link ${(view.kind==='assess'||view.kind==='evaluate'||view.kind==='exams')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'assess'});}}>📊 Evaluación</a>
           <TeacherForumNav onOpen={(gid)=>setView({kind:'forum', group:gid})} />
           <NotifBell userId="teacher" />
           <div className="user-pill">
@@ -41,7 +40,9 @@ function TeacherDashboard({ onLogout, user }) {
         </div>
       </header>
 
-      {view.kind === 'evaluate' ? (
+      {view.kind === 'assess' ? (
+        <TeacherAssessment onBack={() => setView({kind:'groups'})} initialTab={view.tab} />
+      ) : view.kind === 'evaluate' ? (
         <TeacherEvaluate onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'tasks' ? (
         <TeacherPractice onBack={() => setView({kind:'groups'})} />
@@ -106,6 +107,26 @@ function TeacherDashboard({ onLogout, user }) {
 }
 
 /* ─── Groups overview ─────────────────────────────────────────────── */
+
+/* Menú unificado "Evaluación": junta Evaluación presencial + Exámenes de avance
+ * (pedido del teacher — antes eran dos entradas separadas "Evaluar" y "Exámenes"). */
+function TeacherAssessment({ onBack, canDefine, initialTab }) {
+  const [tab, setTab] = React.useState(initialTab === 'exams' ? 'exams' : 'eval');
+  return (
+    <div>
+      <div style={{display:'flex', alignItems:'center', gap:14, flexWrap:'wrap', padding:'14px 28px 0'}}>
+        <button className="back-btn" style={{margin:0}} onClick={onBack}>← Volver al panel</button>
+        <div className="mm-tabs" style={{margin:0}}>
+          <button className={`mm-tab ${tab==='eval'?'on':''}`} onClick={() => setTab('eval')}>📊 Evaluación presencial</button>
+          <button className={`mm-tab ${tab==='exams'?'on':''}`} onClick={() => setTab('exams')}>🎓 Exámenes de avance</button>
+        </div>
+      </div>
+      {tab === 'eval'
+        ? <TeacherEvaluate onBack={onBack} hideBack />
+        : <TeacherExams onBack={onBack} canDefine={canDefine} hideBack />}
+    </div>
+  );
+}
 
 function GroupsView({ stats, onSelectGroup, teacherName }) {
   const { GROUPS, STUDENTS, LEVELS, getStudentMastery } = window.JUCUM_DATA;

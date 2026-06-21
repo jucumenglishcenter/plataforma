@@ -3,7 +3,7 @@
 const { useState: rpUseState } = React;
 
 function GroupReport({ groupId, onBack }) {
-  const { GROUPS, STUDENTS, LEVELS, MODULE_CATALOG, getStudentProgress, getStudentXP, getStudentMastery, entryPassed, getFarmingFlag, passThreshold } = window.JUCUM_DATA;
+  const { GROUPS, STUDENTS, LEVELS, MODULE_CATALOG, getStudentProgress, getStudentXP, getStudentMastery, entryPassed, getFarmingFlag, passThreshold, getRetention } = window.JUCUM_DATA;
   const group = GROUPS.find(g => g.id === groupId);
   const level = LEVELS[group.level];
   const members = STUDENTS.filter(s => s.group === groupId).sort((a,b) => getStudentMastery(b).pct - getStudentMastery(a).pct);
@@ -56,7 +56,7 @@ function GroupReport({ groupId, onBack }) {
       <table className="report-table">
         <thead>
           <tr>
-            <th>#</th><th>Alumno</th><th>Usuario</th><th>Progreso</th><th>Dominio</th><th>Aciertos</th><th>Racha</th><th>Tiempo</th><th>Última conexión</th>
+            <th>#</th><th>Alumno</th><th>Usuario</th><th>Progreso</th><th>Dominio</th><th>Aciertos</th><th>Retención</th><th>Racha</th><th>Tiempo</th><th>Última conexión</th>
           </tr>
         </thead>
         <tbody>
@@ -66,6 +66,14 @@ function GroupReport({ groupId, onBack }) {
             const pct = totalActs ? Math.round((done/totalActs)*100) : 0;
             const mastery = getStudentMastery(s).pct;
             const flag = getFarmingFlag(s);
+            const ret = getRetention ? getRetention(s) : { dir:'none', count:0 };
+            const retCell = ret.dir === 'none'
+              ? <span style={{color:'#A8A8A8'}}>—</span>
+              : ret.dir === 'up'
+                ? <span style={{fontWeight:800, color:'#2E7D32'}}>📈 +{ret.delta}</span>
+                : ret.dir === 'down'
+                  ? <span style={{fontWeight:800, color:'#C0392B'}}>📉 {ret.delta}</span>
+                  : <span style={{fontWeight:800, color:'#7a7466'}}>➡️</span>;
             return (
               <tr key={s.id} style={flag ? {background:'#FEF7F6'} : null}>
                 <td>{i+1}</td>
@@ -74,6 +82,7 @@ function GroupReport({ groupId, onBack }) {
                 <td>{done}/{totalActs} ({pct}%){flag ? <span style={{color:'#C0392B',fontWeight:800,fontSize:11}}> · rápido y mal</span> : null}</td>
                 <td className={mastery >= 85 ? 'rt-high' : mastery >= 70 ? 'rt-mid' : mastery > 0 ? 'rt-low' : ''}>{mastery > 0 ? mastery + '%' : '—'}</td>
                 <td className={s.avgScore >= 85 ? 'rt-high' : s.avgScore >= 70 ? 'rt-mid' : s.avgScore > 0 ? 'rt-low' : ''}>{s.avgScore > 0 ? s.avgScore + '%' : '—'}</td>
+                <td title={ret.count ? `${ret.count} práctica(s) repasada(s): ${ret.from}% → ${ret.to}%` : 'Sin repasos aún'}>{retCell}</td>
                 <td>{s.streak > 0 ? `🔥 ${s.streak}` : '—'}</td>
                 <td>{Math.floor(s.totalMinutes/60)}h {s.totalMinutes%60}m</td>
                 <td>{s.lastActiveDays === 0 ? 'Hoy' : `hace ${s.lastActiveDays}d`}</td>

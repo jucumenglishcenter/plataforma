@@ -52,7 +52,7 @@ function MascotCard({ student }) {
         <div className="masc-info">
           <div className="masc-well">
             <div className="masc-well-top">
-              <span>Bienestar de Neuro</span>
+              <span>Energía de Neuro</span>
               <b style={{color: s.color}}>{s.w}%</b>
             </div>
             <div className="masc-well-bar"><span style={{width: s.w + '%', background: s.color}}></span></div>

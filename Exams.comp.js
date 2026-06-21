@@ -34,7 +34,7 @@ function examDiagnosis(student, r) {
   return `Reforzar ${weak.map(x => `${x.c.label} (${x.v}%)`).join(' y ')}. Sugerir práctica enfocada antes del próximo examen.`;
 }
 
-function TeacherExams({ onBack, canDefine }) {
+function TeacherExams({ onBack, canDefine, hideBack }) {
   const { LEVELS } = window.JUCUM_DATA;
   const X = window.JUCUM_EXAMS;
   const [tab, setTab] = exUseState('modules');
@@ -48,7 +48,7 @@ function TeacherExams({ onBack, canDefine }) {
 
   return (
     <main>
-      <button className="back-btn" onClick={onBack}>← Volver al panel</button>
+      {!hideBack && <button className="back-btn" onClick={onBack}>← Volver al panel</button>}
       <div className="welcome teacher">
         <div className="welcome-text">
           <div className="eyebrow">🎓 Exámenes</div>

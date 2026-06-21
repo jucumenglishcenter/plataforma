@@ -441,44 +441,51 @@ const MODULE_CATALOG = {
   'pre-a1': [
     { id:'pa1-m1', name:'Personal Identity', emoji:'🪪', topics:['Pronouns','To be','There is/are'],
       activities: [
-        { id:'a1', type:'story',     name:'Stories y Diálogos · Personal Identity',
+        { id:'a1', type:'story',     name:'Stories y Diálogos · Personal Identity', open:true,
           url: GH_PA1_M1 + '/PreA1_M1_Story_Personal%20Identity.html' },
-        { id:'a5', type:'reading',   name:'Comprensión lectora · Personal Identity',
+        { id:'a5', type:'reading',   name:'Comprensión lectora · Personal Identity', open:true,
           url: GH_PA1_M1 + '/PreA1_M1_Reading%20Comprehension_Personal%20Identity.html' },
-        { id:'a9', type:'listening', name:'Comprensión auditiva · Personal Identity',
+        { id:'a9', type:'listening', name:'Comprensión auditiva · Personal Identity', open:true,
           url: GH_PA1_M1 + '/PreA1_M1_Listening_Personal%20Identity.html' },
-        { id:'g1a', type:'grammar',  name:'Fill in',        group:'Pronouns: simple personal',
+
+        /* ── Tema 1 · Pronombres personales (resumen primero, luego prácticas) ── */
+        { id:'s1', type:'summary',   name:'Resumen · Pronombres personales', group:'Pronombres personales', open:true,
+          url: GH_PA1_M1 + '/Resumen%20de%20Gram%C3%A1tica/PreA1_M1_Grammar%20Summary_Pronouns.html' },
+        { id:'g1a', type:'grammar',  name:'Fill in',        group:'Pronombres personales',
           url: GH_PA1_M1 + '/Practicas/T1_PRONOUNS/PreA1_M1_Grammar_Pronouns_Fill%20in.html' },
-        { id:'g1b', type:'grammar',  name:'Identification', group:'Pronouns: simple personal',
+        { id:'g1b', type:'grammar',  name:'Identification', group:'Pronombres personales',
           url: GH_PA1_M1 + '/Practicas/T1_PRONOUNS/PreA1_M1_Grammar_Pronouns_Identification.html' },
-        { id:'g1c', type:'grammar',  name:'Transform',      group:'Pronouns: simple personal',
+        { id:'g1c', type:'grammar',  name:'Transform',      group:'Pronombres personales',
           url: GH_PA1_M1 + '/Practicas/T1_PRONOUNS/PreA1_M1_Grammar_Pronouns_Transform.html' },
-        { id:'g2a', type:'grammar',  name:'Fill in',        group:'To be: Affirmative, Negative & Interrogative',
+
+        /* ── Tema 2 · Verbo To be (Ronda 1 + Ronda 2 integradas, cada una con su resumen) ── */
+        { id:'s2', type:'summary',   name:'Resumen · To be (afirmativo y negativo)', group:'Verbo To be',
+          url: GH_PA1_M1 + '/Resumen%20de%20Gram%C3%A1tica/PreA1_M1_Grammar%20Summary_To%20be%20(Affirmative-Negative).html' },
+        { id:'g2a', type:'grammar',  name:'Fill in',        group:'Verbo To be',
           url: GH_PA1_M1 + '/Practicas/T2_To%20be/PreA1_M1_Grammar_To%20be_Fill%20in.html' },
-        { id:'g2b', type:'grammar',  name:'Identification', group:'To be: Affirmative, Negative & Interrogative',
+        { id:'g2b', type:'grammar',  name:'Identification', group:'Verbo To be',
           url: GH_PA1_M1 + '/Practicas/T2_To%20be/PreA1_M1_Grammar_To%20be_Identification.html' },
-        { id:'g2c', type:'grammar',  name:'Transform',      group:'To be: Affirmative, Negative & Interrogative',
+        { id:'g2c', type:'grammar',  name:'Transform',      group:'Verbo To be',
           url: GH_PA1_M1 + '/Practicas/T2_To%20be/PreA1_M1_Grammar_To%20be_Transform.html' },
-        { id:'g3a', type:'grammar',  name:'Fill in',        group:'To be — Round 2',
+        { id:'s3', type:'summary',   name:'Resumen · To be (preguntas) — Ronda 2', group:'Verbo To be',
+          url: GH_PA1_M1 + '/Resumen%20de%20Gram%C3%A1tica/PreA1_M1_Grammar%20Summary_To%20be%20(Questions).html' },
+        { id:'g3a', type:'grammar',  name:'Fill in · preguntas',        group:'Verbo To be',
           url: GH_PA1_M1 + '/Practicas/T2_To%20be_2/PreA1_M1_Grammar_To_be_Fill_in_P2.html' },
-        { id:'g3b', type:'grammar',  name:'Identification', group:'To be — Round 2',
+        { id:'g3b', type:'grammar',  name:'Identification · preguntas', group:'Verbo To be',
           url: GH_PA1_M1 + '/Practicas/T2_To%20be_2/PreA1_M1_Grammar_To_be_Identification_P2.html' },
-        { id:'g3c', type:'grammar',  name:'Transform',      group:'To be — Round 2',
+        { id:'g3c', type:'grammar',  name:'Transform · preguntas',      group:'Verbo To be',
           url: GH_PA1_M1 + '/Practicas/T2_To%20be_2/PreA1_M1_Grammar_To_be_Transform_P2.html' },
+
+        /* ── Tema 3 · There is / There are ── */
+        { id:'s4', type:'summary',   name:'Resumen · There is / There are', group:'There is / There are',
+          url: GH_PA1_M1 + '/Resumen%20de%20Gram%C3%A1tica/PreA1_M1_Grammar%20Summary_There%20is-are.html' },
         { id:'g4a', type:'grammar',  name:'Fill in',        group:'There is / There are',
           url: GH_PA1_M1 + '/Practicas/T3_There%20is_are/PreA1_M1_Grammar_There%20is-are_Fill%20in.html' },
         { id:'g4b', type:'grammar',  name:'Identification', group:'There is / There are',
           url: GH_PA1_M1 + '/Practicas/T3_There%20is_are/PreA1_M1_Grammar_There%20is-are_Identification.html' },
         { id:'g4c', type:'grammar',  name:'Transform',      group:'There is / There are',
           url: GH_PA1_M1 + '/Practicas/T3_There%20is_are/PreA1_M1_Grammar_There%20is-are_Transform.html' },
-        { id:'s1', type:'summary',   name:'Pronouns (+5 MCQ)',                      group:'Resúmenes de gramática',
-          url: GH_PA1_M1 + '/Resumen%20de%20Gram%C3%A1tica/PreA1_M1_Grammar%20Summary_Pronouns.html' },
-        { id:'s2', type:'summary',   name:'To be · Affirmative-Negative (+5 MCQ)',  group:'Resúmenes de gramática',
-          url: GH_PA1_M1 + '/Resumen%20de%20Gram%C3%A1tica/PreA1_M1_Grammar%20Summary_To%20be%20(Affirmative-Negative).html' },
-        { id:'s3', type:'summary',   name:'To be · Questions (+5 MCQ)',             group:'Resúmenes de gramática',
-          url: GH_PA1_M1 + '/Resumen%20de%20Gram%C3%A1tica/PreA1_M1_Grammar%20Summary_To%20be%20(Questions).html' },
-        { id:'s4', type:'summary',   name:'There is/are (+5 MCQ)',                  group:'Resúmenes de gramática',
-          url: GH_PA1_M1 + '/Resumen%20de%20Gram%C3%A1tica/PreA1_M1_Grammar%20Summary_There%20is-are.html' },
+
         { id:'a14',type:'quizlet',   name:'Quizlet · Vocabulario Personal Identity' },
       ],
     },
@@ -517,7 +524,7 @@ const MODULE_CATALOG = {
         { id:'a3', type:'listening', name:'Listening · Support calls' },
         { id:'a4', type:'grammar',   name:'Gramática · Countable vs Uncountable' },
         { id:'a5', type:'grammar',   name:'Gramática · Quantifiers' },
-        { id:'a6', type:'grammar',   name:'Gramática · Present Perfect' },
+        { id:'a6', type:'grammar',   name:'Gramática · Present Perfect', latent:true },
         { id:'a7', type:'grammar',   name:'Gramática · Used to' },
         { id:'a8', type:'quizlet',   name:'Quizlet · A2 Vocabulario' },
       ],
@@ -689,6 +696,23 @@ function entryPassed(entry, level, groupId) {
   return pct >= passThreshold(level || 'pre-a1', groupId);
 }
 
+/* ── Decisión del teacher (METHODOLOGY DECISIONS / EXPECTATIONS) ──────
+ * La gramática se mide por las prácticas P1/P2/P3, NO por los MCQ de los
+ * Resúmenes de gramática (son auto-chequeo de baja exigencia, "student-facing
+ * only, not teacher-reported"). El vocabulario (Quizlet) es práctica suelta,
+ * tampoco se califica. Estos tipos cuentan como PARTICIPACIÓN: completarlos
+ * basta (no se exige umbral), su nota no alimenta el dominio y no entran a
+ * "por mejorar" / repaso / refuerzo. */
+function isLowStakesType(type) { return type === 'summary' || type === 'quizlet'; }
+/* ¿La actividad <activityId> de <moduleId> es de baja exigencia? */
+function _actTypeOf(moduleId, activityId, level) {
+  const mods = MODULE_CATALOG[level] || [];
+  for (const m of mods) if (m.id === moduleId) { const a = (m.activities || []).find(x => x.id === activityId); return a ? a.type : null; }
+  // sin nivel: busca en todos
+  for (const lv of Object.keys(MODULE_CATALOG)) for (const m of MODULE_CATALOG[lv]) if (m.id === moduleId) { const a = (m.activities || []).find(x => x.id === activityId); return a ? a.type : null; }
+  return null;
+}
+
 /* ── Student progress (which activities completed) ───────────────── */
 const PROGRESS_KEY = 'jucum_student_progress_v1';
 function getStudentProgress(studentId) {
@@ -696,7 +720,7 @@ function getStudentProgress(studentId) {
   try { all = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); } catch {}
   return all[studentId] || { completed: {}, todayMinutes: 0, lastDay: null };
 }
-function markActivityComplete(studentId, moduleId, activityId, score, minutes) {
+function markActivityComplete(studentId, moduleId, activityId, score, minutes, meta) {
   let all = {};
   try { all = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); } catch {}
   const prev = all[studentId] || { completed: {}, todayMinutes: 0, lastDay: null };
@@ -727,6 +751,8 @@ function markActivityComplete(studentId, moduleId, activityId, score, minutes) {
   prev.todayMinutes += (minutes || 0);
   all[studentId] = prev;
   localStorage.setItem(PROGRESS_KEY, JSON.stringify(all));
+  // PASO 3 · alimenta el motor de repaso espaciado con ESTE intento (no la mejor nota)
+  try { recordReviewAttempt(studentId, moduleId, activityId, score, _stu.group, _stu.level, meta && meta.total); } catch {}
   if (window.JUCUM_SYNC) window.JUCUM_SYNC.pushProgress(studentId, moduleId, activityId, finalScore, finalMin);
   return prev;
 }
@@ -735,6 +761,18 @@ function markActivityComplete(studentId, moduleId, activityId, score, minutes) {
 
 /* XP awarded per activity type */
 const XP_BASE = { story:10, reading:25, listening:20, grammar:15, quizlet:10 };
+
+/* ── Lectura (Stories/Diálogos) · XP por TIEMPO, progresivo y con tope ──────
+ * Krashen: lo importante es el tiempo de input, no "aprobar". No hay meta de
+ * tiempo; medimos cuánto leen y damos XP creciente por cada bloque de 10 min,
+ * con tope a los 30 min (después puede seguir leyendo, pero ya no suma).
+ *   10 min → +5 · 20 min → +10 más · 30 min → +15 más  (acumulado máx 30 XP). */
+const READING_XP_TIERS = [5, 10, 15];
+function readingTimeXP(minutes) {
+  const blocks = Math.min(READING_XP_TIERS.length, Math.floor((minutes || 0) / 10));
+  let x = 0; for (let i = 0; i < blocks; i++) x += READING_XP_TIERS[i];
+  return x;
+}
 
 /* Compute total XP for a student.
  *   = sum of base XP per completed activity
@@ -755,6 +793,8 @@ function getStudentXP(student) {
      * solo da puntos de PARTICIPACIÓN (+5). Para ganar de verdad hay que aprobar. */
     if (!entryPassed(entry, student.level, student.group)) { xp += 5; continue; }
     if (!act) { xp += 10; continue; }
+    // Lectura (story/diálogo): XP por TIEMPO invertido, no por nota.
+    if (act.type === 'story') { xp += readingTimeXP(entry.minutes); continue; }
     const base = XP_BASE[act.type] || 10;
     // score normalization: numbers >10 = percent (0-100); ≤10 = like /7 or /10 → assume max 10
     let bonusPct = 0.5;
@@ -955,13 +995,14 @@ function getStudentMastery(student) {
   scope.forEach(m => (m.activities || []).forEach(a => {
     total++;
     const e = completed[`${m.id}:${a.id}`];
-    // PASO 2 · solo cuenta como hecha si APROBÓ (o es participación sin nota)
-    if (e && entryPassed(e, student.level, student.group)) {
+    const low = isLowStakesType(a.type);
+    // PASO 2 · cuenta como hecha si APROBÓ, o es participación (sin nota o baja exigencia)
+    if (e && (entryPassed(e, student.level, student.group) || low)) {
       done++;
-      if (typeof e.score === 'number') {
+      if (typeof e.score === 'number' && !low) {
         const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100);
         scoreSum += pct; scoreN++;
-      } else { scoreSum += 70; scoreN++; } // participación (story / sin nota)
+      } else { scoreSum += 70; scoreN++; } // participación (story / resumen / quizlet / sin nota)
     }
   }));
   const coverage = total ? done / total : 0;
@@ -1295,15 +1336,360 @@ function getActivitiesToImprove(student) {
       const [moduleId, activityId] = k.split(':');
       const mod = (MODULE_CATALOG[student.level] || []).find(m => m.id === moduleId);
       const act = mod && (mod.activities || []).find(a => a.id === activityId);
+      if (act && isLowStakesType(act.type)) return;   // resúmenes/quizlet no se exigen a umbral
       out.push({ moduleId, activityId, pct, name: act ? act.name : activityId, type: act ? act.type : '', moduleName: mod ? mod.name : '' });
     }
   });
   return out.sort((a, b) => a.pct - b.pct);
 }
 
+/* ════════════════════════════════════════════════════════════════════
+ * PASO 3 · Repaso espaciado + retención + explicación al bajar
+ * ════════════════════════════════════════════════════════════════════ */
+const REVIEW_KEY = 'jucum_reviews_v1';
+const REVIEW_LADDER_DAYS = [7, 21, 42];   // aprobada: 1 sem → 3 sem → 6 sem
+const REVIEW_RELEARN_DAYS = 3;            // reprobó o bajó → vuelve en 3 días
+
+function _todayStr() { return new Date().toISOString().slice(0, 10); }
+function _addDays(days) { const d = new Date(); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); }
+function _daysBetween(aStr, bStr) { return Math.round((new Date(bStr) - new Date(aStr)) / 86400000); }
+
+function getReviews(studentId) {
+  try { const all = JSON.parse(localStorage.getItem(REVIEW_KEY) || '{}'); return all[studentId] || {}; } catch { return {}; }
+}
+function _saveReviews(studentId, obj) {
+  let all = {};
+  try { all = JSON.parse(localStorage.getItem(REVIEW_KEY) || '{}'); } catch {}
+  all[studentId] = obj;
+  localStorage.setItem(REVIEW_KEY, JSON.stringify(all));
+  try { if (window.JUCUM_SB) window.JUCUM_SB.getClient().from('app_settings').upsert({ key: 'reviews', value: all }, { onConflict: 'key' }).then(() => {}, () => {}); } catch {}
+}
+async function loadReviewsFromCloud() {
+  if (!window.JUCUM_SB) return;
+  try {
+    const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key', 'reviews').maybeSingle();
+    if (data && data.value && typeof data.value === 'object') localStorage.setItem(REVIEW_KEY, JSON.stringify(data.value));
+  } catch {}
+}
+
+/* Clasifica el cambio entre dos intentos. Mide en ACIERTOS si se conoce el total;
+ * si no, en puntos porcentuales (banda equivalente). Regla del teacher:
+ * ±1 acierto = se mantiene · +2 = mejora · −2 = baja.
+ * Pasar de reprobado a aprobado SIEMPRE cuenta como mejora. */
+function reviewTrend(prevPct, currPct, total, level, groupId) {
+  const thr = passThreshold(level || 'pre-a1', groupId);
+  const crossedUp = prevPct < thr && currPct >= thr;
+  let dir, delta;
+  if (total && total > 0) {
+    delta = Math.round(currPct / 100 * total) - Math.round(prevPct / 100 * total);
+    dir = delta >= 2 ? 'up' : delta <= -2 ? 'down' : 'flat';
+  } else {
+    delta = Math.round(currPct - prevPct);
+    dir = delta >= 15 ? 'up' : delta <= -15 ? 'down' : 'flat';
+  }
+  if (crossedUp && dir !== 'up') dir = 'up';
+  return { dir, delta, total: total || null };
+}
+
+/* Registra un intento en el motor de repaso. Llamado desde markActivityComplete.
+ * - Primer intento de una actividad con nota → la programa en la escalera.
+ * - Si ya estaba programada y tocaba repaso → compara antes→ahora, mueve la escalera
+ *   (mantiene/mejora se aleja; baja se acerca) y guarda el resultado para mostrarlo. */
+function recordReviewAttempt(studentId, moduleId, activityId, score, groupId, level, total) {
+  const pct = scorePct(score);
+  if (pct === null) return null;          // participación (sin nota) no entra a repaso
+  if (isLowStakesType(_actTypeOf(moduleId, activityId, level))) return null; // resúmenes/quizlet: baja exigencia, no se repasan por nota
+  const reviews = getReviews(studentId);
+  const k = `${moduleId}:${activityId}`;
+  const today = _todayStr();
+  const ex = reviews[k];
+  const passed = pct >= passThreshold(level || 'pre-a1', groupId);
+
+  if (!ex) {
+    // primer registro: arranca la escalera
+    reviews[k] = {
+      moduleId, activityId, refPct: pct, refTotal: total || null,
+      step: passed ? 0 : -1,
+      due: _addDays(passed ? REVIEW_LADDER_DAYS[0] : REVIEW_RELEARN_DAYS),
+      history: [{ date: today, pct, total: total || null }],
+      firstAt: today, lastTrend: null, lastResult: null,
+    };
+    _saveReviews(studentId, reviews);
+    return reviews[k];
+  }
+
+  // ¿Es un repaso (ya tocaba) o solo otro intento del mismo día?
+  const isReview = ex.due && _daysBetween(ex.due, today) >= 0 && ex.history.length >= 1;
+  const prevPct = ex.refPct;
+  const t = reviewTrend(prevPct, pct, total || ex.refTotal, level, groupId);
+  ex.history.push({ date: today, pct, total: total || null });
+  ex.lastTrend = t.dir;
+  ex.refPct = pct;
+  if (total) ex.refTotal = total;
+
+  if (isReview) {
+    // mueve la escalera
+    if (!passed || t.dir === 'down') {
+      ex.step = Math.max(-1, (ex.step < 0 ? -1 : ex.step - 1));
+      ex.due = _addDays(REVIEW_RELEARN_DAYS);
+    } else {
+      ex.step = Math.min(REVIEW_LADDER_DAYS.length - 1, (ex.step < 0 ? 0 : ex.step + 1));
+      ex.due = _addDays(REVIEW_LADDER_DAYS[ex.step]);
+    }
+    ex.lastResult = { prevPct, currPct: pct, dir: t.dir, delta: t.delta, total: t.total, at: today };
+  } else {
+    // reintento normal (aún no tocaba repaso): reprograma desde la nota nueva
+    ex.step = passed ? Math.max(ex.step, 0) : -1;
+    ex.due = _addDays(passed ? REVIEW_LADDER_DAYS[Math.max(0, ex.step)] : REVIEW_RELEARN_DAYS);
+  }
+  _saveReviews(studentId, reviews);
+  return ex;
+}
+
+/* Repasos que YA tocan hoy (due <= hoy). Para el panel del alumno. */
+function getDueReviews(student) {
+  if (!student) return [];
+  const reviews = getReviews(student.id);
+  const today = _todayStr();
+  const mods = MODULE_CATALOG[student.level] || [];
+  const out = [];
+  Object.values(reviews).forEach(r => {
+    if (!r.due || _daysBetween(r.due, today) < 0) return;   // aún no toca
+    const mod = mods.find(m => m.id === r.moduleId);
+    const act = mod && (mod.activities || []).find(a => a.id === r.activityId);
+    if (!act) return;
+    const last = r.history[r.history.length - 1];
+    out.push({
+      moduleId: r.moduleId, activityId: r.activityId,
+      name: act.name, type: act.type,
+      refPct: r.refPct, refTotal: r.refTotal,
+      daysAgo: last ? _daysBetween(last.date, today) : null,
+      overdue: _daysBetween(r.due, today),
+    });
+  });
+  return out.sort((a, b) => b.overdue - a.overdue);
+}
+
+/* El último resultado de repaso sin "ver" todavía (para la tarjeta antes→ahora). */
+function getLastReviewResult(student) {
+  if (!student) return null;
+  const reviews = getReviews(student.id);
+  const mods = MODULE_CATALOG[student.level] || [];
+  let best = null;
+  Object.values(reviews).forEach(r => {
+    const lr = r.lastResult;
+    if (lr && !lr.seen) {
+      if (!best || lr.at > best.at) {
+        const mod = mods.find(m => m.id === r.moduleId);
+        const act = mod && (mod.activities || []).find(a => a.id === r.activityId);
+        best = { ...lr, moduleId: r.moduleId, activityId: r.activityId, name: act ? act.name : r.activityId, type: act ? act.type : '' };
+      }
+    }
+  });
+  return best;
+}
+function markReviewResultSeen(studentId, moduleId, activityId) {
+  const reviews = getReviews(studentId);
+  const r = reviews[`${moduleId}:${activityId}`];
+  if (r && r.lastResult) { r.lastResult.seen = true; _saveReviews(studentId, reviews); }
+}
+
+/* Retención agregada del alumno (para la columna del reporte del profesor).
+ * Compara la PRIMERA nota con la ÚLTIMA en cada actividad repasada ≥1 vez. */
+function getRetention(student) {
+  if (!student) return { dir: 'none', count: 0 };
+  const reviews = getReviews(student.id);
+  const items = Object.values(reviews).filter(r => r.history && r.history.length >= 2);
+  if (!items.length) return { dir: 'none', count: 0 };
+  let up = 0, down = 0, flat = 0, fromSum = 0, toSum = 0;
+  items.forEach(r => {
+    const first = r.history[0], last = r.history[r.history.length - 1];
+    const t = reviewTrend(first.pct, last.pct, last.total || first.total, student.level, student.group);
+    if (t.dir === 'up') up++; else if (t.dir === 'down') down++; else flat++;
+    fromSum += first.pct; toSum += last.pct;
+  });
+  const from = Math.round(fromSum / items.length), to = Math.round(toSum / items.length);
+  const net = up - down;
+  const dir = net >= 1 ? 'up' : net <= -1 ? 'down' : 'flat';
+  return { dir, count: items.length, up, down, flat, from, to, delta: to - from };
+}
+
+/* ── Explicación al bajar (modal del alumno) ──────────────────────────
+ * Detecta caídas que el alumno PUEDE corregir (categoría de dominio, nº de
+ * aprobadas, nº de logros). NUNCA por ranking relativo. Tono positivo. */
+const STANDING_KEY = 'jucum_standing_v1';
+const MASTERY_BANDS = [
+  { min: 85, name: 'Dominado' }, { min: 70, name: 'Bueno' },
+  { min: 50, name: 'En progreso' }, { min: 0, name: 'Inicial' },
+];
+function _masteryBand(pct) { return MASTERY_BANDS.find(b => pct >= b.min) || MASTERY_BANDS[MASTERY_BANDS.length - 1]; }
+function _bandIndex(name) { return MASTERY_BANDS.findIndex(b => b.name === name); }
+
+function _currentStanding(student) {
+  const m = getStudentMastery(student);
+  const prog = getStudentProgress(student.id);
+  const mods = MODULE_CATALOG[student.level] || [];
+  let passed = 0;
+  mods.forEach(mod => (mod.activities || []).forEach(a => { if (entryPassed(prog.completed[`${mod.id}:${a.id}`], student.level, student.group)) passed++; }));
+  return { band: _masteryBand(m.pct).name, passed, ach: (student.achievements || []).length, masteryPct: m.pct };
+}
+function _getStandingBaseline(studentId) {
+  try { const all = JSON.parse(localStorage.getItem(STANDING_KEY) || '{}'); return all[studentId] || null; } catch { return null; }
+}
+function _setStandingBaseline(studentId, st) {
+  let all = {};
+  try { all = JSON.parse(localStorage.getItem(STANDING_KEY) || '{}'); } catch {}
+  all[studentId] = st;
+  localStorage.setItem(STANDING_KEY, JSON.stringify(all));
+}
+
+/* Devuelve un descriptor de explicación si el alumno bajó de forma corregible, o null.
+ * No escribe nada (lectura pura): usar ackDropExplanation al cerrar / al mejorar. */
+function getDropExplanation(student) {
+  if (!student) return null;
+  const cur = _currentStanding(student);
+  const base = _getStandingBaseline(student.id);
+  const toImprove = getActivitiesToImprove(student).length;
+  if (!base) {
+    // primera vez en este dispositivo: solo avisa si arranca con prácticas por mejorar
+    return toImprove > 0 ? { init: true, reasons: ['below'], toImprove, masteryPct: cur.masteryPct } : null;
+  }
+  const reasons = [];
+  if (_bandIndex(cur.band) > _bandIndex(base.band)) reasons.push('band');   // índice mayor = banda peor
+  if (cur.passed < base.passed) reasons.push('passed');
+  if (cur.ach < base.ach) reasons.push('ach');
+  if (!reasons.length) return null;
+  return { init: false, reasons, toImprove, fromBand: base.band, toBand: cur.band, masteryPct: cur.masteryPct };
+}
+/* Fija la línea base al estado actual (al cerrar el modal o cuando el alumno mejora). */
+function ackDropExplanation(student) { if (student) _setStandingBaseline(student.id, _currentStanding(student)); }
+
+/* ── PASO 4 · Ruta de módulos (mapa con desbloqueo secuencial) ────────
+ * Estado por módulo del nivel: 'done' (todo aprobado) · 'cur' (abierto, en curso
+ * o por alcanzar dentro de la frontera) · 'lock' (aún no se alcanza).
+ * La frontera = el módulo más avanzado que el alumno terminó o que el profesor
+ * activó. Todo lo anterior a la frontera está abierto (secuencial). */
+/* ── PASO 4 · Ruta de módulos (mapa con desbloqueo secuencial) ────────────
+ * Muestra TODO el currículo del nivel aunque el módulo aún no exista en el
+ * catálogo real (sale como candado "próximamente"). */
+const CURRICULUM = {
+  'pre-a1': [
+    { name:'Personal Identity',            emoji:'🪪' },
+    { name:'Essential Actions',            emoji:'🏃' },
+    { name:'Place, Time & Movement',       emoji:'🧭' },
+    { name:'Home, School & Objects',       emoji:'🏠' },
+    { name:'Nature, Food & Animals',       emoji:'🌿' },
+    { name:'Feelings, States & Qualities', emoji:'😊' },
+    { name:'Connectors & Key Expressions', emoji:'🔗' },
+  ],
+};
+function getModuleRoute(student) {
+  if (!student) return [];
+  const mods = MODULE_CATALOG[student.level] || [];
+  const outline = CURRICULUM[student.level] || mods.map(m => ({ name: m.name, emoji: m.emoji }));
+  const settings = getGroupSettings(student.group) || {};
+  const activeIds = (settings.activeModuleIds && settings.activeModuleIds.length)
+    ? settings.activeModuleIds : (settings.activeModuleId ? [settings.activeModuleId] : []);
+  const prog = getStudentProgress(student.id);
+  const due = (typeof getDueReviews === 'function') ? getDueReviews(student) : [];
+  const reviewMods = new Set(due.map(d => d.moduleId));
+  const info = outline.map((o, i) => {
+    const m = mods.find(mm => mm.name === o.name);
+    if (m) {
+      const acts = m.activities || [];
+      const doneCount = acts.filter(a => { const e = prog.completed[`${m.id}:${a.id}`]; return e && (entryPassed(e, student.level, student.group) || isLowStakesType(a.type)); }).length;
+      const allDone = acts.length > 0 && doneCount === acts.length;
+      return { mod: m, idx: i, doneCount, total: acts.length, allDone, active: activeIds.includes(m.id), hasReview: reviewMods.has(m.id), placeholder: false };
+    }
+    return { mod: { id: '__ph' + i, name: o.name, emoji: o.emoji || '📦', activities: [] }, idx: i, doneCount: 0, total: 0, allDone: false, active: false, hasReview: false, placeholder: true };
+  });
+  let frontier = -1;
+  info.forEach(x => { if (!x.placeholder && (x.allDone || x.active)) frontier = Math.max(frontier, x.idx); });
+  if (frontier < 0) frontier = 0;
+  info.forEach(x => { x.state = (!x.placeholder && x.allDone) ? 'done' : ((!x.placeholder && x.idx <= frontier) ? 'cur' : 'lock'); });
+  return info;
+}
+/* Módulo donde el alumno debería estar trabajando ahora (primer 'cur' no terminado). */
+function getFocusModuleId(student) {
+  const route = getModuleRoute(student);
+  const cur = route.find(x => x.state === 'cur');
+  return cur ? cur.mod.id : (route[0] ? route[0].mod.id : null);
+}
+
+/* Mejor racha histórica (récord personal). Se actualiza al leer. */
+const BEST_STREAK_KEY = 'jucum_best_streak_v1';
+function getBestStreak(student) {
+  let all = {};
+  try { all = JSON.parse(localStorage.getItem(BEST_STREAK_KEY) || '{}'); } catch {}
+  const cur = (student && student.streak) || 0;
+  const best = Math.max(all[student.id] || 0, cur);
+  if (best !== (all[student.id] || 0)) { all[student.id] = best; try { localStorage.setItem(BEST_STREAK_KEY, JSON.stringify(all)); } catch {} }
+  return best;
+}
+
+/* ── PASO 5 · "Refuerzo" · práctica extra OPCIONAL ────────────────────────
+ * Pool de actividades YA aprobadas que el alumno puede repetir para fijar lo
+ * aprendido. Sirve para (a) completar la meta cuando ya no quedan pendientes
+ * obligatorios, o (b) seguir practicando por gusto. NUNCA es obligatorio y no
+ * afecta el desbloqueo. Prioriza: nota más baja (entre aprobadas) → gramática
+ * productiva → más antigua. Excluye lo que ya está en "repaso de hoy" o
+ * "por mejorar" (para no duplicar tarjetas). */
+function getRefuerzo(student, limit) {
+  if (!student) return [];
+  limit = limit || 3;
+  const mods = MODULE_CATALOG[student.level] || [];
+  const prog = getStudentProgress(student.id);
+  const dueSet = new Set((typeof getDueReviews === 'function' ? getDueReviews(student) : []).map(d => `${d.moduleId}:${d.activityId}`));
+  const impSet = new Set((typeof getActivitiesToImprove === 'function' ? getActivitiesToImprove(student) : []).map(d => `${d.moduleId}:${d.activityId}`));
+  const pool = [];
+  mods.forEach(m => {
+    (m.activities || []).forEach(a => {
+      const key = `${m.id}:${a.id}`;
+      const e = (prog.completed || {})[key];
+      if (!e) return;                                              // solo lo ya hecho
+      if (!entryPassed(e, student.level, student.group)) return;  // y aprobado
+      if (isLowStakesType(a.type)) return;                         // resúmenes/quizlet: baja exigencia, no son refuerzo medible
+      if (dueSet.has(key) || impSet.has(key)) return;             // no duplicar con repaso / por mejorar
+      if (typeof e.score !== 'number') return;                    // participación (story/quizlet) no aporta como refuerzo medible
+      const pct = e.score > 10 ? e.score : e.score * 10;
+      const typeRank = a.type === 'grammar' ? 0 : (a.type === 'reading' || a.type === 'listening') ? 1 : 2;
+      const ageDays = e.date ? (Date.now() - new Date(e.date).getTime()) / 86400000 : 0;
+      pool.push({ moduleId: m.id, moduleName: m.name, activityId: a.id, name: a.name, type: a.type, group: a.group || null,
+        pct: Math.round(pct), _w: pct + typeRank * 100 - Math.min(ageDays, 60) * 0.4 });
+    });
+  });
+  pool.sort((x, y) => x._w - y._w);   // menor peso primero (nota baja + gramática + antigua)
+  return pool.slice(0, limit);
+}
+
+/* ── PASO 5 · ★ Estructuras latentes (Krashen · solo A1/A2) ────────────────
+ * Algunas estructuras productivas (Present Perfect, preposiciones de lugar/
+ * tiempo no básicas, orden de palabras) maduran mejor con reposo: su práctica
+ * de Transformación (P3) se desbloquea ~1 semana DESPUÉS de aprobar la
+ * actividad previa del mismo tema, no de inmediato. Se marca con "latent": true
+ * en el catálogo. Pre-A1 NUNCA lleva ★. */
+const LATENT_DELAY_DAYS = 7;
+function latentGate(mod, a, i, progress, level) {
+  if (!a || !a.latent || level === 'pre-a1') return { latent: false, ready: true, daysLeft: 0, availableOn: null };
+  const acts = mod.activities || [];
+  const prev = i > 0 ? acts[i - 1] : null;
+  const gate = prev ? (progress.completed || {})[`${mod.id}:${prev.id}`] : null;
+  if (!gate || !gate.date) return { latent: true, ready: false, daysLeft: null, availableOn: null }; // aún no aprueba la previa
+  const avail = new Date(new Date(gate.date).getTime() + LATENT_DELAY_DAYS * 86400000);
+  const now = new Date();
+  const daysLeft = Math.ceil((avail - now) / 86400000);
+  return { latent: true, ready: now >= avail, daysLeft: Math.max(0, daysLeft), availableOn: avail.toISOString().slice(0, 10) };
+}
+
 window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getAchievementAlert, achievementDecayFactor, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness, getStudentGrades, getStudentMonthlyPractice, getStudentTrends,
   /* PASO 2 · umbral + anti-farmeo */
-  passThreshold, getPassThresholds, setPassThreshold, setGroupThreshold, getGroupThreshold, loadPassThresholdsFromCloud, scorePct, entryPassed, getDirectedBonusXP, getFarmingFlag, getActivitiesToImprove };
+  passThreshold, getPassThresholds, setPassThreshold, setGroupThreshold, getGroupThreshold, loadPassThresholdsFromCloud, scorePct, entryPassed, getDirectedBonusXP, getFarmingFlag, getActivitiesToImprove,
+  /* PASO 3 · repaso espaciado + retención + explicación al bajar */
+  getReviews, recordReviewAttempt, getDueReviews, getLastReviewResult, markReviewResultSeen, getRetention, reviewTrend, loadReviewsFromCloud, getDropExplanation, ackDropExplanation,
+  /* PASO 4 · ruta de módulos + récord de racha */
+  getModuleRoute, getFocusModuleId, getBestStreak,
+  /* PASO 5 · refuerzo opcional + estructuras latentes ★ */
+  getRefuerzo, latentGate };
 
 /* ── Metodología del teacher: fase de práctica (P1/P2/P3) + dónde se hace ──
  * Confirmado por el teacher:

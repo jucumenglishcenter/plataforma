@@ -222,14 +222,14 @@ function EvaluateForm({ student, onSave, onCancel }) {
   );
 }
 
-function TeacherEvaluate({ onBack }) {
+function TeacherEvaluate({ onBack, hideBack }) {
   const { STUDENTS, GROUPS, LEVELS } = window.JUCUM_DATA;
   const [stage, setStage] = useState({ kind:'list' });
   const [refresh, setRefresh] = useState(0);
 
   return (
     <main>
-      <button className="back-btn" onClick={onBack}>← Volver al panel</button>
+      {!hideBack && <button className="back-btn" onClick={onBack}>← Volver al panel</button>}
       <div className="welcome teacher">
         <div className="welcome-text">
           <div className="eyebrow">📊 Evaluación presencial</div>

@@ -53,6 +53,9 @@
   // solo se registran como máximo estos minutos. Que lea de más es bienvenido,
   // simplemente no suma extra al reporte.
   var READING_CAP_MIN  = 30;
+  // Lectura · XP por tiempo (igual que la plataforma): 10→+5, 20→+10, 30→+15 (tope 30 min).
+  var READ_XP_TIERS = [5, 10, 15];
+  var readXpShown = {};   // marca qué hitos (10/20/30) ya avisamos en esta sesión
   // Mejora de nota: la práctica se registra al primer intento; recién a la SEMANA
   // puede reintentarla para mejorar (nos quedamos con la mejor nota).
   var RETRY_AFTER_MS   = 7 * 24 * 60 * 60 * 1000;
@@ -182,6 +185,18 @@
         if (document.visibilityState !== 'hidden') {
           activeSec++;
           var capMin = Math.min(READING_CAP_MIN, Math.round(activeSec / 60)); // tope silencioso para el reporte
+          // Hitos de lectura: aviso TRANQUILO de XP a los 10/20/30 min (sin interrumpir).
+          if (!teacher && !exam) {
+            var mins = Math.round(activeSec / 60);
+            if ((mins === 10 || mins === 20 || mins === 30) && !readXpShown[mins]) {
+              readXpShown[mins] = true;
+              var tierIdx = mins / 10 - 1;
+              var gained = READ_XP_TIERS[tierIdx];
+              var total = READ_XP_TIERS.slice(0, tierIdx + 1).reduce(function (a, b) { return a + b; }, 0);
+              if (mins < 30) showReadToast('📖 Vas ' + mins + ' min de lectura', '+' + gained + ' XP · sigue a tu ritmo');
+              else showReadToast('🌟 ¡' + mins + ' min de lectura!', '+' + gained + ' XP (' + total + ' en total) · ya no suma más, pero sigue disfrutando');
+            }
+          }
           if (!done && activeSec >= AUTO_DONE_SEC && !teacher && !exam) {
             done = true; // marcada como practicada (desbloquea la siguiente) — sin cooldown ni tarjeta
             if (!demo) pushProgress(100, Math.max(1, capMin));
@@ -282,6 +297,27 @@
       b.textContent = msg;
       b.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#FFF3CD;color:#5D4037;border-bottom:2px solid #FFD54F;padding:12px 18px;font:700 13px system-ui,sans-serif;text-align:center;z-index:999998';
       document.body.appendChild(b);
+    }
+
+    // ── Aviso TRANQUILO de XP de lectura (no bloquea, se desvanece solo) ──
+    function showReadToast(title, sub) {
+      try {
+        var t = document.createElement('div');
+        t.setAttribute('role', 'status');
+        t.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:999998;max-width:300px;' +
+          'background:#fff;border:1px solid #E3DCC9;border-left:4px solid #2E7D32;border-radius:12px;' +
+          'box-shadow:0 6px 22px rgba(0,0,0,0.13);padding:12px 14px;font-family:system-ui,sans-serif;' +
+          'opacity:0;transform:translateY(10px);transition:opacity .35s ease,transform .35s ease;pointer-events:none;';
+        t.innerHTML =
+          '<div style="font-weight:800;font-size:13.5px;color:#1B5E20;">' + title + '</div>' +
+          '<div style="font-size:12px;color:#6b6453;margin-top:2px;">' + sub + '</div>';
+        document.body.appendChild(t);
+        requestAnimationFrame(function () { t.style.opacity = '1'; t.style.transform = 'translateY(0)'; });
+        setTimeout(function () {
+          t.style.opacity = '0'; t.style.transform = 'translateY(10px)';
+          setTimeout(function () { t.remove(); }, 400);
+        }, 4200);
+      } catch (e) {}
     }
 
     // ── Frase motivacional + cierre de práctica ──

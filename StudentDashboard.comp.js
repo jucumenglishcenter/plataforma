@@ -1,5 +1,37 @@
 /* Student dashboard — Bloque A · with active module + daily target + activity checklist */
 
+/* ════════ Recordatorio suave de vocabulario (2–3x al día · ≤5 min) ════════
+ * Krashen/decisión del teacher: el vocabulario se asienta con repasos cortos y
+ * frecuentes. NO es obligatorio ni bloquea nada — un empujón amable, descartable
+ * por hoy, con acceso directo al Quizlet del módulo activo. */
+function VocabReminder({ student, settings, onGo }) {
+  const D = window.JUCUM_DATA;
+  const today = new Date().toISOString().slice(0, 10);
+  const dismissKey = `jucum_vocab_dismiss_${student.id}_${today}`;
+  const [hidden, setHidden] = React.useState(() => { try { return localStorage.getItem(dismissKey) === '1'; } catch { return false; } });
+  if (hidden) return null;
+  // módulo activo → su actividad de vocabulario (quizlet)
+  const mods = D.MODULE_CATALOG[student.level] || [];
+  const activeIds = (settings && (settings.activeModuleIds || (settings.activeModuleId ? [settings.activeModuleId] : []))) || [];
+  const mod = mods.find(m => activeIds.includes(m.id)) || mods[0];
+  const vocab = mod && (mod.activities || []).find(a => a.type === 'quizlet');
+  if (!mod || !vocab) return null;
+  const dismiss = () => { try { localStorage.setItem(dismissKey, '1'); } catch {} setHidden(true); };
+  return (
+    <div className="scard" style={{marginTop:18, padding:0, overflow:'hidden', borderColor:'#CDB8E6'}}>
+      <div style={{display:'flex', alignItems:'center', gap:12, padding:'13px 15px', background:'#F4EEFB'}}>
+        <span style={{fontSize:22, flexShrink:0}}>🗂️</span>
+        <div style={{flex:1, minWidth:0}}>
+          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14.5, color:'#4A2E73'}}>Vocabulario del día</div>
+          <div style={{fontSize:12, color:'#6b6453', fontWeight:700, marginTop:1, lineHeight:1.4}}>Repásalo <b>2–3 veces al día</b>, 5 minutos cada vez. Corto y frecuente = se queda. 🧠</div>
+        </div>
+        <button type="button" onClick={() => onGo(vocab, mod)} style={{flexShrink:0, border:'none', cursor:'pointer', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13, color:'#fff', background:'linear-gradient(135deg,#8B5FBF,#6C4FB0)', borderRadius:12, padding:'9px 15px', whiteSpace:'nowrap'}}>Repasar · 5 min →</button>
+        <button type="button" onClick={dismiss} title="Ocultar por hoy" aria-label="Ocultar por hoy" style={{flexShrink:0, border:'none', background:'none', cursor:'pointer', color:'#9C8FB5', fontSize:18, lineHeight:1, padding:'4px 2px'}}>×</button>
+      </div>
+    </div>
+  );
+}
+
 function StudentDashboard({ user, onLogout }) {
   const { STUDENTS, GROUPS, LEVELS, MODULE_CATALOG, ACHIEVEMENT_DEFS, getGroupSettings, getStudentProgress, getStudentXP, getStudentLevel, MEDAL_RARITY, RARITY_STYLE, earnedMedals, entryPassed } = window.JUCUM_DATA;
   const student = STUDENTS.find(s => s.id === user.studentId) || STUDENTS[0];
@@ -24,6 +56,15 @@ function StudentDashboard({ user, onLogout }) {
     try { if (window.JUCUM_SURVEY) setSurveyDue(window.JUCUM_SURVEY.isSurveyDue(student)); } catch {}
   }, [student && student.id]);
   const [alertKind, setAlertKind] = React.useState(null);
+  // PASO 3 · explicación al bajar (solo en una caída real corregible)
+  const [dropExp, setDropExp] = React.useState(null);
+  React.useEffect(() => {
+    try {
+      const D = window.JUCUM_DATA;
+      const e = D.getDropExplanation(student);
+      if (e) setDropExp(e); else D.ackDropExplanation(student);
+    } catch {}
+  }, [student.id]);
   const [fTick, setFTick] = React.useState(0);
   React.useEffect(() => {
     const onStorage = (e) => { if (e.key && (e.key.startsWith('jucum_forum') || e.key.startsWith('jucum_likes'))) setFTick(t => t + 1); };
@@ -117,6 +158,7 @@ function StudentDashboard({ user, onLogout }) {
       {!showOnb && surveyDue && <SurveyModal student={student} onDone={() => setSurveyDue(false)} />}
       {!showOnb && celebrate && <PayCelebration payment={celebrate} onClose={closeCelebrate} />}
       {!showOnb && !celebrate && alertKind && <StudentAlertModal kind={alertKind} student={student} onClose={() => setAlertKind(null)} />}
+      {!showOnb && !celebrate && !alertKind && dropExp && <DropExplainModal exp={dropExp} student={student} onClose={() => { try { window.JUCUM_DATA.ackDropExplanation(student); } catch {} setDropExp(null); }} onGo={() => { setDropExp(null); setView('dashboard'); }} />}
       <header className="app-header">
         <div className="app-logo">
           <img src={window.JUCUM_LOGO || 'logo-jucum.png'} alt="JUCUM EC" />
@@ -124,6 +166,7 @@ function StudentDashboard({ user, onLogout }) {
         </div>
         <div className="app-right">
           <span className="role-pill s">🎓 Alumno</span>
+          <a className={`nav-link ${view==='practica'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('practica');}}>📚 Mi práctica</a>
           <a className={`nav-link ${view==='profile'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('profile');}}>👤 Mi perfil</a>
           <a className={`nav-link ${view==='forum'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();openForum();}} style={{position:'relative'}}>💬 Foro{forumUnread > 0 && <span className="nav-dot">{forumUnread > 9 ? '9+' : forumUnread}</span>}</a>
           <a className={`nav-link ${view==='tasks'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('tasks');}}>📝 Tareas</a>
@@ -160,6 +203,8 @@ function StudentDashboard({ user, onLogout }) {
           <button className="back-btn" onClick={() => setView('dashboard')} style={{padding:'10px 28px 0'}}>← Volver al panel</button>
           <Forum user={user} groupOverride={student.group} />
         </>
+      ) : view === 'practica' ? (
+        <StudentPractice student={student} settings={settings} onBack={() => setView('dashboard')} />
       ) : (
       <main>
         <div className="welcome">
@@ -176,28 +221,11 @@ function StudentDashboard({ user, onLogout }) {
           </div>
         </div>
 
-        {/* — Práctica dirigida: bloque con ventana de días (si hay) — */}
-        {(() => {
-          const dps = window.JUCUM_TT ? window.JUCUM_TT.getActiveDirectedForStudent(student) : [];
-          return dps.length ? <div style={{marginTop:18, display:'flex', flexDirection:'column', gap:12}}>{dps.map(dp => <DirectedPracticeCard key={dp.id} dp={dp} student={student} />)}</div> : null;
-        })()}
-
-        {/* — PASO 2 · Aviso amable "por mejorar" (nunca el 🚩 rojo del profesor) — */}
-        <ImproveBanner student={student} onGo={(it) => {
-          const mod = (MODULE_CATALOG[student.level] || []).find(m => m.id === it.moduleId);
-          const a = mod && (mod.activities || []).find(x => x.id === it.activityId);
-          const href = a ? linkFor(a, mod, student.id) : null;
-          if (href) window.location.href = href;
-        }} />
-
-        {/* — Mascota Neuro: al inicio, da la bienvenida y refleja su ánimo — */}
+        {/* — Neuro: bienvenida + ánimo (refleja el esfuerzo) — */}
         <div style={{marginTop:18}}><MascotCard student={student} /></div>
 
-        {/* ════════ ZONA 1 · HOY ════════ */}
-        {/* Lo primero que ve el alumno: su práctica del día y su meta. */}
-        <div style={{marginTop:18}}><TodayPracticeCard student={student} /></div>
-
-        <div className="two-col" style={{gridTemplateColumns:'1fr 2fr'}}>
+        {/* — Meta de hoy + Top del grupo — */}
+        <div className="two-col" style={{gridTemplateColumns:'1fr 1fr', marginTop:18}}>
           <div className="scard daily-card">
             <div className="sec-head"><div className="sec-title">Meta de hoy</div></div>
             <DailyRing done={todayMin} target={targetMin} levelColor={level.color} dark={level.dark} />
@@ -207,35 +235,24 @@ function StudentDashboard({ user, onLogout }) {
                 : <>Te faltan <b>{targetMin - todayMin} min</b> para tu meta de hoy.</>}
             </div>
           </div>
-
-          {/* ════════ ZONA 2 · MI MÓDULO ════════ */}
-          <div className="scard">
-            <div className="sec-head">
-              <div className="sec-title">{activeModules.length > 1 ? 'Mis módulos activos' : 'Mi módulo activo'}</div>
-              {deadlineLabel && <span className={`deadline ${settings.deadline && new Date(settings.deadline) < new Date() ? 'late' : ''}`}>{deadlineLabel}</span>}
-            </div>
-            {activeModules.length === 0 ? (
-              <div className="empty-state"><div className="icon">📦</div>El profesor aún no activa ningún módulo.</div>
-            ) : activeModules.map((mod, mi) => {
-              const acts = mod.activities || [];
-              const dc = acts.filter(a => entryPassed(progress.completed[`${mod.id}:${a.id}`], student.level, student.group)).length;
-              const pc = acts.length ? Math.round((dc/acts.length)*100) : 0;
-              return (
-                <div key={mod.id} style={mi > 0 ? {marginTop:16, paddingTop:16, borderTop:'1px dashed var(--border)'} : undefined}>
-                  <ModuleProgress mod={mod} progress={progress} pct={pc} doneCount={dc} studentId={student.id} freeUnlock={settings.unlockMode === 'free'} unlockMode={settings.unlockMode} unlockedActivities={settings.unlockedActivities} />
-                </div>
-              );
-            })}
-          </div>
+          <Podium student={student} onSeeTop={() => setView('practica')} />
         </div>
 
-        {/* ── Motivación: no pierdas tu avance + compite sano ── */}
+        {/* — Racha + récord personal — */}
+        <div style={{marginTop:18}}><StreakCard streak={student.streak} student={student} /></div>
+
+        {/* — CTA: todo el material vive en "Mi práctica" — */}
+        <button type="button" onClick={() => setView('practica')} style={{marginTop:18, width:'100%', border:'none', cursor:'pointer', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:20, color:'#fff', background:'linear-gradient(135deg,#F4A02C,#E07A12)', borderRadius:18, padding:18, display:'flex', alignItems:'center', justifyContent:'center', gap:12, boxShadow:'0 10px 24px rgba(224,122,18,.32)'}}>▶ Empieza a practicar →</button>
+        <div style={{textAlign:'center', fontSize:12, color:'var(--text-mute,#A8A8A8)', fontWeight:700, marginTop:9}}>Todo tu material y tus repasos de hoy en un solo lugar</div>
+
+        {/* ── Recordatorio suave de vocabulario (2–3x al día) ── */}
+        <VocabReminder student={student} settings={settings} onGo={(vocab, mod) => {
+          const href = vocab && vocab.url ? linkFor(vocab, mod, student.id) : null;
+          if (href) window.location.href = href; else setView('practica');
+        }} />
+
+        {/* ── Motivación: no pierdas tu avance ── */}
         <AchievementWarning student={student} />
-
-        <div className="gami-row" style={{gridTemplateColumns:'1fr 1fr', marginTop:18}}>
-          <StreakCard streak={student.streak} />
-          <RankCard student={student} groupName={group.name} />
-        </div>
 
         <ProgressExplainer studentId={student.id} />
 
@@ -303,15 +320,20 @@ function ModuleProgress({ mod, progress, pct, doneCount, studentId, freeUnlock, 
             const grp = stu ? stu.group : null;
             const items = mod.activities.map((a, i) => {
               const done = progress.completed[`${mod.id}:${a.id}`];
-              const passed = done ? D.entryPassed(done, lvl, grp) : false;
+              // Resúmenes/Quizlet = baja exigencia: hechos cuentan como ✓ (no se exige umbral)
+              const lowStakes = a.type === 'summary' || a.type === 'quizlet';
+              const passed = done ? (D.entryPassed(done, lvl, grp) || lowStakes) : false;
               const prevDone = i === 0 || progress.completed[`${mod.id}:${mod.activities[i-1].id}`];
               const teacherOpen = freeUnlock || unlockMode === 'free' ||
                 (unlockMode === 'custom' && enabledSet.has(`${mod.id}:${a.id}`));
               const alwaysOpen = a.open === true; // marcado en el catálogo ("open": true)
               const locked = !done && !prevDone && !teacherOpen && !alwaysOpen;
+              // PASO 5 · ★ estructura latente: aprobó la previa pero el Transform madura con reposo
+              const lg = D.latentGate(mod, a, i, progress, lvl);
+              const latentLocked = !done && !teacherOpen && lg.latent && !lg.ready && prevDone;
               // PASO 2 · hecho pero bajo el umbral → "a mejorar" (redo), no cuenta como ✓
-              const status = done ? (passed ? 'done' : 'redo') : locked ? 'locked' : 'open';
-              return { a, i, done, passed, status };
+              const status = done ? (passed ? 'done' : 'redo') : latentLocked ? 'latent' : locked ? 'locked' : 'open';
+              return { a, i, done, passed, status, latent: latentLocked ? lg : null };
             });
             // group consecutive items that share a.group into expandable topics
             const segments = [];
@@ -364,6 +386,20 @@ function ChecklistRow({ it, mod, studentId }) {
       </a>
     );
   }
+  // PASO 5 · ★ estructura latente — aprobó la previa, pero esta práctica madura con reposo
+  if (status === 'latent') {
+    const li = it.latent || {};
+    return (
+      <div className="al-item" style={{cursor:'default', background:'#F1FBF4', borderColor:'#BFE6CB'}}
+           title={`Estructura que se asienta mejor con reposo. Se activará ${li.availableOn ? 'el ' + li.availableOn : 'pronto'}.`}>
+        <span className="al-num" style={{background:'#E3F4E8', color:'#2E7D32', borderColor:'#A5D6A7'}}>🌱</span>
+        <span className="al-ico">{typeIcon(a.type)}</span>
+        <span className="al-name">{a.name}</span>
+        <PhaseTags a={a} />
+        <span className="al-score" style={{background:'#E3F4E8', color:'#2E7D32', whiteSpace:'nowrap'}}>🌱 {li.daysLeft != null ? `en ${li.daysLeft} día${li.daysLeft===1?'':'s'}` : 'madurando'}</span>
+      </div>
+    );
+  }
   return (
     <a href={status!=='locked' ? (href || undefined) : undefined}
        className={`al-item ${status}`}>
@@ -382,11 +418,12 @@ function TopicGroup({ num, name, items, mod, studentId }) {
   const doneCount = items.filter(it => it.passed).length;
   const allDone = doneCount === items.length;
   const anyOpen = items.some(it => it.status === 'open' || it.status === 'redo');
-  const [open, setOpen] = React.useState(anyOpen);
+  const [open, setOpen] = React.useState(false); // solo aparece el tema; el alumno hace clic para ver sus actividades
   return (
     <div className={`tg ${allDone ? 'tg-done' : ''}`}>
       <button type="button" className="tg-head" onClick={() => setOpen(!open)}>
         <span className={`tg-num ${allDone ? 'done' : ''}`}>{allDone ? '✓' : num}</span>
+        <span className="tg-tema">Tema</span>
         <span className="tg-name">{name}</span>
         <span className="tg-meta">{doneCount}/{items.length}</span>
         <span className={`tg-arr ${open ? 'open' : ''}`}>▾</span>
@@ -508,8 +545,10 @@ function XpCard({ xp, xpInfo, student }) {
   );
 }
 
-function StreakCard({ streak }) {
+function StreakCard({ streak, student }) {
   const flameSize = streak >= 7 ? 'huge' : streak >= 3 ? 'big' : streak > 0 ? 'med' : 'cold';
+  const best = (student && window.JUCUM_DATA.getBestStreak) ? window.JUCUM_DATA.getBestStreak(student) : 0;
+  const toBeat = best > streak ? best - streak : 0;
   return (
     <div className={`gami-card streak-card s-${flameSize}`}>
       <div className="gami-eyebrow">🔥 Racha activa</div>
@@ -524,6 +563,15 @@ function StreakCard({ streak }) {
          streak > 0  ? 'Construye tu hábito día a día.' :
                        'Practica hoy para empezar tu racha.'}
       </div>
+      {best > 0 && (
+        <div style={{marginTop:12, display:'flex', alignItems:'center', gap:10, background:'#FFF8EC', border:'1px solid #F3DFB6', borderRadius:12, padding:'10px 13px'}}>
+          <span style={{fontSize:20}}>🏆</span>
+          <div style={{flex:1, textAlign:'left'}}>
+            <div style={{fontSize:12.5, fontWeight:800, color:'#9c5d00'}}>Tu récord: {best} {best===1?'día':'días'}</div>
+            <div style={{fontSize:11.5, color:'#B26A00', fontWeight:700}}>{toBeat > 0 ? `Te faltan ${toBeat} para superarlo · ¡tú puedes!` : '¡Estás en tu mejor racha! 🎉'}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -590,6 +638,384 @@ function ImproveBanner({ student, onGo }) {
         )}
       </div>
     </div>
+  );
+}
+
+/* PASO 3 · Repaso espaciado — tarjetas "🔁 Repaso de hoy" + resultado antes→ahora.
+ * Estilo morado del repaso (coherente con la demo aprobada). */
+function ReviewSection({ student }) {
+  const D = window.JUCUM_DATA;
+  const { MODULE_CATALOG } = D;
+  const due = D.getDueReviews ? D.getDueReviews(student) : [];
+  const [result, setResult] = React.useState(() => D.getLastReviewResult ? D.getLastReviewResult(student) : null);
+  if (!due.length && !result) return null;
+
+  const goReview = (it) => {
+    const mod = (MODULE_CATALOG[student.level] || []).find(m => m.id === it.moduleId);
+    const a = mod && (mod.activities || []).find(x => x.id === it.activityId);
+    const href = a ? linkFor(a, mod, student.id) : null;
+    if (href) window.location.href = href;
+  };
+  const dismissResult = () => {
+    if (result) D.markReviewResultSeen(student.id, result.moduleId, result.activityId);
+    setResult(null);
+  };
+
+  return (
+    <div className="scard" style={{padding:0, overflow:'hidden', borderColor:'#C3B4E4'}}>
+      <div style={{padding:'12px 15px', display:'flex', alignItems:'center', gap:11, background:'#EFEAF9', borderBottom:'1px solid #D9CEEC'}}>
+        <span style={{fontSize:20}}>🧠</span>
+        <div style={{flex:1, fontSize:12.8, fontWeight:700, color:'#5B3FA0', lineHeight:1.4}}>Repásalo antes de que se enfríe — la <b>curva del olvido</b> lo trae de vuelta justo a tiempo</div>
+        <span style={{fontSize:11, fontWeight:700, color:'#7E6CA8', whiteSpace:'nowrap'}}>Curva del olvido</span>
+      </div>
+      <div style={{padding:'12px 13px', display:'flex', flexDirection:'column', gap:9}}>
+
+      {result && (() => {
+        const up = result.dir === 'up', flat = result.dir === 'flat';
+        const col = up ? '#2EA84B' : flat ? '#7a7466' : '#C0392B';
+        const bg = up ? '#E8F5E9' : flat ? '#F4F2EA' : '#FEF1EF';
+        const bd = up ? '#A5D6A7' : flat ? '#E3DDD0' : '#F1B0AA';
+        const fromA = result.total ? Math.round(result.prevPct/100*result.total)+'/'+result.total : result.prevPct+'%';
+        const toA = result.total ? Math.round(result.currPct/100*result.total)+'/'+result.total : result.currPct+'%';
+        const label = up ? `Mejoró (+${result.delta} acierto${result.delta===1?'':'s'})` : flat ? 'Se mantiene' : `Bajó (${result.delta})`;
+        return (
+          <div style={{border:'1px solid '+bd, background:bg, borderRadius:11, padding:'13px 15px'}}>
+            <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:10}}>
+              <span style={{fontSize:18}}>{up ? '✅' : flat ? '➡️' : '⚠️'}</span>
+              <div style={{flex:1, fontWeight:800, fontSize:14, color:'var(--text)'}}>{result.name} — {label}</div>
+              <button type="button" onClick={dismissResult} style={{border:'none', background:'transparent', cursor:'pointer', fontSize:18, color:'#9a9a9a', lineHeight:1}}>✕</button>
+            </div>
+            <div style={{display:'flex', alignItems:'center', gap:12, flexWrap:'wrap'}}>
+              <span style={{fontSize:12, fontWeight:800, color:'var(--text-soft, #6B6B6B)'}}>Antes</span>
+              <span style={{fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize:20, color:'#A8A8A8', textDecoration:'line-through'}}>{fromA}</span>
+              <span style={{fontSize:18, color:col}}>→</span>
+              <span style={{fontSize:12, fontWeight:800, color:'var(--text-soft, #6B6B6B)'}}>Ahora</span>
+              <span style={{fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize:20, color:col}}>{toA}</span>
+              <span style={{marginLeft:'auto', fontSize:13, fontWeight:800, color:'#fff', background:col, padding:'4px 12px', borderRadius:16}}>{up?'+':''}{result.delta} {up?'↑':flat?'→':'↓'}</span>
+            </div>
+            {!up && !flat && <div style={{marginTop:9, fontSize:12.5, color:'#A33227', fontWeight:600}}>Lo reprogramamos <b>más pronto</b> (en 3 días) para reforzarlo.</div>}
+          </div>
+        );
+      })()}
+
+        {due.map((it, i) => (
+          <button key={i} type="button" onClick={() => goReview(it)} className="al-item open" style={{width:'100%', textAlign:'left', font:'inherit', cursor:'pointer'}}>
+            <span className="al-num" style={{background:'#EEE7F9', color:'#6C4FB0', borderColor:'#D6C9EC'}}>🔁</span>
+            <span className="al-ico">{typeIcon(it.type)}</span>
+            <span className="al-name">{it.name}<span style={{display:'block', fontSize:11, fontWeight:700, color:'var(--text-soft)', marginTop:1}}>{it.daysAgo != null ? `Hace ${it.daysAgo} día${it.daysAgo===1?'':'s'}` : 'Toca repasar'} · {it.refTotal ? Math.round(it.refPct/100*it.refTotal)+'/'+it.refTotal : it.refPct+'%'} · a ver si lo mantienes</span></span>
+            <span className="al-score" style={{background:'#EEE7F9', color:'#6C4FB0'}}>{it.overdue > 1 ? `Hace ${it.overdue}d` : 'Hoy'}</span>
+            <span className="al-arr">→</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* PASO 3 · Modal "tu posición cambió" — tono positivo 🌱, solo en caída real. */
+function DropExplainModal({ exp, student, onClose, onGo }) {
+  const n = exp.toImprove || 0;
+  const why = exp.init
+    ? <>Ahora una práctica solo suma cuando la <b>apruebas</b> (no solo por hacerla).{n>0 && <> Tienes <b>{n} práctica{n===1?'':'s'} por debajo del nivel</b>, así que tu avance se ajustó.</>}</>
+    : exp.reasons.includes('passed')
+      ? <>Ahora una práctica solo cuenta cuando la <b>apruebas</b>.{n>0 && <> Tienes <b>{n} por debajo del nivel</b>,</>} por eso tu avance bajó.</>
+      : exp.reasons.includes('band')
+        ? <>Tu dominio pasó de <b>{exp.fromBand}</b> a <b>{exp.toBand}</b>. Con repaso lo recuperas.</>
+        : <>Dejaste de practicar y perdiste algún logro. Se recupera practicando.</>;
+  return (
+    <div style={{position:'fixed', inset:0, background:'rgba(20,36,89,.45)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:120, padding:20}} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{maxWidth:380, width:'100%', background:'#fff', borderRadius:22, overflow:'hidden', boxShadow:'0 20px 50px rgba(31,58,138,.3)'}}>
+        <div style={{height:30, background:'#152459'}}></div>
+        <div style={{padding:'24px 22px 22px', textAlign:'center'}}>
+          <div style={{fontSize:42}}>🌱</div>
+          <h3 style={{fontFamily:"'Fredoka',sans-serif", fontSize:19, margin:'10px 0 0'}}>Tu posición cambió</h3>
+          <div style={{margin:'14px 0', background:'#FEF1EF', border:'1px solid #F1B0AA', borderRadius:12, padding:'13px 15px', textAlign:'left', fontSize:13, color:'#A33227', lineHeight:1.5}}>
+            <b>¿Por qué?</b> {why}
+          </div>
+          <div style={{background:'#E8F5E9', border:'1px solid #A5D6A7', borderRadius:12, padding:'13px 15px', textAlign:'left', fontSize:13, color:'#1B5E20', lineHeight:1.5, marginBottom:16}}>
+            <b>¿Cómo recuperarte?</b> {n>0 ? <>Repite {n>1?'esas '+n:'esa'} práctica{n===1?'':'s'} hasta aprobarla{n===1?'':'s'} y haz tus repasos del día. En cuanto suban tus notas, <b>vuelves a subir</b>. 💪</> : <>Sigue practicando y haz tus repasos del día. Tu avance se recupera solo. 💪</>}
+          </div>
+          <button type="button" onClick={onGo} style={{width:'100%', fontFamily:'inherit', fontWeight:800, fontSize:15, border:'none', borderRadius:24, padding:13, background:'#1F3A8A', color:'#fff', cursor:'pointer'}}>Lo entendí · Voy a mejorar</button>
+          <div style={{fontSize:11.5, color:'#A8A8A8', marginTop:10}}>Este aviso solo aparece cuando tu posición baja de verdad.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════ PASO 4 · Anillo de meta compacto (encabezado de Mi práctica) ════════ */
+function MiniRing({ done, target }) {
+  const pct = Math.min(100, Math.round((done / Math.max(1, target)) * 100));
+  const C = 113, off = C * (1 - Math.min(1, done / Math.max(1, target)));
+  const met = done >= target;
+  return (
+    <div style={{display:'flex', alignItems:'center', gap:10, background:'#fff', border:'1px solid var(--border)', borderRadius:14, padding:'8px 13px'}}>
+      <div style={{position:'relative', width:42, height:42}}>
+        <svg width="42" height="42" style={{transform:'rotate(-90deg)'}}>
+          <circle cx="21" cy="21" r="18" fill="none" stroke="#ECE9E0" strokeWidth="6"></circle>
+          <circle cx="21" cy="21" r="18" fill="none" stroke="#2EA84B" strokeWidth="6" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={off}></circle>
+        </svg>
+        <span style={{position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:met?15:12, fontWeight:800, color:'#1B5E20', fontFamily:"'Fredoka',sans-serif"}}>{met ? '✓' : done + "'"}</span>
+      </div>
+      <div>
+        <b style={{fontSize:13, fontFamily:"'Fredoka',sans-serif", color:'#1B5E20', display:'block', lineHeight:1}}>{done} min</b>
+        <span style={{fontSize:10.5, fontWeight:800, color:'var(--text-mute,#A8A8A8)', textTransform:'uppercase'}}>{met ? 'meta de hoy ✓' : (target - done) + ' min restantes'}</span>
+      </div>
+    </div>
+  );
+}
+
+/* Top del grupo — podio competitivo + 4.°/5.° + a quién perseguir */
+function Podium({ student, onSeeTop }) {
+  const { getComplianceRanking } = window.JUCUM_DATA;
+  const ranking = getComplianceRanking(student.group) || [];
+  const myIdx = ranking.findIndex(r => r.student.id === student.id);
+  const me = myIdx >= 0 ? ranking[myIdx] : null;
+  const ranked = me && me.score > 0;
+  const ini = (s) => (s.fullName || '?').split(' ').map(w => w[0]).slice(0,2).join('');
+  const podMap = [['p2',1],['p1',0],['p3',2]]; // visual: 2.° izq · 1.° centro · 3.° der
+  const barH = { p1:62, p2:46, p3:34 }, barBg = { p1:'linear-gradient(#F4B400,#D49A00)', p2:'linear-gradient(#B8BCC4,#8E939C)', p3:'linear-gradient(#D98C4A,#B06A2C)' }, avaBg = { p1:'#C99700', p2:'#8E939C', p3:'#B06A2C' };
+  const ahead = myIdx > 0 ? ranking[myIdx - 1] : null;
+  return (
+    <div className="scard" style={{background:'linear-gradient(150deg,#21408F,#152459)', border:'none', color:'#fff', position:'relative', overflow:'hidden'}}>
+      <div style={{position:'absolute', top:-30, right:-30, width:120, height:120, background:'radial-gradient(circle,rgba(244,180,0,.4),transparent 70%)'}}></div>
+      <div style={{fontSize:11, fontWeight:800, letterSpacing:'.06em', textTransform:'uppercase', color:'rgba(255,255,255,.6)'}}>Top de tu grupo</div>
+      {!ranked ? (
+        <div style={{position:'relative', zIndex:1, marginTop:12, background:'rgba(255,255,255,.1)', border:'1px solid rgba(255,255,255,.16)', borderRadius:12, padding:16, fontSize:13, fontWeight:700, lineHeight:1.5, textAlign:'center'}}>
+          🏁 Aún no estás en el ranking.<br/>Completa tu primera práctica para <b>entrar y competir</b>.
+        </div>
+      ) : (
+        <>
+          <div style={{display:'flex', alignItems:'flex-end', justifyContent:'center', gap:8, margin:'14px 0 12px', position:'relative', zIndex:1}}>
+            {podMap.map(([cls, idx]) => {
+              const r = ranking[idx]; if (!r) return null;
+              const isMe = r.student.id === student.id;
+              return (
+                <div key={cls} style={{display:'flex', flexDirection:'column', alignItems:'center', gap:5}}>
+                  <div style={{width:34, height:34, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:12, color:'#fff', background:avaBg[cls], border:'2px solid rgba(255,255,255,.5)', boxShadow:isMe?'0 0 0 3px rgba(244,180,0,.6)':'none'}}>{ini(r.student)}</div>
+                  <div style={{width:54, height:barH[cls], background:barBg[cls], borderRadius:'8px 8px 0 0', display:'flex', alignItems:'flex-start', justifyContent:'center', paddingTop:6, fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize:16, color:'rgba(0,0,0,.5)'}}>{idx+1}</div>
+                  <div style={{fontSize:10.5, fontWeight:800, color:'rgba(255,255,255,.85)'}}>{isMe ? 'Tú' : r.student.fullName.split(' ')[0]}</div>
+                </div>
+              );
+            })}
+          </div>
+          {ranking.length > 3 && (
+            <div style={{position:'relative', zIndex:1, display:'flex', flexDirection:'column', gap:5, marginBottom:10}}>
+              {ranking.slice(3,5).map((r, i) => (
+                <div key={r.student.id} style={{display:'flex', alignItems:'center', gap:10, background:r.student.id===student.id?'rgba(244,180,0,.18)':'rgba(255,255,255,.08)', borderRadius:9, padding:'7px 11px', fontSize:12.5}}>
+                  <span style={{fontWeight:800, color:'rgba(255,255,255,.6)', width:18}}>{i+4}°</span>
+                  <span style={{flex:1, fontWeight:700}}>{r.student.id===student.id?'Tú':r.student.fullName}</span>
+                  <span style={{fontWeight:800, color:'rgba(255,255,255,.7)', fontSize:11.5}}>{r.score}%</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{display:'flex', alignItems:'center', gap:10, background:'rgba(255,255,255,.1)', border:'1px solid rgba(255,255,255,.16)', borderRadius:12, padding:'9px 12px', position:'relative', zIndex:1}}>
+            <span style={{fontSize:18}}>🎯</span>
+            <div style={{flex:1, fontSize:12, fontWeight:700, lineHeight:1.35}}>
+              {myIdx === 0 ? <>¡Vas <b style={{color:'#F4B400'}}>1.°</b>! Mantén el ritmo para no perderlo.</>
+                : ahead ? <>Te falta poco para alcanzar a <b style={{color:'#F4B400'}}>{ahead.student.fullName.split(' ')[0]}</b> y subir al <b style={{color:'#F4B400'}}>{myIdx}.°</b></>
+                : <>Sigue practicando para subir.</>}
+            </div>
+            {onSeeTop && <button onClick={onSeeTop} style={{fontSize:11.5, fontWeight:800, background:'#fff', color:'#1F3A8A', borderRadius:16, padding:'6px 12px', border:'none', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap'}}>Ver el top →</button>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* Ruta de módulos — mapa con desbloqueo secuencial (escala a 7+) */
+function ModuleRoute({ student, selectedId, onSelect }) {
+  const route = window.JUCUM_DATA.getModuleRoute(student);
+  const curIdx = (route.find(x => x.state === 'cur') || route[0] || {}).idx || 0;
+  const colors = { done:{bg:'#2EA84B',fg:'#fff'}, cur:{bg:'#1F3A8A',fg:'#fff'}, lock:{bg:'#E7E2D6',fg:'#A8A8A8'} };
+  return (
+    <div style={{background:'#fff', border:'1px solid var(--border)', borderRadius:16, padding:'14px 8px 6px', marginTop:4}}>
+      <div style={{fontSize:11, fontWeight:800, letterSpacing:'.06em', textTransform:'uppercase', color:'var(--text-mute,#A8A8A8)', margin:'0 10px 4px'}}>🗺️ Tu ruta · Módulo {curIdx + 1} de {route.length} · toca un módulo para ver su contenido</div>
+      <div style={{display:'flex', overflowX:'auto', padding:'14px 6px 10px', gap:0}}>
+        {route.map((x, i) => {
+          const c = colors[x.state]; const sel = x.mod.id === selectedId;
+          return (
+            <button key={x.mod.id} onClick={() => onSelect(x.mod.id)} style={{flex:'none', width:108, display:'flex', flexDirection:'column', alignItems:'center', gap:8, position:'relative', cursor:'pointer', background:'none', border:'none', fontFamily:'inherit', padding:0}}>
+              {x.state === 'cur' && <span style={{position:'absolute', top:-13, fontSize:9, fontWeight:800, background:'#1F3A8A', color:'#fff', padding:'2px 7px', borderRadius:10, whiteSpace:'nowrap', zIndex:2}}>Aquí vas</span>}
+              {x.hasReview && <span style={{position:'absolute', top:-3, right:24, width:21, height:21, borderRadius:'50%', background:'#5B3FA0', color:'#fff', fontSize:11, display:'flex', alignItems:'center', justifyContent:'center', zIndex:3, border:'2px solid #fff'}}>🔁</span>}
+              {i < route.length - 1 && <span style={{position:'absolute', top:23, left:77, width:56, height:3, background:x.state==='done'?'#2EA84B':'var(--border)', borderRadius:2, zIndex:0}}></span>}
+              <span style={{width:46, height:46, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize:16, zIndex:1, border:'3px solid #fff', background:c.bg, color:c.fg, boxShadow: sel ? '0 0 0 4px rgba(242,148,30,.35)' : (x.state==='cur' ? '0 0 0 4px rgba(31,58,138,.16)' : 'none')}}>{x.state==='done'?'✓':x.state==='lock'?'🔒':i+1}</span>
+              <span style={{fontSize:10.5, fontWeight:800, color:x.state==='lock'?'var(--text-mute,#A8A8A8)':'var(--text-soft,#6B6B6B)', textAlign:'center', lineHeight:1.2, maxWidth:98}}>M{i+1}<br/>{x.mod.name}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* Mensaje inteligente de la meta (según el día del alumno) */
+function MetaSmartMessage({ metaMet, hasPending, minsLeft, onReview }) {
+  if (metaMet && hasPending) {
+    return <div style={{display:'flex', alignItems:'center', gap:11, background:'#E8F5E9', border:'1px solid #A5D6A7', borderRadius:14, padding:'12px 15px', fontSize:13, fontWeight:700, color:'#1B5E20', lineHeight:1.4, marginTop:14}}><span style={{fontSize:20}}>🎉</span><div>¡Cumpliste tu meta! Pero aún te quedan prácticas de hoy. El repaso rinde más el mismo día — <b>termínalas</b> 💪</div></div>;
+  }
+  if (!metaMet && !hasPending) {
+    return <div style={{display:'flex', alignItems:'center', gap:11, background:'#FFF7E8', border:'1px solid #F0C66B', borderRadius:14, padding:'12px 15px', fontSize:13, fontWeight:700, color:'#9c5d00', lineHeight:1.4, marginTop:14}}><span style={{fontSize:20}}>🔁</span><div>Ya terminaste lo de hoy 🙌 Te faltan <b>{minsLeft} min</b> de meta — refuerza con un repaso para fijar lo aprendido.</div>{onReview && <button onClick={onReview} style={{marginLeft:'auto', fontSize:12, fontWeight:800, color:'#fff', background:'#F9A825', borderRadius:16, padding:'7px 13px', border:'none', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap'}}>Empezar repaso</button>}</div>;
+  }
+  if (!metaMet) {
+    return <div style={{display:'flex', alignItems:'center', gap:11, background:'#EDF1FB', border:'1px solid #C9D6F0', borderRadius:14, padding:'12px 15px', fontSize:13, fontWeight:700, color:'#152459', lineHeight:1.4, marginTop:14}}><span style={{fontSize:20}}>🎯</span><div>Te faltan <b>{minsLeft} min</b> para tu meta. Sigue con tu práctica de hoy 💪</div></div>;
+  }
+  return null;
+}
+
+/* ════════ PASO 5 · "Refuerzo" · práctica extra OPCIONAL ════════
+ * Bloque al final de "Mi práctica". Ofrece repetir actividades YA aprobadas
+ * para fijar lo aprendido. Es opcional: se enmarca distinto (no obligatorio,
+ * no cuenta para el desbloqueo). Se realza cuando al alumno le falta meta y ya
+ * no tiene pendientes obligatorios — así completa su meta repasando. */
+function RefuerzoSection({ student, highlight }) {
+  const D = window.JUCUM_DATA;
+  const items = (D.getRefuerzo ? D.getRefuerzo(student, 3) : []);
+  if (!items.length) return null;
+  const mods = D.MODULE_CATALOG[student.level] || [];
+  const go = (it) => {
+    const mod = mods.find(m => m.id === it.moduleId);
+    const a = mod && (mod.activities || []).find(x => x.id === it.activityId);
+    const href = a ? linkFor(a, mod, student.id) : null;
+    if (href) window.location.href = href;
+  };
+  return (
+    <div style={{marginTop:24}}>
+      <div style={{display:'flex', alignItems:'center', gap:8, margin:'0 2px 10px'}}>
+        <span style={{fontSize:17}}>💪</span>
+        <h2 style={{fontFamily:"'Fredoka',sans-serif", fontSize:17, margin:0}}>Refuerzo <span style={{fontSize:12.5, fontWeight:700, color:'var(--text-soft)'}}>· opcional</span></h2>
+      </div>
+      <div className="scard" style={{padding:0, overflow:'hidden', borderColor: highlight ? '#9BC9F0' : '#E6DEC9', borderStyle:'dashed'}}>
+        <div style={{padding:'12px 15px', display:'flex', alignItems:'center', gap:11, background: highlight ? '#EDF3FC' : '#FBF8F0', borderBottom:'1px dashed ' + (highlight ? '#9BC9F0' : '#E6DEC9')}}>
+          <span style={{fontSize:20}}>{highlight ? '🎯' : '✨'}</span>
+          <div style={{fontSize:12.8, fontWeight:700, color: highlight ? '#1B3B6F' : 'var(--text-soft)', lineHeight:1.4}}>
+            {highlight
+              ? <>¿Te falta meta y ya no tienes pendientes? <b>Refuerza</b> lo que más te costó — cuenta para tu meta y fija lo aprendido.</>
+              : <>Practica de más, cuando quieras. Repetir lo aprendido lo asienta para siempre 🧠</>}
+          </div>
+        </div>
+        <div style={{padding:'10px 13px', display:'flex', flexDirection:'column', gap:7}}>
+          {items.map((it, i) => (
+            <button key={i} type="button" onClick={() => go(it)} className="al-item open" style={{width:'100%', textAlign:'left', font:'inherit', cursor:'pointer'}}>
+              <span className="al-num" style={{background:'#EFE7F7', color:'#6C4FB0', borderColor:'#D6C9EC'}}>↻</span>
+              <span className="al-ico">{typeIcon(it.type)}</span>
+              <span className="al-name">{it.name}<span style={{display:'block', fontSize:11, fontWeight:700, color:'var(--text-soft)', marginTop:1}}>{it.moduleName}{it.group ? ' · ' + it.group : ''}</span></span>
+              <span className="al-score" style={{background:'#F0ECE0', color:'#8A7F6A'}}>{it.pct}%</span>
+              <span className="al-arr">→</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Encabezado de sección de "Mi práctica" — chip de color + título + línea fina.
+ * Da identidad de color a cada bloque (práctica/repaso/actividades) de forma sutil. */
+function PracHead({ emoji, title, color, tint, line }) {
+  return (
+    <div style={{display:'flex', alignItems:'center', gap:10, margin:'26px 2px 12px', paddingBottom:8, borderBottom:`1.5px solid ${line}`}}>
+      <span style={{fontSize:17, width:32, height:32, borderRadius:9, background:tint, display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>{emoji}</span>
+      <h2 style={{fontFamily:"'Fredoka',sans-serif", fontSize:17, margin:0, color}}>{title}</h2>
+    </div>
+  );
+}
+
+/* ════════ Vista "Mi práctica" — ruta + temas + repaso + por mejorar ════════ */
+function StudentPractice({ student, settings, onBack }) {
+  const D = window.JUCUM_DATA;
+  const { MODULE_CATALOG, getStudentProgress, getModuleRoute, getFocusModuleId, getDueReviews } = D;
+  const progress = getStudentProgress(student.id);
+  const route = getModuleRoute(student);
+  const [selectedId, setSelectedId] = React.useState(() => getFocusModuleId(student));
+  const sel = route.find(x => x.mod.id === selectedId) || route.find(x => x.state === 'cur') || route[0];
+  const due = getDueReviews(student) || [];
+  const improve = D.getActivitiesToImprove(student) || [];
+  const showReview = due.length > 0 || !!(D.getLastReviewResult && D.getLastReviewResult(student));
+  const targetMin = settings.dailyTargetMin || 15;
+  const todayMin = progress.todayMinutes || 0;
+  const metaMet = todayMin >= targetMin;
+  const totalPendingActs = route.reduce((n, x) => n + (x.state !== 'lock' ? (x.total - x.doneCount) : 0), 0);
+  const hasPending = due.length > 0 || improve.length > 0 || totalPendingActs > 0;
+
+  // repaso de un módulo YA terminado (curva del olvido) → banner destacado
+  const doneIds = new Set(route.filter(x => x.state === 'done').map(x => x.mod.id));
+  const pastReview = due.find(d => doneIds.has(d.moduleId));
+
+  const goReviewModule = (modId) => { setSelectedId(modId); };
+
+  const selMod = sel ? sel.mod : null;
+
+  return (
+    <main>
+      <div style={{display:'flex', alignItems:'center', gap:14, marginBottom:4}}>
+        <button className="back-btn" onClick={onBack} style={{marginBottom:0}}>← Mi panel</button>
+        <div style={{flex:1}}>
+          <h1 style={{fontFamily:"'Fredoka',sans-serif", fontSize:24, margin:0}}>Mi práctica</h1>
+          <div style={{fontSize:12.5, color:'var(--text-soft)', fontWeight:700}}>Sigue tu ruta de módulos</div>
+        </div>
+        <MiniRing done={todayMin} target={targetMin} />
+      </div>
+
+      <MetaSmartMessage metaMet={metaMet} hasPending={hasPending} minsLeft={Math.max(0, targetMin - todayMin)} onReview={pastReview ? () => goReviewModule(pastReview.moduleId) : null} />
+
+      {/* ── 1) Tu ruta de módulos ── */}
+      <div style={{marginTop:16}}>
+        <ModuleRoute student={student} selectedId={selectedId} onSelect={setSelectedId} />
+      </div>
+
+      {/* ── 2) Tu práctica de hoy ── */}
+      <PracHead emoji="🎯" title="Tu práctica de hoy" color="#1B3B6F" tint="#E4EDFB" line="#D2E0F5" />
+      <div style={{marginTop:10}}><TodayPracticeCard student={student} /></div>
+      {(() => {
+        const dps = window.JUCUM_TT ? window.JUCUM_TT.getActiveDirectedForStudent(student) : [];
+        return dps.length ? <div style={{marginTop:14, display:'flex', flexDirection:'column', gap:12}}>{dps.map(dp => <DirectedPracticeCard key={dp.id} dp={dp} student={student} />)}</div> : null;
+      })()}
+
+      {/* ── 3) Tu repaso de hoy ── */}
+      {showReview && (
+        <>
+          <PracHead emoji="🔁" title="Tu repaso de hoy" color="#5B3FA0" tint="#ECE5F8" line="#DCD0F0" />
+          <ReviewSection student={student} />
+        </>
+      )}
+
+      {/* ── 4) Actividades del módulo (con aviso "por mejorar" como entrada) ── */}
+      <PracHead emoji="📚" title="Actividades" color="#9C5D00" tint="#FCEFD0" line="#F0DDB0" />
+      <ImproveBanner student={student} onGo={(it) => {
+        const mod = (MODULE_CATALOG[student.level] || []).find(m => m.id === it.moduleId);
+        const a = mod && (mod.activities || []).find(x => x.id === it.activityId);
+        const href = a ? linkFor(a, mod, student.id) : null;
+        if (href) window.location.href = href;
+      }} />
+
+      {selMod && (
+        <div style={{marginTop:14}}>
+          {sel.state === 'lock' ? (
+            <div className="scard" style={{display:'flex', alignItems:'center', gap:12, color:'var(--text-soft)'}}>
+              <span style={{fontSize:24}}>🔒</span>
+              <div style={{fontSize:13.5, fontWeight:700}}>{sel.placeholder
+                ? <>El módulo <b>{selMod.name}</b> aún no está disponible — llegará más adelante en tu ruta.</>
+                : <>El módulo <b>{selMod.name}</b> se desbloquea cuando termines el anterior. Sigue tu ruta paso a paso.</>}</div>
+            </div>
+          ) : (
+            <div className="scard">
+              {sel.state === 'done' && (
+                <div style={{display:'flex', alignItems:'center', gap:11, background:'#E8F5E9', border:'1px solid #A5D6A7', borderRadius:12, padding:'11px 14px', marginBottom:14, fontSize:13, fontWeight:700, color:'#1B5E20'}}>
+                  <span style={{fontSize:20}}>✅</span><div><b>{selMod.name}</b> · completado.{sel.hasReview ? ' Tienes un repaso pendiente de este módulo 👇' : ' Sus repasos vuelven según la curva del olvido.'}</div>
+                </div>
+              )}
+              <ModuleProgress mod={selMod} progress={progress} pct={sel.total?Math.round(sel.doneCount/sel.total*100):0} doneCount={sel.doneCount} studentId={student.id} freeUnlock={settings.unlockMode === 'free'} unlockMode={settings.unlockMode} unlockedActivities={settings.unlockedActivities} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 5) Refuerzo opcional — realzado si falta meta y no hay pendientes ── */}
+      <RefuerzoSection student={student} highlight={!metaMet && !hasPending} />
+    </main>
   );
 }
 
@@ -761,12 +1187,15 @@ function TodayPracticeCard({ student }) {
   const dayName = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'][new Date().getDay()];
   if (!items || !items.length) return null;
   return (
-    <div className="scard" style={{background:'#F0F7FF', borderColor:'#90CAF9'}}>
-      <div className="sec-head">
-        <div className="sec-title">🗓️ Tu práctica de hoy</div>
-        <span className="sec-meta">{isGeneric ? 'Sugerencia del día' : '⭐ Dejada por tu profesor'} · {dayName}</span>
+    <div className="scard" style={{padding:0, overflow:'hidden', borderColor:'#90CAF9'}}>
+      <div style={{padding:'12px 15px', display:'flex', alignItems:'center', gap:11, background:'#EAF3FE', borderBottom:'1px solid #C5DEF7'}}>
+        <span style={{fontSize:20}}>🗓️</span>
+        <div style={{flex:1, fontSize:12.8, fontWeight:700, color:'#1B3B6F', lineHeight:1.4}}>
+          {isGeneric ? 'Tu plan recomendado para hoy' : 'Lo que tu profesor te dejó para hoy'}
+        </div>
+        <span style={{fontSize:11, fontWeight:700, color:'#5B7BA8', whiteSpace:'nowrap', textTransform:'capitalize'}}>{dayName}</span>
       </div>
-      <div className="next-row">
+      <div className="next-row" style={{padding:'12px 13px'}}>
         {items.map((it, i) => {
           const mod = mods.find(m => m.id === it.moduleId);
           const a = mod && (mod.activities || []).find(x => x.id === it.activityId);
