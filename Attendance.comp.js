@@ -14,7 +14,7 @@ const STATUS = {
 };
 
 /* ═══════════ PROFESOR ═══════════ */
-function TeacherAttendance({ onBack }) {
+function TeacherAttendance({ onBack, embedded }) {
   const { GROUPS, STUDENTS, LEVELS } = window.JUCUM_DATA;
   const A = window.JUCUM_ATT;
   const [groupId, setGroupId] = atUseState(GROUPS[0]?.id || '');
@@ -30,16 +30,17 @@ function TeacherAttendance({ onBack }) {
 
   const marked = members.filter(s => A.getStudentRecord(date, s.id)).length;
 
+  const Wrap = embedded ? 'div' : 'main';
   return (
-    <main>
-      <button className="back-btn" onClick={onBack}>← Volver al panel</button>
-      <div className="welcome teacher">
+    <Wrap>
+      {!embedded && <button className="back-btn" onClick={onBack}>← Volver al panel</button>}
+      {!embedded && <div className="welcome teacher">
         <div className="welcome-text">
           <div className="eyebrow t">📋 Asistencia</div>
           <h1>Lista del día</h1>
           <p>Marca quién asistió, faltó o justificó, y su participación en clase. La administración lo verá para el seguimiento.</p>
         </div>
-      </div>
+      </div>}
 
       <div className="scard" style={{marginTop:18}}>
         <div className="row-flex" style={{gap:12, flexWrap:'wrap', alignItems:'flex-end'}}>
@@ -95,7 +96,7 @@ function TeacherAttendance({ onBack }) {
             })}
         </div>
       </div>
-    </main>
+    </Wrap>
   );
 }
 

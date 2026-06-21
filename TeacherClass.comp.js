@@ -24,7 +24,7 @@ function MethodTags({ a }) {
 
 function TeacherClass({ onBack }) {
   const { GROUPS, LEVELS } = window.JUCUM_DATA;
-  const [tab, setTab] = React.useState('daily');
+  const [tab, setTab] = React.useState('seq');
   const [, setTick] = React.useState(0);
   const refresh = () => setTick(t => t + 1);
   React.useEffect(() => { if (window.JUCUM_TT) window.JUCUM_TT.cloudLoadAll().then(refresh); }, []);
@@ -36,27 +36,56 @@ function TeacherClass({ onBack }) {
         <div className="welcome-text">
           <div className="eyebrow t">🏫 Clase</div>
           <h1>Mi clase del día a día</h1>
-          <p>Deja la práctica del día, abre materiales para enseñar, lleva tu bitácora y anota cómo va cada alumno.</p>
+          <p>Sigue tu secuencia, toma asistencia, abre materiales para enseñar, lleva tu bitácora y anota cómo va cada alumno.</p>
         </div>
       </div>
 
       <div className="mm-tabs" style={{flexWrap:'wrap'}}>
-        <button className={`mm-tab ${tab==='daily'?'on':''}`} onClick={()=>setTab('daily')}>📅 Práctica del día</button>
-        <button className={`mm-tab ${tab==='directed'?'on':''}`} onClick={()=>setTab('directed')}>📌 Práctica dirigida</button>
         <button className={`mm-tab ${tab==='seq'?'on':''}`} onClick={()=>setTab('seq')}>🧭 Secuencia de clase</button>
+        <button className={`mm-tab ${tab==='attendance'?'on':''}`} onClick={()=>setTab('attendance')}>📋 Asistencia</button>
         <button className={`mm-tab ${tab==='materials'?'on':''}`} onClick={()=>setTab('materials')}>📚 Materiales</button>
         <button className={`mm-tab ${tab==='log'?'on':''}`} onClick={()=>setTab('log')}>📆 Bitácora</button>
         <button className={`mm-tab ${tab==='notes'?'on':''}`} onClick={()=>setTab('notes')}>📝 Notas</button>
         <button className={`mm-tab ${tab==='reminders'?'on':''}`} onClick={()=>setTab('reminders')}>🔔 Recordatorios</button>
       </div>
 
-      {tab==='daily' ? <DailyPracticePanel onChange={refresh} />
-        : tab==='directed' ? <DirectedPracticePanel onChange={refresh} />
-        : tab==='seq' ? <ClassSequencePanel />
+      {tab==='seq' ? <ClassSequencePanel />
+        : tab==='attendance' ? <TeacherAttendance embedded />
         : tab==='materials' ? <TeacherMaterialsBrowser />
         : tab==='log' ? <ClassLogPanel onChange={refresh} />
         : tab==='notes' ? <TeacherNotesPanel onChange={refresh} />
         : <RemindersPanel onChange={refresh} />}
+    </main>
+  );
+}
+
+/* ── Prácticas (sección del menú): Práctica del día + dirigida + Tareas ── */
+function TeacherPractice({ onBack }) {
+  const [tab, setTab] = React.useState('daily');
+  const [, setTick] = React.useState(0);
+  const refresh = () => setTick(t => t + 1);
+  React.useEffect(() => { if (window.JUCUM_TT) window.JUCUM_TT.cloudLoadAll().then(refresh); }, []);
+
+  return (
+    <main>
+      <button className="back-btn" onClick={onBack}>← Volver al panel</button>
+      <div className="welcome teacher">
+        <div className="welcome-text">
+          <div className="eyebrow t">📝 Prácticas</div>
+          <h1>Prácticas de mis alumnos</h1>
+          <p>Deja la práctica del día, arma prácticas dirigidas con ventana de días y asigna tareas — todo en un solo lugar.</p>
+        </div>
+      </div>
+
+      <div className="mm-tabs" style={{flexWrap:'wrap'}}>
+        <button className={`mm-tab ${tab==='daily'?'on':''}`} onClick={()=>setTab('daily')}>📅 Práctica del día</button>
+        <button className={`mm-tab ${tab==='directed'?'on':''}`} onClick={()=>setTab('directed')}>📌 Práctica dirigida</button>
+        <button className={`mm-tab ${tab==='tasks'?'on':''}`} onClick={()=>setTab('tasks')}>📄 Tareas</button>
+      </div>
+
+      {tab==='daily' ? <DailyPracticePanel onChange={refresh} />
+        : tab==='directed' ? <DirectedPracticePanel onChange={refresh} />
+        : <TeacherAssignments embedded />}
     </main>
   );
 }
@@ -569,4 +598,4 @@ function TeacherStudentNotes({ studentId }) {
   );
 }
 
-Object.assign(window, { TeacherClass, ClassSequencePanel, DirectedPracticePanel, DPPickModule, DailyPracticePanel, TeacherMaterialsBrowser, ClassLogPanel, TeacherNotesPanel, RemindersPanel, NoteList, TeacherStudentNotes });
+Object.assign(window, { TeacherClass, TeacherPractice, ClassSequencePanel, DirectedPracticePanel, DPPickModule, DailyPracticePanel, TeacherMaterialsBrowser, ClassLogPanel, TeacherNotesPanel, RemindersPanel, NoteList, TeacherStudentNotes });

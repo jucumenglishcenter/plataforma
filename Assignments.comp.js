@@ -98,7 +98,7 @@ function TaskFilePicker({ attachments, setAttachments, allowRecord }) {
 }
 
 /* ═══════════════════════ PROFESOR ═══════════════════════ */
-function TeacherAssignments({ onBack }) {
+function TeacherAssignments({ onBack, embedded }) {
   const { STUDENTS, GROUPS, LEVELS } = window.JUCUM_DATA;
   const T = window.JUCUM_TASKS;
   const [creating, setCreating] = tUseState(false);
@@ -110,17 +110,25 @@ function TeacherAssignments({ onBack }) {
 
   if (viewing) return <TeacherSubmissions assignment={viewing} onBack={() => { setViewing(null); refresh(); }} />;
 
+  const Wrap = embedded ? 'div' : 'main';
   return (
-    <main>
-      <button className="back-btn" onClick={onBack}>← Volver al panel</button>
-      <div className="welcome teacher">
-        <div className="welcome-text">
-          <div className="eyebrow">📝 Tareas</div>
-          <h1>Asignaciones</h1>
-          <p>Asigna tareas a un grupo o a alumnos puntuales. Ellos entregan adjuntando archivos y ganan XP. Calificar es opcional.</p>
+    <Wrap>
+      {!embedded && <button className="back-btn" onClick={onBack}>← Volver al panel</button>}
+      {embedded ? (
+        <div className="scard" style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, marginBottom:14}}>
+          <div className="settings-hint" style={{margin:0}}>Asigna <b>tareas</b> a un grupo o a alumnos puntuales. Ellos entregan adjuntando archivos y ganan XP. Calificar es opcional.</div>
+          <button className="btn-settings" style={{flexShrink:0}} onClick={() => setCreating(true)}>+ Nueva tarea</button>
         </div>
-        <button className="btn-settings" onClick={() => setCreating(true)}>+ Nueva tarea</button>
-      </div>
+      ) : (
+        <div className="welcome teacher">
+          <div className="welcome-text">
+            <div className="eyebrow">📝 Tareas</div>
+            <h1>Asignaciones</h1>
+            <p>Asigna tareas a un grupo o a alumnos puntuales. Ellos entregan adjuntando archivos y ganan XP. Calificar es opcional.</p>
+          </div>
+          <button className="btn-settings" onClick={() => setCreating(true)}>+ Nueva tarea</button>
+        </div>
+      )}
 
       {assignments.length === 0 ? (
         <div className="scard" style={{marginTop:18}}><div className="empty-state"><div className="icon">📝</div>Aún no has creado tareas. Crea la primera.</div></div>
@@ -155,7 +163,7 @@ function TeacherAssignments({ onBack }) {
       )}
 
       {creating && <AssignmentForm onClose={() => setCreating(false)} onSaved={() => { setCreating(false); refresh(); }} />}
-    </main>
+    </Wrap>
   );
 }
 

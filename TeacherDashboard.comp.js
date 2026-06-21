@@ -26,13 +26,12 @@ function TeacherDashboard({ onLogout, user }) {
         </div>
         <div className="app-right">
           <span className="role-pill t">👨‍🏫 Profesor</span>
-          <TeacherForumNav onOpen={(gid)=>setView({kind:'forum', group:gid})} />
           <a className={`nav-link ${['groups','group','student'].includes(view.kind)?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'groups'});}}>👥 Mis grupos</a>
           <a className={`nav-link ${view.kind==='class'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'class'});}}>🏫 Clase</a>
+          <a className={`nav-link ${view.kind==='tasks'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'tasks'});}}>📝 Prácticas</a>
           <a className={`nav-link ${view.kind==='evaluate'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'evaluate'});}}>📊 Evaluar</a>
-          <a className={`nav-link ${view.kind==='tasks'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'tasks'});}}>📝 Tareas</a>
-          <a className={`nav-link ${view.kind==='attendance'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'attendance'});}}>📋 Asistencia</a>
           <a className={`nav-link ${view.kind==='exams'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'exams'});}}>📑 Exámenes</a>
+          <TeacherForumNav onOpen={(gid)=>setView({kind:'forum', group:gid})} />
           <NotifBell userId="teacher" />
           <div className="user-pill">
             <div className="ava" style={{background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>{(teacherName.split(' ').map(n=>n[0]).slice(0,2).join('')||'JM').toUpperCase()}</div>
@@ -45,7 +44,7 @@ function TeacherDashboard({ onLogout, user }) {
       {view.kind === 'evaluate' ? (
         <TeacherEvaluate onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'tasks' ? (
-        <TeacherAssignments onBack={() => setView({kind:'groups'})} />
+        <TeacherPractice onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'attendance' ? (
         <TeacherAttendance onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'manage' ? (
