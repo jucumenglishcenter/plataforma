@@ -165,7 +165,7 @@ function GroupsView({ stats, onSelectGroup, teacherName }) {
           return (
             <div key={g.id} className={`gcard lvl-${g.level}`} onClick={() => onSelectGroup(g.id)}>
               <div className="gcard-head">
-                <span className="gcard-pill">{level.emoji} {level.code}</span>
+                <span className="gcard-pill" style={{background:'linear-gradient(135deg,'+level.color+','+level.dark+')', color:'#fff', border:'none'}}>{level.emoji} {level.code}</span>
                 <span className="gcard-count">{members.length} alumnos</span>
               </div>
               <div className="gcard-name">{g.name}</div>
@@ -175,6 +175,20 @@ function GroupsView({ stats, onSelectGroup, teacherName }) {
                 <div><b style={{color:'#2E7D32'}}>{activeNow}</b> activos</div>
                 {inactive > 0 && <div><b style={{color:'#C62828'}}>{inactive}</b> ausentes</div>}
               </div>
+              {(() => {
+                if (!window.JUCUM_DATA.getWeekChampions) return null;
+                const champ1 = (window.JUCUM_DATA.getWeekChampions(g.id).champions || []).find(c => c.rank === 1);
+                return (
+                  <div style={{display:'flex',alignItems:'center',gap:7,marginTop:9,padding:'7px 10px',borderRadius:9,background:'linear-gradient(120deg,#FFF7E0,#FFFDF6)',border:'1px solid #F0D89A'}}>
+                    <span style={{fontSize:15}}>🏆</span>
+                    {champ1 ? (
+                      <span style={{fontSize:12,fontWeight:700,color:'#9c5d00'}}>Campeón: <b style={{fontWeight:800}}>{champ1.emoji ? champ1.emoji + ' ' : ''}{champ1.student.fullName.split(' ')[0]} {(champ1.student.fullName.split(' ')[1]||'')[0]||''}.</b></span>
+                    ) : (
+                      <span style={{fontSize:12,fontWeight:700,color:'#B6852B'}}>Sin campeón aún esta semana</span>
+                    )}
+                  </div>
+                );
+              })()}
               <div className="gcard-go">Ver alumnos →</div>
             </div>
           );
@@ -185,6 +199,57 @@ function GroupsView({ stats, onSelectGroup, teacherName }) {
 }
 
 /* ─── Group detail (one group, students inside) ───────────────────── */
+
+/* 🏆 Campeones de la semana del grupo — vista del profesor (podio Top 3 + escenario del #1) */
+const TCH_SCENES = {
+  'theme-gold': 'repeating-conic-gradient(from 0deg at 50% -4%, rgba(255,214,120,.16) 0deg 6deg, transparent 6deg 14deg), radial-gradient(circle at 50% -8%, rgba(255,216,110,.7), transparent 56%), linear-gradient(160deg,#6E5214,#2C2006)',
+  'theme-mountains': 'radial-gradient(ellipse 85% 46% at 16% 118%, #34204C 0 70%, transparent 71%), radial-gradient(ellipse 78% 44% at 86% 115%, #5A386F 0 70%, transparent 71%), radial-gradient(circle at 50% 50%, #FFE7A8 0 6%, rgba(255,180,120,.55) 7%, transparent 17%), linear-gradient(180deg,#FF9266 0%,#FF6F9C 42%,#7A4D9E 100%)',
+  'theme-night': 'radial-gradient(ellipse 95% 34% at 50% 126%, #131132 0 72%, transparent 73%), radial-gradient(1.4px 1.4px at 18% 26%, #fff, transparent), radial-gradient(1.6px 1.6px at 62% 15%, #fff, transparent), radial-gradient(circle at 76% 24%, #FBF4D0 0 5%, transparent 13%), linear-gradient(180deg,#23266C 0%,#0B0B24 100%)',
+  'theme-aurora': 'radial-gradient(ellipse 95% 34% at 50% 122%, #06131C 0 72%, transparent 73%), radial-gradient(ellipse 52% 42% at 26% 4%, rgba(80,240,180,.55), transparent 60%), radial-gradient(ellipse 46% 40% at 74% 12%, rgba(130,140,255,.5), transparent 60%), linear-gradient(180deg,#0C3242 0%,#07151F 100%)',
+  'theme-ocean': 'radial-gradient(ellipse 130% 30% at 50% 130%, rgba(120,225,255,.55) 0 60%, transparent 61%), radial-gradient(ellipse 130% 26% at 50% 119%, rgba(70,180,235,.5) 0 60%, transparent 61%), linear-gradient(180deg,#0E6CA0 0%,#062236 100%)',
+  'theme-party': 'radial-gradient(3px 3px at 12% 20%, #FFD54F, transparent), radial-gradient(3px 3px at 30% 52%, #FF6F9C, transparent), radial-gradient(3px 3px at 70% 40%, #7CFFB2, transparent), radial-gradient(3px 3px at 86% 22%, #FFB347, transparent), linear-gradient(160deg,#2A2F86,#15184A)',
+};
+function TeacherChampions({ groupId, levelColor }) {
+  const D = window.JUCUM_DATA;
+  const [, force] = React.useReducer(x => x + 1, 0);
+  React.useEffect(() => { if (D.loadLeagueFromCloud) D.loadLeagueFromCloud().then(() => force()); }, [groupId]); // eslint-disable-line
+  if (!D.getWeekChampions) return null;
+  const champ = D.getWeekChampions(groupId);
+  const champions = champ.champions || [];
+  const sceneBg = TCH_SCENES[champ.scenario] || TCH_SCENES['theme-gold'];
+  const ini = (s) => (s.fullName || '?').split(' ').map(w => w[0]).slice(0, 2).join('');
+  const sz = { 1:{a:50,e:26,b:48,bg:'linear-gradient(#F4B400,#D49A00)',ab:'#C99700'}, 2:{a:40,e:20,b:36,bg:'linear-gradient(#B8BCC4,#8E939C)',ab:'#8E939C'}, 3:{a:38,e:19,b:26,bg:'linear-gradient(#D98C4A,#B06A2C)',ab:'#B06A2C'} };
+  const podMap = [2, 1, 3];
+  return (
+    <div className="scard" style={{ marginBottom: 16, padding: 0, overflow: 'hidden' }}>
+      <div style={{ background: sceneBg, color: '#fff', padding: '14px 16px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 15, textShadow: '0 1px 4px rgba(0,0,0,.45)' }}>🏆 Campeones de la semana</div>
+          <span style={{ fontSize: 10, fontWeight: 800, background: 'rgba(0,0,0,.28)', padding: '3px 10px', borderRadius: 20 }}>de este grupo · hasta el lunes</span>
+        </div>
+        {champions.length === 0 ? (
+          <div style={{ marginTop: 12, background: 'rgba(0,0,0,.2)', borderRadius: 10, padding: 14, fontSize: 12.5, fontWeight: 700, textAlign: 'center', textShadow: '0 1px 2px rgba(0,0,0,.4)' }}>🏁 Aún no hay campeones. Se corona al Top 3 por XP cuando cierre la semana.</div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 14, margin: '14px 0 2px' }}>
+            {podMap.map(rk => { const c = champions.find(x => x.rank === rk); if (!c) return <div key={rk} style={{ width: 50 }} />; const z = sz[rk];
+              return (
+                <div key={rk} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                  <div style={{ position: 'relative', width: z.a, height: z.a, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: c.emoji ? z.e : z.a * 0.4, color: '#fff', background: c.emoji ? 'rgba(255,255,255,.16)' : z.ab, border: '2.5px solid rgba(255,255,255,.6)' }}>
+                    {rk === 1 && <span style={{ position: 'absolute', top: -16, left: '50%', transform: 'translateX(-50%)', fontSize: 17 }}>👑</span>}
+                    {c.emoji || ini(c.student)}
+                  </div>
+                  <div style={{ width: z.a + 6, height: z.b, background: z.bg, borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 5, fontFamily: "'Fredoka',sans-serif", fontWeight: 700, fontSize: 15, color: 'rgba(0,0,0,.45)' }}>{rk}</div>
+                  <div style={{ fontSize: 11.5, fontWeight: 800, color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,.5)' }}>{c.student.fullName.split(' ')[0]} {(c.student.fullName.split(' ')[1] || '')[0] || ''}.</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,.85)' }}>{(c.xp || 0).toLocaleString()} XP</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /* Panel SIEMPRE visible para prender/apagar módulos del grupo sin entrar a un modal */
 function GroupModulesQuick({ groupId }) {
@@ -260,6 +325,8 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
       </div>
 
       <GroupModulesQuick groupId={groupId} />
+
+      <TeacherChampions groupId={groupId} levelColor={level.dark} />
 
       <WeeklyPlan groupId={groupId} />
 

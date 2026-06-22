@@ -129,7 +129,7 @@ function neuroSceneHTML(stage, mood, color){
   // Etapa 6 — Neuro dentro de su nave
   if(stage===6){
     return `<div style="position:absolute;inset:0;background:${sceneBg};"></div>${stars}${aura}${sparks}
-      <div class="nv-ship"><div class="nv-dome"><div class="nv-char a-bob" style="transform:scale(.78);">${brainEl}</div><span class="nv-glare"></span></div>
+      <div class="nv-ship"><div class="nv-dome"><div class="nv-char a-bob" style="transform:scale(.58);">${brainEl}</div><span class="nv-glare"></span></div>
       <div class="nv-ufo"><span class="nv-lt"></span><span class="nv-lt"></span><span class="nv-lt"></span><span class="nv-lt"></span></div>
       <span class="nv-thrust"></span></div>`;
   }
