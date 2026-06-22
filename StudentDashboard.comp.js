@@ -771,7 +771,8 @@ function Podium({ student, onSeeTop }) {
   const ranking = getComplianceRanking(student.group) || [];
   const myIdx = ranking.findIndex(r => r.student.id === student.id);
   const me = myIdx >= 0 ? ranking[myIdx] : null;
-  const ranked = me && me.score > 0;
+  // Entra al ranking si tiene dominio O ya ganó XP (p.ej. por tiempo de lectura).
+  const ranked = me && (me.score > 0 || me.xp > 0);
   const ini = (s) => (s.fullName || '?').split(' ').map(w => w[0]).slice(0,2).join('');
   const podMap = [['p2',1],['p1',0],['p3',2]]; // visual: 2.° izq · 1.° centro · 3.° der
   const barH = { p1:62, p2:46, p3:34 }, barBg = { p1:'linear-gradient(#F4B400,#D49A00)', p2:'linear-gradient(#B8BCC4,#8E939C)', p3:'linear-gradient(#D98C4A,#B06A2C)' }, avaBg = { p1:'#C99700', p2:'#8E939C', p3:'#B06A2C' };

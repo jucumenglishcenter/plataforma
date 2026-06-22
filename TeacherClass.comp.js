@@ -24,7 +24,7 @@ function MethodTags({ a }) {
 
 function TeacherClass({ onBack }) {
   const { GROUPS, LEVELS } = window.JUCUM_DATA;
-  const [tab, setTab] = React.useState('seq');
+  const [tab, setTab] = React.useState('attendance');
   const [, setTick] = React.useState(0);
   const refresh = () => setTick(t => t + 1);
   React.useEffect(() => { if (window.JUCUM_TT) window.JUCUM_TT.cloudLoadAll().then(refresh); }, []);
@@ -36,23 +36,19 @@ function TeacherClass({ onBack }) {
         <div className="welcome-text">
           <div className="eyebrow t">🏫 Clase</div>
           <h1>Mi clase del día a día</h1>
-          <p>Sigue tu secuencia, toma asistencia, abre materiales para enseñar, lleva tu bitácora y anota cómo va cada alumno.</p>
+          <p>Toma asistencia, abre materiales para enseñar y anota cómo va cada alumno. Tu secuencia y tu bitácora ahora viven en 🗓️ Planificar.</p>
         </div>
       </div>
 
       <div className="mm-tabs" style={{flexWrap:'wrap'}}>
-        <button className={`mm-tab ${tab==='seq'?'on':''}`} onClick={()=>setTab('seq')}>🧭 Secuencia de clase</button>
         <button className={`mm-tab ${tab==='attendance'?'on':''}`} onClick={()=>setTab('attendance')}>📋 Asistencia</button>
         <button className={`mm-tab ${tab==='materials'?'on':''}`} onClick={()=>setTab('materials')}>📚 Materiales</button>
-        <button className={`mm-tab ${tab==='log'?'on':''}`} onClick={()=>setTab('log')}>📆 Bitácora</button>
         <button className={`mm-tab ${tab==='notes'?'on':''}`} onClick={()=>setTab('notes')}>📝 Notas</button>
         <button className={`mm-tab ${tab==='reminders'?'on':''}`} onClick={()=>setTab('reminders')}>🔔 Recordatorios</button>
       </div>
 
-      {tab==='seq' ? <ClassSequencePanel />
-        : tab==='attendance' ? <TeacherAttendance embedded />
+      {tab==='attendance' ? <TeacherAttendance embedded />
         : tab==='materials' ? <TeacherMaterialsBrowser />
-        : tab==='log' ? <ClassLogPanel onChange={refresh} />
         : tab==='notes' ? <TeacherNotesPanel onChange={refresh} />
         : <RemindersPanel onChange={refresh} />}
     </main>

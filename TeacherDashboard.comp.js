@@ -30,6 +30,7 @@ function TeacherDashboard({ onLogout, user }) {
           <a className={`nav-link ${view.kind==='class'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'class'});}}>🏫 Clase</a>
           <a className={`nav-link ${view.kind==='tasks'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'tasks'});}}>📝 Prácticas</a>
           <a className={`nav-link ${(view.kind==='assess'||view.kind==='evaluate'||view.kind==='exams')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'assess'});}}>📊 Evaluación</a>
+          <a className={`nav-link ${view.kind==='planner'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'planner'});}}>🗓️ Planificar</a>
           <TeacherForumNav onOpen={(gid)=>setView({kind:'forum', group:gid})} />
           <NotifBell userId="teacher" />
           <div className="user-pill">
@@ -42,6 +43,8 @@ function TeacherDashboard({ onLogout, user }) {
 
       {view.kind === 'assess' ? (
         <TeacherAssessment onBack={() => setView({kind:'groups'})} initialTab={view.tab} />
+      ) : view.kind === 'planner' ? (
+        <ClassPlanner onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'evaluate' ? (
         <TeacherEvaluate onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'tasks' ? (

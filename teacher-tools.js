@@ -5,8 +5,10 @@
  * los materiales vía jucum-connect, por eso necesita nube) y el resto.
  */
 (function () {
-  const DP_KEY  = 'jucum_daily_practice_v1';   // { [groupId]: { [weekday]: [items] } }
+  const DP_KEY  = 'jucum_daily_practice_v1';   // { [groupId]: { [weekday]: [items] } }  (LEGADO)
   const DPR_KEY = 'jucum_directed_practice_v1'; // [ {id, groupId, openDate, dueDate, activities, bonusXp, createdAt} ]
+  const PP_KEY  = 'jucum_practice_plans_v1';    // [ {id, groupId, title, activities, dates:[yyyy-mm-dd], assignToStudents, bonusXp, note, createdAt} ]
+  const CP_KEY  = 'jucum_class_plans_v1';        // planes de CLASE (sesión minuto a minuto) por fecha — escritos por el PlannerHub
   const CL_KEY  = 'jucum_class_log_v1';         // array de usos de material en clase
   const NOTE_KEY= 'jucum_teacher_notes_v1';     // array de notas
   const REM_KEY = 'jucum_teacher_reminders_v1'; // array de recordatorios
@@ -27,34 +29,113 @@
     w(DP_KEY, all);
     cloudSetting('daily_practice', all);
   }
-  /* Lo que el alumno puede practicar HOY: lo que dejó el profesor para su grupo
-   * en el día de la semana actual; si no hay nada, una sugerencia genérica. */
-  function getTodayPracticeForStudent(student) {
-    const wd = new Date().getDay();
+  /* Lo que el alumno debe practicar en una FECHA concreta (hoy por defecto).
+   * Orden de resolución — meticuloso para NO duplicar ni arrastrar memoria vieja:
+   *   1) Plan de práctica del profesor cuya lista de fechas incluya ESTA fecha
+   *      (y que esté marcado para asignar a alumnos). Sin repetición fantasma:
+   *      solo aparece en los días que el profe eligió.
+   *   2) (Legado) práctica por día de la semana, si aún existe configurada.
+   *   3) Recomendación automática SOLO si no hay nada definido para esa fecha. */
+  function todayStr() { return new Date().toISOString().slice(0, 10); }
+  function getTodayPracticeForStudent(student, dateStr) {
+    if (!student) return { items: [], isGeneric: true, source: 'none' };
+    const date = dateStr || todayStr();
+    // 1) plan por fecha explícita (fuente principal)
+    const plans = getPracticePlansForStudentOnDate(student, date).filter(p => p.assignToStudents !== false);
+    if (plans.length) {
+      const seen = new Set(); const items = [];
+      plans.forEach(p => (p.activities || []).forEach(a => {
+        const k = `${a.moduleId}:${a.activityId}:${a.label}`;
+        if (seen.has(k)) return; seen.add(k); items.push(a);
+      }));
+      if (items.length) return { items, isGeneric: false, source: 'plan', planTitle: plans[0].title, planId: plans[0].id };
+    }
+    // 2) legado: práctica por día de la semana (solo si el profe la dejó así)
+    const wd = new Date(date + 'T12:00:00').getDay();
     const set = getDailyPractice(student.group, wd);
-    if (set && set.length) return { items: set, isGeneric: false };
-    return { items: genericPractice(student), isGeneric: true };
+    if (set && set.length) return { items: set, isGeneric: false, source: 'weekday' };
+    // 3) recomendación automática (último recurso, nunca sobre un plan definido)
+    return { items: genericPractice(student), isGeneric: true, source: 'generic' };
   }
+  /* Recomendación automática: SOLO cuando el profe no definió plan para esa fecha.
+   * Se basa en (a) lo último que se trabajó en clase (bitácora) para sugerir su
+   * práctica de casa (P1/P2), y (b) el avance del alumno en su módulo activo.
+   * No acumula: devuelve un set corto y enfocado. */
   function genericPractice(student) {
     const D = window.JUCUM_DATA;
-    const out = [];
+    const out = []; const seen = new Set();
+    const push = (it) => { const k = `${it.moduleId}:${it.activityId}`; if (seen.has(k)) return; seen.add(k); out.push(it); };
     try {
       const settings = D.getGroupSettings(student.group);
       const mods = D.MODULE_CATALOG[student.level] || [];
       const activeIds = settings.activeModuleIds || (settings.activeModuleId ? [settings.activeModuleId] : []);
       const mod = mods.find(m => activeIds.includes(m.id)) || mods[0];
       const prog = D.getStudentProgress(student.id);
+      // (a) lo que se vio en clase recientemente con este grupo → su práctica de casa
+      const log = (getClassLogForGroupRecent(student.group, 4) || []);
+      log.forEach(e => {
+        if (!e.moduleId) return;
+        const m = mods.find(x => x.id === e.moduleId); if (!m) return;
+        // si lo de clase fue gramática, sugiere su P1/P2 de casa del mismo tema (group)
+        const seenAct = (m.activities || []).find(a => a.id === e.activityId);
+        const topic = seenAct && seenAct.group;
+        const home = (m.activities || []).find(a => a.type === 'grammar' && (!topic || a.group === topic)
+          && !D.entryPassed(prog.completed[`${m.id}:${a.id}`], student.level, student.group));
+        if (home) push({ moduleId: m.id, activityId: home.id, label: `Tarea de lo visto en clase: ${home.name}${topic ? ' · ' + topic : ''}`, type: home.type });
+      });
+      // (b) continúa el módulo activo donde se quedó
       if (mod) {
         const next = (mod.activities || []).find(a => !prog.completed[`${mod.id}:${a.id}`]) || mod.activities[0];
-        if (next) out.push({ moduleId: mod.id, activityId: next.id, label: `Continúa tu módulo: ${next.name}`, type: next.type });
-        const listen = (mod.activities || []).find(a => a.type === 'listening');
-        if (listen) out.push({ moduleId: mod.id, activityId: listen.id, label: '10 min de comprensión auditiva (listening)', type: 'listening' });
-        const read = (mod.activities || []).find(a => a.type === 'reading' || a.type === 'story');
-        if (read) out.push({ moduleId: mod.id, activityId: read.id, label: 'Lee con calma una historia o lectura', type: read.type });
+        if (next) push({ moduleId: mod.id, activityId: next.id, label: `Continúa tu módulo: ${next.name}`, type: next.type });
+        const read = (mod.activities || []).find(a => a.type === 'story' || a.type === 'reading');
+        if (read && out.length < 3) push({ moduleId: mod.id, activityId: read.id, label: 'Lee con calma tu Story (cuenta por tiempo)', type: read.type });
       }
     } catch {}
-    if (!out.length) out.push({ moduleId: null, activityId: null, label: 'Practica al menos 15 minutos hoy en cualquier actividad de tu módulo.', type: 'grammar' });
-    return out;
+    if (!out.length) out.push({ moduleId: null, activityId: null, label: 'Practica al menos 15 minutos hoy en una actividad de tu módulo.', type: 'grammar' });
+    return out.slice(0, 3);
+  }
+
+  /* ── Planes de práctica por FECHAS explícitas (el profe elige los días) ── */
+  function getPracticePlans() { return j(PP_KEY, []); }
+  function savePracticePlans(a) { w(PP_KEY, a); cloudSetting('practice_plans', a); }
+  function addPracticePlan(pp) {
+    const all = getPracticePlans();
+    const e = { id: 'pp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
+      groupId: pp.groupId || null,
+      title: pp.title || 'Práctica',
+      activities: pp.activities || [],            // [{moduleId, activityId, label, type, location}]
+      dates: Array.from(new Set(pp.dates || [])).sort(),  // fechas yyyy-mm-dd elegidas por el profe
+      assignToStudents: pp.assignToStudents !== false,    // true: actualiza la práctica del alumno
+      bonusXp: pp.bonusXp != null ? pp.bonusXp : 0,
+      note: pp.note || '',
+      createdAt: new Date().toISOString() };
+    all.unshift(e); savePracticePlans(all); return e.id;
+  }
+  function updatePracticePlan(id, partial) { const a = getPracticePlans(); const i = a.findIndex(x => x.id === id); if (i >= 0) { a[i] = { ...a[i], ...partial, dates: partial.dates ? Array.from(new Set(partial.dates)).sort() : a[i].dates }; savePracticePlans(a); } }
+  function deletePracticePlan(id) { savePracticePlans(getPracticePlans().filter(p => p.id !== id)); }
+  function getPracticePlansForDay(date) { return getPracticePlans().filter(p => (p.dates || []).includes(date)); }
+  function getPracticePlansForStudentOnDate(student, date) { return getPracticePlans().filter(p => p.groupId === student.group && (p.dates || []).includes(date)); }
+
+  /* ── Planes de CLASE por fecha (sesión minuto a minuto) ── */
+  function getClassPlans() { return j(CP_KEY, []); }
+  function saveClassPlans(a) { w(CP_KEY, a); cloudSetting('class_plans', a); }
+  function upsertClassPlan(plan) {
+    const all = getClassPlans();
+    const rec = { ...plan, id: plan.id || 'cp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5), savedAt: new Date().toISOString() };
+    const i = all.findIndex(x => x.id === rec.id); if (i >= 0) all[i] = rec; else all.unshift(rec);
+    saveClassPlans(all); return rec.id;
+  }
+  function deleteClassPlan(id) { saveClassPlans(getClassPlans().filter(p => p.id !== id)); }
+  function getClassPlansForDay(date) { return getClassPlans().filter(p => p.date === date); }
+
+  /* Lo planeado para un día (clase + práctica) — usado por el calendario del hub */
+  function getPlannedForDay(date) {
+    return { classPlans: getClassPlansForDay(date), practicePlans: getPracticePlansForDay(date) };
+  }
+  function getClassLogForGroupRecent(groupId, days) {
+    const cut = new Date(Date.now() - (days || 4) * 86400000).toISOString().slice(0, 10);
+    return getClassLog().filter(e => (!groupId || e.groupId === groupId) && e.date >= cut)
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)));
   }
 
   /* ── Práctica dirigida (bloque con ventana de días + bono) ───────── */
@@ -188,6 +269,8 @@
     if (!window.JUCUM_SB) return;
     try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','daily_practice').maybeSingle(); if (data && data.value) w(DP_KEY, data.value); } catch(e){}
     try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','directed_practice').maybeSingle(); if (data && Array.isArray(data.value)) w(DPR_KEY, data.value); } catch(e){}
+    try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','practice_plans').maybeSingle(); if (data && Array.isArray(data.value)) w(PP_KEY, data.value); } catch(e){}
+    try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','class_plans').maybeSingle(); if (data && Array.isArray(data.value)) w(CP_KEY, data.value); } catch(e){}
     try { const rows = await window.JUCUM_SB.all('teacher_notes'); if (Array.isArray(rows)) saveNotes(rows.map(r=>({ id:r.id, date:r.created_at, studentId:r.student_id, groupId:r.group_id, kind:r.kind, text:r.text, tag:r.tag })).sort((a,b)=>String(b.date).localeCompare(String(a.date)))); } catch(e){}
     try { const rows = await window.JUCUM_SB.all('teacher_reminders'); if (Array.isArray(rows)) w(REM_KEY, rows.map(r=>({ id:r.id, date:r.created_at, groupId:r.group_id, text:r.text, due:r.due, done:r.done }))); } catch(e){}
   }
@@ -205,6 +288,8 @@
 
   window.JUCUM_TT = {
     getDailyPractice, setDailyPractice, getTodayPracticeForStudent, genericPractice,
+    getPracticePlans, addPracticePlan, updatePracticePlan, deletePracticePlan, getPracticePlansForDay, getPracticePlansForStudentOnDate,
+    getClassPlans, upsertClassPlan, deleteClassPlan, getClassPlansForDay, getPlannedForDay, getClassLogForGroupRecent,
     getDirectedAll, addDirected, updateDirected, deleteDirected, getDirectedForGroup, directedStatusForStudent, getActiveDirectedForStudent,
     getClassLog, logClassMaterial, deleteClassEntry, getClassLogForMonth, getClassLogForDay, cloudLoadClassLog, cloudLoadAll,
     addNote, updateNote, deleteNote, getStudentNotes, getGeneralNotes, getNotes,

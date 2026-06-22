@@ -44,14 +44,15 @@ function getStudentHistory(studentId, limit) {
 function getStudentSummary(studentId, days) {
   const hist = getStudentHistory(studentId, days || 60);
   const total = hist.length;
-  const asistio = hist.filter(h => h.status === 'asistio').length;
+  const asistio = hist.filter(h => h.status === 'asistio' || h.status === 'tarde').length;
+  const tarde = hist.filter(h => h.status === 'tarde').length;
   const falto = hist.filter(h => h.status === 'falto').length;
   const justifico = hist.filter(h => h.status === 'justifico').length;
   const pct = total ? Math.round((asistio + justifico) / total * 100) : null;
   // faltas consecutivas recientes (sin justificar)
   let streakAbsent = 0;
   for (const h of hist) { if (h.status === 'falto') streakAbsent++; else break; }
-  return { total, asistio, falto, justifico, pct, streakAbsent };
+  return { total, asistio, falto, justifico, tarde, pct, streakAbsent };
 }
 
 /* ¿Semana perfecta? asistió a todas las clases registradas de la semana actual

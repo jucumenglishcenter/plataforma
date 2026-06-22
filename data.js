@@ -952,6 +952,108 @@ function daysUntilMonday() {
   return ((8 - d.getDay()) % 7) || 7;
 }
 
+/* ════════════════════════════════════════════════════════════════════
+ * 🏆 LIGA SEMANAL · campeones congelados + escenario del #1 + emoji por ganador
+ *  - El Top 3 de la semana que YA cerró queda FIJO ("campeones de la semana")
+ *    hasta el lunes siguiente, cuando se corona al nuevo podio.
+ *  - El #1 elige un ESCENARIO (fondo) que ve todo el grupo.
+ *  - Cada uno de los 3 ganadores elige su EMOJI de avatar (solo el suyo).
+ *  Persistencia: localStorage (caché) + app_settings 'weekly_league' (nube,
+ *  multidispositivo). La LISTA se congela al calcularse por primera vez en la
+ *  semana y se comparte por la nube; solo se guardan también las ELECCIONES. */
+const LEAGUE_STATE_KEY = 'jucum_league_state_v1';
+const LEAGUE_SCENARIOS = ['theme-gold','theme-mountains','theme-night','theme-aurora','theme-ocean','theme-party'];
+function lastWeekId() {                       // lunes de la semana ANTERIOR (la cerrada)
+  const d = new Date(); const day = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - day - 7);
+  return d.toISOString().slice(0, 10);
+}
+function _nextMonday(mondayStr) {
+  const d = new Date(mondayStr + 'T00:00:00'); d.setDate(d.getDate() + 7);
+  return d.toISOString().slice(0, 10);
+}
+/* XP de un alumno DENTRO de una semana concreta [lunes, lunes+7) */
+function getWeeklyXPForWeek(student, mondayStr) {
+  const progress = getStudentProgress(student.id);
+  const end = _nextMonday(mondayStr);
+  let xp = 0;
+  for (const [key, entry] of Object.entries(progress.completed || {})) {
+    if (!entry || !entry.date) continue;
+    const day = String(entry.date).slice(0, 10);
+    if (day < mondayStr || day >= end) continue;
+    const [modId, actId] = key.split(':');
+    const mods = MODULE_CATALOG[student.level] || [];
+    const act = mods.find(m => m.id === modId)?.activities.find(a => a.id === actId);
+    const base = act ? (XP_BASE[act.type] || 10) : 10;
+    let bonusPct = 0.5;
+    if (typeof entry.score === 'number') bonusPct = entry.score > 10 ? Math.min(1, entry.score / 100) : Math.min(1, entry.score / 10);
+    xp += Math.round(base * (1 + bonusPct));
+  }
+  return xp;
+}
+function getRankingForWeek(groupId, mondayStr) {
+  return STUDENTS
+    .filter(s => s.group === groupId)
+    .map(s => ({ student: s, xp: getWeeklyXPForWeek(s, mondayStr) }))
+    .sort((a, b) => b.xp - a.xp);
+}
+function _getLeagueState() { try { return JSON.parse(localStorage.getItem(LEAGUE_STATE_KEY) || '{}'); } catch { return {}; } }
+function _saveLeagueState(all, pushCloud) {
+  localStorage.setItem(LEAGUE_STATE_KEY, JSON.stringify(all));
+  if (pushCloud) { try { if (window.JUCUM_SB) window.JUCUM_SB.getClient().from('app_settings').upsert({ key: 'weekly_league', value: all }, { onConflict: 'key' }).then(() => {}, () => {}); } catch {} }
+}
+async function loadLeagueFromCloud() {
+  if (!window.JUCUM_SB) return;
+  try {
+    const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key', 'weekly_league').maybeSingle();
+    if (data && data.value && typeof data.value === 'object') {
+      const cloud = data.value, local = _getLeagueState();
+      localStorage.setItem(LEAGUE_STATE_KEY, JSON.stringify({ ...local, ...cloud }));
+    }
+  } catch {}
+}
+function _leagueGroup(groupId, create) {
+  const wk = lastWeekId(); const all = _getLeagueState();
+  let g = all[groupId];
+  if (!g || g.champWeek !== wk) {
+    const list = getRankingForWeek(groupId, wk).filter(r => r.xp > 0).slice(0, 3)
+      .map((r, i) => ({ id: r.student.id, name: r.student.fullName, xp: r.xp, rank: i + 1 }));
+    g = { champWeek: wk, scenario: 'theme-gold', emojis: {}, list };
+    all[groupId] = g;
+    _saveLeagueState(all, create && list.length > 0);
+  }
+  return { all, g, wk };
+}
+/* Campeones congelados de la semana cerrada: { week, scenario, champions:[{student,xp,rank,emoji}] } */
+function getWeekChampions(groupId) {
+  const { g, wk } = _leagueGroup(groupId, true);
+  const champions = (g.list || []).map(c => {
+    const student = STUDENTS.find(s => s.id === c.id) || { id: c.id, fullName: c.name, group: groupId };
+    return { student, xp: c.xp, rank: c.rank, emoji: (g.emojis && g.emojis[c.id]) || '' };
+  });
+  return { week: wk, scenario: g.scenario || 'theme-gold', champions };
+}
+function getLeagueScenario(groupId) { return getWeekChampions(groupId).scenario; }
+function championRank(student) {
+  if (!student) return 0;
+  const c = getWeekChampions(student.group).champions.find(x => x.student.id === student.id);
+  return c ? c.rank : 0;
+}
+function getChampionEmoji(groupId, studentId) {
+  const c = getWeekChampions(groupId).champions.find(x => x.student.id === studentId);
+  return c ? c.emoji : '';
+}
+function setChampionEmoji(groupId, studentId, emoji) {
+  const { all, g } = _leagueGroup(groupId, false);
+  if (!(g.list || []).some(c => c.id === studentId)) return;
+  g.emojis = g.emojis || {}; g.emojis[studentId] = emoji; _saveLeagueState(all, true);
+}
+function setLeagueScenario(groupId, scenario) {
+  if (LEAGUE_SCENARIOS.indexOf(scenario) < 0) return;
+  const { all, g } = _leagueGroup(groupId, false);
+  g.scenario = scenario; _saveLeagueState(all, true);
+}
+
 /* ── Dominio real del alumno (anti falsos positivos) ──────────────────
  * El "promedio" antiguo solo promediaba las prácticas hechas, así que un
  * alumno con 2 actividades al 100% mostraba 100%. El dominio pondera:
@@ -1551,8 +1653,11 @@ function getDropExplanation(student) {
   const base = _getStandingBaseline(student.id);
   const toImprove = getActivitiesToImprove(student).length;
   if (!base) {
-    // primera vez en este dispositivo: solo avisa si arranca con prácticas por mejorar
-    return toImprove > 0 ? { init: true, reasons: ['below'], toImprove, masteryPct: cur.masteryPct } : null;
+    // primera vez en este dispositivo: solo avisa si YA tiene posición (dominio>0) y
+    // arranca con prácticas por mejorar. Un alumno recién empezado (dominio 0) NO "baja
+    // de posición" — todavía no entra al ranking; el Podio ya le dice "completa tu
+    // primera práctica para entrar y competir". Evita el mensaje contradictorio.
+    return (cur.masteryPct > 0 && toImprove > 0) ? { init: true, reasons: ['below'], toImprove, masteryPct: cur.masteryPct } : null;
   }
   const reasons = [];
   if (_bandIndex(cur.band) > _bandIndex(base.band)) reasons.push('band');   // índice mayor = banda peor
@@ -1748,3 +1853,16 @@ window.JUCUM_DATA.setModuleExamWeight = setModuleExamWeight;
 window.JUCUM_DATA.getModuleStats = getModuleStats;
 window.JUCUM_DATA.getModuleExamResult = getModuleExamResult;
 window.JUCUM_DATA.getModuleFinalGrade = getModuleFinalGrade;
+
+/* 🏆 Liga semanal · campeones congelados + escenario + emojis */
+window.JUCUM_DATA.lastWeekId = lastWeekId;
+window.JUCUM_DATA.getWeeklyXPForWeek = getWeeklyXPForWeek;
+window.JUCUM_DATA.getRankingForWeek = getRankingForWeek;
+window.JUCUM_DATA.getWeekChampions = getWeekChampions;
+window.JUCUM_DATA.getLeagueScenario = getLeagueScenario;
+window.JUCUM_DATA.championRank = championRank;
+window.JUCUM_DATA.getChampionEmoji = getChampionEmoji;
+window.JUCUM_DATA.setChampionEmoji = setChampionEmoji;
+window.JUCUM_DATA.setLeagueScenario = setLeagueScenario;
+window.JUCUM_DATA.loadLeagueFromCloud = loadLeagueFromCloud;
+window.JUCUM_DATA.LEAGUE_SCENARIOS = LEAGUE_SCENARIOS;
