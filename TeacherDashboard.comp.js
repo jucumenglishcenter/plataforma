@@ -322,6 +322,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
         </div>
         <button className="btn-settings" onClick={() => setShowSettings(true)}>⚙️ Configurar grupo</button>
         <button className="btn-settings" onClick={() => setShowReport(true)} style={{marginLeft:8}}>📄 Reporte PDF</button>
+        <button className="btn-settings" onClick={() => { if (window.JUCUM_STUDENT_PREVIEW) window.JUCUM_STUDENT_PREVIEW.open(groupId); }} style={{marginLeft:8}} title="Ver la app tal como la ve un alumno de este grupo (demostración)">👁 Ver como alumno</button>
       </div>
 
       <GroupModulesQuick groupId={groupId} />
