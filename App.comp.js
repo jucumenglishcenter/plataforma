@@ -58,10 +58,42 @@ function App() {
             const seedM1 = (CAT['pre-a1'] || []).find(m => m.id === 'pa1-m1');
             if (rows && rows.length > 0) {
               Object.keys(CAT).forEach(k => CAT[k].length = 0);
+              // De-dup: la tabla en la nube puede traer el MISMO módulo repetido
+              // (mismo nombre, distinto id) si se importó dos veces. Conservamos
+              // una sola copia por nombre (la más completa), reapuntamos los
+              // grupos que tuvieran activada la copia descartada y borramos las
+              // filas sobrantes de la nube para que no vuelvan a aparecer.
+              const seenMod = {};   // `${level}::${nombre}` -> módulo conservado
+              const dupRemap = {};  // idDescartado -> idConservado
               rows.forEach(r => {
-                CAT[r.level] = CAT[r.level] || [];
-                CAT[r.level].push({ id:r.id, name:r.name, emoji:r.emoji, topics:r.topics||[], activities:r.activities||[] });
+                const mod = { id:r.id, name:r.name, emoji:r.emoji, topics:r.topics||[], activities:r.activities||[] };
+                const key = r.level + '::' + String(r.name || '').trim().toLowerCase();
+                const prev = seenMod[key];
+                if (!prev) {
+                  seenMod[key] = mod;
+                  CAT[r.level] = CAT[r.level] || [];
+                  CAT[r.level].push(mod);
+                  return;
+                }
+                const keep = (mod.activities.length > prev.activities.length) ? mod : prev;
+                const drop = (keep === mod) ? prev : mod;
+                if (keep === mod) {
+                  const arr = CAT[r.level]; arr[arr.indexOf(prev)] = mod; seenMod[key] = mod;
+                }
+                dupRemap[drop.id] = keep.id;
               });
+              const dupIds = Object.keys(dupRemap);
+              if (dupIds.length) {
+                (window.JUCUM_DATA.GROUPS || []).forEach(g => {
+                  const st = window.JUCUM_DATA.getGroupSettings(g.id);
+                  const ids = (st.activeModuleIds && st.activeModuleIds.length) ? st.activeModuleIds : (st.activeModuleId ? [st.activeModuleId] : []);
+                  if (ids.some(id => dupRemap[id])) {
+                    const next = [...new Set(ids.map(id => dupRemap[id] || id))];
+                    window.JUCUM_DATA.setGroupSettings(g.id, { activeModuleIds: next });
+                  }
+                });
+                if (window.JUCUM_SYNC.deleteModuleDb) dupIds.forEach(id => { try { window.JUCUM_SYNC.deleteModuleDb(id); } catch {} });
+              }
               // One-time upgrade: if the cloud copy of M1 has no URLs but the
               // built-in seed does, replace it with the URL-loaded seed.
               const cloudM1 = (CAT['pre-a1'] || []).find(m => m.id === 'pa1-m1');
