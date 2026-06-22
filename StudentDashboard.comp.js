@@ -803,16 +803,16 @@ function DayCard({ student, streak, todayMin, target }) {
   );
 }
 
-/* Top del grupo (simple) con Top 3 resaltado = próximos campeones */
+/* Top del grupo (simple) por XP de la semana — los próximos campeones */
 function GroupTopSimple({ student, onSeeTop }) {
-  const { getComplianceRanking } = window.JUCUM_DATA;
-  const ranking = getComplianceRanking(student.group) || [];
+  const { getWeeklyRanking } = window.JUCUM_DATA;
+  const ranking = getWeeklyRanking(student.group) || [];
   const myIdx = ranking.findIndex(r => r.student.id === student.id);
   const me = myIdx>=0 ? ranking[myIdx] : null;
-  const ranked = me && (me.score>0 || me.xp>0);
+  const ranked = me && me.xp>0;
   return (
     <div className="scard" style={{padding:16}}>
-      <div style={{fontSize:10.5,fontWeight:800,letterSpacing:'.1em',textTransform:'uppercase',color:'var(--text-soft,#6B6B6B)',marginBottom:10}}>🏅 Top del grupo · constancia</div>
+      <div style={{fontSize:10.5,fontWeight:800,letterSpacing:'.1em',textTransform:'uppercase',color:'var(--text-soft,#6B6B6B)',marginBottom:10}}>🏅 Top del grupo · esta semana</div>
       {!ranked ? (
         <div style={{background:'#F6F8FD',borderRadius:10,padding:14,fontSize:12.5,fontWeight:700,textAlign:'center',lineHeight:1.5,color:'var(--text-soft,#6B6B6B)'}}>🏁 Aún no estás en el ranking. Completa tu primera práctica para <b>entrar y competir</b>.</div>
       ) : (<>
@@ -822,7 +822,7 @@ function GroupTopSimple({ student, onSeeTop }) {
               <span style={{fontWeight:800,width:22,color:next?'#C28A00':'var(--text-soft,#6B6B6B)'}}>{i+1}°</span>
               <span style={{flex:1,fontWeight:700,color:'#2A3550'}}>{isMe?'Tú':r.student.fullName.split(' ')[0]+' '+((r.student.fullName.split(' ')[1]||'')[0]||'')+'.'}</span>
               {next && <span style={{fontSize:9.5,fontWeight:800,color:'#fff',background:'#E0A400',padding:'2px 7px',borderRadius:10,textTransform:'uppercase',letterSpacing:'.04em'}}>próx. campeón</span>}
-              <span style={{fontWeight:800,color:'var(--text-soft,#6B6B6B)',fontSize:12}}>{r.score}%</span>
+              <span style={{fontWeight:800,color:'var(--text-soft,#6B6B6B)',fontSize:12}}>{(r.xp||0).toLocaleString()} XP</span>
             </div>);})}
         </div>
         <div style={{fontSize:11,color:'var(--text-mute,#A8A8A8)',fontWeight:700,textAlign:'center',marginTop:10}}>✨ El <b style={{color:'#C28A00'}}>Top 3</b> serán los próximos campeones si siguen así</div>
