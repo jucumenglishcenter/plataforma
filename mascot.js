@@ -71,15 +71,15 @@
   }
 
   function buildNarrative(stage, ctx) {
-    const { inactive, nextSold, justRecovered, minsLeft, todayMin } = ctx;
+    const { inactive, todayMin } = ctx;
     switch (stage) {
-      case 0: return `Pasaron ${inactive || 'varios'} días sin práctica. A Neuro no le alcanzó ni para la luz y tuvo que vender ${nextSold || 'sus cosas'}. No lo abandones: con solo 10 minutos hoy empieza a recuperarse. 💪`;
-      case 1: return `Neuro está decaído y ya no tiene ${nextSold || 'algunas cosas'}. Le faltan fuerzas… unos minutos de práctica hoy lo levantan. 🌱`;
-      case 2: return `Neuro está preocupado: si dejas de practicar irá perdiendo ${nextSold || 'lo que tiene'}. Demuéstrale tu esfuerzo y cuídalo. 🤍`;
-      case 3: return `Neuro está estable. Mantén tu práctica diaria para que crezca fuerte y recupere todo lo suyo. 🙂`;
-      case 4: return `¡Neuro está animado! Tu constancia se nota${justRecovered ? ` y recuperó ${justRecovered.name}` : ''}. Sigue así. 😄`;
-      case 5: return `¡Neuro está fuerte y feliz! Ya casi imparable${justRecovered ? `, con ${justRecovered.name} de vuelta` : ''}. ¡No bajes el ritmo! 💪🔥`;
-      case 6: return `¡Neuro está IMPARABLE, corriendo con su cinta! ${todayMin > 0 ? 'Practicaste hoy y' : 'Tu constancia es ejemplar y'} eres su mejor entrenador. 🏃🔥`;
+      case 0: return `Neuro se quedó sin energía y se fue a descansar… te dejó una carta. Tócala para leer su mensaje 💌`;
+      case 1: return `Neuro está triste viendo a otros Neuros felices. Unos minutos de práctica hoy lo animan 🌱`;
+      case 2: return `Neuro está bajo la lluvia, preocupado. Si no practicas seguirá decayendo — ¡no lo dejes! ☔`;
+      case 3: return `Neuro está estable, pero si dejas de practicar se va a <b>ahogar en problemas</b>… ya se siente venir la lluvia. ¡Mantén tu práctica diaria! 🌧️→☀️`;
+      case 4: return `¡Neuro está animado! Tu constancia se nota. Sigue así 😄`;
+      case 5: return `¡Neuro está fuerte, con su traje de karateca! No bajes el ritmo 🥋💪`;
+      case 6: return `¡Neuro está IMPARABLE, surcando el espacio en su nave! ${todayMin > 0 ? 'Practicaste hoy y' : 'Tu constancia es ejemplar y'} eres su mejor entrenador 🚀🌌`;
       default: return '';
     }
   }

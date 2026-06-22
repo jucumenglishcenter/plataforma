@@ -207,9 +207,9 @@ function StudentDashboard({ user, onLogout }) {
         <StudentPractice student={student} settings={settings} onBack={() => setView('dashboard')} />
       ) : (
       <main>
-        <div className="welcome">
+        <div className="welcome" data-level={student.level} style={{background:'linear-gradient(135deg,'+level.color+','+level.dark+')'}}>
           <div className="welcome-text">
-            <div className="eyebrow">{level.emoji} {level.code} · {group.name}</div>
+            <div className="eyebrow" style={{color:'#fff', opacity:1, textShadow:'0 1px 3px rgba(0,0,0,.4)'}}>{level.emoji} {level.code} · {group.name}</div>
             <h1>¡Hola, {student.fullName.split(' ')[0]}!</h1>
             <p>{student.streak > 0
               ? <>Racha de <b>{student.streak} {student.streak === 1 ? 'día' : 'días'}</b> 🔥 ¡No la rompas hoy!</>
@@ -221,25 +221,17 @@ function StudentDashboard({ user, onLogout }) {
           </div>
         </div>
 
-        {/* — Neuro: bienvenida + ánimo (refleja el esfuerzo) — */}
-        <div style={{marginTop:18}}><MascotCard student={student} /></div>
-
-        {/* — Meta de hoy + Top del grupo — */}
-        <div className="two-col" style={{gridTemplateColumns:'1fr 1fr', marginTop:18}}>
-          <div className="scard daily-card">
-            <div className="sec-head"><div className="sec-title">Meta de hoy</div></div>
-            <DailyRing done={todayMin} target={targetMin} levelColor={level.color} dark={level.dark} />
-            <div className="daily-msg">
-              {todayMin >= targetMin
-                ? <>🎉 <b>¡Meta cumplida!</b> Sigue si quieres más XP.</>
-                : <>Te faltan <b>{targetMin - todayMin} min</b> para tu meta de hoy.</>}
-            </div>
-          </div>
-          <Podium student={student} onSeeTop={() => setView('practica')} />
+        {/* — Neuro + (Racha fusionada con Meta de hoy) — */}
+        <div className="two-col" style={{gridTemplateColumns:'1.4fr 1fr', marginTop:18}}>
+          <MascotCard student={student} />
+          <DayCard student={student} streak={student.streak} todayMin={todayMin} target={targetMin} />
         </div>
 
-        {/* — Racha + récord personal — */}
-        <div style={{marginTop:18}}><StreakCard streak={student.streak} student={student} /></div>
+        {/* — Campeones de la semana (protagonista) + Top del grupo (simple) — */}
+        <div className="two-col" style={{gridTemplateColumns:'1.35fr 1fr', marginTop:18}}>
+          <WeekChampionsCard student={student} />
+          <GroupTopSimple student={student} onSeeTop={() => setView('practica')} />
+        </div>
 
         {/* — CTA: todo el material vive en "Mi práctica" — */}
         <button type="button" onClick={() => setView('practica')} style={{marginTop:18, width:'100%', border:'none', cursor:'pointer', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:20, color:'#fff', background:'linear-gradient(135deg,#F4A02C,#E07A12)', borderRadius:18, padding:18, display:'flex', alignItems:'center', justifyContent:'center', gap:12, boxShadow:'0 10px 24px rgba(224,122,18,.32)'}}>▶ Empieza a practicar →</button>
@@ -760,6 +752,190 @@ function MiniRing({ done, target }) {
       <div>
         <b style={{fontSize:13, fontFamily:"'Fredoka',sans-serif", color:'#1B5E20', display:'block', lineHeight:1}}>{done} min</b>
         <span style={{fontSize:10.5, fontWeight:800, color:'var(--text-mute,#A8A8A8)', textTransform:'uppercase'}}>{met ? 'meta de hoy ✓' : (target - done) + ' min restantes'}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ════════ Liga semanal + tarjetas del panel rediseñado ════════ */
+const LG_SCENES = {
+  'theme-gold': 'repeating-conic-gradient(from 0deg at 50% -4%, rgba(255,214,120,.16) 0deg 6deg, transparent 6deg 14deg), radial-gradient(circle at 50% -8%, rgba(255,216,110,.7), transparent 56%), linear-gradient(160deg,#6E5214,#2C2006)',
+  'theme-mountains': 'radial-gradient(ellipse 85% 46% at 16% 118%, #34204C 0 70%, transparent 71%), radial-gradient(ellipse 78% 44% at 86% 115%, #5A386F 0 70%, transparent 71%), radial-gradient(circle at 50% 50%, #FFE7A8 0 6%, rgba(255,180,120,.55) 7%, transparent 17%), linear-gradient(180deg,#FF9266 0%,#FF6F9C 42%,#7A4D9E 100%)',
+  'theme-night': 'radial-gradient(ellipse 95% 34% at 50% 126%, #131132 0 72%, transparent 73%), radial-gradient(1.4px 1.4px at 18% 26%, #fff, transparent), radial-gradient(1.6px 1.6px at 62% 15%, #fff, transparent), radial-gradient(1.3px 1.3px at 80% 33%, #cfe, transparent), radial-gradient(1.6px 1.6px at 38% 20%, #fff, transparent), radial-gradient(1.3px 1.3px at 28% 44%, #fff, transparent), radial-gradient(circle at 76% 24%, #FBF4D0 0 5%, rgba(251,244,208,.35) 6%, transparent 13%), linear-gradient(180deg,#23266C 0%,#0B0B24 100%)',
+  'theme-aurora': 'radial-gradient(ellipse 95% 34% at 50% 122%, #06131C 0 72%, transparent 73%), radial-gradient(ellipse 52% 42% at 26% 4%, rgba(80,240,180,.55), transparent 60%), radial-gradient(ellipse 46% 40% at 74% 12%, rgba(130,140,255,.5), transparent 60%), radial-gradient(ellipse 42% 32% at 50% 0%, rgba(120,255,210,.4), transparent 60%), linear-gradient(180deg,#0C3242 0%,#07151F 100%)',
+  'theme-ocean': 'radial-gradient(ellipse 130% 30% at 50% 130%, rgba(120,225,255,.55) 0 60%, transparent 61%), radial-gradient(ellipse 130% 26% at 50% 119%, rgba(70,180,235,.5) 0 60%, transparent 61%), radial-gradient(circle at 50% 28%, rgba(255,240,200,.65) 0 5%, transparent 15%), linear-gradient(180deg,#0E6CA0 0%,#062236 100%)',
+  'theme-party': 'radial-gradient(3px 3px at 12% 20%, #FFD54F, transparent), radial-gradient(3px 3px at 30% 52%, #FF6F9C, transparent), radial-gradient(3px 3px at 52% 14%, #5AD6FF, transparent), radial-gradient(3px 3px at 70% 40%, #7CFFB2, transparent), radial-gradient(3px 3px at 86% 22%, #FFB347, transparent), radial-gradient(3px 3px at 22% 78%, #C78BFF, transparent), radial-gradient(3px 3px at 64% 74%, #FF8AD0, transparent), radial-gradient(3px 3px at 90% 64%, #9CFF7C, transparent), linear-gradient(160deg,#2A2F86,#15184A)',
+};
+const LG_SCENE_META = [['theme-gold','🏆','Oro'],['theme-mountains','🏔️','Montañas'],['theme-night','🌙','Noche'],['theme-aurora','🌌','Aurora'],['theme-ocean','🌊','Océano'],['theme-party','🎉','Fiesta']];
+const LG_EMOJIS = [['🦁','León'],['🦊','Zorro'],['🐯','Tigre'],['🐼','Panda'],['🦄','Unicornio'],['🐲','Dragón'],['🦅','Águila'],['🦉','Búho'],['🐙','Pulpo'],['🦖','Dino'],['🐧','Pingüino'],['🐺','Lobo'],['🦋','Mariposa'],['🐬','Delfín'],['🦈','Tiburón'],['🐝','Abeja'],['🚀','Cohete'],['⚡','Rayo'],['🔥','Fuego'],['🌟','Estrella'],['👑','Corona'],['💎','Diamante'],['🎯','Diana'],['🏆','Trofeo']];
+const LG_AVA = {1:{a:58,e:30,b:60,bg:'linear-gradient(#F4B400,#D49A00)',ab:'#C99700',ring:'0 0 0 4px rgba(244,180,0,.35),0 4px 14px rgba(0,0,0,.3)'},2:{a:46,e:23,b:46,bg:'linear-gradient(#B8BCC4,#8E939C)',ab:'#8E939C',ring:'0 3px 10px rgba(0,0,0,.25)'},3:{a:44,e:22,b:34,bg:'linear-gradient(#D98C4A,#B06A2C)',ab:'#B06A2C',ring:'0 3px 10px rgba(0,0,0,.25)'}};
+const lgIni = (s) => (s.fullName || '?').split(' ').map(w => w[0]).slice(0,2).join('');
+
+/* Fusión Racha (protagonista) + Meta de hoy (secundaria) */
+function DayCard({ student, streak, todayMin, target }) {
+  const D = window.JUCUM_DATA;
+  const best = (student && D.getBestStreak) ? D.getBestStreak(student) : 0;
+  const toBeat = best > streak ? best - streak : 0;
+  const flame = streak>=7?'🔥🔥🔥':streak>=3?'🔥🔥':streak>0?'🔥':'❄️';
+  const met = todayMin>=target;
+  const pct = Math.min(100, Math.round(todayMin/Math.max(1,target)*100));
+  const tip = streak>=7?'¡Imparable! Sigue así.':streak>=3?'¡Vas muy bien! No la rompas hoy.':streak>0?'Construye tu hábito día a día.':'Practica hoy para empezar tu racha.';
+  return (
+    <div className="scard" style={{borderTop:'4px solid #F4B400', display:'flex', flexDirection:'column'}}>
+      <div style={{textAlign:'center', fontSize:10.5, fontWeight:800, letterSpacing:'.08em', textTransform:'uppercase', color:'#C28A00'}}>🔥 Tu constancia</div>
+      <div style={{fontSize:30, textAlign:'center', lineHeight:1, marginTop:4}}>{flame}</div>
+      <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize:52, color:'#E58A00', textAlign:'center', lineHeight:.95}}>{streak}</div>
+      <div style={{textAlign:'center', fontWeight:800, color:'#B26A00', fontSize:13, marginTop:2}}>{streak===1?'día seguido':'días seguidos'}</div>
+      <div style={{textAlign:'center', fontSize:12, fontWeight:700, color:'var(--text-soft,#6B6B6B)', marginTop:8}}>{tip}</div>
+      {best>0 && <div style={{display:'flex',alignItems:'center',gap:9,background:'#FFF8EC',border:'1px solid #F3DFB6',borderRadius:11,padding:'8px 11px',marginTop:12}}>
+        <span style={{fontSize:19}}>🏆</span>
+        <div style={{flex:1,textAlign:'left'}}><div style={{fontSize:12,fontWeight:800,color:'#9c5d00'}}>Tu récord: {best} {best===1?'día':'días'}</div>
+        <div style={{fontSize:11,color:'#B26A00',fontWeight:700}}>{toBeat>0?`Te faltan ${toBeat} para superarlo · ¡tú puedes!`:'¡Estás en tu mejor racha! 🎉'}</div></div>
+      </div>}
+      <div style={{marginTop:13, borderTop:'1px dashed var(--border)', paddingTop:12}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:12,fontWeight:800,marginBottom:6}}>
+          <span style={{color:'#1B5E20'}}>🎯 Meta de hoy</span><span style={{color:'#1B5E20'}}>{todayMin} / {target} min</span>
+        </div>
+        <div style={{height:11,background:'#E9EFE9',borderRadius:7,overflow:'hidden'}}><span style={{display:'block',height:'100%',width:pct+'%',background:'linear-gradient(90deg,#43C463,#2EA84B)',borderRadius:7}}></span></div>
+        <div style={{fontSize:11,fontWeight:700,color:'var(--text-soft,#6B6B6B)',marginTop:5}}>{met?<>🎉 <b>¡Meta cumplida!</b> Sigue si quieres más XP.</>:<>Te faltan <b>{target-todayMin} min</b> para tu meta.</>}</div>
+      </div>
+    </div>
+  );
+}
+
+/* Top del grupo (simple) con Top 3 resaltado = próximos campeones */
+function GroupTopSimple({ student, onSeeTop }) {
+  const { getComplianceRanking } = window.JUCUM_DATA;
+  const ranking = getComplianceRanking(student.group) || [];
+  const myIdx = ranking.findIndex(r => r.student.id === student.id);
+  const me = myIdx>=0 ? ranking[myIdx] : null;
+  const ranked = me && (me.score>0 || me.xp>0);
+  return (
+    <div className="scard" style={{padding:16}}>
+      <div style={{fontSize:10.5,fontWeight:800,letterSpacing:'.1em',textTransform:'uppercase',color:'var(--text-soft,#6B6B6B)',marginBottom:10}}>🏅 Top del grupo · constancia</div>
+      {!ranked ? (
+        <div style={{background:'#F6F8FD',borderRadius:10,padding:14,fontSize:12.5,fontWeight:700,textAlign:'center',lineHeight:1.5,color:'var(--text-soft,#6B6B6B)'}}>🏁 Aún no estás en el ranking. Completa tu primera práctica para <b>entrar y competir</b>.</div>
+      ) : (<>
+        <div style={{display:'flex',flexDirection:'column',gap:5}}>
+          {ranking.slice(0,5).map((r,i)=>{const next=i<3;const isMe=r.student.id===student.id;
+            return (<div key={r.student.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:10,fontSize:13,background:next?'linear-gradient(90deg,#FFF6DD,#FFFDF5)':'#F6F8FD',border:next?'1px solid #F1DDA0':(isMe?'1px solid #C9D6F0':'1px solid transparent')}}>
+              <span style={{fontWeight:800,width:22,color:next?'#C28A00':'var(--text-soft,#6B6B6B)'}}>{i+1}°</span>
+              <span style={{flex:1,fontWeight:700,color:'#2A3550'}}>{isMe?'Tú':r.student.fullName.split(' ')[0]+' '+((r.student.fullName.split(' ')[1]||'')[0]||'')+'.'}</span>
+              {next && <span style={{fontSize:9.5,fontWeight:800,color:'#fff',background:'#E0A400',padding:'2px 7px',borderRadius:10,textTransform:'uppercase',letterSpacing:'.04em'}}>próx. campeón</span>}
+              <span style={{fontWeight:800,color:'var(--text-soft,#6B6B6B)',fontSize:12}}>{r.score}%</span>
+            </div>);})}
+        </div>
+        <div style={{fontSize:11,color:'var(--text-mute,#A8A8A8)',fontWeight:700,textAlign:'center',marginTop:10}}>✨ El <b style={{color:'#C28A00'}}>Top 3</b> serán los próximos campeones si siguen así</div>
+        {onSeeTop && <button onClick={onSeeTop} style={{marginTop:10,width:'100%',border:'none',background:'#F6F8FD',color:'#1F3A8A',fontFamily:'inherit',fontWeight:800,fontSize:12,padding:'9px',borderRadius:10,cursor:'pointer'}}>Ver mi práctica →</button>}
+      </>)}
+    </div>
+  );
+}
+
+/* Campeones de la semana (protagonista) + botón Reclamar premio */
+function WeekChampionsCard({ student }) {
+  const D = window.JUCUM_DATA;
+  const [, force] = React.useReducer(x=>x+1,0);
+  const [modal, setModal] = React.useState(false);
+  React.useEffect(()=>{ if(D.loadLeagueFromCloud) D.loadLeagueFromCloud().then(()=>force()); }, []); // eslint-disable-line
+  const champ = D.getWeekChampions(student.group);
+  const champions = champ.champions || [];
+  const myRank = D.championRank(student);
+  const sceneBg = LG_SCENES[champ.scenario] || LG_SCENES['theme-gold'];
+  const champ1 = champions.find(c=>c.rank===1);
+  const myEmoji = myRank ? D.getChampionEmoji(student.group, student.id) : '';
+  const podMap = [2,1,3];
+  return (
+    <div className="scard" style={{padding:0, overflow:'hidden', border:'none', boxShadow:'0 10px 30px rgba(20,36,89,.16)'}}>
+      <div style={{background:sceneBg, color:'#fff', padding:'15px 16px 18px'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+          <div style={{fontFamily:"'Fredoka',sans-serif",fontWeight:600,fontSize:16,textShadow:'0 1px 4px rgba(0,0,0,.45)'}}>🏆 Campeones de la semana</div>
+          <span style={{fontSize:10,fontWeight:800,background:'rgba(0,0,0,.28)',padding:'3px 10px',borderRadius:20,textShadow:'0 1px 2px rgba(0,0,0,.4)'}}>Hasta el lunes</span>
+        </div>
+        {champions.length===0 ? (
+          <div style={{marginTop:14,background:'rgba(0,0,0,.22)',borderRadius:12,padding:16,fontSize:12.5,fontWeight:700,textAlign:'center',lineHeight:1.5,textShadow:'0 1px 2px rgba(0,0,0,.4)'}}>🏁 Aún no hay campeones. ¡Practica esta semana y el lunes se corona el primer podio!</div>
+        ) : (
+          <div style={{display:'flex',alignItems:'flex-end',justifyContent:'center',gap:10,margin:'16px 0 4px'}}>
+            {podMap.map(rk=>{const c=champions.find(x=>x.rank===rk);if(!c)return <div key={rk} style={{width:60}} />;const A=LG_AVA[rk];const isMe=c.student.id===student.id;
+              return (<div key={rk} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:5}}>
+                <div style={{position:'relative',width:A.a,height:A.a,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:c.emoji?A.e:A.a*0.4,color:'#fff',background:c.emoji?'rgba(255,255,255,.16)':A.ab,border:'2.5px solid rgba(255,255,255,.6)',boxShadow:(isMe?'0 0 0 3px #fff,':'')+A.ring}}>
+                  {rk===1 && <span style={{position:'absolute',top:-17,left:'50%',transform:'translateX(-50%)',fontSize:18}}>👑</span>}
+                  {c.emoji||lgIni(c.student)}
+                </div>
+                <div style={{width:A.a+6,height:A.b,background:A.bg,borderRadius:'8px 8px 0 0',display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:6,fontFamily:"'Fredoka',sans-serif",fontWeight:700,fontSize:17,color:'rgba(0,0,0,.45)'}}>{rk}</div>
+                <div style={{fontSize:11,fontWeight:800,color:isMe?'#FFE08A':'#fff',textShadow:'0 1px 3px rgba(0,0,0,.5)'}}>{isMe?'Tú':c.student.fullName.split(' ')[0]}</div>
+              </div>);})}
+          </div>
+        )}
+        {champions.length>0 && (myRank>0 ? (myEmoji ? (
+          <div style={{marginTop:14,background:'rgba(255,255,255,.92)',borderRadius:12,padding:'11px 13px',display:'flex',alignItems:'center',gap:10,color:'#3a2a00'}}>
+            <span style={{fontSize:30}}>{myEmoji}</span>
+            <div style={{flex:1}}><div style={{fontSize:12.5,fontWeight:800,color:'#9c5d00'}}>🎉 Premio reclamado</div><div style={{fontSize:11,color:'#B26A00',fontWeight:700}}>Todos te ven así · fijo hasta el lunes</div></div>
+            <button onClick={()=>setModal(true)} style={{border:'none',background:'rgba(0,0,0,.08)',color:'#9c5d00',fontWeight:800,fontSize:11,padding:'6px 10px',borderRadius:14,cursor:'pointer'}}>Cambiar</button>
+          </div>
+        ) : (
+          <button onClick={()=>setModal(true)} style={{display:'block',width:'100%',marginTop:14,border:'none',cursor:'pointer',fontFamily:"'Fredoka',sans-serif",fontWeight:600,fontSize:15,color:'#3a2a00',background:'linear-gradient(135deg,#FFD75E,#F4B400)',borderRadius:13,padding:13,boxShadow:'0 6px 16px rgba(244,180,0,.4)'}}>🎁 Reclama tu premio de campeón →</button>
+        )) : (
+          <div style={{marginTop:14,background:'rgba(255,255,255,.14)',border:'1px solid rgba(255,255,255,.28)',borderRadius:12,padding:'11px 13px',fontSize:12,fontWeight:700,lineHeight:1.45,textShadow:'0 1px 2px rgba(0,0,0,.4)'}}>🏆 Estos son los <b style={{color:'#FFE08A'}}>campeones de la semana</b>{champ1?<> y el escenario que eligió <b style={{color:'#FFE08A'}}>{champ1.student.fullName.split(' ')[0]}</b></>:''}. ¡Practica mucho para ser el próximo en <b style={{color:'#FFE08A'}}>reclamar este premio</b> 🎁!</div>
+        ))}
+      </div>
+      {modal && <ChampionRewardModal student={student} myRank={myRank} onClose={()=>setModal(false)} onSaved={()=>{setModal(false);force();}} />}
+    </div>
+  );
+}
+
+function ChampionRewardModal({ student, myRank, onClose, onSaved }) {
+  const D = window.JUCUM_DATA;
+  const champ = D.getWeekChampions(student.group);
+  const champions = champ.champions || [];
+  const [pick, setPick] = React.useState(D.getChampionEmoji(student.group, student.id) || '🦁');
+  const [sc, setSc] = React.useState(D.getLeagueScenario(student.group));
+  const isOne = myRank===1;
+  const previewScene = isOne ? sc : champ.scenario;
+  const save = ()=>{ D.setChampionEmoji(student.group, student.id, pick); if(isOne) D.setLeagueScenario(student.group, sc); onSaved(); };
+  const mini = (highlightMe)=>{ const podMap=[2,1,3];
+    return (<div style={{borderRadius:11,overflow:'hidden'}}>
+      <div style={{fontSize:10,fontWeight:800,textAlign:'center',padding:5,color:'#fff',background:'rgba(0,0,0,.25)',textShadow:'0 1px 2px rgba(0,0,0,.4)'}}>{highlightMe?'👁️ En tu panel':'En el de tus compañeros'}</div>
+      <div style={{display:'flex',alignItems:'flex-end',justifyContent:'center',gap:6,padding:'6px 4px 9px',background:LG_SCENES[previewScene]}}>
+        {podMap.map(rk=>{const c=champions.find(x=>x.rank===rk);if(!c)return <div key={rk} style={{width:24}}/>;const isMe=c.student.id===student.id;const em=isMe?pick:c.emoji;const z={1:{a:30,b:26},2:{a:24,b:20},3:{a:23,b:15}}[rk];const ab={1:'#C99700',2:'#8E939C',3:'#B06A2C'}[rk];const bg={1:'linear-gradient(#F4B400,#D49A00)',2:'linear-gradient(#B8BCC4,#8E939C)',3:'linear-gradient(#D98C4A,#B06A2C)'}[rk];
+          return (<div key={rk} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
+            <div style={{width:z.a,height:z.a,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,color:'#fff',fontSize:em?z.a*0.55:z.a*0.42,background:em?'rgba(255,255,255,.18)':ab,border:'2px solid rgba(255,255,255,.6)',boxShadow:(isMe&&highlightMe)?'0 0 0 2px #fff':'none'}}>{em||lgIni(c.student)}</div>
+            <div style={{width:z.a+4,height:z.b,background:bg,borderRadius:'5px 5px 0 0',display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:3,fontFamily:"'Fredoka',sans-serif",fontWeight:700,fontSize:11,color:'rgba(0,0,0,.45)'}}>{rk}</div>
+            <div style={{fontSize:8.5,fontWeight:800,color:(isMe&&highlightMe)?'#FFE08A':'#fff',textShadow:'0 1px 2px rgba(0,0,0,.5)'}}>{isMe?'Tú':c.student.fullName.split(' ')[0]}</div>
+          </div>);})}
+      </div>
+    </div>);
+  };
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" style={{maxWidth:500}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-head" style={{background:LG_SCENES[previewScene]}}>
+          <div className="modal-title" style={{color:'#fff'}}>🎁 Reclama tu premio</div>
+          <div className="modal-date" style={{color:'rgba(255,255,255,.9)'}}>Quedaste {myRank}.° — mira cómo te verán todos mientras eliges.</div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div style={{background:'#F4F7FD',border:'1px solid var(--border)',borderRadius:13,padding:12,marginBottom:16}}>
+            <div style={{fontSize:10.5,fontWeight:800,textTransform:'uppercase',letterSpacing:'.05em',color:'var(--text-soft,#6B6B6B)',textAlign:'center',marginBottom:9}}>✨ Vista previa en vivo</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>{mini(true)}{mini(false)}</div>
+          </div>
+          <div style={{fontFamily:"'Fredoka',sans-serif",fontWeight:600,fontSize:14,color:'#9c5d00'}}>🎭 Tu emoji de avatar</div>
+          <div style={{fontSize:12,fontWeight:700,color:'#B26A00',margin:'2px 0 10px'}}>Será tu cara en el podio. <b>Solo tú</b> cambias el tuyo.</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:7}}>
+            {LG_EMOJIS.map(([e,l])=> <button key={e} title={l} onClick={()=>setPick(e)} style={{aspectRatio:'1',minWidth:0,border:pick===e?'1.5px solid #F4B400':'1.5px solid var(--border)',background:pick===e?'#FFF4D6':'#fff',boxShadow:pick===e?'0 0 0 2px rgba(244,180,0,.25)':'none',borderRadius:9,fontSize:18,cursor:'pointer'}}>{e}</button>)}
+          </div>
+          {isOne && <><div style={{borderTop:'1px solid #EEE',margin:'16px 0 14px'}}></div>
+            <div style={{fontFamily:"'Fredoka',sans-serif",fontWeight:600,fontSize:14,color:'#1F3A8A'}}>👑 Escenario del grupo</div>
+            <div style={{fontSize:12,fontWeight:700,color:'#6E59A8',margin:'2px 0 8px'}}>Como 1.°, tú eliges el fondo. <b>Todo el grupo lo verá.</b></div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:7}}>
+              {LG_SCENE_META.map(([k,em,l])=>{const on=sc===k;return <button key={k} onClick={()=>setSc(k)} style={{position:'relative',height:50,borderRadius:10,border:on?'2px solid #1F3A8A':'2px solid transparent',boxShadow:on?'0 0 0 2px rgba(31,58,138,.3)':'none',cursor:'pointer',overflow:'hidden',background:LG_SCENES[k],color:'#fff',fontFamily:'inherit',fontWeight:800,fontSize:9.5,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-end',padding:'0 0 4px',textShadow:'0 1px 2px rgba(0,0,0,.6)'}}>{on&&<span style={{position:'absolute',top:2,right:4,fontSize:10}}>✓</span>}<span style={{fontSize:15}}>{em}</span>{l}</button>;})}
+            </div></>}
+          <div style={{display:'flex',alignItems:'center',gap:10,marginTop:14,background:'#FFFDF6',border:'1px solid #F0C66B',borderRadius:11,padding:'9px 12px'}}>
+            <span style={{fontSize:26}}>{pick}</span>
+            <div style={{fontSize:12.5,fontWeight:800,color:'#9c5d00'}}>Tu avatar de campeón<small style={{display:'block',fontWeight:700,color:'#B26A00',fontSize:11}}>{(LG_EMOJIS.find(x=>x[0]===pick)||[null,''])[1]} — elegido</small></div>
+            <button onClick={save} style={{marginLeft:'auto',border:'none',background:'#F4B400',color:'#3a2a00',fontFamily:"'Fredoka',sans-serif",fontWeight:600,fontSize:13,padding:'9px 18px',borderRadius:16,cursor:'pointer'}}>Guardar</button>
+          </div>
+        </div>
       </div>
     </div>
   );

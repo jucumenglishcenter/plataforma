@@ -1016,6 +1016,8 @@ function _leagueGroup(groupId, create) {
   const wk = lastWeekId(); const all = _getLeagueState();
   let g = all[groupId];
   if (!g || g.champWeek !== wk) {
+    // Top 3 por XP de la semana que YA CERRÓ (domingo). Queda FIJO toda la semana
+    // siguiente; solo entran quienes ganaron XP esa semana (xp > 0).
     const list = getRankingForWeek(groupId, wk).filter(r => r.xp > 0).slice(0, 3)
       .map((r, i) => ({ id: r.student.id, name: r.student.fullName, xp: r.xp, rank: i + 1 }));
     g = { champWeek: wk, scenario: 'theme-gold', emojis: {}, list };
