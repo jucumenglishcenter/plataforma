@@ -133,6 +133,7 @@ function ClassPlanner({ onBack }) {
         <button className={`mm-tab ${screen === 'calendar' ? 'on' : ''}`} onClick={() => setScreen('calendar')}>📅 Calendario</button>
         <button className={`mm-tab ${screen === 'class' ? 'on' : ''}`} onClick={() => goNewClass()}>📘 Plan de clase</button>
         <button className={`mm-tab ${screen === 'practice' ? 'on' : ''}`} onClick={() => goNewPractice()}>📝 Set de práctica</button>
+        <button className={`mm-tab ${screen === 'tareas' ? 'on' : ''}`} onClick={() => setScreen('tareas')}>📋 Tareas</button>
         <button className={`mm-tab ${screen === 'saved' ? 'on' : ''}`} onClick={() => setScreen('saved')}>📁 Guardados</button>
       </div>
 
@@ -143,6 +144,9 @@ function ClassPlanner({ onBack }) {
       )}
       {screen === 'class' && (
         <ClassPlanEditor date={selDate} initial={editPlan} defaultGroupId={defaultGroup} onClassMode={goClassMode} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
+      )}
+      {screen === 'tareas' && (
+        <TeacherAssignments embedded onBack={() => setScreen('calendar')} />
       )}
       {screen === 'classmode' && (
         <ClassMode plan={classModePlan} onBack={() => setScreen('calendar')} />

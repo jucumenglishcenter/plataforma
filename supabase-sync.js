@@ -236,7 +236,7 @@
     hydrate, pushSettings, pushProgress, pushNotif, markNotifRead, markAllNotifRead,
     pushEvaluation, pushPost, pushReply, pushPin, deletePostDb, deleteReplyDb, pushLike, pushMute,
     pushModule, deleteModuleDb, fetchModules, computeStats,
-    pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb,
+    pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb, uploadAttachments,
     pushExam, deleteExamDb, pushWindow, deleteWindowDb,
     pushAttendance, pushSurvey,
   };
@@ -259,11 +259,11 @@
     return out;
   }
   function pushAssignment(a) {
-    safe(SB().from('assignments').insert({
+    safe(SB().from('assignments').upsert({
       id: a.id, group_id: a.groupId || null, target_student_ids: a.targetStudentIds || [],
       title: a.title, description: a.description || null, due_at: a.dueAt || null,
       gradable: !!a.gradable, attachments: a.attachments || [], xp: a.xp ?? 40,
-    }));
+    }, { onConflict: 'id' }));
   }
   function deleteAssignmentDb(id) { safe(SB().from('assignments').delete().eq('id', id)); }
   async function pushSubmission(assignmentId, studentId, sub) {

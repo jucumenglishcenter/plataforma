@@ -28,7 +28,6 @@ function TeacherDashboard({ onLogout, user }) {
           <span className="role-pill t">👨‍🏫 Profesor</span>
           <a className={`nav-link ${['groups','group','student'].includes(view.kind)?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'groups'});}}>👥 Mis grupos</a>
           <a className={`nav-link ${view.kind==='class'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'class'});}}>🏫 Clase</a>
-          <a className={`nav-link ${view.kind==='tasks'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'tasks'});}}>📝 Prácticas</a>
           <a className={`nav-link ${(view.kind==='assess'||view.kind==='evaluate'||view.kind==='exams')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'assess'});}}>📊 Evaluación</a>
           <a className={`nav-link ${view.kind==='planner'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'planner'});}}>🗓️ Planificar</a>
           <TeacherForumNav onOpen={(gid)=>setView({kind:'forum', group:gid})} />

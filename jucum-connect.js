@@ -195,6 +195,7 @@
           var capMin = Math.min(READING_CAP_MIN, Math.round(activeSec / 60)); // tope silencioso para el reporte
           if (!done && activeSec >= AUTO_DONE_SEC && !teacher && !exam) {
             done = true; // marcada como practicada (desbloquea la siguiente) — sin cooldown ni tarjeta
+            try { if (window.parent && window.parent !== window) window.parent.postMessage({ source: 'jucum-connect', type: 'done', uid: uid, mod: modId, act: actId, score: null, minutes: Math.max(1, capMin) }, '*'); } catch (e) {}
             if (!demo) pushProgress(100, Math.max(1, capMin));
           }
           // refresca el tiempo de lectura cada 2 min (hasta el tope) para que el profesor lo vea
@@ -222,6 +223,10 @@
       updateChip();
       var minutes = Math.max(1, Math.round(activeSec / 60));
       var pct = score == null ? 100 : score;
+
+      // Puente con la plataforma: si el material está EMBEBIDO en una tarea,
+      // avisa al panel padre para registrar la nota en la entrega.
+      try { if (window.parent && window.parent !== window) window.parent.postMessage({ source: 'jucum-connect', type: 'done', uid: uid, mod: modId, act: actId, score: (score == null ? null : pct), minutes: minutes }, '*'); } catch (e) {}
 
       if (demo) {
         showResultCard(pct, '🧪 Modo prueba · ' + minutes + ' min' + (score != null ? ' · ' + pct + '%' : '') + ' (no se registró)', score != null);
