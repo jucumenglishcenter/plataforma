@@ -20,7 +20,17 @@
     likes:    'jucum_likes_v1',
   };
   const read  = k => { try { return JSON.parse(localStorage.getItem(k) || '{}'); } catch { return {}; } };
-  const write = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+  const _stripHeavy = (node) => { if (Array.isArray(node)) { node.forEach(_stripHeavy); return; } if (node && typeof node === 'object') { if (typeof node.dataUrl === 'string') { delete node.dataUrl; if (!node.url) node.pending = true; } Object.keys(node).forEach(k => _stripHeavy(node[k])); } };
+  const _purgeKey = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); if (v) { _stripHeavy(v); localStorage.setItem(k, JSON.stringify(v)); } } catch (e) {} };
+  const write = (k, v) => {
+    try { localStorage.setItem(k, JSON.stringify(v)); }
+    catch (e) {
+      // Cupo lleno (base64 viejo): purga adjuntos pesados y reintenta.
+      try { _purgeKey('jucum_submissions_v1'); _purgeKey('jucum_assignments_v1'); } catch (e2) {}
+      try { const light = JSON.parse(JSON.stringify(v)); _stripHeavy(light); localStorage.setItem(k, JSON.stringify(light)); }
+      catch (e3) { console.warn('write quota:', k); }
+    }
+  };
 
   /* ── HYDRATE: pull all cloud data into localStorage ── */
   async function hydrate(groups, users) {
