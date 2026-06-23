@@ -15,6 +15,13 @@ const MM_TYPES = [
   { v:'quizlet',   l:'🃏 Quizlet / Vocabulario' },
 ];
 
+/* Una actividad cuenta como "con material" si tiene URL. El Quizlet no usa URL:
+ * basta con que tenga al menos uno de sus links de juego. */
+function mmHasUrl(a) {
+  if (a.type === 'quizlet') return !!(a.quizVocabulario || a.quizVocabulario2 || a.quizTraducir || a.quizOrdenar || a.url);
+  return !!a.url;
+}
+
 function ManageModules({ onBack }) {
   const { MODULE_CATALOG, LEVELS } = window.JUCUM_DATA;
   const [level, setLevel] = mmUseState('pre-a1');
@@ -71,7 +78,12 @@ function ManageModules({ onBack }) {
       name: String(a.name || '').trim(),
       group: String(a.group || '').trim() || undefined,
       url: String(a.url || '').trim() || undefined,
+      quizVocabulario: String(a.quizVocabulario || '').trim() || undefined,
+      quizVocabulario2: String(a.quizVocabulario2 || '').trim() || undefined,
+      quizTraducir: String(a.quizTraducir || '').trim() || undefined,
+      quizOrdenar: String(a.quizOrdenar || '').trim() || undefined,
       open: a.open === true || undefined,
+      latent: a.latent === true || undefined,
     }));
     const data = {
       name: String(cat.module || cat.name || '').trim(),
@@ -121,7 +133,7 @@ function ManageModules({ onBack }) {
           <div className="empty-state"><div className="icon">📦</div>Sin módulos en este nivel. Crea el primero.</div>
         ) : mods.map((m, i) => {
           const nGroups = new Set(m.activities.filter(a => a.group).map(a => a.group)).size;
-          const nUrls = m.activities.filter(a => a.url).length;
+          const nUrls = m.activities.filter(mmHasUrl).length;
           const missing = m.activities.length - nUrls;
           const complete = m.activities.length > 0 && missing === 0;
           return (
@@ -196,7 +208,12 @@ function ModuleFormModal({ mod, onClose, onSave }) {
     onSave({
       name: name.trim(), emoji: emoji.trim() || '📦',
       topics: topics.split(',').map(t => t.trim()).filter(Boolean),
-      activities: acts.map(a => ({ id:a.id, type:a.type, name:a.name.trim(), group:(a.group||'').trim() || undefined, url:(a.url||'').trim() || undefined, open:a.open || undefined })),
+      activities: acts.map(a => ({ id:a.id, type:a.type, name:a.name.trim(), group:(a.group||'').trim() || undefined, url:(a.url||'').trim() || undefined,
+        quizVocabulario:(a.quizVocabulario||'').trim() || undefined,
+        quizVocabulario2:(a.quizVocabulario2||'').trim() || undefined,
+        quizTraducir:(a.quizTraducir||'').trim() || undefined,
+        quizOrdenar:(a.quizOrdenar||'').trim() || undefined,
+        open:a.open || undefined, latent:a.latent || undefined })),
     });
   };
 
@@ -237,7 +254,16 @@ function ModuleFormModal({ mod, onClose, onSave }) {
                   </select>
                   <input className="input-text" placeholder="Nombre (ej: Fill in)" value={a.name} onChange={e => setAct(i,'name',e.target.value)} />
                   <input className="input-text" placeholder="Tema (opcional)" value={a.group||''} onChange={e => setAct(i,'group',e.target.value)} />
-                  <input className="input-text" placeholder="URL del material (GitHub Pages)" value={a.url||''} onChange={e => setAct(i,'url',e.target.value)} />
+                  {a.type === 'quizlet' ? (
+                    <div style={{display:'flex', flexDirection:'column', gap:4}}>
+                      <input className="input-text" placeholder="Link Quizlet · Vocabulario" value={a.quizVocabulario||''} onChange={e => setAct(i,'quizVocabulario',e.target.value)} />
+                      <input className="input-text" placeholder="Link Quizlet · Vocabulario 2 (opcional)" value={a.quizVocabulario2||''} onChange={e => setAct(i,'quizVocabulario2',e.target.value)} />
+                      <input className="input-text" placeholder="Link Quizlet · Traducir" value={a.quizTraducir||''} onChange={e => setAct(i,'quizTraducir',e.target.value)} />
+                      <input className="input-text" placeholder="Link Quizlet · Ordenar" value={a.quizOrdenar||''} onChange={e => setAct(i,'quizOrdenar',e.target.value)} />
+                    </div>
+                  ) : (
+                    <input className="input-text" placeholder="URL del material (GitHub Pages)" value={a.url||''} onChange={e => setAct(i,'url',e.target.value)} />
+                  )}
                   <div className="mm-act-btns">
                     <button type="button" className="att-btn" onClick={() => moveAct(i,-1)} disabled={i===0}>↑</button>
                     <button type="button" className="att-btn" onClick={() => moveAct(i,1)} disabled={i===acts.length-1}>↓</button>
@@ -286,7 +312,7 @@ function CatalogImportModal({ level, levelLabel, existingNames, onClose, onImpor
   };
 
   const counts = preview ? preview.activities.reduce((acc, a) => { acc[a.type] = (acc[a.type] || 0) + 1; return acc; }, {}) : {};
-  const nUrls = preview ? preview.activities.filter(a => a.url).length : 0;
+  const nUrls = preview ? preview.activities.filter(mmHasUrl).length : 0;
   const pvMissing = preview ? preview.activities.length - nUrls : 0;
   const pvComplete = preview && pvMissing === 0;
   const modName = preview ? String(preview.module || preview.name || '') : '';

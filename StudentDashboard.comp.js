@@ -348,8 +348,93 @@ function ModuleProgress({ mod, progress, pct, doneCount, studentId, freeUnlock, 
   );
 }
 
+/* Juegos de Quizlet de una actividad quizlet, leídos del catálogo.
+ * Links opcionales: quizVocabulario · quizVocabulario2 · quizTraducir · quizOrdenar.
+ * Solo se muestran los que tengan link. Si hay 2 vocabularios → 4 opciones. */
+function quizletGames(a) {
+  const defs = [
+    { key:'vocabulario',  ico:'📚', label:'Vocabulario',           sub:'Tarjetas · aprende las palabras', url:a.quizVocabulario },
+    { key:'vocabulario2', ico:'📒', label:'Vocabulario · Parte 2', sub:'Tarjetas · segunda mitad',        url:a.quizVocabulario2 },
+    { key:'traducir',     ico:'🔁', label:'Traducir',              sub:'EN ↔ ES · empareja',              url:a.quizTraducir },
+    { key:'ordenar',      ico:'🔢', label:'Ordenar',               sub:'Arma la oración',                 url:a.quizOrdenar },
+  ];
+  // Compatibilidad: si solo existe a.url (un único link), trátalo como Vocabulario.
+  if (!defs.some(g => g.url) && a.url) defs[0].url = a.url;
+  const games = defs.filter(g => g.url);
+  // Con 2 vocabularios, renombra el primero a "Parte 1".
+  if (games.some(g => g.key === 'vocabulario2')) {
+    const g1 = games.find(g => g.key === 'vocabulario');
+    if (g1) { g1.label = 'Vocabulario · Parte 1'; g1.sub = 'Tarjetas · primera mitad'; }
+  }
+  return games;
+}
+
+/* Bloque Quizlet del alumno · se toca y abre un panel con los juegos disponibles.
+ * Abrir cualquier juego cuenta como participación ✓ (baja exigencia, no califica). */
+function QuizletRow({ it, mod, studentId }) {
+  const { a, i, done, status } = it;
+  const [open, setOpen] = React.useState(false);
+  const games = quizletGames(a);
+
+  if (status === 'locked') {
+    return (
+      <div className="al-item locked" style={{cursor:'default'}}>
+        <span className="al-num">🔒</span>
+        <span className="al-ico">🃏</span>
+        <span className="al-name">{a.name}</span>
+      </div>
+    );
+  }
+  if (games.length === 0) {
+    return (
+      <div className="al-item open" style={{opacity:.65, cursor:'default'}} title="Aún no se han cargado los links de Quizlet. Pronto los activaremos.">
+        <span className="al-num">{i+1}</span>
+        <span className="al-ico">🃏</span>
+        <span className="al-name">{a.name}</span>
+        <span className="al-score" style={{background:'#EEEAE0', color:'#8A7F6A'}}>📚 En preparación</span>
+      </div>
+    );
+  }
+  const openGame = (g) => {
+    try { window.JUCUM_DATA.markActivityComplete(studentId, mod.id, a.id, null, 0, { quizlet: g.key }); } catch (e) {}
+    window.open(g.url, '_blank', 'noopener');
+    setOpen(false);
+  };
+  return (
+    <>
+      <div className={`al-item ${status==='done'?'done':'open'}`} onClick={() => setOpen(o => !o)} style={{cursor:'pointer'}}>
+        <span className="al-num">{status==='done' ? '✓' : '🃏'}</span>
+        <span className="al-ico">🃏</span>
+        <span className="al-name">{a.name}<span style={{display:'block', fontSize:10.5, color:'var(--ld)', fontWeight:800, marginTop:1}}>Toca para elegir el juego</span></span>
+        <span className="al-score" style={{background:'var(--ll)', color:'var(--lbt)', border:'1.5px solid var(--lm)'}}>{games.length} juego{games.length>1?'s':''}</span>
+        <span className="al-arr">{open ? '▾' : '→'}</span>
+      </div>
+      {open && (
+        <div style={{background:'#fff', border:'1.5px solid var(--lm)', borderRadius:14, boxShadow:'var(--shadow-sm)', overflow:'hidden', margin:'2px 0 4px'}}>
+          <div style={{background:'var(--lg)', color:'#fff', padding:'10px 14px', display:'flex', alignItems:'center', gap:9}}>
+            <span style={{fontSize:18}}>🃏</span>
+            <div><div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14}}>Quizlet · elige el juego</div><div style={{fontSize:11, opacity:.92, fontWeight:700}}>{a.name.replace(/^Quizlet\s*·?\s*/i,'') || 'Vocabulario'}</div></div>
+          </div>
+          <div style={{padding:11, display:'flex', flexDirection:'column', gap:8}}>
+            {games.map(g => (
+              <button key={g.key} type="button" onClick={() => openGame(g)}
+                style={{display:'flex', alignItems:'center', gap:12, textAlign:'left', cursor:'pointer', border:'1.5px solid var(--lm)', background:'var(--ll)', borderRadius:10, padding:'11px 13px', font:'inherit', width:'100%'}}>
+                <span style={{fontSize:21}}>{g.ico}</span>
+                <span style={{flex:1, fontWeight:800, fontSize:13.5, color:'var(--ld)'}}>{g.label}<span style={{display:'block', fontSize:11, color:'var(--text-soft)', fontWeight:700, marginTop:1}}>{g.sub}</span></span>
+                <span style={{color:'var(--lp)', fontWeight:900, fontSize:15}}>▸</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function ChecklistRow({ it, mod, studentId }) {
   const { a, i, done, passed, status } = it;
+  // Quizlet: en vez de un link directo, abre un panel con sus juegos.
+  if (a.type === 'quizlet') return <QuizletRow it={it} mod={mod} studentId={studentId} />;
   const href = status !== 'locked' ? linkFor(a, mod, studentId) : null;
   // Abierto pero sin material configurado todavía → "en preparación" (no es clic).
   if (status !== 'locked' && !done && !href) {
