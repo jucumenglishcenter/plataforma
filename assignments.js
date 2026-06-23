@@ -15,11 +15,34 @@ function loadAssignments() {
   try { const a = JSON.parse(localStorage.getItem(ASSIGN_KEY) || '[]'); return Array.isArray(a) ? a : []; }
   catch { return []; }
 }
-function saveAssignments(arr) { localStorage.setItem(ASSIGN_KEY, JSON.stringify(arr)); }
+function saveAssignments(arr) { _jucumSafeSet(ASSIGN_KEY, arr); }
 function loadSubmissions() {
   try { return JSON.parse(localStorage.getItem(SUBMIT_KEY) || '{}'); } catch { return {}; }
 }
-function saveSubmissions(obj) { localStorage.setItem(SUBMIT_KEY, JSON.stringify(obj)); }
+function saveSubmissions(obj) { _jucumSafeSet(SUBMIT_KEY, obj); }
+
+/* Quita cualquier base64 (dataUrl) de un árbol de datos — deja solo metadatos. */
+function _jucumStripDataUrls(node) {
+  if (Array.isArray(node)) { node.forEach(_jucumStripDataUrls); return; }
+  if (node && typeof node === 'object') {
+    if (typeof node.dataUrl === 'string' && !node.url) { delete node.dataUrl; node.pending = true; }
+    else if (node.dataUrl) { delete node.dataUrl; }
+    Object.keys(node).forEach(k => _jucumStripDataUrls(node[k]));
+  }
+}
+function _jucumPurge(key) {
+  try { const v = JSON.parse(localStorage.getItem(key) || 'null'); if (v) { _jucumStripDataUrls(v); localStorage.setItem(key, JSON.stringify(v)); } } catch (e) {}
+}
+/* Guarda en localStorage; si el cupo está lleno (base64 viejo), purga y reintenta.
+ * Esto repara solo el almacenamiento que antes quedaba lleno y bloqueaba guardar. */
+function _jucumSafeSet(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); return; }
+  catch (e) {
+    try { _jucumPurge(ASSIGN_KEY); _jucumPurge(SUBMIT_KEY); } catch (e2) {}
+    try { const light = JSON.parse(JSON.stringify(val)); _jucumStripDataUrls(light); localStorage.setItem(key, JSON.stringify(light)); }
+    catch (e3) { /* sin espacio aún: la nube (Supabase) ya guardó lo importante */ }
+  }
+}
 
 /* Todas las tareas, más recientes primero */
 function getAssignments() {
@@ -43,20 +66,26 @@ function recipientsOf(a, STUDENTS) {
   return STUDENTS.filter(s => s.group === a.groupId);
 }
 
-function createAssignment(data) {
+async function createAssignment(data) {
+  // Sube a Storage cualquier adjunto del profesor (no guardar base64 en local).
+  let atts = data.attachments || [];
+  if (window.JUCUM_SYNC && window.JUCUM_SYNC.uploadAttachments) {
+    try { atts = await window.JUCUM_SYNC.uploadAttachments('tareas-material', atts); } catch (e) {}
+  }
+  const lightAtts = (atts || []).map(x => (x && x.dataUrl && !x.url && (x.size || 0) >= 800 * 1024) ? { kind: x.kind, name: x.name, size: x.size, pending: true } : x);
   const arr = loadAssignments();
   const a = {
     id: 'as-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
     date: new Date().toISOString(),
     xp: 40,
-    attachments: [],
     targetStudentIds: [],
     gradable: false,
     ...data,
+    attachments: lightAtts,
   };
   arr.unshift(a);
   saveAssignments(arr);
-  if (window.JUCUM_SYNC && window.JUCUM_SYNC.pushAssignment) window.JUCUM_SYNC.pushAssignment(a);
+  if (window.JUCUM_SYNC && window.JUCUM_SYNC.pushAssignment) window.JUCUM_SYNC.pushAssignment({ ...a, attachments: atts });
   // Notificar a los destinatarios
   if (window.JUCUM_NOTIF && window.JUCUM_DATA) {
     const recipients = recipientsOf(a, window.JUCUM_DATA.STUDENTS);
@@ -71,13 +100,18 @@ function createAssignment(data) {
   return a.id;
 }
 
-function updateAssignment(id, data) {
+async function updateAssignment(id, data) {
+  let atts = data.attachments;
+  if (atts && window.JUCUM_SYNC && window.JUCUM_SYNC.uploadAttachments) {
+    try { atts = await window.JUCUM_SYNC.uploadAttachments('tareas-material', atts); } catch (e) {}
+  }
+  const lightAtts = atts ? (atts || []).map(x => (x && x.dataUrl && !x.url && (x.size || 0) >= 800 * 1024) ? { kind: x.kind, name: x.name, size: x.size, pending: true } : x) : undefined;
   const arr = loadAssignments();
   const i = arr.findIndex(a => a.id === id);
   if (i < 0) return;
-  arr[i] = { ...arr[i], ...data };
+  arr[i] = { ...arr[i], ...data, ...(lightAtts ? { attachments: lightAtts } : {}) };
   saveAssignments(arr);
-  if (window.JUCUM_SYNC && window.JUCUM_SYNC.pushAssignment) window.JUCUM_SYNC.pushAssignment(arr[i]);
+  if (window.JUCUM_SYNC && window.JUCUM_SYNC.pushAssignment) window.JUCUM_SYNC.pushAssignment({ ...arr[i], ...(atts ? { attachments: atts } : {}) });
   // Avisar a los destinatarios que la tarea cambió
   if (window.JUCUM_NOTIF && window.JUCUM_DATA) {
     const recipients = recipientsOf(arr[i], window.JUCUM_DATA.STUDENTS);

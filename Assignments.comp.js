@@ -203,7 +203,7 @@ function AssignmentForm({ onClose, onSaved, initial }) {
   const groupStudents = STUDENTS.filter(s => s.group === groupId);
   const togglePick = (id) => setPicked(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
-  const save = () => {
+  const save = async () => {
     if (!title.trim()) { setErr('Ponle un título a la tarea.'); return; }
     if (mode === 'students' && picked.length === 0) { setErr('Elige al menos un alumno.'); return; }
     const finalAtt = [...attachments];
@@ -217,8 +217,11 @@ function AssignmentForm({ onClose, onSaved, initial }) {
       gradable,
       attachments: finalAtt,
     };
-    if (initial) window.JUCUM_TASKS.updateAssignment(initial.id, data);
-    else window.JUCUM_TASKS.createAssignment(data);
+    setErr('');
+    try {
+      if (initial) await window.JUCUM_TASKS.updateAssignment(initial.id, data);
+      else await window.JUCUM_TASKS.createAssignment(data);
+    } catch (e) { setErr('No se pudo guardar: ' + (e && e.message ? e.message : 'inténtalo de nuevo')); return; }
     onSaved();
   };
 
