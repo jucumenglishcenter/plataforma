@@ -1448,6 +1448,21 @@ function TodayPracticeCard({ student }) {
   const mods = D.MODULE_CATALOG[student.level] || [];
   const dayName = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'][new Date().getDay()];
   if (!items || !items.length) return null;
+  // Instructivo "Cómo practicar hoy" — del set asignado por el profe (si lo trae)
+  const plansToday = (TT.getPracticePlansForStudentOnDate ? TT.getPracticePlansForStudentOnDate(student, new Date().toISOString().slice(0,10)) : [])
+    .filter(p => p.assignToStudents !== false);
+  const planWithGuide = plansToday.find(p => p.guide && p.guide.steps && p.guide.steps.length);
+  const openGuide = () => {
+    if (!window.JUCUM_GUIDE) return;
+    let g = planWithGuide ? planWithGuide.guide : window.JUCUM_GUIDE.build(student.level, items.map(it => ({ moduleId: it.moduleId, activityId: it.activityId, label: it.label, type: it.type })), '', { title: 'Cómo practicar hoy' });
+    // resolver links de cada paso a su material
+    const links = (g.steps || []).map(s => {
+      const mod = mods.find(m => m.id === s.moduleId);
+      const a = mod && (mod.activities || []).find(x => x.id === s.activityId);
+      return (mod && a) ? linkFor(a, mod, student.id) : null;
+    });
+    window.JUCUM_GUIDE.openOverlay(g, { links, studentName: (student.fullName || '').split(' ')[0] });
+  };
   return (
     <div className="scard" style={{padding:0, overflow:'hidden', borderColor:'#90CAF9'}}>
       <div style={{padding:'12px 15px', display:'flex', alignItems:'center', gap:11, background:'#EAF3FE', borderBottom:'1px solid #C5DEF7'}}>
@@ -1457,6 +1472,16 @@ function TodayPracticeCard({ student }) {
         </div>
         <span style={{fontSize:11, fontWeight:700, color:'#5B7BA8', whiteSpace:'nowrap', textTransform:'capitalize'}}>{dayName}</span>
       </div>
+      {window.JUCUM_GUIDE && (
+        <button onClick={openGuide} style={{display:'flex', alignItems:'center', gap:11, width:'100%', textAlign:'left', cursor:'pointer', border:'none', borderBottom:'1px solid #E7DFF5', background:'linear-gradient(120deg,#F3EEFC,#FBFAFF)', padding:'12px 15px', font:'inherit'}}>
+          <span style={{fontSize:22}}>📋</span>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:800, fontSize:13.5, color:'#4A2E86'}}>Cómo practicar hoy</div>
+            <div style={{fontSize:11.5, fontWeight:700, color:'#7A66B0', marginTop:1}}>Abre el instructivo con los pasos en orden</div>
+          </div>
+          <span style={{fontSize:12, fontWeight:800, color:'#fff', background:'#6C4FB0', borderRadius:16, padding:'6px 12px', whiteSpace:'nowrap'}}>Ver →</span>
+        </button>
+      )}
       <div className="next-row" style={{padding:'12px 13px'}}>
         {items.map((it, i) => {
           const mod = mods.find(m => m.id === it.moduleId);

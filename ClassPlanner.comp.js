@@ -439,20 +439,47 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
   const mod = mods.find(m => m.id === moduleId) || mods[0];
   const [title, setTitle] = React.useState(initial ? initial.title : 'Práctica de la semana');
   const [picked, setPicked] = React.useState(() => initial ? initial.activities.slice() : []);
+  const [reviewOn, setReviewOn] = React.useState(false);
+  const [reviewModId, setReviewModId] = React.useState(null);
+  const [reviewTema, setReviewTema] = React.useState('');
   const [dates, setDates] = React.useState(() => initial ? initial.dates.slice() : (date ? [date] : []));
   const [assign, setAssign] = React.useState(initial ? initial.assignToStudents !== false : true);
   const [note, setNote] = React.useState(initial ? initial.note : '');
+  const [guide, setGuide] = React.useState(() => (initial && initial.guide) ? initial.guide : null);
+  const [favTick, setFavTick] = React.useState(0);
+  const lang = (guide && guide.lang) || 'es';
+  const setLang = (lg) => setGuide(g => g ? { ...g, lang: lg } : g);
+  const regenGuide = () => setGuide(window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }));
+  const previewGuide = () => { const g = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }); if (!guide) setGuide(g); window.JUCUM_GUIDE.openOverlay(g, {}); };
+  const updateStep = (i, patch) => setGuide(g => ({ ...g, steps: g.steps.map((s, k) => k === i ? { ...s, ...patch } : s) }));
+  const allTemas = Array.from(new Set(mods.flatMap(m => (m.activities || []).map(a => a.group).filter(Boolean))));
+  const focusText = (s) => {
+    if (s.type === 'story') { const a = []; if (s.storyNo) a.push('Historia #' + s.storyNo); if (s.dialogNo) a.push('Diálogo #' + s.dialogNo); return a.join(' · '); }
+    if (s.type === 'reading') { return s.storyNo ? ('Historia #' + s.storyNo) : ''; }
+    if (s.type === 'summary' || s.type === 'grammar') { return s.tema ? ('Tema: ' + s.tema) : ''; }
+    return '';
+  };
+  const setStepMeta = (i, patch) => setGuide(g => ({ ...g, steps: g.steps.map((s, k) => { if (k !== i) return s; const ns = { ...s, ...patch }; ns.focus = focusText(ns); return ns; }) }));
+  const moveStep = (i, dir) => setGuide(g => { const arr = g.steps.slice(); const j = i + dir; if (j < 0 || j >= arr.length) return g; const t = arr[i]; arr[i] = arr[j]; arr[j] = t; return { ...g, steps: arr }; });
+  const delStep = (i) => setGuide(g => ({ ...g, steps: g.steps.filter((_, k) => k !== i) }));
+  const loadFav = (favId) => { const f = (TT.getGuideFavs() || []).find(x => x.id === favId); if (!f) return; const g = JSON.parse(JSON.stringify(f.guide)); g.title = title; g.note = note; g.moduleName = mod ? mod.name : g.moduleName; setGuide(g); };
+  const saveFav = () => { const g = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }); if (!guide) setGuide(g); const name = window.prompt('Ponle un nombre a este instructivo favorito (para reconocerlo después):', title || 'Mi instructivo'); if (!name) return; TT.addGuideFav(name.trim(), g); setFavTick(t => t + 1); alert('⭐ Guardado en favoritos como “' + name.trim() + '”'); };
+  const delFav = (id) => { if (window.confirm('¿Borrar este instructivo favorito?')) { TT.deleteGuideFav(id); setFavTick(t => t + 1); } };
   const cur = new Date(); const [pcur, setPcur] = React.useState({ y: cur.getFullYear(), m: cur.getMonth() });
 
   const isPicked = (m, a) => picked.some(p => p.moduleId === m.id && p.activityId === a.id);
   const togglePick = (m, a) => setPicked(arr => isPicked(m, a) ? arr.filter(p => !(p.moduleId === m.id && p.activityId === a.id)) : [...arr, { moduleId: m.id, activityId: a.id, label: a.name, type: a.type, group: a.group || null }]);
+  const togglePickReview = (m, a) => setPicked(arr => isPicked(m, a) ? arr.filter(p => !(p.moduleId === m.id && p.activityId === a.id)) : [...arr, { moduleId: m.id, activityId: a.id, label: a.name, type: a.type, group: a.group || null, review: true, moduleName: m.name }]);
+  const reviewMod = mods.find(m => m.id === reviewModId) || null;
+  const reviewTemas = reviewMod ? Array.from(new Set((reviewMod.activities || []).map(a => a.group).filter(Boolean))) : [];
   const toggleDate = (dstr) => setDates(arr => arr.includes(dstr) ? arr.filter(x => x !== dstr) : [...arr, dstr].sort());
   const addWeek = (offset) => { const base = parseYMD(date || todayYMD()); const out = new Set(dates); for (let i = 0; i < 7; i++) { const d = new Date(base); d.setDate(base.getDate() + offset * 7 + i); out.add(ymd(d)); } setDates(Array.from(out).sort()); };
 
   const save = () => {
     if (!picked.length) { alert('Elige al menos una actividad.'); return; }
     if (!dates.length) { alert('Elige al menos un día en el calendario.'); return; }
-    const rec = { groupId, title, activities: picked, dates, assignToStudents: assign, note };
+    const finalGuide = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang });
+    const rec = { groupId, title, activities: picked, dates, assignToStudents: assign, note, guide: finalGuide };
     if (initial) { TT.updatePracticePlan(initial.id, rec); alert('✅ Set de práctica actualizado'); }
     else { TT.addPracticePlan(rec); alert(assign ? '✅ Set guardado y asignado a los alumnos en esos días' : '✅ Set guardado (solo para ti)'); }
     onSaved();
@@ -470,13 +497,14 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:14, marginTop:6}}>
           <Field label="Título"><input value={title} onChange={e => setTitle(e.target.value)} style={selStyle} /></Field>
           <Field label="Grupo"><select value={groupId || ''} onChange={e => { setGroupId(e.target.value); const g = GROUPS.find(x => x.id === e.target.value); const lv = g ? g.level : level; const m = (MODULE_CATALOG[lv] || [])[0]; setModuleId(m ? m.id : null); setPicked([]); }} style={selStyle}>{GROUPS.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></Field>
-          <Field label="Módulo"><select value={moduleId || ''} onChange={e => setModuleId(e.target.value)} style={selStyle}>{mods.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
+          <Field label="Módulo (puedes elegir uno pasado)"><select value={moduleId || ''} onChange={e => setModuleId(e.target.value)} style={selStyle}>{mods.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
         </div>
       </div>
 
       {/* 1 · Actividades */}
       <div className="scard" style={{marginTop:16}}>
         <div className="sec-head"><div className="sec-title">1 · Elige las actividades</div></div>
+        <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginBottom:6}}>Tip: cambia el <b>Módulo</b> arriba (incluso uno pasado) y sigue marcando — se acumulan de varios módulos.</div>
         <div style={{display:'flex', flexDirection:'column', gap:7, marginTop:6}}>
           {(mod ? mod.activities : []).map(a => {
             const on = isPicked(mod, a);
@@ -491,6 +519,55 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
           })}
         </div>
         <div style={{marginTop:9, fontSize:12, fontWeight:700, color:'#6b6453'}}>{picked.length} actividad(es) elegida(s)</div>
+      </div>
+
+      {/* 1b · Repaso de otro módulo (opcional) */}
+      <div className="scard" style={{marginTop:16}}>
+        <button onClick={() => setReviewOn(v => !v)} style={{display:'flex', alignItems:'center', gap:11, width:'100%', textAlign:'left', cursor:'pointer', border:'none', background:'transparent', font:'inherit', padding:0}}>
+          <span style={{width:24, height:24, borderRadius:7, background: reviewOn ? '#E67E00' : '#F0E6D4', color:'#fff', fontSize:15, fontWeight:900, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>{reviewOn ? '✓' : '＋'}</span>
+          <div style={{flex:1}}>
+            <div className="sec-title" style={{margin:0}}>🔁 Integrar repaso de otro módulo</div>
+            <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700}}>¿Notas un tema de un módulo anterior que aún no dominan? Agrégalo aquí. Al alumno le saldrá “Repasamos nuevamente el módulo…”.</div>
+          </div>
+        </button>
+
+        {reviewOn && (
+          <div style={{marginTop:13, borderTop:'1px dashed #E3DCC9', paddingTop:13}}>
+            <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:12}}>
+              <Field label="1) Módulo a repasar">
+                <select value={reviewModId || ''} onChange={e => { setReviewModId(e.target.value); setReviewTema(''); }} style={selStyle}>
+                  <option value="">— Elige un módulo —</option>
+                  {mods.filter(m => m.id !== moduleId).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              </Field>
+              <Field label="2) Tema">
+                <select value={reviewTema} onChange={e => setReviewTema(e.target.value)} disabled={!reviewMod} style={{...selStyle, opacity: reviewMod ? 1 : .6}}>
+                  <option value="">— Todos los temas —</option>
+                  {reviewTemas.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </Field>
+            </div>
+            {reviewMod && (
+              <div style={{marginTop:12}}>
+                <div style={{fontSize:11.5, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'.03em', marginBottom:6}}>3) Material a practicar</div>
+                <div style={{display:'flex', flexDirection:'column', gap:7}}>
+                  {(reviewMod.activities || []).filter(a => !reviewTema || a.group === reviewTema).map(a => {
+                    const on = isPicked(reviewMod, a);
+                    return (
+                      <button key={a.id} onClick={() => togglePickReview(reviewMod, a)} style={{display:'flex', alignItems:'center', gap:10, textAlign:'left', cursor:'pointer', border:'1px solid ' + (on ? '#F2C99A' : '#E3DCC9'), background: on ? '#FFF6EC' : '#fff', borderRadius:10, padding:'9px 12px', font:'inherit'}}>
+                        <span style={{width:20, height:20, borderRadius:6, border:'2px solid ' + (on ? '#E67E00' : '#cdc4ad'), background: on ? '#E67E00' : '#fff', color:'#fff', fontSize:13, fontWeight:900, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>{on ? '✓' : ''}</span>
+                        <span style={{fontSize:15}}>{typeIcon(a.type)}</span>
+                        <span style={{flex:1, fontWeight:700, fontSize:13}}>{a.name}{a.group ? <span style={{display:'block', fontSize:11, color:'#8a7f6a', fontWeight:700}}>{a.group}</span> : null}</span>
+                        {!a.url && <span style={{fontSize:10.5, fontWeight:800, color:'#9C5D00', background:'#FFF3E0', borderRadius:20, padding:'2px 8px'}}>sin archivo</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{marginTop:9, fontSize:12, fontWeight:700, color:'#9c4a00'}}>{picked.filter(p => p.review).length} material(es) de repaso agregado(s)</div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 2 · Días (multi-fecha) */}
@@ -519,9 +596,111 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
         </div>
       </div>
 
-      {/* 3 · Destino */}
+      {/* 3 · Instructivo (cómo practicar) — documento de pasos que ve el alumno */}
       <div className="scard" style={{marginTop:16}}>
-        <div className="sec-head"><div className="sec-title">3 · ¿Cómo se usa?</div></div>
+        <div className="sec-head"><div className="sec-title">3 · Instructivo · cómo practicar</div></div>
+        <div style={{fontSize:12.5, color:'#8a7f6a', fontWeight:700, margin:'2px 0 10px'}}>Trae los <b>pasos oficiales por nivel</b> ya cargados. Genera, edítalos a tu gusto y guárdalos como <b>favoritos</b> (con un nombre) para reutilizarlos.</div>
+
+        {/* Favoritos */}
+        {(() => { const favs = TT.getGuideFavs ? TT.getGuideFavs() : []; void favTick; return (
+          <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', background:'#FBF7FF', border:'1px solid #E2D5F3', borderRadius:11, padding:'10px 12px', marginBottom:12}}>
+            <span style={{fontSize:16}}>⭐</span>
+            <span style={{fontSize:12.5, fontWeight:800, color:'#5B3FA0'}}>Plantillas favoritas:</span>
+            {favs.length === 0
+              ? <span style={{fontSize:12, fontWeight:700, color:'#9b8fc0'}}>aún no tienes — genera y guarda una abajo</span>
+              : <select onChange={e => { if (e.target.value) loadFav(e.target.value); e.target.value=''; }} defaultValue="" style={{...selStyle, width:'auto', minWidth:200, flex:1, maxWidth:320}}>
+                  <option value="">＋ Usar una plantilla favorita…</option>
+                  {favs.map(f => <option key={f.id} value={f.id}>{f.name}{f.level ? ' · ' + f.level.toUpperCase() : ''}</option>)}
+                </select>}
+            {favs.length > 0 && <details style={{position:'relative'}}>
+              <summary style={{listStyle:'none', cursor:'pointer', fontSize:11.5, fontWeight:800, color:'#8a7f6a'}}>administrar</summary>
+              <div style={{position:'absolute', right:0, top:'120%', zIndex:5, background:'#fff', border:'1px solid #E3DCC9', borderRadius:10, boxShadow:'0 8px 24px rgba(0,0,0,.14)', padding:8, width:240}}>
+                {favs.map(f => <div key={f.id} style={{display:'flex', alignItems:'center', gap:8, padding:'5px 4px', borderTop:'1px solid #F2EEE3'}}><span style={{flex:1, fontSize:12, fontWeight:700}}>{f.name}</span><button onClick={() => loadFav(f.id)} style={{...iconBtn, width:'auto', padding:'2px 7px', fontSize:11}}>usar</button><button onClick={() => delFav(f.id)} style={{...iconBtn, width:'auto', padding:'2px 7px', fontSize:11, color:'#C0392B', borderColor:'#E2B6AE'}}>✕</button></div>)}
+              </div>
+            </details>}
+          </div>
+        ); })()}
+
+        {!guide ? (
+          <div style={{display:'flex', alignItems:'center', gap:12, background:'#FBFAF5', border:'1px dashed #D8CEB4', borderRadius:12, padding:'16px 16px'}}>
+            <span style={{fontSize:26}}>📋</span>
+            <div style={{flex:1, fontSize:13, fontWeight:700, color:'#6b6453'}}>Aún no has generado el instructivo. Elige las actividades arriba y genera los pasos oficiales del nivel.</div>
+            <button onClick={regenGuide} disabled={!picked.length} style={{...btnPrimary, background: picked.length ? 'linear-gradient(135deg,#3F5BB8,#0D1B5A)' : '#bbb', opacity: picked.length ? 1 : .6}}>⚡ Generar instructivo</button>
+          </div>
+        ) : (
+          <>
+            <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:12, background:'#F4F7FD', border:'1px solid #D8E3F5', borderRadius:11, padding:'9px 12px'}}>
+              <span style={{fontSize:12.5, fontWeight:800, color:'#1F3A8A'}}>🌐 Idioma de las instrucciones:</span>
+              {[['es','Español'],['en','English'],['par','Paralelo (EN + ES)']].map(([k, lbl]) => (
+                <button key={k} onClick={() => setLang(k)} style={{border:'1.5px solid ' + (lang === k ? '#1F3A8A' : '#C9D6F0'), background: lang === k ? '#1F3A8A' : '#fff', color: lang === k ? '#fff' : '#3A4A66', fontFamily:'inherit', fontWeight:800, fontSize:12, padding:'6px 12px', borderRadius:18, cursor:'pointer'}}>{lbl}</button>
+              ))}
+            </div>
+            {lang === 'par' && <div style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700, margin:'2px 0 10px'}}>En “Paralelo”, el alumno verá la instrucción en <b>inglés</b> y debajo, sutil, su <b>traducción</b> al español.</div>}
+            <div style={{display:'flex', flexDirection:'column', gap:10}}>
+              {guide.steps.map((s, i) => (
+                <div key={i} style={{border:'1px solid #E3DCC9', borderRadius:12, padding:'11px 13px', background:'#fff'}}>
+                  <div style={{display:'flex', alignItems:'center', gap:9, marginBottom:7}}>
+                    <span style={{width:22, height:22, flexShrink:0, borderRadius:7, background:'#1F3A8A', color:'#fff', fontWeight:800, fontSize:12, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>{i + 1}</span>
+                    <div style={{flex:1, fontWeight:800, fontSize:13.5}}>{s.emoji} {s.title} {s.group ? <span style={{fontSize:11, color:'#6C4FB0', fontWeight:800}}>· {s.group}</span> : null} {s.review ? <span style={{fontSize:10, color:'#fff', background:'#E67E00', borderRadius:8, padding:'2px 7px', fontWeight:800}}>🔁 repaso {s.reviewModule || ''}</span> : null}</div>
+                    <button title="Subir" onClick={() => moveStep(i, -1)} disabled={i === 0} style={{...iconBtn, opacity: i === 0 ? .4 : 1}}>↑</button>
+                    <button title="Bajar" onClick={() => moveStep(i, 1)} disabled={i === guide.steps.length - 1} style={{...iconBtn, opacity: i === guide.steps.length - 1 ? .4 : 1}}>↓</button>
+                    <button title="Quitar" onClick={() => delStep(i)} style={{...iconBtn, color:'#C0392B', borderColor:'#E2B6AE'}}>🗑️</button>
+                  </div>
+
+                  {/* Controles según el tipo: tema (resumen/práctica) · nº historia/diálogo (story/lectura) */}
+                  {(s.type === 'summary' || s.type === 'grammar') && (
+                    <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:8, flexWrap:'wrap'}}>
+                      <span style={{fontSize:11.5, fontWeight:800, color:'#6C4FB0'}}>📚 Tema:</span>
+                      <select value={s.tema || ''} onChange={e => setStepMeta(i, { tema: e.target.value || null, group: e.target.value || s.group })} style={{...selStyle, width:'auto', minWidth:180}}>
+                        <option value="">— Sin tema específico —</option>
+                        {allTemas.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {(s.type === 'story' || s.type === 'reading') && (
+                    <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:8, flexWrap:'wrap'}}>
+                      <span style={{fontSize:11.5, fontWeight:800, color:'#6C4FB0'}}>📖 ¿Qué leer?:</span>
+                      <select value={s.storyNo || ''} onChange={e => setStepMeta(i, { storyNo: e.target.value ? Number(e.target.value) : null })} style={{...selStyle, width:'auto'}}>
+                        <option value="">Historia —</option>
+                        {[1,2,3,4].map(n => <option key={n} value={n}>Historia #{n}</option>)}
+                      </select>
+                      {s.type === 'story' && (
+                        <select value={s.dialogNo || ''} onChange={e => setStepMeta(i, { dialogNo: e.target.value ? Number(e.target.value) : null })} style={{...selStyle, width:'auto'}}>
+                          <option value="">Diálogo —</option>
+                          {[1,2,3,4].map(n => <option key={n} value={n}>Diálogo #{n}</option>)}
+                        </select>
+                      )}
+                    </div>
+                  )}
+
+                  {lang !== 'par' ? (<>
+                    <div style={{fontSize:10.5, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'.03em', marginBottom:3}}>Pasos · {lang === 'en' ? 'English' : 'Español'} (uno por línea)</div>
+                    <textarea value={((lang === 'en' ? s.linesEn : s.linesEs) || []).join('\n')} onChange={e => updateStep(i, lang === 'en' ? { linesEn: e.target.value.split('\n').filter(x => x.trim() !== '') } : { linesEs: e.target.value.split('\n').filter(x => x.trim() !== '') })} rows={Math.max(2, ((lang === 'en' ? s.linesEn : s.linesEs) || []).length)} style={{width:'100%', border:'1px solid #E3DCC9', borderRadius:9, padding:'8px 10px', fontSize:12.5, fontFamily:'inherit', fontWeight:600, lineHeight:1.5, resize:'vertical', color:'#444'}} />
+                    <div style={{display:'flex', alignItems:'center', gap:8, marginTop:7}}>
+                      <span style={{fontSize:12, fontWeight:800, color:'#9c6a00'}}>📌</span>
+                      <input value={(lang === 'en' ? s.noteEn : s.noteEs) || ''} onChange={e => updateStep(i, lang === 'en' ? { noteEn: e.target.value } : { noteEs: e.target.value })} placeholder="Nota del paso (opcional)" style={{flex:1, border:'1px solid #F2DFB0', background:'#FFFDF7', borderRadius:8, padding:'6px 9px', fontSize:12, fontFamily:'inherit', fontWeight:700, color:'#9c6a00'}} />
+                    </div>
+                  </>) : (<>
+                    <div style={{fontSize:10.5, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'.03em', marginBottom:3}}>Pasos · English (uno por línea)</div>
+                    <textarea value={(s.linesEn || []).join('\n')} onChange={e => updateStep(i, { linesEn: e.target.value.split('\n').filter(x => x.trim() !== '') })} rows={Math.max(2, (s.linesEn || []).length)} style={{width:'100%', border:'1px solid #E3DCC9', borderRadius:9, padding:'8px 10px', fontSize:12.5, fontFamily:'inherit', fontWeight:600, lineHeight:1.5, resize:'vertical', color:'#444'}} />
+                    <div style={{fontSize:10.5, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'.03em', margin:'8px 0 3px'}}>Traducción · Español</div>
+                    <textarea value={(s.linesEs || []).join('\n')} onChange={e => updateStep(i, { linesEs: e.target.value.split('\n').filter(x => x.trim() !== '') })} rows={Math.max(2, (s.linesEs || []).length)} style={{width:'100%', border:'1px solid #E3DCC9', borderRadius:9, padding:'8px 10px', fontSize:12.5, fontFamily:'inherit', fontWeight:600, lineHeight:1.5, resize:'vertical', color:'#777', fontStyle:'italic'}} />
+                  </>)}
+                </div>
+              ))}
+            </div>
+            <div style={{display:'flex', gap:10, flexWrap:'wrap', marginTop:12}}>
+              <button onClick={previewGuide} style={{...btnGhost, borderColor:'#9FB0DA', color:'#3F5BB8'}}>👁️ Ver como lo verá el alumno</button>
+              <button onClick={saveFav} style={{...btnGhost, borderColor:'#C9A8E8', color:'#5B3FA0'}}>⭐ Guardar como favorito</button>
+              <button onClick={regenGuide} style={btnGhost}>↺ Restaurar pasos oficiales</button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* 4 · Destino */}
+      <div className="scard" style={{marginTop:16}}>
+        <div className="sec-head"><div className="sec-title">4 · ¿Cómo se usa?</div></div>
         <div style={{display:'flex', flexDirection:'column', gap:9, marginTop:6}}>
           <button onClick={() => setAssign(true)} style={destBtn(assign)}>
             <span style={{fontSize:18}}>👥</span><div><b>Asignar a los alumnos</b><div style={destSub}>Aparece como “Tu práctica de hoy” en su panel, solo en los días elegidos. Actualiza su sección de prácticas.</div></div>

@@ -116,6 +116,17 @@
   function getPracticePlansForDay(date) { return getPracticePlans().filter(p => (p.dates || []).includes(date)); }
   function getPracticePlansForStudentOnDate(student, date) { return getPracticePlans().filter(p => p.groupId === student.group && (p.dates || []).includes(date)); }
 
+  /* ── Instructivos de práctica FAVORITOS (plantillas con nombre) ── */
+  const GFAV_KEY = 'jucum_practice_guide_favs_v1';
+  function getGuideFavs() { return j(GFAV_KEY, []); }
+  function saveGuideFavs(a) { w(GFAV_KEY, a); cloudSetting('practice_guide_favs', a); }
+  function addGuideFav(name, guide) {
+    const all = getGuideFavs();
+    const e = { id: 'gf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5), name: name || 'Instructivo', level: guide ? guide.level : '', guide: guide, createdAt: new Date().toISOString() };
+    all.unshift(e); saveGuideFavs(all); return e;
+  }
+  function deleteGuideFav(id) { saveGuideFavs(getGuideFavs().filter(f => f.id !== id)); }
+
   /* ── Planes de CLASE por fecha (sesión minuto a minuto) ── */
   function getClassPlans() { return j(CP_KEY, []); }
   function saveClassPlans(a) { w(CP_KEY, a); cloudSetting('class_plans', a); }
@@ -270,6 +281,7 @@
     try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','daily_practice').maybeSingle(); if (data && data.value) w(DP_KEY, data.value); } catch(e){}
     try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','directed_practice').maybeSingle(); if (data && Array.isArray(data.value)) w(DPR_KEY, data.value); } catch(e){}
     try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','practice_plans').maybeSingle(); if (data && Array.isArray(data.value)) w(PP_KEY, data.value); } catch(e){}
+    try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','practice_guide_favs').maybeSingle(); if (data && Array.isArray(data.value)) w(GFAV_KEY, data.value); } catch(e){}
     try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','class_plans').maybeSingle(); if (data && Array.isArray(data.value)) w(CP_KEY, data.value); } catch(e){}
     try { const rows = await window.JUCUM_SB.all('teacher_notes'); if (Array.isArray(rows)) saveNotes(rows.map(r=>({ id:r.id, date:r.created_at, studentId:r.student_id, groupId:r.group_id, kind:r.kind, text:r.text, tag:r.tag })).sort((a,b)=>String(b.date).localeCompare(String(a.date)))); } catch(e){}
     try { const rows = await window.JUCUM_SB.all('teacher_reminders'); if (Array.isArray(rows)) w(REM_KEY, rows.map(r=>({ id:r.id, date:r.created_at, groupId:r.group_id, text:r.text, due:r.due, done:r.done }))); } catch(e){}
@@ -289,6 +301,7 @@
   window.JUCUM_TT = {
     getDailyPractice, setDailyPractice, getTodayPracticeForStudent, genericPractice,
     getPracticePlans, addPracticePlan, updatePracticePlan, deletePracticePlan, getPracticePlansForDay, getPracticePlansForStudentOnDate,
+    getGuideFavs, addGuideFav, deleteGuideFav,
     getClassPlans, upsertClassPlan, deleteClassPlan, getClassPlansForDay, getPlannedForDay, getClassLogForGroupRecent,
     getDirectedAll, addDirected, updateDirected, deleteDirected, getDirectedForGroup, directedStatusForStudent, getActiveDirectedForStudent,
     getClassLog, logClassMaterial, deleteClassEntry, getClassLogForMonth, getClassLogForDay, cloudLoadClassLog, cloudLoadAll,
