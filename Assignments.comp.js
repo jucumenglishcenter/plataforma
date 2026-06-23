@@ -131,7 +131,7 @@ function TeacherAssignments({ onBack, embedded }) {
       {embedded ? (
         <div className="scard" style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, marginBottom:14}}>
           <div className="settings-hint" style={{margin:0}}>Asigna <b>tareas</b> a un grupo o a alumnos puntuales. Ellos entregan adjuntando archivos y ganan XP. Calificar es opcional.</div>
-          <button className="btn-settings" style={{flexShrink:0}} onClick={() => setCreating(true)}>+ Nueva tarea</button>
+          <button onClick={() => setCreating(true)} style={{flexShrink:0, border:'none', cursor:'pointer', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14, color:'#fff', background:'linear-gradient(135deg,#7B5FC4,#5A3FA0)', borderRadius:12, padding:'10px 18px', boxShadow:'0 4px 12px rgba(108,79,176,.3)', whiteSpace:'nowrap'}}>＋ Nueva tarea</button>
         </div>
       ) : (
         <div className="welcome teacher">

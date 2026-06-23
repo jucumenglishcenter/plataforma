@@ -140,19 +140,19 @@ function ClassPlanner({ onBack }) {
       {screen === 'calendar' && (
         <CalendarHub cursor={cursor} setCursor={setCursor} selDate={selDate} setSelDate={setSelDate}
           onNewClass={goNewClass} onNewPractice={goNewPractice} onEditClass={(p) => { setEditPlan(p); setScreen('class'); }}
-          onEditPractice={(p) => { setEditPractice(p); setScreen('practice'); }} onClassMode={goClassMode} refreshKey={tick} onChange={refresh} />
+          onEditPractice={(p) => { setEditPractice(p); setScreen('practice'); }} onClassMode={goClassMode} onOpenTasks={() => setScreen('tareas')} refreshKey={tick} onChange={refresh} />
       )}
       {screen === 'class' && (
         <ClassPlanEditor date={selDate} initial={editPlan} defaultGroupId={defaultGroup} onClassMode={goClassMode} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
-      )}
-      {screen === 'tareas' && (
-        <TeacherAssignments embedded onBack={() => setScreen('calendar')} />
       )}
       {screen === 'classmode' && (
         <ClassMode plan={classModePlan} onBack={() => setScreen('calendar')} />
       )}
       {screen === 'practice' && (
         <PracticePlanEditor date={selDate} initial={editPractice} defaultGroupId={defaultGroup} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
+      )}
+      {screen === 'tareas' && (
+        <TeacherAssignments embedded onBack={() => setScreen('calendar')} />
       )}
       {screen === 'saved' && (
         <SavedItems onOpenClass={(p) => { setEditPlan(p); setScreen('class'); }} onOpenPractice={(p) => { setEditPractice(p); setScreen('practice'); }} onChange={refresh} refreshKey={tick} />
@@ -162,7 +162,7 @@ function ClassPlanner({ onBack }) {
 }
 
 /* ════════ Calendario mensual ════════ */
-function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNewPractice, onEditClass, onEditPractice, onClassMode, refreshKey, onChange }) {
+function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNewPractice, onEditClass, onEditPractice, onClassMode, onOpenTasks, refreshKey, onChange }) {
   const TT = window.JUCUM_TT;
   const { GROUPS } = window.JUCUM_DATA;
   const [groupId, setGroupId] = React.useState(GROUPS[0] ? GROUPS[0].id : null);
@@ -171,8 +171,9 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
   const nextM = () => setCursor(c => { const d = new Date(c.y, c.m + 1, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
   const day = (dstr) => { const p = TT.getPlannedForDay(dstr); return { classPlans: p.classPlans.filter(x => !groupId || x.groupId === groupId), practicePlans: p.practicePlans.filter(x => !groupId || x.groupId === groupId) }; };
   const logFor = (dstr) => (TT.getClassLogForDay ? TT.getClassLogForDay(dstr) : []).filter(e => !groupId || e.groupId === groupId);
+  const tasksFor = (dstr) => (window.JUCUM_TASKS ? window.JUCUM_TASKS.getAssignments() : []).filter(a => a.dueAt && ymd(new Date(a.dueAt)) === dstr && (!groupId || a.groupId === groupId));
 
-  const sel = day(selDate); const selLog = logFor(selDate);
+  const sel = day(selDate); const selLog = logFor(selDate); const selTasks = tasksFor(selDate);
 
   return (
     <>
@@ -205,6 +206,7 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
                 <span style={{display:'flex', gap:3, flexWrap:'wrap'}}>
                   {nClass > 0 && <span title="Plan de clase" style={dot('#3F5BB8')}>📘</span>}
                   {nPrac > 0 && <span title="Set de práctica" style={dot('#6C4FB0')}>📝</span>}
+                  {tasksFor(dstr).length > 0 && <span title="Tarea (cierre)" style={dot('#E65100')}>📋</span>}
                   {nLog > 0 && <span title="Realizado en clase" style={dot('#2E7D32')}>✅</span>}
                 </span>
               </button>
@@ -212,7 +214,7 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
           })}
         </div>
         <div style={{display:'flex', gap:14, flexWrap:'wrap', marginTop:11, fontSize:11.5, fontWeight:700, color:'#8a7f6a'}}>
-          <span>📘 Plan de clase</span><span>📝 Set de práctica</span><span>✅ Realizado (bitácora)</span>
+          <span>📘 Plan de clase</span><span>📝 Set de práctica</span><span>📋 Tarea (cierre)</span><span>✅ Realizado (bitácora)</span>
         </div>
       </div>
 
@@ -222,11 +224,23 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
           <div className="sec-title" style={{flex:1, textTransform:'capitalize'}}>{(() => { const d = parseYMD(selDate); return `${DOW_ES[d.getDay()]} ${d.getDate()} de ${MONTHS_ES[d.getMonth()]}`; })()}</div>
           <button onClick={() => onNewClass(selDate, groupId)} style={{...btnGhost, padding:'7px 12px'}}>＋ Plan de clase</button>
           <button onClick={() => onNewPractice(selDate, groupId)} style={{...btnPrimary, padding:'7px 12px', fontSize:13}}>＋ Set de práctica</button>
+          {onOpenTasks && <button onClick={() => onOpenTasks()} style={{...btnGhost, padding:'7px 12px', borderColor:'#F0C28A', color:'#E65100'}}>＋ Tarea</button>}
         </div>
 
-        {sel.classPlans.length === 0 && sel.practicePlans.length === 0 && selLog.length === 0 && (
-          <div className="empty-state" style={{padding:'22px 0'}}><div className="icon">🗓️</div>Nada planeado para este día. Agrega un plan de clase o un set de práctica.</div>
+        {sel.classPlans.length === 0 && sel.practicePlans.length === 0 && selLog.length === 0 && selTasks.length === 0 && (
+          <div className="empty-state" style={{padding:'22px 0'}}><div className="icon">🗓️</div>Nada planeado para este día. Agrega un plan de clase, un set de práctica o una tarea.</div>
         )}
+
+        {selTasks.map(t => {
+          const dd = new Date(t.dueAt);
+          const hh = dd.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+          const closed = dd < new Date();
+          return (
+            <DayRow key={t.id} icon="📋" tint="#FFF4E5" border="#F0C28A" title={`${t.title}${closed ? ' · cerrada' : ''}`}
+              sub={`Tarea · cierra ${hh}${t.gradable ? ' · calificable' : ''}`}
+              onOpen={() => onOpenTasks && onOpenTasks()} />
+          );
+        })}
 
         {sel.classPlans.map(p => (
           <DayRow key={p.id} icon="📘" tint="#EEF2FC" border="#C9D6F5" title={`${p.moduleName} · ${p.sessionLabel}`}
