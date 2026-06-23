@@ -236,7 +236,7 @@
     hydrate, pushSettings, pushProgress, pushNotif, markNotifRead, markAllNotifRead,
     pushEvaluation, pushPost, pushReply, pushPin, deletePostDb, deleteReplyDb, pushLike, pushMute,
     pushModule, deleteModuleDb, fetchModules, computeStats,
-    pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb, uploadAttachments,
+    pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb, uploadAttachments, refreshTasks,
     pushExam, deleteExamDb, pushWindow, deleteWindowDb,
     pushAttendance, pushSurvey,
   };
@@ -257,6 +257,33 @@
       } catch { out.push(a); }
     }
     return out;
+  }
+  /* Relee tareas+entregas de la nube y actualiza el caché local (para ver
+   * tareas nuevas sin tener que cerrar y volver a entrar). */
+  async function refreshTasks() {
+    try {
+      const sb = SB();
+      const [{ data: assigns }, { data: subs }] = await Promise.all([
+        sb.from('assignments').select('*'),
+        sb.from('submissions').select('*'),
+      ]);
+      const aArr = (assigns || []).map(a => ({
+        id: a.id, groupId: a.group_id, targetStudentIds: a.target_student_ids || [],
+        title: a.title, description: a.description, dueAt: a.due_at, gradable: a.gradable,
+        attachments: a.attachments || [], xp: a.xp ?? 40, date: a.created_at,
+      }));
+      write('jucum_assignments_v1', aArr);
+      const sMap = {};
+      (subs || []).forEach(s => {
+        sMap[s.assignment_id] = sMap[s.assignment_id] || {};
+        sMap[s.assignment_id][s.student_id] = {
+          id: s.id, submittedAt: s.submitted_at, text: s.text, attachments: s.attachments || [],
+          status: s.status, grade: s.grade, feedback: s.feedback, gradedAt: s.graded_at,
+        };
+      });
+      write('jucum_submissions_v1', sMap);
+      return true;
+    } catch (e) { console.warn('refreshTasks:', e && e.message); return false; }
   }
   function pushAssignment(a) {
     safe(SB().from('assignments').upsert({

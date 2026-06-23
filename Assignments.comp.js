@@ -119,6 +119,11 @@ function TeacherAssignments({ onBack, embedded }) {
   const [viewing, setViewing] = tUseState(null); // assignment
   const [tick, setTick] = tUseState(0);
   const refresh = () => setTick(t => t + 1);
+  React.useEffect(() => {
+    if (window.JUCUM_SYNC && window.JUCUM_SYNC.refreshTasks) {
+      window.JUCUM_SYNC.refreshTasks().then(refresh).catch(() => {});
+    }
+  }, []);
 
   const assignments = T.getAssignments();
 
@@ -422,6 +427,11 @@ function StudentAssignments({ user, onBack }) {
   const T = window.JUCUM_TASKS;
   const student = STUDENTS.find(s => s.id === user.studentId) || STUDENTS[0];
   const [tick, setTick] = tUseState(0);
+  React.useEffect(() => {
+    if (window.JUCUM_SYNC && window.JUCUM_SYNC.refreshTasks) {
+      window.JUCUM_SYNC.refreshTasks().then(() => setTick(t => t + 1)).catch(() => {});
+    }
+  }, []);
   const list = T.assignmentsForStudent(student);
   const pending = list.filter(a => !T.getSubmission(a.id, student.id));
   const doneList = list.filter(a => T.getSubmission(a.id, student.id));
