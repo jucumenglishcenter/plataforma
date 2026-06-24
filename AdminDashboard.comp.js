@@ -4,7 +4,8 @@
  */
 function AdminDashboard({ user, onLogout }) {
   const D = window.JUCUM_DATA; const P = window.JUCUM_PAY;
-  const [view, setView] = React.useState('payments');
+  const [view, setView] = React.useState(() => (window.JUCUM_NAV ? window.JUCUM_NAV.load('admin', 'payments') : 'payments'));
+  React.useEffect(() => { if (window.JUCUM_NAV) window.JUCUM_NAV.save('admin', view); }, [view]);
   const [, setTick] = React.useState(0);
   const refresh = () => setTick(t => t + 1);
 
