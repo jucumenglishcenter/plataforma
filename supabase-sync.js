@@ -246,7 +246,7 @@
     hydrate, pushSettings, pushProgress, pushNotif, markNotifRead, markAllNotifRead,
     pushEvaluation, pushPost, pushReply, pushPin, deletePostDb, deleteReplyDb, pushLike, pushMute,
     pushModule, deleteModuleDb, fetchModules, computeStats,
-    pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb, uploadAttachments, refreshTasks,
+    pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb, uploadAttachments, refreshTasks, refreshProgress,
     pushExam, deleteExamDb, pushWindow, deleteWindowDb,
     pushAttendance, pushSurvey,
   };
@@ -294,6 +294,40 @@
       write('jucum_submissions_v1', sMap);
       return true;
     } catch (e) { console.warn('refreshTasks:', e && e.message); return false; }
+  }
+  /* Relee SOLO el avance (tabla progress) de la nube y actualiza el caché +
+   * recalcula los puntos/estadísticas. Ligero: una sola consulta. Sirve para
+   * que los materiales que el alumno acaba de hacer aparezcan como completados
+   * y sus puntos suban sin tener que recargar toda la plataforma. */
+  async function refreshProgress() {
+    try {
+      const sb = SB();
+      const { data: prog, error } = await sb.from('progress').select('*');
+      if (error) return false;
+      const today = new Date().toISOString().slice(0, 10);
+      const cloud = {};
+      (prog || []).forEach(p => {
+        cloud[p.user_id] = cloud[p.user_id] || { completed:{}, todayMinutes:0, lastDay:null };
+        cloud[p.user_id].completed[`${p.module_id}:${p.activity_id}`] = {
+          score: p.score, minutes: p.minutes, date: p.completed_at,
+        };
+        const day = (p.completed_at || '').slice(0,10);
+        if (day === today) { cloud[p.user_id].todayMinutes += (p.minutes||0); cloud[p.user_id].lastDay = today; }
+      });
+      // La nube manda, pero conservamos los avances locales recién hechos que
+      // todavía no terminaron de subir (evita que un material recién completado
+      // "parpadee" y desaparezca antes de que su guardado llegue a la nube).
+      const local = read(KEYS.progress);
+      const merged = { ...cloud };
+      Object.keys(local || {}).forEach(u => {
+        const lc = (local[u] && local[u].completed) || {};
+        merged[u] = merged[u] || { completed:{}, todayMinutes:(local[u] && local[u].todayMinutes) || 0, lastDay:(local[u] && local[u].lastDay) || null };
+        Object.keys(lc).forEach(k => { if (!merged[u].completed[k]) merged[u].completed[k] = lc[k]; });
+      });
+      write(KEYS.progress, merged);
+      try { computeStats(); } catch (e) {}
+      return true;
+    } catch (e) { console.warn('refreshProgress:', e && e.message); return false; }
   }
   function pushAssignment(a) {
     safe(SB().from('assignments').upsert({

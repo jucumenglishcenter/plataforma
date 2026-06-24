@@ -8,8 +8,11 @@
  *  1. Lee la versión con la que se cargó esta sesión (el ?v= de config.js).
  *  2. Cada pocos minutos —y cuando el usuario vuelve a la pestaña— consulta el
  *     index.html del servidor (sin caché) y mira su ?v=.
- *  3. Si el servidor tiene una versión más nueva → muestra un aviso flotante
- *     "🔄 Hay una nueva versión · Actualizar". Al pulsar, recarga limpio.
+ *  3. Si el servidor tiene una versión más nueva → se ACTUALIZA SOLA en el
+ *     momento (recarga limpia), conservando la pantalla donde estabas
+ *     (gracias a nav-persist.js). Solo si estás escribiendo en un campo o con
+ *     una ventana abierta, espera y muestra el aviso "🔄 nueva versión" para no
+ *     interrumpirte; en cuanto sueltas el campo, se actualiza sola.
  *  4. Además deja SIEMPRE un botón discreto "↻" abajo a la izquierda para que
  *     cualquiera fuerce la actualización si algo se ve raro (sin Ctrl+F5).
  *
@@ -20,11 +23,12 @@
   'use strict';
   if (window.JUCUM_UPDATE) return; // evitar doble carga
 
-  var POLL_MS = 4 * 60 * 1000;     // revisa cada 4 minutos
-  var MIN_GAP_MS = 30 * 1000;      // no consultar más seguido que esto
+  var POLL_MS = 60 * 1000;         // revisa cada minuto
+  var MIN_GAP_MS = 20 * 1000;      // no consultar más seguido que esto
   var lastCheck = 0;
   var running = readRunningVersion();
   var notified = false;
+  var pending = false;             // hay una versión nueva esperando aplicarse
 
   /* Versión con la que se cargó la página (token ?v= de config.js en el DOM) */
   function readRunningVersion() {
@@ -59,8 +63,30 @@
     fetchServerVersion().then(function (server) {
       if (!server) return;
       if (!running) { running = server; return; }
-      if (server !== running && !notified) { notified = true; showBanner(); }
+      if (server !== running) { pending = true; maybeApply(); }
     });
+  }
+
+  /* ¿Es seguro recargar AHORA sin interrumpir al usuario? (no está escribiendo
+     ni tiene una ventana/modal abierta ni está grabando audio). */
+  function canAutoReload() {
+    try {
+      var a = document.activeElement;
+      if (a) {
+        var t = (a.tagName || '').toLowerCase();
+        if (t === 'input' || t === 'textarea' || t === 'select' || a.isContentEditable) return false;
+      }
+      if (document.querySelector('.modal-backdrop, .onb-backdrop, .att-btn.rec-on')) return false;
+    } catch (e) {}
+    return true;
+  }
+
+  /* Aplica la versión nueva: si es seguro, se actualiza sola; si no, deja el
+     aviso y reintenta en cuanto el usuario deje de escribir. */
+  function maybeApply() {
+    if (!pending) return;
+    if (canAutoReload()) { showUpdatingToast(); setTimeout(hardReload, 1000); }
+    else if (!notified) { notified = true; showBanner(); }
   }
 
   /* Recarga "dura": borra Cache Storage si existe y recarga el index (que es
@@ -89,6 +115,22 @@
     if (css) e.style.cssText = css;
     if (html != null) e.innerHTML = html;
     return e;
+  }
+
+  function showUpdatingToast() {
+    if (document.getElementById('jucum-update-toast')) return;
+    var wrap = el('div', [
+      'position:fixed', 'left:50%', 'bottom:22px', 'transform:translateX(-50%)',
+      'z-index:2147483641', 'display:flex', 'align-items:center', 'gap:11px',
+      'background:linear-gradient(135deg,#1F3A8A,#2E5BB8)', 'color:#fff',
+      'padding:12px 18px', 'border-radius:14px',
+      'box-shadow:0 10px 34px rgba(0,0,0,.30)', "font-family:'Nunito',system-ui,sans-serif",
+      'font-size:14px', 'font-weight:700', 'max-width:92vw', 'animation:jucumUpIn .35s ease'
+    ].join(';'));
+    wrap.id = 'jucum-update-toast';
+    wrap.appendChild(el('span', 'font-size:18px', '🔄'));
+    wrap.appendChild(el('span', 'line-height:1.35', 'Aplicando la <b>nueva versión</b>…'));
+    document.body.appendChild(wrap);
   }
 
   function showBanner() {
@@ -162,10 +204,12 @@
     mountManualButton();
     setTimeout(function () { check(true); }, 4000);     // primer chequeo tras cargar
     setInterval(function () { check(false); }, POLL_MS);
+    setInterval(maybeApply, 5000);                      // reintenta aplicar en cuanto sea seguro
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') check(false);
+      if (document.visibilityState === 'visible') { check(false); maybeApply(); }
     });
-    window.addEventListener('focus', function () { check(false); });
+    window.addEventListener('focus', function () { check(false); maybeApply(); });
+    document.addEventListener('focusout', function () { setTimeout(maybeApply, 200); });
   }
 
   window.JUCUM_UPDATE = { check: function () { check(true); }, reload: hardReload, running: function () { return running; } };

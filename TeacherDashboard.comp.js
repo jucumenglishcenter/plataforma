@@ -6,7 +6,28 @@
 
 function TeacherDashboard({ onLogout, user }) {
   const { STUDENTS, GROUPS, LEVELS, ACHIEVEMENT_DEFS, ACTIVITY_LOG, getStudentMastery } = window.JUCUM_DATA;
-  const [view, setView] = React.useState({ kind:'groups' });
+  const [view, setView] = React.useState(() => {
+    const s = window.JUCUM_NAV && window.JUCUM_NAV.load('teacher', null);
+    if (!s || !s.kind) return { kind:'groups' };
+    if (s.kind === 'group'   && !GROUPS.some(g => g.id === s.id))    return { kind:'groups' };
+    if (s.kind === 'student' && !STUDENTS.some(st => st.id === s.id)) return { kind:'groups' };
+    return s;
+  });
+  React.useEffect(() => { if (window.JUCUM_NAV) window.JUCUM_NAV.save('teacher', view); }, [view]);
+  // Avance en vivo de los alumnos: releemos el progreso de la nube al volver a la
+  // pestaña y cada 30 s, para ver puntos y materiales completados sin recargar.
+  const [, setLiveTick] = React.useState(0);
+  React.useEffect(() => {
+    if (!window.JUCUM_SYNC || !window.JUCUM_SYNC.refreshProgress) return;
+    let alive = true;
+    const refresh = () => window.JUCUM_SYNC.refreshProgress().then(ok => { if (ok && alive) setLiveTick(t => t + 1); }).catch(() => {});
+    refresh();
+    const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
+    const iv = setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 30000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVis);
+    return () => { alive = false; clearInterval(iv); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
+  }, []);
   const teacherName = (user && user.name && user.name !== 'Profesor' && user.name !== 'Profesor JUCUM') ? user.name : 'Joe Miller';
 
   // Reset palette

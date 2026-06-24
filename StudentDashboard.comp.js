@@ -49,7 +49,8 @@ function StudentDashboard({ user, onLogout }) {
     : (settings.activeModuleId ? [settings.activeModuleId] : []);
   const activeModules = allModules.filter(m => activeIds.includes(m.id));
   const activeModule = activeModules[0] || allModules[0];
-  const [view, setView] = React.useState('dashboard');
+  const [view, setView] = React.useState(() => (window.JUCUM_NAV ? window.JUCUM_NAV.load('student', 'dashboard') : 'dashboard'));
+  React.useEffect(() => { if (window.JUCUM_NAV) window.JUCUM_NAV.save('student', view); }, [view]);
   const [showOnb, setShowOnb] = React.useState(() => !localStorage.getItem(`jucum_onboarded_${user.studentId}`));
   const [surveyDue, setSurveyDue] = React.useState(false);
   React.useEffect(() => {
@@ -70,6 +71,21 @@ function StudentDashboard({ user, onLogout }) {
     const onStorage = (e) => { if (e.key && (e.key.startsWith('jucum_forum') || e.key.startsWith('jucum_likes'))) setFTick(t => t + 1); };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
+  }, []);
+  // Avance en vivo: al volver a la pestaña (o cada 20 s) releemos SOLO el avance
+  // de la nube — así lo que el alumno acaba de practicar en otra pestaña aparece
+  // como completado y sus puntos suben sin recargar toda la plataforma.
+  const [, setPTick] = React.useState(0);
+  React.useEffect(() => {
+    if (!window.JUCUM_SYNC || !window.JUCUM_SYNC.refreshProgress) return;
+    let alive = true;
+    const refresh = () => window.JUCUM_SYNC.refreshProgress().then(ok => { if (ok && alive) setPTick(t => t + 1); }).catch(() => {});
+    refresh();
+    const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
+    const iv = setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 20000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVis);
+    return () => { alive = false; clearInterval(iv); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
   }, []);
   const forumUnread = window.JUCUM_FORUM ? window.JUCUM_FORUM.forumUnreadCount(student.id, student.group) : 0;
   const openForum = () => {

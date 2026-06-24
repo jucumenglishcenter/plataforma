@@ -123,6 +123,7 @@ function App() {
 
   const onLogin = (u) => { setUser(u); localStorage.setItem('jucum_user', JSON.stringify(u)); };
   const onLogout = () => {
+    if (window.JUCUM_NAV) window.JUCUM_NAV.clearAll();
     setUser(null);
     localStorage.removeItem('jucum_user');
     document.body.removeAttribute('data-level');

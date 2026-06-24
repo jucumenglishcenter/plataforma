@@ -5,7 +5,8 @@
  * Resalta la sección activa (clase .active en el nav).
  */
 function DevDashboard({ user, onLogout }) {
-  const [view, setView] = React.useState('modules');
+  const [view, setView] = React.useState(() => (window.JUCUM_NAV ? window.JUCUM_NAV.load('dev', 'modules') : 'modules'));
+  React.useEffect(() => { if (window.JUCUM_NAV) window.JUCUM_NAV.save('dev', view); }, [view]);
   React.useEffect(() => { document.body.removeAttribute('data-level'); }, []);
 
   const NAV = [
