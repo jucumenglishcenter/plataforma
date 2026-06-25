@@ -304,12 +304,14 @@
     // ── Frase motivacional + cierre de práctica ──
     function jecMotivation(pct) {
       if (pct >= 90) return { emoji:'🌟', title:'¡Excelente!',    text:'Dominaste el tema. Tu constancia se nota — sigue así.',                                         bg:'#E8F5E9', color:'#2E7D32' };
-      if (pct >= 70) return { emoji:'💪', title:'¡Muy bien!',     text:'Vas por buen camino. Repasa los pocos errores y serás imparable.',                                bg:'#E3F2FD', color:'#1565C0' };
+      if (pct >= 75) return { emoji:'💪', title:'¡Muy bien!',     text:'Vas por buen camino. Repasa los pocos errores y serás imparable.',                                bg:'#E3F2FD', color:'#1565C0' };
       if (pct >= 50) return { emoji:'🌱', title:'¡Buen intento!', text:'Aprendiste más de lo que crees. Revisa el feedback y vuelve a intentarlo: cada error te acerca.',     bg:'#FFF8E1', color:'#F57F17' };
       return               { emoji:'🤗', title:'¡Sigue adelante!', text:'Equivocarse ES aprender — tu cerebro ya está cambiando aunque no lo sientas. Repasa con calma y verás el avance.', bg:'#FCE4EC', color:'#AD1457' };
     }
     function showResultCard(pct, statusMsg, hasScore) {
       var m = jecMotivation(pct);
+      var needRetry = hasScore && pct < 75;
+      var retryHtml = needRetry ? '<div style="font-size:13px;font-weight:800;color:#92510F;background:#FFF3D6;border:1.5px solid #F0C66B;border-radius:12px;padding:11px 13px;margin-bottom:14px;line-height:1.5;">🔁 Necesitas <b>75% o más</b> de respuestas correctas para aprobar. Revisa el feedback y <b>vuelve a realizar la actividad</b> para completarla.</div>' : '';
       var ov = document.createElement('div');
       ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.6);z-index:1000000;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;padding:16px;';
       ov.innerHTML =
@@ -320,6 +322,7 @@
         '</div>' +
         '<div style="padding:18px 22px 22px;text-align:center;">' +
         '<div style="font-size:14px;line-height:1.55;color:#333;margin-bottom:14px;">' + m.text + '</div>' +
+        retryHtml +
         '<div style="font-size:12px;font-weight:700;color:#555;background:#F5F5F0;border-radius:10px;padding:9px 12px;margin-bottom:16px;">' + statusMsg + '</div>' +
         '<button id="jec-rc-btn" style="padding:12px 28px;border:none;border-radius:24px;background:#1F3A8A;color:#fff;font-weight:800;font-size:14px;cursor:pointer;">Entendido ✓</button>' +
         '</div></div>';
