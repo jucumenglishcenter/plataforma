@@ -217,7 +217,7 @@
       updateChip();
     }, 1000);
 
-    function complete(score) {
+    function complete(score, lowStakes) {
       if (done) return;
       done = true;
       updateChip();
@@ -229,7 +229,7 @@
       try { if (window.parent && window.parent !== window) window.parent.postMessage({ source: 'jucum-connect', type: 'done', uid: uid, mod: modId, act: actId, score: (score == null ? null : pct), minutes: minutes }, '*'); } catch (e) {}
 
       if (demo) {
-        showResultCard(pct, '🧪 Modo prueba · ' + minutes + ' min' + (score != null ? ' · ' + pct + '%' : '') + ' (no se registró)', score != null);
+        showResultCard(pct, '🧪 Modo prueba · ' + minutes + ' min' + (score != null ? ' · ' + pct + '%' : '') + ' (no se registró)', score != null, lowStakes);
         return;
       }
 
@@ -238,7 +238,7 @@
       // Dentro de la semana del primer intento → practica libre, pero la nota NO cambia.
       if (firstTs && (now - firstTs) < RETRY_AFTER_MS) {
         var fecha = new Date(firstTs + RETRY_AFTER_MS).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' });
-        showResultCard(pct, '📌 Tu nota guardada se mantiene. Podrás intentar mejorarla a partir del ' + fecha + '. ¡Mientras tanto, sigue practicando!', score != null);
+        showResultCard(pct, '📌 Tu nota guardada se mantiene. Podrás intentar mejorarla a partir del ' + fecha + '. ¡Mientras tanto, sigue practicando!', score != null, lowStakes);
         return;
       }
       // Primer intento, o ya pasó la semana → registra quedándonos con la MEJOR nota.
@@ -249,7 +249,7 @@
         else if (score != null && pct > prev) msg = '🎉 ¡Mejoraste tu nota! Antes ' + prev + '% → ahora ' + pct + '%.';
         else if (score != null) msg = '👍 Lo intentaste de nuevo. Tu mejor nota (' + prev + '%) se mantiene.';
         else msg = '✅ Práctica registrada · ' + minutes + ' min';
-        showResultCard(pct, msg, score != null);
+        showResultCard(pct, msg, score != null, lowStakes);
       });
     }
 
@@ -284,7 +284,9 @@
 
     // Quizzes (readings, listenings, gramática, resúmenes MCQ) avisan así:
     window.addEventListener('jucum:done', function (e) {
-      complete((e.detail && e.detail.score != null) ? e.detail.score : 80);
+      var d = e.detail || {};
+      var lowStakes = d.type === 'summary' || d.type === 'quizlet';
+      complete((d.score != null) ? d.score : 80, lowStakes);
     });
 
     function toast(msg) {
@@ -308,9 +310,9 @@
       if (pct >= 50) return { emoji:'🌱', title:'¡Buen intento!', text:'Aprendiste más de lo que crees. Revisa el feedback y vuelve a intentarlo: cada error te acerca.',     bg:'#FFF8E1', color:'#F57F17' };
       return               { emoji:'🤗', title:'¡Sigue adelante!', text:'Equivocarse ES aprender — tu cerebro ya está cambiando aunque no lo sientas. Repasa con calma y verás el avance.', bg:'#FCE4EC', color:'#AD1457' };
     }
-    function showResultCard(pct, statusMsg, hasScore) {
+    function showResultCard(pct, statusMsg, hasScore, lowStakes) {
       var m = jecMotivation(pct);
-      var needRetry = hasScore && pct < 75;
+      var needRetry = hasScore && pct < 75 && !lowStakes;
       var retryHtml = needRetry ? '<div style="font-size:13px;font-weight:800;color:#92510F;background:#FFF3D6;border:1.5px solid #F0C66B;border-radius:12px;padding:11px 13px;margin-bottom:14px;line-height:1.5;">🔁 Necesitas <b>75% o más</b> de respuestas correctas para aprobar. Revisa el feedback y <b>vuelve a realizar la actividad</b> para completarla.</div>' : '';
       var ov = document.createElement('div');
       ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.6);z-index:1000000;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;padding:16px;';
