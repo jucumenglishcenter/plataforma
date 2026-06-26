@@ -57,6 +57,27 @@ function StudentDashboard({ user, onLogout }) {
     try { if (window.JUCUM_SURVEY) setSurveyDue(window.JUCUM_SURVEY.isSurveyDue(student)); } catch {}
   }, [student && student.id]);
   const [alertKind, setAlertKind] = React.useState(null);
+  // Cartel flotante: tarea que vence en ≤3 días (una vez al día, hasta vencer o entregar)
+  const [taskDue, setTaskDue] = React.useState(null);
+  React.useEffect(() => {
+    try {
+      const T = window.JUCUM_TASKS; if (!T) return;
+      const today = new Date().toISOString().slice(0, 10);
+      const soon = (T.assignmentsForStudent(student) || []).filter(a => {
+        if (!a.dueAt) return false;
+        if (T.getSubmission(a.id, student.id)) return false;          // ya entregada
+        const diff = new Date(a.dueAt) - new Date();
+        if (diff <= 0) return false;                                  // ya venció
+        return Math.ceil(diff / 86400000) <= 3;                       // 3 días o menos
+      }).sort((a, b) => new Date(a.dueAt) - new Date(b.dueAt));
+      if (!soon.length) return;
+      const a = soon[0];
+      const key = `jucum_taskcartel_${student.id}_${a.id}_${today}`; // 1 vez al día por tarea
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, '1');
+      setTaskDue(a);
+    } catch {}
+  }, [student.id]);
   // PASO 3 · explicación al bajar (solo en una caída real corregible)
   const [dropExp, setDropExp] = React.useState(null);
   React.useEffect(() => {
@@ -175,6 +196,7 @@ function StudentDashboard({ user, onLogout }) {
       {!showOnb && celebrate && <PayCelebration payment={celebrate} onClose={closeCelebrate} />}
       {!showOnb && !celebrate && alertKind && <StudentAlertModal kind={alertKind} student={student} onClose={() => setAlertKind(null)} />}
       {!showOnb && !celebrate && !alertKind && dropExp && <DropExplainModal exp={dropExp} student={student} onClose={() => { try { window.JUCUM_DATA.ackDropExplanation(student); } catch {} setDropExp(null); }} onGo={() => { setDropExp(null); setView('dashboard'); }} />}
+      {!showOnb && !celebrate && !alertKind && !dropExp && taskDue && <TaskDueCartel assignment={taskDue} onGo={() => { setTaskDue(null); setView('tasks'); }} onClose={() => setTaskDue(null)} />}
       <header className="app-header">
         <div className="app-logo">
           <img src={window.JUCUM_LOGO || 'logo-jucum.png'} alt="JUCUM EC" />
@@ -837,6 +859,33 @@ function DropExplainModal({ exp, student, onClose, onGo }) {
 }
 
 /* ════════ PASO 4 · Anillo de meta compacto (encabezado de Mi práctica) ════════ */
+function TaskDueCartel({ assignment, onGo, onClose }) {
+  const d = assignment.dueAt ? new Date(assignment.dueAt) : null;
+  const days = d ? Math.max(0, Math.ceil((d - new Date()) / 86400000)) : null;
+  const dueTxt = d ? d.toLocaleString('es-PE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  const daysTxt = days === 0 ? 'hoy mismo' : days === 1 ? 'mañana' : `en ${days} días`;
+  return (
+    <div onClick={onClose} style={{position:'fixed', inset:0, zIndex:130, background:'rgba(20,20,40,0.45)', backdropFilter:'blur(2px)', display:'flex', alignItems:'center', justifyContent:'center', padding:20}}>
+      <div onClick={e => e.stopPropagation()} style={{width:'min(420px, 94%)', background:'#fff', borderRadius:20, overflow:'hidden', boxShadow:'0 18px 50px rgba(0,0,0,0.32)', animation:'jucumPop .28s cubic-bezier(.2,.8,.3,1.1) both'}}>
+        <div style={{background:'linear-gradient(135deg,#F2820D,#D9690A)', padding:'20px 22px 18px', color:'#fff', position:'relative', textAlign:'center'}}>
+          <button onClick={onClose} style={{position:'absolute', top:12, right:12, width:30, height:30, borderRadius:'50%', border:'none', background:'rgba(255,255,255,0.22)', color:'#fff', fontWeight:800, fontSize:14, cursor:'pointer'}}>×</button>
+          <div style={{fontSize:42, lineHeight:1}}>⏰</div>
+          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:20, marginTop:6}}>¡Tienes una tarea por vencer!</div>
+        </div>
+        <div style={{padding:'18px 22px 22px'}}>
+          <div style={{border:'1px solid #F2D9B8', background:'#FFF8F0', borderRadius:13, padding:'13px 15px', marginBottom:16}}>
+            <div style={{fontSize:10.5, fontWeight:800, letterSpacing:'0.06em', textTransform:'uppercase', color:'#C46200'}}>📝 Tarea</div>
+            <div style={{fontWeight:800, fontSize:14.5, color:'#2b2b2b', margin:'3px 0 6px', lineHeight:1.3}}>{assignment.title}</div>
+            <div style={{display:'inline-flex', alignItems:'center', gap:6, fontSize:12.5, fontWeight:800, color:'#B23A00', background:'#FFE7D1', borderRadius:14, padding:'4px 12px'}}>⏰ Vence {daysTxt}{dueTxt ? ` · ${dueTxt}` : ''}</div>
+          </div>
+          <button onClick={onGo} style={{width:'100%', border:'none', cursor:'pointer', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15, color:'#fff', background:'linear-gradient(135deg,#F2820D,#D9690A)', borderRadius:13, padding:'13px 18px', boxShadow:'0 6px 16px rgba(214,120,13,0.35)'}}>Ir a la tarea →</button>
+          <button onClick={onClose} style={{width:'100%', marginTop:9, border:'none', background:'none', color:'#8a7f6a', fontFamily:'inherit', fontWeight:800, fontSize:12.5, cursor:'pointer', padding:'6px'}}>Ahora no · recordarme mañana</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MiniRing({ done, target }) {
   const pct = Math.min(100, Math.round((done / Math.max(1, target)) * 100));
   const C = 113, off = C * (1 - Math.min(1, done / Math.max(1, target)));

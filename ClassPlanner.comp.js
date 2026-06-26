@@ -166,6 +166,8 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
   const TT = window.JUCUM_TT;
   const { GROUPS } = window.JUCUM_DATA;
   const [groupId, setGroupId] = React.useState(GROUPS[0] ? GROUPS[0].id : null);
+  const [summaryDate, setSummaryDate] = React.useState(null);   // ✅ resumen de la clase realizada
+  const [dupPlan, setDupPlan] = React.useState(null);           // ⧉ duplicar plan a otro grupo
   const cells = monthMatrix(cursor.y, cursor.m);
   const prevM = () => setCursor(c => { const d = new Date(c.y, c.m - 1, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
   const nextM = () => setCursor(c => { const d = new Date(c.y, c.m + 1, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
@@ -245,7 +247,7 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
         {sel.classPlans.map(p => (
           <DayRow key={p.id} icon="📘" tint="#EEF2FC" border="#C9D6F5" title={`${p.moduleName} · ${p.sessionLabel}`}
             sub={`Plan de clase · ${p.lengthMin} min · ${(p.blocks || []).length} bloques`}
-            onPlay={() => onClassMode(p)} onOpen={() => onEditClass(p)} onDelete={() => { TT.deleteClassPlan(p.id); onChange(); }} />
+            onPlay={() => onClassMode(p)} onOpen={() => onEditClass(p)} onDup={() => setDupPlan(p)} onDelete={() => { TT.deleteClassPlan(p.id); onChange(); }} />
         ))}
         {sel.practicePlans.map(p => (
           <DayRow key={p.id} icon="📝" tint="#F4EEFB" border="#D9CEEC" title={p.title}
@@ -254,24 +256,178 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
         ))}
         {selLog.length > 0 && (
           <div style={{marginTop:10, borderTop:'1px dashed #E3DCC9', paddingTop:10}}>
-            <div style={{fontSize:12, fontWeight:800, color:'#2E7D32', marginBottom:6}}>✅ Realizado en clase (registro automático)</div>
-            {selLog.map(e => (
-              <div key={e.id} style={{display:'flex', alignItems:'center', gap:9, fontSize:12.5, color:'#555', padding:'4px 0'}}>
-                <span style={{fontWeight:700, color:'#2E7D32', whiteSpace:'nowrap'}}>{e.from || '—'}</span>
-                <span style={{flex:1}}>{e.materialName}</span>
-                <span style={{color:'#999', fontWeight:700}}>{e.minutes}′</span>
-              </div>
-            ))}
+            <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:7, flexWrap:'wrap'}}>
+              <div style={{fontSize:12, fontWeight:800, color:'#2E7D32', flex:1}}>✅ Realizado en clase (registro automático)</div>
+              <button onClick={() => setSummaryDate(selDate)} style={{...btnGhost, padding:'5px 11px', fontSize:12, borderColor:'#9FD3A4', color:'#2E7D32'}}>👁️ Ver resumen de la clase</button>
+            </div>
+            <button onClick={() => setSummaryDate(selDate)} style={{display:'block', width:'100%', textAlign:'left', cursor:'pointer', border:'1px solid #BFE3C4', background:'#F3FAF4', borderRadius:11, padding:'9px 11px', font:'inherit'}}>
+              {selLog.map(e => (
+                <span key={e.id} style={{display:'flex', alignItems:'center', gap:11, padding:'4px 0'}}>
+                  <span style={{fontSize:11, fontWeight:800, color:'#2E7D32', background:'#E6F4E8', border:'1px solid #BFE3C4', borderRadius:7, padding:'3px 8px', whiteSpace:'nowrap'}}>⏰ {fmtLogClock(e.from)}</span>
+                  <span style={{flex:1, minWidth:0, fontWeight:700, fontSize:12.5, color:'#2b2b2b', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{e.materialName}</span>
+                  <span style={{fontSize:12, color:'#7a8a7c', fontWeight:800, whiteSpace:'nowrap'}}>{e.minutes} min</span>
+                </span>
+              ))}
+              <span style={{display:'block', fontSize:11.5, color:'#5a8a5f', fontWeight:700, marginTop:5}}>👆 Toca para ver el plan dado, la asistencia y los comentarios — y duplicar la clase a otro grupo.</span>
+            </button>
           </div>
         )}
       </div>
+      {summaryDate && <ClassSummaryModal date={summaryDate} groupId={groupId} onClose={() => setSummaryDate(null)} onDuplicate={(p) => { setSummaryDate(null); setDupPlan(p); }} />}
+      {dupPlan && <DuplicateClassModal plan={dupPlan} onClose={() => setDupPlan(null)} onDone={() => { setDupPlan(null); onChange(); }} />}
     </>
   );
 }
 
-function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay }) {
+/* ════════ Resumen de la clase realizada (plan dado · asistencia · comentarios) ════════ */
+function ClassSummaryModal({ date, groupId, onClose, onDuplicate }) {
+  const TT = window.JUCUM_TT; const A = window.JUCUM_ATT;
+  const { STUDENTS, GROUPS } = window.JUCUM_DATA;
+  const group = (GROUPS || []).find(g => g.id === groupId) || null;
+  const planned = TT.getPlannedForDay ? TT.getPlannedForDay(date) : { classPlans: [] };
+  const classPlans = (planned.classPlans || []).filter(p => !groupId || p.groupId === groupId);
+  const log = (TT.getClassLogForDay ? TT.getClassLogForDay(date) : []).filter(e => !groupId || e.groupId === groupId);
+  const students = (STUDENTS || []).filter(s => !groupId || s.group === groupId);
+  const att = students.map(s => ({ s, st: (A && A.getStudentRecord(date, s.id) || {}).status || null }));
+  const present = att.filter(a => a.st === 'asistio' || a.st === 'tarde').length;
+  const marked = att.filter(a => a.st).length;
+  // Comentarios de clase de ese día (notas con fecha = ese día, de este grupo o de sus alumnos)
+  const sIds = new Set(students.map(s => s.id));
+  const notes = (TT.getNotes ? TT.getNotes() : []).filter(n => String(n.date).slice(0,10) === date && (n.groupId === groupId || (n.studentId && sIds.has(n.studentId)) || (!n.groupId && !n.studentId)));
+  const generalNotes = notes.filter(n => !n.studentId);
+  const studentNotes = notes.filter(n => n.studentId);
+  const ATT_META = { asistio:{l:'P',c:'#2E7D32'}, tarde:{l:'T',c:'#F2820D'}, falto:{l:'A',c:'#C0392B'} };
+  const totalMin = log.reduce((a,e) => a + (e.minutes || 0), 0);
+  const sName = (id) => { const st = students.find(x => x.id === id); return st ? (st.fullName || st.username) : 'Alumno'; };
+
   return (
-    <div style={{display:'flex', alignItems:'center', gap:11, border:'1px solid ' + border, background: tint, borderRadius:11, padding:'10px 12px', marginBottom:8}}>
+    <div onClick={onClose} style={{position:'fixed', inset:0, zIndex:1000, background:'rgba(15,23,42,0.5)', backdropFilter:'blur(3px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
+      <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, width:'100%', maxWidth:620, maxHeight:'88vh', display:'flex', flexDirection:'column', boxShadow:'0 24px 60px rgba(0,0,0,0.35)'}}>
+        <div style={{padding:'16px 20px 13px', borderBottom:'1.5px solid #E3DCC9', position:'relative'}}>
+          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, lineHeight:1.2, color:'#2E7D32', display:'flex', alignItems:'center', gap:9}}>✅ Resumen de la clase</div>
+          <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginTop:3, textTransform:'capitalize'}}>{fmtDateLong(date)}{group ? ' · ' + group.name : ''}</div>
+          <button onClick={onClose} style={{position:'absolute', top:14, right:14, width:32, height:32, borderRadius:'50%', border:'none', background:'#FAFAF6', color:'#8a7f6a', fontSize:14, fontWeight:800, cursor:'pointer'}}>✕</button>
+        </div>
+        <div style={{padding:'14px 20px 18px', overflowY:'auto', flex:1, display:'flex', flexDirection:'column', gap:16}}>
+          {/* Plan dado */}
+          <div>
+            <div style={lblStyle}>📘 Plan de clase {classPlans.length ? '(lo que se preparó)' : ''}</div>
+            {classPlans.length === 0 ? <div style={mutedStyle}>No había un plan de clase agendado para este día (solo bitácora de materiales).</div>
+              : classPlans.map(p => (
+              <div key={p.id} style={{border:'1px solid #C9D6F5', background:'#EEF2FC', borderRadius:11, padding:'10px 12px', marginBottom:8}}>
+                <div style={{fontWeight:800, fontSize:13.5, marginBottom:6}}>{p.moduleName} · {p.sessionLabel} <span style={{fontSize:11, color:'#8a7f6a', fontWeight:700}}>· {p.lengthMin} min</span></div>
+                {withClock(p.blocks || [], p.startTime).map(b => (
+                  <div key={b.id} style={{display:'flex', alignItems:'center', gap:9, fontSize:12.5, color:'#3a4a66', padding:'2px 0'}}>
+                    <span style={{fontWeight:800, color:'#1F3A8A', whiteSpace:'nowrap', fontSize:11.5}}>{b.from}–{b.to}</span>
+                    <span>{b.emoji}</span><span style={{flex:1, fontWeight:700}}>{b.title}</span>
+                    <span style={{color:'#999', fontWeight:700}}>{b.mins}′</span>
+                  </div>
+                ))}
+                <div style={{marginTop:8}}><button onClick={() => onDuplicate(p)} style={{...btnGhost, padding:'6px 12px', fontSize:12, borderColor:'#9FB0DA', color:'#3F5BB8'}}>⧉ Duplicar esta clase a otro grupo</button></div>
+              </div>
+            ))}
+          </div>
+          {/* Materiales usados (bitácora) */}
+          <div>
+            <div style={lblStyle}>📎 Materiales usados (bitácora automática){totalMin ? ` · ${totalMin} min en total` : ''}</div>
+            {log.length === 0 ? <div style={mutedStyle}>No se registraron materiales abiertos en clase este día.</div>
+              : log.map(e => (
+              <div key={e.id} style={{display:'flex', alignItems:'center', gap:9, fontSize:12.5, color:'#555', padding:'4px 0', borderBottom:'1px solid #F2ECDD'}}>
+                <span style={{fontWeight:800, color:'#2E7D32', whiteSpace:'nowrap', fontSize:11.5}}>⏰ {fmtLogClock(e.from)}</span>
+                <span style={{flex:1, fontWeight:700}}>{e.materialName}</span>
+                <span style={{color:'#999', fontWeight:700}}>{e.minutes}′</span>
+              </div>
+            ))}
+          </div>
+          {/* Asistencia */}
+          <div>
+            <div style={lblStyle}>📝 Asistencia · {present}/{students.length} presentes{marked < students.length ? ` · ${students.length - marked} sin marcar` : ''}</div>
+            {students.length === 0 ? <div style={mutedStyle}>Este grupo no tiene alumnos.</div>
+              : <div style={{display:'flex', flexDirection:'column', gap:5}}>
+              {att.map(({ s, st }) => {
+                const ini = (s.fullName || s.username || '?').split(' ').map(x => x[0]).slice(0,2).join('').toUpperCase();
+                const m = ATT_META[st];
+                return (
+                  <div key={s.id} style={{display:'flex', alignItems:'center', gap:9, padding:'3px 0'}}>
+                    <span style={{width:28, height:28, borderRadius:'50%', background:'#FCEFD8', color:'#C77B12', fontWeight:800, fontSize:11, display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>{ini}</span>
+                    <span style={{flex:1, fontWeight:700, fontSize:12.5, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{s.fullName || s.username}</span>
+                    {m ? <span style={{width:24, height:24, borderRadius:7, background:m.c, color:'#fff', fontWeight:900, fontSize:11.5, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>{m.l}</span>
+                       : <span style={{fontSize:10.5, color:'#b0a88f', fontWeight:800}}>sin marcar</span>}
+                  </div>
+                );
+              })}
+            </div>}
+          </div>
+          {/* Comentarios */}
+          <div>
+            <div style={lblStyle}>💬 Comentarios de la clase</div>
+            {generalNotes.length === 0 && studentNotes.length === 0 ? <div style={mutedStyle}>No anotaste comentarios este día. Puedes anotarlos desde 👥 en el modo clase.</div> : null}
+            {generalNotes.map(n => (
+              <div key={n.id} style={{fontSize:13, color:'#7a5e1f', background:'#FFFDE7', border:'1px solid #FBC02D', borderRadius:9, padding:'9px 11px', fontWeight:600, marginBottom:7}}>{n.text}</div>
+            ))}
+            {studentNotes.map(n => (
+              <div key={n.id} style={{display:'flex', gap:8, fontSize:12.5, color:'#555', padding:'3px 0'}}>
+                <span style={{fontWeight:800, color:'#1F3A8A', flexShrink:0}}>✎ {sName(n.studentId).split(' ')[0]}:</span>
+                <span style={{flex:1}}>{n.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{display:'flex', gap:10, justifyContent:'space-between', alignItems:'center', padding:'13px 20px', borderTop:'1.5px solid #E3DCC9', flexWrap:'wrap'}}>
+          {classPlans[0] ? <button onClick={() => onDuplicate(classPlans[0])} style={{...btnGhost, padding:'8px 14px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>⧉ Duplicar la clase a otro grupo</button> : <span />}
+          <button onClick={onClose} style={{...btnGhost, padding:'8px 16px', fontSize:12.5}}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════ Duplicar un plan de clase a otro grupo ════════ */
+function DuplicateClassModal({ plan, onClose, onDone }) {
+  const TT = window.JUCUM_TT;
+  const { GROUPS, MODULE_CATALOG } = window.JUCUM_DATA;
+  const others = (GROUPS || []).filter(g => g.id !== plan.groupId);
+  const [gid, setGid] = React.useState(others[0] ? others[0].id : (plan.groupId || null));
+  const [date, setDate] = React.useState(plan.date || todayYMD());
+  const dup = () => {
+    const g = (GROUPS || []).find(x => x.id === gid);
+    const lvl = (g && g.level) || plan.level;
+    const copy = { ...plan, id: undefined, groupId: gid, level: lvl, date,
+      blocks: (plan.blocks || []).map(b => ({ ...b, id: 'b_' + Math.random().toString(36).slice(2,7) })) };
+    TT.upsertClassPlan(copy);
+    alert('⧉ Clase duplicada al grupo seleccionado el ' + date + '. Ábrela en su calendario para ajustar lo que quieras (no se tocó el original).');
+    onDone();
+  };
+  return (
+    <div onClick={onClose} style={{position:'fixed', inset:0, zIndex:1001, background:'rgba(15,23,42,0.55)', backdropFilter:'blur(3px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
+      <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, width:'100%', maxWidth:440, boxShadow:'0 24px 60px rgba(0,0,0,0.35)'}}>
+        <div style={{padding:'16px 20px 13px', borderBottom:'1.5px solid #E3DCC9', position:'relative'}}>
+          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, color:'#3F5BB8'}}>⧉ Duplicar a otro grupo</div>
+          <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginTop:3}}>{plan.moduleName} · {plan.sessionLabel}</div>
+          <button onClick={onClose} style={{position:'absolute', top:14, right:14, width:32, height:32, borderRadius:'50%', border:'none', background:'#FAFAF6', color:'#8a7f6a', fontSize:14, fontWeight:800, cursor:'pointer'}}>✕</button>
+        </div>
+        <div style={{padding:'16px 20px 6px'}}>
+          {others.length === 0 ? <div style={mutedStyle}>No tienes otro grupo al que duplicar todavía.</div> : (
+            <>
+              <Field label="Grupo destino"><select value={gid || ''} onChange={e => setGid(e.target.value)} style={selStyle}>{others.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></Field>
+              <div style={{height:12}} />
+              <Field label="Fecha en ese grupo"><input type="date" value={date} onChange={e => setDate(e.target.value)} style={selStyle} /></Field>
+              <div style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700, margin:'10px 0 2px'}}>Se crea una <b>copia idéntica</b> (secuencia y materiales). El original no se modifica.</div>
+            </>
+          )}
+        </div>
+        <div style={{display:'flex', gap:10, justifyContent:'flex-end', padding:'13px 20px', borderTop:'1.5px solid #E3DCC9'}}>
+          <button onClick={onClose} style={{...btnGhost, padding:'9px 16px', fontSize:12.5}}>Cancelar</button>
+          {others.length > 0 && <button onClick={dup} style={{...btnPrimary, padding:'9px 18px', fontSize:13, background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>⧉ Duplicar aquí</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDup }) {
+  return (
+    <div style={{display:'flex', alignItems:'center', gap:11, border:'1px solid ' + border, background: tint, borderRadius:11, padding:'10px 12px', marginBottom:8, flexWrap:'wrap'}}>
       <span style={{fontSize:19}}>{icon}</span>
       <div style={{flex:1, minWidth:0}}>
         <div style={{fontWeight:800, fontSize:13.5}}>{title}</div>
@@ -279,6 +435,7 @@ function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay }) {
       </div>
       {onPlay && <button onClick={onPlay} style={{...btnPrimary, padding:'6px 12px', fontSize:12.5, background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>▶ Modo clase</button>}
       <button onClick={onOpen} style={{...btnGhost, padding:'6px 12px', fontSize:12.5}}>Abrir</button>
+      {onDup && <button onClick={onDup} title="Duplicar a otro grupo" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>⧉ Duplicar</button>}
       <button onClick={onDelete} title="Eliminar" style={{...iconBtn, color:'#C0392B'}}>×</button>
     </div>
   );
@@ -1112,6 +1269,9 @@ function saveLS(k, a) { try { localStorage.setItem(k, JSON.stringify(a)); } catc
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
 function fmtDateLong(s) { if (!s) return ''; const d = parseYMD(s); return `${DOW_ES[d.getDay()]} ${d.getDate()} de ${MONTHS_ES[d.getMonth()]} ${d.getFullYear()}`; }
 function fmtDateShort(s) { const d = parseYMD(s); return `${d.getDate()}/${d.getMonth() + 1}`; }
+function fmtLogClock(v) { if (!v) return '—'; const m = String(v).match(/(\d{1,2}):(\d{2})/); if (!m) return String(v); let h = +m[1]; const ap = h >= 12 ? 'p. m.' : 'a. m.'; h = h % 12 || 12; return `${h}:${m[2]} ${ap}`; }
+const lblStyle = { fontSize:10.5, fontWeight:800, letterSpacing:'0.06em', textTransform:'uppercase', color:'#8a7f6a', marginBottom:7 };
+const mutedStyle = { fontSize:12.5, color:'#a8a29a', fontWeight:700, fontStyle:'italic' };
 function typeIcon(t) { return ({ story:'📖', reading:'📕', listening:'🎧', grammar:'✍️', summary:'🧠', quizlet:'🗂️' })[t] || '•'; }
 function typeIconTxt(t) { return typeIcon(t); }
 /* Link directo a un material en MODO PROFESOR (abre sin restricción y registra
