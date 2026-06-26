@@ -139,6 +139,21 @@
   function deleteClassPlan(id) { saveClassPlans(getClassPlans().filter(p => p.id !== id)); }
   function getClassPlansForDay(date) { return getClassPlans().filter(p => p.date === date); }
 
+  /* ── Plantillas reutilizables (clase / práctica) · con nombre + nivel ──
+   * Sincronizadas a la nube (sobreviven cambio de equipo/redepliegue). */
+  const TPL_KEY = 'jucum_planner_templates_v1';
+  function getTemplates() { return j(TPL_KEY, []); }
+  function saveTemplates(a) { w(TPL_KEY, a); cloudSetting('planner_templates', a); }
+  function addTemplate(t) {
+    const all = getTemplates();
+    const rec = { id: 'tpl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
+      kind: t.kind || 'class', name: t.name || 'Plantilla', level: t.level || null,
+      payload: t.payload || {}, createdAt: new Date().toISOString() };
+    all.unshift(rec); saveTemplates(all); return rec.id;
+  }
+  function updateTemplate(id, patch) { const a = getTemplates(); const i = a.findIndex(x => x.id === id); if (i >= 0) { a[i] = { ...a[i], ...patch }; saveTemplates(a); } }
+  function deleteTemplate(id) { saveTemplates(getTemplates().filter(t => t.id !== id)); }
+
   /* Lo planeado para un día (clase + práctica) — usado por el calendario del hub */
   function getPlannedForDay(date) {
     return { classPlans: getClassPlansForDay(date), practicePlans: getPracticePlansForDay(date) };
@@ -283,6 +298,7 @@
     try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','practice_plans').maybeSingle(); if (data && Array.isArray(data.value)) w(PP_KEY, data.value); } catch(e){}
     try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','practice_guide_favs').maybeSingle(); if (data && Array.isArray(data.value)) w(GFAV_KEY, data.value); } catch(e){}
     try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','class_plans').maybeSingle(); if (data && Array.isArray(data.value)) w(CP_KEY, data.value); } catch(e){}
+    try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','planner_templates').maybeSingle(); if (data && Array.isArray(data.value)) w(TPL_KEY, data.value); } catch(e){}
     try { const rows = await window.JUCUM_SB.all('teacher_notes'); if (Array.isArray(rows)) saveNotes(rows.map(r=>({ id:r.id, date:r.created_at, studentId:r.student_id, groupId:r.group_id, kind:r.kind, text:r.text, tag:r.tag })).sort((a,b)=>String(b.date).localeCompare(String(a.date)))); } catch(e){}
     try { const rows = await window.JUCUM_SB.all('teacher_reminders'); if (Array.isArray(rows)) w(REM_KEY, rows.map(r=>({ id:r.id, date:r.created_at, groupId:r.group_id, text:r.text, due:r.due, done:r.done }))); } catch(e){}
   }
@@ -303,6 +319,7 @@
     getPracticePlans, addPracticePlan, updatePracticePlan, deletePracticePlan, getPracticePlansForDay, getPracticePlansForStudentOnDate,
     getGuideFavs, addGuideFav, deleteGuideFav,
     getClassPlans, upsertClassPlan, deleteClassPlan, getClassPlansForDay, getPlannedForDay, getClassLogForGroupRecent,
+    getTemplates, addTemplate, updateTemplate, deleteTemplate,
     getDirectedAll, addDirected, updateDirected, deleteDirected, getDirectedForGroup, directedStatusForStudent, getActiveDirectedForStudent,
     getClassLog, logClassMaterial, deleteClassEntry, getClassLogForMonth, getClassLogForDay, cloudLoadClassLog, cloudLoadAll,
     addNote, updateNote, deleteNote, getStudentNotes, getGeneralNotes, getNotes,

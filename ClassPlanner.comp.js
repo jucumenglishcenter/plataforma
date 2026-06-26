@@ -143,13 +143,13 @@ function ClassPlanner({ onBack }) {
           onEditPractice={(p) => { setEditPractice(p); setScreen('practice'); }} onClassMode={goClassMode} onOpenTasks={() => setScreen('tareas')} refreshKey={tick} onChange={refresh} />
       )}
       {screen === 'class' && (
-        <ClassPlanEditor date={selDate} initial={editPlan} defaultGroupId={defaultGroup} onClassMode={goClassMode} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
+        <ClassPlanEditor key={editPlan ? editPlan.id || 'tpl' : 'new'} date={selDate} initial={editPlan} defaultGroupId={defaultGroup} onClassMode={goClassMode} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
       )}
       {screen === 'classmode' && (
         <ClassMode plan={classModePlan} onBack={() => setScreen('calendar')} />
       )}
       {screen === 'practice' && (
-        <PracticePlanEditor date={selDate} initial={editPractice} defaultGroupId={defaultGroup} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
+        <PracticePlanEditor key={editPractice ? editPractice.id || 'tpl' : 'new'} date={selDate} initial={editPractice} defaultGroupId={defaultGroup} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
       )}
       {screen === 'tareas' && (
         <TeacherAssignments embedded onBack={() => setScreen('calendar')} />
@@ -319,8 +319,15 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
 
   const save = (asTemplate) => {
     if (!plan) return;
-    const rec = { ...plan, groupId: cfg.groupId, date: cfg.date || date, sessionLabel: cfg.sessionLabel, startTime: cfg.startTime, lengthMin: totalMin, id: initial ? initial.id : undefined };
-    if (asTemplate) { const tpls = loadLS(PLAN_TPL_KEY); tpls.unshift({ ...rec, id: 'tpl_' + Date.now(), isTemplate: true }); saveLS(PLAN_TPL_KEY, tpls); alert('✅ Guardado como plantilla reutilizable'); return; }
+    if (asTemplate) {
+      const name = window.prompt('Nombre para esta plantilla de clase:', plan.moduleName + ' · ' + cfg.sessionLabel);
+      if (!name) return;
+      const payload = { ...plan, groupId: cfg.groupId, sessionLabel: cfg.sessionLabel, startTime: cfg.startTime, lengthMin: totalMin, date: undefined, id: undefined };
+      TT.addTemplate({ kind: 'class', name: name.trim(), level: cfg.level, payload });
+      alert('⭐ Plantilla "' + name.trim() + '" guardada. La encuentras en 📁 Guardados.');
+      return;
+    }
+    const rec = { ...plan, groupId: cfg.groupId, date: cfg.date || date, sessionLabel: cfg.sessionLabel, startTime: cfg.startTime, lengthMin: totalMin, id: initial && !initial._tpl ? initial.id : undefined };
     TT.upsertClassPlan(rec); alert('✅ Plan de clase guardado en el calendario'); onSaved();
   };
   const printPlan = () => printClassPlan(plan, cfg, totalMin);
@@ -329,6 +336,16 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
     <>
       <div className="scard">
         <div className="sec-head"><div className="sec-title">📘 Plan de clase · {fmtDateLong(cfg.date || date)}</div></div>
+        {initial && !initial._tpl && (
+          <div style={{display:'flex', alignItems:'center', gap:9, background:'#EEF2FC', border:'1px solid #C9D6F5', borderRadius:11, padding:'9px 13px', margin:'4px 0 10px', fontSize:12.5, fontWeight:700, color:'#1F3A8A'}}>
+            ✏️ Estás <b>editando un plan guardado</b>. Cambia lo que quieras abajo y pulsa <b>💾 Guardar</b> — se actualiza en su mismo día (no se duplica).
+          </div>
+        )}
+        {initial && initial._tpl && (
+          <div style={{display:'flex', alignItems:'center', gap:9, background:'#FBF7FF', border:'1px solid #E2D5F3', borderRadius:11, padding:'9px 13px', margin:'4px 0 10px', fontSize:12.5, fontWeight:700, color:'#5B3FA0'}}>
+            ⭐ Partiste de una <b>plantilla</b>. Ajusta la fecha y el grupo, y guárdalo para agendarlo en el calendario.
+          </div>
+        )}
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:14, marginTop:6}}>
           <Field label="Fecha"><input type="date" value={cfg.date || date} onChange={e => setCfg(c => ({ ...c, date: e.target.value }))} style={selStyle} /></Field>
           <Field label="Grupo"><select value={cfg.groupId || ''} onChange={e => { const g = GROUPS.find(x => x.id === e.target.value); const lvl = g ? g.level : cfg.level; const m = (MODULE_CATALOG[lvl] || [])[0]; setCfg(c => ({ ...c, groupId: e.target.value, level: lvl, moduleId: m ? m.id : c.moduleId, themeGroup: '' })); }} style={selStyle}>{GROUPS.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></Field>
@@ -340,7 +357,7 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
           <Field label="Hora de inicio"><input type="time" value={cfg.startTime} onChange={e => setCfg(c => ({ ...c, startTime: e.target.value }))} style={selStyle} /></Field>
         </div>
         <div style={{display:'flex', gap:10, marginTop:16, flexWrap:'wrap'}}>
-          <button onClick={generate} style={{...btnPrimary, background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>⚡ {plan ? 'Regenerar' : 'Generar plan'}</button>
+          <button onClick={() => { if (plan && !window.confirm('¿Regenerar desde cero? Se perderán los cambios que hiciste a los bloques.')) return; generate(); }} style={{...btnPrimary, background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>⚡ {plan ? 'Regenerar' : 'Generar plan'}</button>
           <button onClick={onCancel} style={btnGhost}>Cancelar</button>
         </div>
       </div>
@@ -480,9 +497,17 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
     if (!dates.length) { alert('Elige al menos un día en el calendario.'); return; }
     const finalGuide = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang });
     const rec = { groupId, title, activities: picked, dates, assignToStudents: assign, note, guide: finalGuide };
-    if (initial) { TT.updatePracticePlan(initial.id, rec); alert('✅ Set de práctica actualizado'); }
+    if (initial && !initial._tpl) { TT.updatePracticePlan(initial.id, rec); alert('✅ Set de práctica actualizado'); }
     else { TT.addPracticePlan(rec); alert(assign ? '✅ Set guardado y asignado a los alumnos en esos días' : '✅ Set guardado (solo para ti)'); }
     onSaved();
+  };
+  const saveAsTemplate = () => {
+    if (!picked.length) { alert('Elige al menos una actividad antes de guardar la plantilla.'); return; }
+    const name = window.prompt('Nombre para esta plantilla de práctica:', title);
+    if (!name) return;
+    const finalGuide = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang });
+    TT.addTemplate({ kind: 'practice', name: name.trim(), level, payload: { title, activities: picked, assignToStudents: assign, note, guide: finalGuide, dates: [] } });
+    alert('⭐ Plantilla "' + name.trim() + '" guardada. La encuentras en 📁 Guardados.');
   };
   const printSet = () => printPracticeSet({ title, group, level, picked, dates, mod }, MODULE_CATALOG);
 
@@ -494,6 +519,16 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
     <>
       <div className="scard">
         <div className="sec-head"><div className="sec-title">📝 Set de práctica</div></div>
+        {initial && !initial._tpl && (
+          <div style={{display:'flex', alignItems:'center', gap:9, background:'#F4EEFB', border:'1px solid #D9CEEC', borderRadius:11, padding:'9px 13px', margin:'4px 0 4px', fontSize:12.5, fontWeight:700, color:'#5B3FA0'}}>
+            ✏️ Estás <b>editando un set guardado</b>. Cambia actividades, días o destino y pulsa <b>💾 Guardar</b> — se actualiza el mismo set.
+          </div>
+        )}
+        {initial && initial._tpl && (
+          <div style={{display:'flex', alignItems:'center', gap:9, background:'#FBF7FF', border:'1px solid #E2D5F3', borderRadius:11, padding:'9px 13px', margin:'4px 0 4px', fontSize:12.5, fontWeight:700, color:'#5B3FA0'}}>
+            ⭐ Partiste de una <b>plantilla</b>. Elige los <b>días</b> y guárdalo para asignarlo.
+          </div>
+        )}
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:14, marginTop:6}}>
           <Field label="Título"><input value={title} onChange={e => setTitle(e.target.value)} style={selStyle} /></Field>
           <Field label="Grupo"><select value={groupId || ''} onChange={e => { setGroupId(e.target.value); const g = GROUPS.find(x => x.id === e.target.value); const lv = g ? g.level : level; const m = (MODULE_CATALOG[lv] || [])[0]; setModuleId(m ? m.id : null); setPicked([]); }} style={selStyle}>{GROUPS.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></Field>
@@ -714,6 +749,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
         <Field label="Nota para los alumnos (opcional)" style={{marginTop:12}}><input value={note} onChange={e => setNote(e.target.value)} placeholder="Ej: enfócate en la pronunciación" style={selStyle} /></Field>
         <div style={{display:'flex', gap:10, flexWrap:'wrap', marginTop:16}}>
           <button onClick={save} style={btnPrimary}>💾 Guardar set de práctica</button>
+          <button onClick={saveAsTemplate} style={{...btnGhost, borderColor:'#C9A8E8', color:'#5B3FA0'}}>⭐ Plantilla</button>
           <button onClick={printSet} style={btnGhost}>🖨️ Archivos / PDF</button>
           <button onClick={onCancel} style={btnGhost}>Cancelar</button>
         </div>
@@ -930,33 +966,101 @@ function QuizChips({ label, value, options, onPick }) {
 }
 function SavedItems({ onOpenClass, onOpenPractice, onChange, refreshKey }) {
   const TT = window.JUCUM_TT;
-  const classPlans = TT.getClassPlans();
-  const practicePlans = TT.getPracticePlans();
-  const templates = loadLS(PLAN_TPL_KEY);
-  const Row = ({ icon, title, sub, onOpen, onDel }) => (
-    <div style={{display:'flex', alignItems:'center', gap:11, border:'1px solid #E3DCC9', borderRadius:11, padding:'10px 13px', background:'#FCFAF4', marginBottom:8}}>
+  const { GROUPS, MODULE_CATALOG } = window.JUCUM_DATA;
+  const [fGroup, setFGroup] = React.useState('all');
+  const [fLevel, setFLevel] = React.useState('all');
+  const gName = (id) => { const g = GROUPS.find(x => x.id === id); return g ? g.name : (id === 'g1' ? 'Grupo' : '—'); };
+  const gLevel = (id) => { const g = GROUPS.find(x => x.id === id); return g ? g.level : null; };
+  const levels = Object.keys(MODULE_CATALOG);
+
+  let classPlans = TT.getClassPlans().slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  let practicePlans = TT.getPracticePlans().slice().sort((a, b) => String((b.dates || [])[0] || '').localeCompare(String((a.dates || [])[0] || '')));
+  let templates = (TT.getTemplates ? TT.getTemplates() : []);
+  if (fGroup !== 'all') { classPlans = classPlans.filter(p => p.groupId === fGroup); practicePlans = practicePlans.filter(p => p.groupId === fGroup); }
+  if (fLevel !== 'all') {
+    classPlans = classPlans.filter(p => (p.level || gLevel(p.groupId)) === fLevel);
+    practicePlans = practicePlans.filter(p => gLevel(p.groupId) === fLevel);
+    templates = templates.filter(t => !t.level || t.level === fLevel);
+  }
+  const classTpls = templates.filter(t => t.kind === 'class');
+  const pracTpls = templates.filter(t => t.kind === 'practice');
+
+  const dupClass = (p) => { const copy = { ...p, id: undefined, date: todayYMD(), sessionLabel: (p.sessionLabel || 'Sesión') + ' (copia)' }; TT.upsertClassPlan(copy); onChange(); alert('📋 Plan duplicado para hoy. Ábrelo para ajustar fecha y grupo.'); };
+  const dupPractice = (p) => { const copy = { ...p, title: (p.title || 'Práctica') + ' (copia)', dates: [] }; const id = TT.addPracticePlan(copy); onChange(); onOpenPractice({ ...TT.getPracticePlans().find(x => x.id === id) }); };
+  const useTpl = (t) => { if (t.kind === 'class') onOpenClass({ ...t.payload, _tpl: true, id: undefined }); else onOpenPractice({ ...t.payload, _tpl: true, id: undefined }); };
+  const dupTpl = (t) => { TT.addTemplate({ kind: t.kind, name: t.name + ' (copia)', level: t.level, payload: t.payload }); onChange(); };
+  const renameTpl = (t) => { const n = window.prompt('Nuevo nombre de la plantilla:', t.name); if (n && n.trim()) { TT.updateTemplate(t.id, { name: n.trim() }); onChange(); } };
+  const setTplLevel = (t, lv) => { TT.updateTemplate(t.id, { level: lv || null }); onChange(); };
+
+  const Row = ({ icon, tint, title, sub, children }) => (
+    <div style={{display:'flex', alignItems:'center', gap:11, border:'1px solid #E3DCC9', borderRadius:11, padding:'10px 13px', background: tint || '#FCFAF4', marginBottom:8, flexWrap:'wrap'}}>
       <span style={{fontSize:19}}>{icon}</span>
-      <div style={{flex:1, minWidth:0}}><div style={{fontWeight:800, fontSize:13.5}}>{title}</div><div style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700}}>{sub}</div></div>
-      <button onClick={onOpen} style={{...btnGhost, padding:'6px 12px', fontSize:12.5}}>Abrir</button>
-      {onDel && <button onClick={onDel} style={{...iconBtn, color:'#C0392B'}}>×</button>}
+      <div style={{flex:1, minWidth:140}}><div style={{fontWeight:800, fontSize:13.5}}>{title}</div><div style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700}}>{sub}</div></div>
+      <div style={{display:'flex', gap:6, flexWrap:'wrap'}}>{children}</div>
     </div>
   );
+  const Lvl = ({ lv }) => lv ? <span style={{fontSize:10, fontWeight:800, color:'#fff', background:'#3F5BB8', borderRadius:10, padding:'2px 7px', marginLeft:6}}>{lv.toUpperCase()}</span> : null;
+  const mini = { ...btnGhost, padding:'5px 10px', fontSize:12 };
+
   return (
     <>
       <div className="scard" style={{marginBottom:16}}>
-        <div className="sec-head"><div className="sec-title">📘 Planes de clase</div></div>
-        {classPlans.length === 0 ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">📭</div>Sin planes de clase aún.</div>
-          : classPlans.map(p => <Row key={p.id} icon="📘" title={`${p.moduleName} · ${p.sessionLabel}`} sub={`${p.date || 's/fecha'} · ${p.lengthMin} min`} onOpen={() => onOpenClass(p)} onDel={() => { TT.deleteClassPlan(p.id); onChange(); }} />)}
+        <div style={{display:'flex', alignItems:'center', gap:9, flexWrap:'wrap'}}>
+          <span style={{fontSize:12, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'.03em'}}>🔎 Filtrar</span>
+          <select value={fGroup} onChange={e => setFGroup(e.target.value)} style={{...selStyle, width:'auto', minWidth:150}}>
+            <option value="all">Todos los grupos</option>
+            {GROUPS.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+          <select value={fLevel} onChange={e => setFLevel(e.target.value)} style={{...selStyle, width:'auto', minWidth:120}}>
+            <option value="all">Todos los niveles</option>
+            {levels.map(lv => <option key={lv} value={lv}>{lv.toUpperCase()}</option>)}
+          </select>
+          <span style={{fontSize:11.5, color:'#A8A8A8', fontWeight:700}}>Aquí ves TODO lo que has hecho, de cualquier grupo o fecha.</span>
+        </div>
       </div>
+
       <div className="scard" style={{marginBottom:16}}>
-        <div className="sec-head"><div className="sec-title">📝 Sets de práctica</div></div>
-        {practicePlans.length === 0 ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">📭</div>Sin sets de práctica aún.</div>
-          : practicePlans.map(p => <Row key={p.id} icon="📝" title={p.title} sub={`${(p.activities || []).length} act. · ${(p.dates || []).length} día(s) · ${p.assignToStudents !== false ? '👥 alumnos' : '🙋 solo tú'}`} onOpen={() => onOpenPractice(p)} onDel={() => { TT.deletePracticePlan(p.id); onChange(); }} />)}
+        <div className="sec-head"><div className="sec-title">📘 Planes de clase <span style={{fontSize:12, color:'#8a7f6a'}}>({classPlans.length})</span></div></div>
+        {classPlans.length === 0 ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">📭</div>Sin planes de clase con este filtro.</div>
+          : classPlans.map(p => <Row key={p.id} icon="📘" tint="#EEF2FC" title={<>{p.moduleName} · {p.sessionLabel}<Lvl lv={p.level} /></>} sub={`${gName(p.groupId)} · ${p.date || 's/fecha'} · ${p.lengthMin} min`}>
+              <button onClick={() => onOpenClass(p)} style={mini}>Abrir</button>
+              <button onClick={() => dupClass(p)} style={mini}>⧉ Duplicar</button>
+              <button onClick={() => { if (window.confirm('¿Eliminar este plan de clase?')) { TT.deleteClassPlan(p.id); onChange(); } }} style={{...iconBtn, color:'#C0392B'}}>×</button>
+            </Row>)}
       </div>
+
+      <div className="scard" style={{marginBottom:16}}>
+        <div className="sec-head"><div className="sec-title">📝 Sets de práctica <span style={{fontSize:12, color:'#8a7f6a'}}>({practicePlans.length})</span></div></div>
+        {practicePlans.length === 0 ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">📭</div>Sin sets de práctica con este filtro.</div>
+          : practicePlans.map(p => <Row key={p.id} icon="📝" tint="#F4EEFB" title={p.title} sub={`${gName(p.groupId)} · ${(p.activities || []).length} act. · ${(p.dates || []).length} día(s) · ${p.assignToStudents !== false ? '👥 alumnos' : '🙋 solo tú'}`}>
+              <button onClick={() => onOpenPractice(p)} style={mini}>Abrir</button>
+              <button onClick={() => dupPractice(p)} style={mini}>⧉ Duplicar</button>
+              <button onClick={() => { if (window.confirm('¿Eliminar este set de práctica?')) { TT.deletePracticePlan(p.id); onChange(); } }} style={{...iconBtn, color:'#C0392B'}}>×</button>
+            </Row>)}
+      </div>
+
+      <div className="scard" style={{marginBottom:16}}>
+        <div className="sec-head"><div className="sec-title">⭐ Plantillas de clase <span style={{fontSize:12, color:'#8a7f6a'}}>({classTpls.length})</span></div></div>
+        {classTpls.length === 0 ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">📭</div>Guarda un plan como plantilla (botón ⭐ en el editor) para reutilizarlo.</div>
+          : classTpls.map(t => <Row key={t.id} icon="⭐" tint="#FBF7FF" title={<>{t.name}<Lvl lv={t.level} /></>} sub={`Plantilla de clase · ${(t.payload.blocks || []).length} bloques · ${t.payload.lengthMin || '—'} min`}>
+              <button onClick={() => useTpl(t)} style={{...mini, borderColor:'#9FB0DA', color:'#3F5BB8'}}>Usar</button>
+              <button onClick={() => dupTpl(t)} style={mini}>⧉ Duplicar</button>
+              <button onClick={() => renameTpl(t)} style={mini}>✎ Renombrar</button>
+              <select value={t.level || ''} onChange={e => setTplLevel(t, e.target.value)} style={{...selStyle, width:'auto', padding:'4px 7px', fontSize:11}}><option value="">Nivel —</option>{levels.map(lv => <option key={lv} value={lv}>{lv.toUpperCase()}</option>)}</select>
+              <button onClick={() => { if (window.confirm('¿Eliminar esta plantilla?')) { TT.deleteTemplate(t.id); onChange(); } }} style={{...iconBtn, color:'#C0392B'}}>×</button>
+            </Row>)}
+      </div>
+
       <div className="scard">
-        <div className="sec-head"><div className="sec-title">⭐ Plantillas de clase</div></div>
-        {templates.length === 0 ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">📭</div>Guarda un plan como plantilla para reutilizarlo.</div>
-          : templates.map(p => <Row key={p.id} icon="⭐" title={`${p.moduleName} · ${p.sessionLabel}`} sub={`Plantilla · ${p.lengthMin} min`} onOpen={() => onOpenClass({ ...p, id: undefined })} onDel={() => { saveLS(PLAN_TPL_KEY, loadLS(PLAN_TPL_KEY).filter(x => x.id !== p.id)); onChange(); }} />)}
+        <div className="sec-head"><div className="sec-title">⭐ Plantillas de práctica <span style={{fontSize:12, color:'#8a7f6a'}}>({pracTpls.length})</span></div></div>
+        {pracTpls.length === 0 ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">📭</div>Guarda un set como plantilla (botón ⭐ en el editor) para reutilizarlo.</div>
+          : pracTpls.map(t => <Row key={t.id} icon="⭐" tint="#FBF7FF" title={<>{t.name}<Lvl lv={t.level} /></>} sub={`Plantilla de práctica · ${(t.payload.activities || []).length} actividad(es)`}>
+              <button onClick={() => useTpl(t)} style={{...mini, borderColor:'#C9A8E8', color:'#5B3FA0'}}>Usar</button>
+              <button onClick={() => dupTpl(t)} style={mini}>⧉ Duplicar</button>
+              <button onClick={() => renameTpl(t)} style={mini}>✎ Renombrar</button>
+              <select value={t.level || ''} onChange={e => setTplLevel(t, e.target.value)} style={{...selStyle, width:'auto', padding:'4px 7px', fontSize:11}}><option value="">Nivel —</option>{levels.map(lv => <option key={lv} value={lv}>{lv.toUpperCase()}</option>)}</select>
+              <button onClick={() => { if (window.confirm('¿Eliminar esta plantilla?')) { TT.deleteTemplate(t.id); onChange(); } }} style={{...iconBtn, color:'#C0392B'}}>×</button>
+            </Row>)}
       </div>
     </>
   );
