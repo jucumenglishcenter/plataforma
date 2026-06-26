@@ -1002,12 +1002,32 @@ function _saveLeagueState(all, pushCloud) {
   localStorage.setItem(LEAGUE_STATE_KEY, JSON.stringify(all));
   if (pushCloud) { try { if (window.JUCUM_SB) window.JUCUM_SB.getClient().from('app_settings').upsert({ key: 'weekly_league', value: all }, { onConflict: 'key' }).then(() => {}, () => {}); } catch {} }
 }
+/* ¿Este dispositivo es del PERSONAL (profesor/admin/dev)? Solo ellos tienen el
+ * progreso de TODO el grupo en caché, así que solo ellos pueden calcular y
+ * publicar los campeones. Un alumno solo tiene SU progreso → si calculara, se
+ * vería solo a sí mismo y sobrescribiría el podio en la nube (causa de que
+ * "los campeones cambien a cada rato"). */
+function _leagueIsStaff() {
+  try { const u = JSON.parse(localStorage.getItem('jucum_user') || 'null');
+    return !!(u && (u.role === 'teacher' || u.role === 'admin' || u.role === 'dev')); } catch { return false; }
+}
+function _computeChampList(groupId, wk) {
+  return getRankingForWeek(groupId, wk).filter(r => r.xp > 0).slice(0, 3)
+    .map((r, i) => ({ id: r.student.id, name: r.student.fullName, xp: r.xp, rank: i + 1 }));
+}
+function _sameChampList(a, b) {
+  a = a || []; b = b || [];
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) { if (a[i].id !== b[i].id || a[i].xp !== b[i].xp) return false; }
+  return true;
+}
 async function loadLeagueFromCloud() {
   if (!window.JUCUM_SB) return;
   try {
     const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key', 'weekly_league').maybeSingle();
     if (data && data.value && typeof data.value === 'object') {
       const cloud = data.value, local = _getLeagueState();
+      // la nube manda para la semana vigente; conserva grupos que la nube no traiga
       localStorage.setItem(LEAGUE_STATE_KEY, JSON.stringify({ ...local, ...cloud }));
     }
   } catch {}
@@ -1015,14 +1035,25 @@ async function loadLeagueFromCloud() {
 function _leagueGroup(groupId, create) {
   const wk = lastWeekId(); const all = _getLeagueState();
   let g = all[groupId];
-  if (!g || g.champWeek !== wk) {
-    // Top 3 por XP de la semana que YA CERRÓ (domingo). Queda FIJO toda la semana
-    // siguiente; solo entran quienes ganaron XP esa semana (xp > 0).
-    const list = getRankingForWeek(groupId, wk).filter(r => r.xp > 0).slice(0, 3)
-      .map((r, i) => ({ id: r.student.id, name: r.student.fullName, xp: r.xp, rank: i + 1 }));
-    g = { champWeek: wk, scenario: 'theme-gold', emojis: {}, list };
-    all[groupId] = g;
-    _saveLeagueState(all, create && list.length > 0);
+  if (_leagueIsStaff()) {
+    // Personal: ÚNICA fuente que calcula y publica los campeones (tiene el
+    // progreso de todo el grupo). Congela el Top 3 de la semana cerrada y, si la
+    // nube quedó con un valor parcial (de un alumno), lo corrige.
+    const list = _computeChampList(groupId, wk);
+    if (!g || g.champWeek !== wk) {
+      g = { champWeek: wk, scenario: 'theme-gold', emojis: {}, list };
+      all[groupId] = g; _saveLeagueState(all, create && list.length > 0);
+    } else if (list.length > 0 && !_sameChampList(g.list, list)) {
+      g = { ...g, list }; all[groupId] = g; _saveLeagueState(all, true);
+    }
+  } else {
+    // Alumno: NUNCA calcula ni publica la lista. Usa lo que el personal dejó en
+    // la nube (lo trae loadLeagueFromCloud). Si aún no existe, lista vacía y la UI
+    // muestra "aún no hay campeones".
+    if (!g || g.champWeek !== wk) {
+      g = { champWeek: wk, scenario: (g && g.scenario) || 'theme-gold', emojis: {}, list: [] };
+      all[groupId] = g; _saveLeagueState(all, false); // guarda local, NO publica
+    }
   }
   return { all, g, wk };
 }
@@ -1047,7 +1078,7 @@ function getChampionEmoji(groupId, studentId) {
 }
 function setChampionEmoji(groupId, studentId, emoji) {
   const { all, g } = _leagueGroup(groupId, false);
-  if (!(g.list || []).some(c => c.id === studentId)) return;
+  if (!(g.list || []).some(c => c.id === studentId)) return; // solo un campeón cambia el suyo
   g.emojis = g.emojis || {}; g.emojis[studentId] = emoji; _saveLeagueState(all, true);
 }
 function setLeagueScenario(groupId, scenario) {
