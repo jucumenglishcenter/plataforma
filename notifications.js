@@ -27,12 +27,6 @@ function pushNotif(userId, notif) {
   });
   if (all[userId].length > 50) all[userId] = all[userId].slice(0, 50);
   saveNotifs(all);
-  // Sonido solo si la notificación es para el usuario logueado (debounced en sounds.js)
-  try {
-    const u = JSON.parse(localStorage.getItem('jucum_user') || 'null');
-    const myId = u ? (u.studentId || (u.role === 'teacher' ? 'teacher' : u.role === 'admin' ? 'admin' : null)) : null;
-    if (myId && userId === myId && window.JUCUM_SOUND) window.JUCUM_SOUND.notify();
-  } catch {}
   if (window.JUCUM_SYNC) window.JUCUM_SYNC.pushNotif(userId, notif);
 }
 function markRead(userId, notifId) {

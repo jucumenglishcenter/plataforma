@@ -5,13 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>JUCUM EC — Plataforma de alumnos</title>
-<script>
-/* Recuerda la sección abierta de cada panel (profesor/alumno/admin/dev) y la
-   restaura al recargar, para no volver siempre al panel principal. Va INLINE
-   aquí a propósito: así no depende de subir ningún archivo extra. */
-(function(){if(window.JUCUM_NAV)return;function uid(){try{var u=JSON.parse(localStorage.getItem('jucum_user')||'null');return u?String(u.id||u.username||u.role||''):'';}catch(e){return'';}}function key(s){return'jucum_nav_'+s+'_'+uid();}window.JUCUM_NAV={load:function(s,f){try{var r=sessionStorage.getItem(key(s));return r==null?f:JSON.parse(r);}catch(e){return f;}},save:function(s,v){try{sessionStorage.setItem(key(s),JSON.stringify(v));}catch(e){}},clearAll:function(){try{var d=[];for(var i=0;i<sessionStorage.length;i++){var k=sessionStorage.key(i);if(k&&k.indexOf('jucum_nav_')===0)d.push(k);}d.forEach(function(k){sessionStorage.removeItem(k);});}catch(e){}}};})();
-</script>
-<link rel="stylesheet" href="colors_and_type.css?v=20260627a">
+<link rel="stylesheet" href="colors_and_type.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Nunito',sans-serif;background:var(--bg-tint);color:var(--text);min-height:100vh;}
@@ -38,20 +32,6 @@ body{font-family:'Nunito',sans-serif;background:var(--bg-tint);color:var(--text)
 
 .nav-link{display:inline-flex;align-items:center;gap:4px;padding:7px 12px;border-radius:8px;text-decoration:none;color:#555;font-size:12.5px;font-weight:700;transition:all 0.15s;font-family:'Nunito',sans-serif;}
 .nav-link:hover{background:#FAFAF6;color:#1F3A8A;}
-.nav-link.active{background:#1F3A8A;color:#fff;box-shadow:0 2px 8px rgba(31,58,138,0.25);}
-.nav-link.active:hover{background:#16306f;color:#fff;}
-
-.nav-dot{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:#E11930;color:#fff;font-size:9.5px;font-weight:800;margin-left:5px;vertical-align:middle;border:1.5px solid #fff;box-shadow:0 1px 3px rgba(225,25,48,0.4);}
-.foro-dd{position:relative;}
-.foro-menu{position:absolute;left:0;top:38px;width:300px;max-width:88vw;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,0.18);z-index:120;overflow:hidden;animation:notifSlide 0.16s ease-out;}
-.foro-menu-head{padding:11px 14px;font-family:'Fredoka',sans-serif;font-weight:600;font-size:13px;color:var(--text);background:#FAFAF6;border-bottom:1px solid var(--border);}
-.foro-menu-item{display:flex;align-items:center;gap:9px;width:100%;padding:11px 14px;border:none;border-bottom:1px solid var(--border-soft);background:#fff;cursor:pointer;font-family:inherit;text-align:left;transition:background 0.12s;}
-.foro-menu-item:last-child{border-bottom:none;}
-.foro-menu-item:hover{background:#F0F4FA;}
-.foro-menu-emo{font-size:16px;flex-shrink:0;}
-.foro-menu-name{flex:1;font-size:12.5px;font-weight:700;color:var(--text);line-height:1.2;}
-.foro-menu-badge{font-size:10px;font-weight:800;letter-spacing:0.03em;background:#E11930;color:#fff;padding:3px 8px;border-radius:10px;flex-shrink:0;}
-.foro-menu-none{font-size:10.5px;font-weight:700;color:var(--text-mute);flex-shrink:0;}
 
 .logout-btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:20px;border:1.5px solid #EF9A9A;background:#FFEBEE;color:#C62828;font-family:'Nunito',sans-serif;font-weight:800;font-size:11.5px;letter-spacing:0.05em;cursor:pointer;transition:all 0.15s;}
 .logout-btn:hover{background:#C62828;color:#fff;border-color:#C62828;}
@@ -427,16 +407,6 @@ main{max-width:1100px;margin:0 auto;padding:28px 24px 80px;}
 .medal-name{font-family:'Fredoka',sans-serif;font-weight:600;font-size:13px;color:var(--text);line-height:1.2;}
 .medal-rarity{font-size:9.5px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-soft);margin-top:2px;}
 .medal-desc{font-size:10.5px;color:var(--text-soft);font-weight:600;margin-top:5px;line-height:1.35;}
-/* Bloque 3 · progreso de logros (el aro se llena → se vuelve a color al conseguirlo) */
-.medal-ring{padding:5px;box-sizing:border-box;}
-.medal.locked{opacity:1;filter:none;background:#FAFAF6;border-color:var(--border);}
-.medal.locked .medal-name{color:var(--text);}
-.medal.locked .medal-ring{background:conic-gradient(#ECE9E0 0,#ECE9E0 100%);}
-.medal-prog{margin-top:7px;}
-.medal-prog-bar{height:6px;border-radius:6px;background:#ECE9E0;overflow:hidden;margin-bottom:3px;}
-.medal-prog-bar span{display:block;height:100%;border-radius:6px;transition:width .5s ease;}
-.medal-prog-txt{font-size:9.5px;font-weight:800;color:var(--text-soft);}
-.medal-rarity.done{font-size:10px;letter-spacing:.04em;}
 
 /* ── Bloque D · Evaluations ─────────────────────────────────── */
 .eval-list{display:flex;flex-direction:column;gap:18px;margin-top:18px;}
@@ -628,24 +598,17 @@ main{max-width:1100px;margin:0 auto;padding:28px 24px 80px;}
 .sm-actions{display:flex;gap:5px;flex-shrink:0;}
 
 /* ── Temas numerados expandibles (alumno) ─────────────────── */
-.tg{border:1.5px solid #E6C7D9;border-radius:12px;background:#FCF2F7;overflow:hidden;}
-.tg + .tg{margin-top:8px;}
-.tg-done{border-color:#A5D6A7;background:#F1F9F2;}
-.tg-head{display:flex;align-items:center;gap:9px;width:100%;padding:12px 14px;border:none;background:#F8E7F0;cursor:pointer;font-family:inherit;text-align:left;}
-.tg-head:hover{background:#F2D9E7;}
-.tg-done .tg-head{background:#E8F5E9;}
-.tg-done .tg-head:hover{background:#DCEFDD;}
-.tg-num{width:26px;height:26px;border-radius:8px;background:#B23A77;color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.tg-num.done{background:#2E7D32;color:#fff;}
-.tg-tema{font-size:9.5px;font-weight:800;letter-spacing:0.07em;text-transform:uppercase;color:#B23A77;background:#fff;border:1px solid #E6C7D9;border-radius:20px;padding:2px 9px;flex-shrink:0;}
-.tg-done .tg-tema{color:#2E7D32;border-color:#A5D6A7;}
-.tg-name{flex:1;font-weight:800;font-size:13.5px;color:#54243F;}
-.tg-done .tg-name{color:#1B5E20;}
-.tg-cont{font-size:10px;font-weight:800;color:#fff;background:#B23A77;border-radius:20px;padding:3px 9px;flex-shrink:0;white-space:nowrap;}
-.tg-meta{font-size:11.5px;font-weight:800;color:#9C6A85;}
-.tg-arr{font-size:12px;color:#B23A77;transition:transform 0.18s ease;}
+.tg{border:1px solid var(--border);border-radius:12px;background:#fff;overflow:hidden;}
+.tg-done{border-color:#A5D6A7;}
+.tg-head{display:flex;align-items:center;gap:10px;width:100%;padding:11px 14px;border:none;background:#fff;cursor:pointer;font-family:inherit;text-align:left;}
+.tg-head:hover{background:#FAFAF6;}
+.tg-num{width:26px;height:26px;border-radius:8px;background:#FFF3CD;color:#B45309;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.tg-num.done{background:#E8F5E9;color:#2E7D32;}
+.tg-name{flex:1;font-weight:700;font-size:13.5px;color:var(--text);}
+.tg-meta{font-size:11.5px;font-weight:800;color:var(--text-soft);}
+.tg-arr{font-size:12px;color:var(--text-soft);transition:transform 0.18s ease;}
 .tg-arr.open{transform:rotate(180deg);}
-.tg-items{border-top:1px solid #E6C7D9;padding:9px 10px;display:flex;flex-direction:column;gap:5px;background:#fff;}
+.tg-items{border-top:1px dashed var(--border);padding:8px 10px;display:flex;flex-direction:column;gap:5px;background:#FBFBF8;}
 
 /* ── Gestor de módulos (profesor) ─────────────────────────── */
 .mm-tabs{display:flex;gap:8px;margin:18px 0 14px;}
@@ -813,7 +776,6 @@ main{max-width:1100px;margin:0 auto;padding:28px 24px 80px;}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .modal{background:#fff;border-radius:18px;width:100%;max-width:560px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 4px 8px rgba(0,0,0,0.20),0 24px 60px rgba(0,0,0,0.35);animation:modalPop 0.25s cubic-bezier(0.34,1.56,0.64,1) both;overflow:hidden;}
 @keyframes modalPop{0%{opacity:0;transform:scale(0.92) translateY(10px);}100%{opacity:1;transform:scale(1) translateY(0);}}
-@keyframes jucumPop{0%{opacity:0;transform:scale(0.88) translateY(-12px);}100%{opacity:1;transform:scale(1) translateY(0);}}
 .modal-head{padding:18px 20px 14px;border-bottom:1.5px solid var(--border);position:relative;}
 .modal-title{font-family:'Fredoka',sans-serif;font-weight:600;font-size:18px;color:#1F3A8A;display:flex;align-items:center;gap:10px;}
 .modal-date{font-size:12px;color:var(--text-soft);font-weight:600;margin-top:4px;text-transform:capitalize;}
@@ -830,138 +792,6 @@ main{max-width:1100px;margin:0 auto;padding:28px 24px 80px;}
 .mi-score.high{background:#E8F5E9;color:#2E7D32;}
 .mi-score.mid {background:#FFF8E1;color:#E65100;}
 .mi-score.low {background:#FFEBEE;color:#C62828;}
-
-/* ── Mascota "Neuro" ─────────────────────────────────────── */
-.masc-card{border-top:4px solid #FF5FA0;}
-.masc-badge{color:#fff;font-size:11px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;padding:4px 12px;border-radius:20px;}
-.masc-layout{display:grid;grid-template-columns:248px 1fr;gap:18px;align-items:center;}
-@media (max-width:700px){.masc-layout{grid-template-columns:1fr;}}
-.masc-scene{position:relative;background:radial-gradient(circle at 50% 28%, #fff, #FAF6F8);border:1.5px solid var(--border);border-radius:16px;padding:18px 12px 14px;display:flex;flex-direction:column;align-items:center;gap:14px;overflow:hidden;}
-.masc-scene::before{content:'';position:absolute;top:128px;left:14%;right:14%;height:10px;background:var(--masc-glow);border-radius:50%;filter:blur(4px);}
-.masc-floor{position:relative;width:130px;height:140px;display:flex;align-items:flex-end;justify-content:center;}
-.masc-anim-idle .masc-char{animation:mascIdle 3.4s ease-in-out infinite;}
-.masc-anim-bob  .masc-char{animation:mascBob 1.6s ease-in-out infinite;}
-.masc-anim-sway .masc-char{animation:mascSway 3s ease-in-out infinite;transform-origin:bottom center;}
-.masc-anim-slump .masc-char{transform:translateY(6px);}
-.masc-anim-run  .masc-char{animation:mascRun 0.5s ease-in-out infinite;}
-@keyframes mascIdle{0%,100%{transform:translateY(0);}50%{transform:translateY(-3px);}}
-@keyframes mascBob{0%,100%{transform:translateY(0) rotate(-1deg);}50%{transform:translateY(-7px) rotate(1deg);}}
-@keyframes mascSway{0%,100%{transform:rotate(-3deg);}50%{transform:rotate(3deg);}}
-@keyframes mascRun{0%,100%{transform:translateY(0) rotate(-3deg);}50%{transform:translateY(-5px) rotate(3deg);}}
-.masc-char{position:relative;width:108px;}
-.masc-brain{position:relative;width:104px;height:84px;margin:0 auto;background:radial-gradient(circle at 38% 30%, color-mix(in srgb,var(--masc-color) 72%,#fff), var(--masc-color));border-radius:48% 48% 44% 44% / 54% 54% 46% 46%;box-shadow:inset 0 -6px 10px rgba(0,0,0,0.12), inset 6px 0 0 -2px rgba(255,255,255,0.18), 0 6px 14px var(--masc-glow);}
-.masc-brain::before{content:'';position:absolute;top:7px;bottom:9px;left:50%;width:2.5px;transform:translateX(-50%);background:rgba(0,0,0,0.10);border-radius:2px;}
-.masc-brain::after{content:'';position:absolute;top:12px;left:15px;right:15px;height:10px;border-top:2px solid rgba(255,255,255,0.25);border-radius:50%;}
-.masc-eye{position:absolute;top:34px;width:18px;height:18px;background:#fff;border-radius:50%;box-shadow:inset 0 1px 2px rgba(0,0,0,0.18);display:flex;align-items:center;justify-content:center;z-index:1;}
-.masc-eye.l{left:26px;}
-.masc-eye.r{right:26px;}
-.masc-pupil{width:8px;height:8px;background:#2b2b2b;border-radius:50%;}
-.masc-mouth{position:absolute;left:50%;top:58px;transform:translateX(-50%);z-index:1;}
-.masc-mouth.great{width:26px;height:18px;background:#9c3b52;border-radius:0 0 26px 26px;}
-.masc-mouth.happy{width:30px;height:15px;border:3px solid #9c3b52;border-top:none;border-radius:0 0 30px 30px;}
-.masc-mouth.smile{width:24px;height:11px;border:3px solid #9c3b52;border-top:none;border-radius:0 0 24px 24px;}
-.masc-mouth.neutral{width:18px;height:3px;background:#9c3b52;border-radius:3px;}
-.masc-mouth.worried{width:18px;height:9px;border:2.5px solid #9c3b52;border-bottom:none;border-radius:18px 18px 0 0;top:60px;}
-.masc-mouth.sad{width:22px;height:10px;border:3px solid #9c3b52;border-bottom:none;border-radius:22px 22px 0 0;top:60px;}
-.masc-mouth.cry{width:15px;height:14px;background:#9c3b52;border-radius:50%;}
-.masc-brow{position:absolute;top:28px;width:14px;height:3px;background:rgba(0,0,0,0.42);border-radius:3px;z-index:1;}
-.masc-brow.l{left:24px;transform:rotate(-13deg);}
-.masc-brow.r{right:24px;transform:rotate(13deg);}
-.masc-tear{position:absolute;top:50px;left:30px;width:6px;height:9px;background:#6cc6ff;border-radius:0 50% 50% 50%;transform:rotate(45deg);animation:mascTear 2s ease-in-out infinite;z-index:1;}
-@keyframes mascTear{0%,100%{opacity:0.35;}50%{opacity:1;}}
-.masc-cheek{position:absolute;top:48px;width:11px;height:7px;background:rgba(255,120,150,0.5);border-radius:50%;}
-.masc-cheek.l{left:16px;}
-.masc-cheek.r{right:16px;}
-.masc-headband{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:112px;height:12px;background:linear-gradient(#E11930,#B71C1C);border-radius:6px;z-index:3;box-shadow:0 1px 2px rgba(0,0,0,0.2);}
-.masc-knot{position:absolute;right:-3px;top:-3px;width:14px;height:14px;background:#B71C1C;border-radius:3px;transform:rotate(45deg);}
-.masc-feet{position:relative;display:flex;gap:18px;justify-content:center;margin-top:-2px;}
-.masc-feet span{width:16px;height:8px;background:var(--masc-color);border-radius:0 0 8px 8px;filter:brightness(0.82);}
-.masc-anim-run .masc-feet span:first-child{animation:mascFootA 0.5s ease-in-out infinite;}
-.masc-anim-run .masc-feet span:last-child{animation:mascFootB 0.5s ease-in-out infinite;}
-@keyframes mascFootA{0%,100%{transform:translateX(0);}50%{transform:translate(-5px,-3px);}}
-@keyframes mascFootB{0%,100%{transform:translateX(0);}50%{transform:translate(5px,-3px);}}
-.masc-shelf{display:flex;gap:8px;background:#FAFAF6;border:1px solid var(--border);border-radius:12px;padding:8px 12px;}
-.masc-item{font-size:20px;transition:all 0.25s;}
-.masc-item.lost{filter:grayscale(1);opacity:0.22;transform:scale(0.85);}
-.masc-item.owned{filter:drop-shadow(0 2px 3px rgba(0,0,0,0.18));}
-.masc-info{display:flex;flex-direction:column;gap:10px;}
-.masc-well-top{display:flex;justify-content:space-between;font-size:11px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-soft);margin-bottom:4px;}
-.masc-well-bar{height:9px;background:#EEE;border-radius:6px;overflow:hidden;}
-.masc-well-bar span{display:block;height:100%;border-radius:6px;transition:width 0.6s ease;}
-.masc-narr{font-size:13.5px;line-height:1.55;color:var(--text);background:#FFF8FB;border:1px solid #F4D6E2;border-radius:10px;padding:10px 12px;}
-.masc-helps{font-size:12.5px;}
-.masc-help-h{font-weight:800;color:var(--text-soft);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:5px;}
-.masc-helps ul{list-style:none;display:flex;flex-direction:column;gap:4px;}
-.masc-helps li{padding:5px 10px;background:#FAFAF6;border:1px solid var(--border);border-radius:8px;color:var(--text);}
-.masc-helps li.ok{background:#F0FAF1;border-color:#A5D6A7;color:#1B5E20;font-weight:700;}
-.masc-foot{font-size:11.5px;color:var(--text-soft);line-height:1.5;font-style:italic;}
-
-/* ── Resultados por módulo (alumno) ── */
-.modres{display:flex;align-items:center;gap:12px;background:#FAFAF6;border:1px solid var(--border);border-radius:12px;padding:12px 14px;}
-.modres-emo{font-size:26px;flex-shrink:0;}
-.modres-info{flex:1;min-width:0;}
-.modres-name{font-family:'Fredoka',sans-serif;font-weight:600;font-size:14px;color:var(--text);}
-.modres-sub{font-size:11.5px;color:var(--text-soft);font-weight:600;margin:2px 0 6px;}
-.modres-bar{height:7px;background:#EEE;border-radius:4px;overflow:hidden;}
-.modres-bar span{display:block;height:100%;border-radius:4px;transition:width .5s;}
-.modres-final{text-align:center;flex-shrink:0;min-width:80px;}
-.modres-pct{font-family:'Fredoka',sans-serif;font-weight:700;font-size:24px;line-height:1;}
-.modres-badge{font-size:9.5px;font-weight:800;letter-spacing:0.03em;padding:3px 8px;border-radius:10px;margin-top:4px;display:inline-block;}
-
-/* ── Pagos ── */
-.paym-list{display:flex;flex-direction:column;gap:8px;}
-.paym-row{display:flex;align-items:center;gap:12px;padding:11px 14px;background:#FAFAF6;border:1px solid var(--border);border-radius:10px;}
-.paym-label{font-weight:700;font-size:13px;color:var(--text);min-width:150px;}
-.paym-value{flex:1;font-family:ui-monospace,Menlo,monospace;font-size:15px;font-weight:700;color:#1F3A8A;letter-spacing:0.02em;}
-.paym-copy{background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:6px 12px;font-family:'Nunito',sans-serif;font-weight:700;font-size:11.5px;color:var(--text-soft);cursor:pointer;}
-.paym-copy:hover{border-color:#1F3A8A;color:#1F3A8A;}
-.pay-reminder{position:sticky;top:72px;z-index:40;display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;background:#FFF3CD;border-bottom:1.5px solid #FFD54F;color:#7A5C00;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;}
-.pay-reminder-btn{background:#E11930;color:#fff;border:none;border-radius:18px;padding:6px 14px;font-family:'Nunito',sans-serif;font-weight:800;font-size:11.5px;cursor:pointer;}
-@media (max-width:700px){.pay-reminder{position:static;top:auto;} .paym-label{min-width:0;} .paym-row{flex-wrap:wrap;}}
-
-/* ── Bitácora / calendario del profesor ── */
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;}
-.cal-h{text-align:center;font-size:10.5px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;color:var(--text-soft);padding:4px 0;}
-.cal-cell{min-height:58px;border:1px solid var(--border);border-radius:8px;background:#fff;display:flex;flex-direction:column;align-items:flex-start;padding:5px 6px;cursor:pointer;font-family:inherit;transition:all 0.12s;}
-.cal-cell.empty{border:none;background:transparent;cursor:default;}
-.cal-cell:hover:not(.empty){border-color:#1F3A8A;}
-.cal-cell.has{background:#F0F7FF;border-color:#90CAF9;}
-.cal-cell.today{box-shadow:inset 0 0 0 2px #F9A825;}
-.cal-cell.sel{border-color:#1F3A8A;box-shadow:0 0 0 2px rgba(31,58,138,0.25);}
-.cal-num{font-weight:800;font-size:13px;color:var(--text);}
-.cal-dot{margin-top:auto;font-size:9.5px;font-weight:800;color:#1565C0;background:#E3F2FD;border-radius:6px;padding:1px 5px;}
-@media (max-width:700px){.cal-cell{min-height:46px;} .cal-dot{font-size:8px;}}
-
-/* ── Logros en peligro por inactividad ── */
-.ach-warn{display:flex;gap:12px;align-items:flex-start;background:linear-gradient(135deg,#FFF3E0,#FFEBEE);border:1.5px solid #FFB74D;border-radius:12px;padding:12px 14px;margin-bottom:14px;}
-.ach-warn-ico{font-size:24px;flex-shrink:0;animation:achPulse 1.6s ease-in-out infinite;}
-@keyframes achPulse{0%,100%{transform:scale(1);}50%{transform:scale(1.18);}}
-.ach-warn-text{font-size:13px;line-height:1.5;color:#6D4C00;}
-.medal.lost{opacity:0.92;}
-.medal.lost .medal-ring{filter:grayscale(0.55);}
-.medal.lost .medal-ico{filter:grayscale(1) !important;opacity:0.6 !important;}
-.medal.fading .medal-ring{box-shadow:0 0 0 2px #FFB74D, 0 4px 12px rgba(255,152,0,0.3);}
-.medal-ring{position:relative;}
-.medal-risk-badge{position:absolute;top:-4px;right:-4px;font-size:15px;background:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.25);}
-.medal-lost-txt{font-size:11px;font-weight:800;color:#C62828;margin-bottom:2px;}
-
-/* ── Secciones plegables del panel del alumno ── */
-.collapse-head{display:flex;align-items:center;gap:12px;width:100%;padding:13px 18px;border:1px solid var(--border);border-top:3.5px solid var(--lp,#1F3A8A);border-radius:14px;background:#fff;cursor:pointer;font-family:inherit;box-shadow:0 2px 4px rgba(0,0,0,0.06);text-align:left;}
-.collapse-head:hover{background:#FCFCF9;}
-.collapse-title{font-family:'Fredoka',sans-serif;font-weight:600;font-size:16px;color:var(--text);flex-shrink:0;}
-.collapse-meta{font-size:11px;color:var(--text-soft);font-weight:800;letter-spacing:0.06em;text-transform:uppercase;flex:1;}
-.collapse-arr{font-size:14px;color:var(--text-soft);transition:transform 0.18s ease;flex-shrink:0;}
-.collapse-arr.open{transform:rotate(180deg);}
-.collapse-body{padding-top:4px;}
-
-/* ── Importación masiva de alumnos ── */
-.bulk-preview{max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;background:#FAFAF6;}
-.bulk-row{display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid var(--border-soft);font-size:13px;}
-.bulk-row:last-child{border-bottom:none;}
-.bulk-n{width:22px;height:22px;flex-shrink:0;background:#1F3A8A;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;}
-.bulk-name{font-weight:700;color:var(--text);flex:1;min-width:0;}
-.bulk-user{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#1565C0;background:#E3F2FD;border-radius:6px;padding:2px 8px;}
-.bulk-warn{font-size:10.5px;font-weight:700;color:#E65100;background:#FFF3E0;border-radius:6px;padding:2px 7px;}
 </style>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
@@ -972,63 +802,27 @@ main{max-width:1100px;margin:0 auto;padding:28px 24px 80px;}
 <div id="root"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=20260627a"></script>
-<script src="logo.js?v=20260627a"></script>
-<script src="supabase-client.js?v=20260627a"></script>
-<script>/* La demostración ya NO desconecta Supabase: el ingreso real SIEMPRE funciona. Limpiamos cualquier marca de demo atascada para que el dispositivo se auto-repare. */try{localStorage.removeItem('jucum_demo_mode');}catch(e){}</script>
-<script src="supabase-sync.js?v=20260627a"></script>
-<script type="text/babel" src="data.js?v=20260627a"></script>
-<script src="evaluations.js?v=20260627a"></script>
-<script src="forum.js?v=20260627a"></script>
-<script src="sounds.js?v=20260627a"></script>
-<script src="notifications.js?v=20260627a"></script>
-<script src="mascot.js?v=20260627a"></script>
-<script src="payments.js?v=20260627a"></script>
-<script src="teacher-tools.js?v=20260627a"></script>
-<script src="practice-guide.js?v=20260627a"></script>
-<script src="assignments.js?v=20260627a"></script>
-<script src="exams.js?v=20260627a"></script>
-<script src="attendance.js?v=20260627a"></script>
-<script src="survey.js?v=20260627a"></script>
-<script src="evolution.js?v=20260627a"></script>
-<script src="demo-seed.js?v=20260627a"></script>
-<script src="registration.js?v=20260627a"></script>
-<script src="retention.js?v=20260627a"></script>
-<script type="text/babel" src="Evaluations.comp.js?v=20260627a"></script>
-<script type="text/babel" src="Assignments.comp.js?v=20260627a"></script>
-<script type="text/babel" src="Readiness.comp.js?v=20260627a"></script>
-<script type="text/babel" src="Exams.comp.js?v=20260627a"></script>
-<script type="text/babel" src="Attendance.comp.js?v=20260627a"></script>
-<script type="text/babel" src="Survey.comp.js?v=20260627a"></script>
-<script type="text/babel" src="MyEvolution.comp.js?v=20260627a"></script>
-<script type="text/babel" src="WeeklyPlan.comp.js?v=20260627a"></script>
-<script type="text/babel" src="AdminRegister.comp.js?v=20260627a"></script>
-<script type="text/babel" src="Retention.comp.js?v=20260627a"></script>
-<script type="text/babel" src="Grades.comp.js?v=20260627a"></script>
-<script type="text/babel" src="StudentReport.comp.js?v=20260627a"></script>
-<script type="text/babel" src="ManageGroups.comp.js?v=20260627a"></script>
-<script type="text/babel" src="ManageModules.comp.js?v=20260627a"></script>
-<script type="text/babel" src="TeacherMaterials.comp.js?v=20260627a"></script>
-<script type="text/babel" src="ManageStudents.comp.js?v=20260627a"></script>
-<script type="text/babel" src="LevelPromotion.comp.js?v=20260627a"></script>
-<script type="text/babel" src="Forum.comp.js?v=20260627a"></script>
-<script type="text/babel" src="Onboarding.comp.js?v=20260627a"></script>
-<script type="text/babel" src="Profile.comp.js?v=20260627a"></script>
-<script type="text/babel" src="GroupReport.comp.js?v=20260627a"></script>
-<script type="text/babel" src="Notifications.comp.js?v=20260627a"></script>
-<script type="text/babel" src="Mascot.comp.js?v=20260627a"></script>
-<script type="text/babel" src="Login.comp.js?v=20260627a"></script>
-<script type="text/babel" src="StudentDiagnosis.comp.js?v=20260627a"></script>
-<script type="text/babel" src="StudentPayments.comp.js?v=20260627a"></script>
-<script type="text/babel" src="AdminDashboard.comp.js?v=20260627a"></script>
-<script type="text/babel" src="TeacherClass.comp.js?v=20260627a"></script>
-<script type="text/babel" src="ClassPlanner.comp.js?v=20260627a"></script>
-<script type="text/babel" src="StudentDashboard.comp.js?v=20260627a"></script>
-<script type="text/babel" src="TeacherDashboard.comp.js?v=20260627a"></script>
-<script type="text/babel" src="DevDashboard.comp.js?v=20260627a"></script>
-<script type="text/babel" src="App.comp.js?v=20260627a"></script>
-<script src="student-preview.js?v=20260627a"></script>
-<script src="inactivity.js?v=20260627a"></script>
-<script src="app-update.js?v=20260627a"></script>
+<script src="config.js"></script>
+<script src="supabase-client.js"></script>
+<script src="supabase-sync.js"></script>
+<script type="text/babel" src="data.js"></script>
+<script src="evaluations.js"></script>
+<script src="forum.js"></script>
+<script src="notifications.js"></script>
+<script type="text/babel" src="Evaluations.comp.js"></script>
+<script type="text/babel" src="ManageGroups.comp.js"></script>
+<script type="text/babel" src="ManageModules.comp.js"></script>
+<script type="text/babel" src="ManageStudents.comp.js"></script>
+<script type="text/babel" src="LevelPromotion.comp.js"></script>
+<script type="text/babel" src="Forum.comp.js"></script>
+<script type="text/babel" src="Onboarding.comp.js"></script>
+<script type="text/babel" src="Profile.comp.js"></script>
+<script type="text/babel" src="GroupReport.comp.js"></script>
+<script type="text/babel" src="Notifications.comp.js"></script>
+<script type="text/babel" src="Login.comp.js"></script>
+<script type="text/babel" src="StudentDashboard.comp.js"></script>
+<script type="text/babel" src="TeacherDashboard.comp.js"></script>
+<script type="text/babel" src="App.comp.js"></script>
+<script src="inactivity.js"></script>
 </body>
 </html>

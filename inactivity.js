@@ -40,8 +40,8 @@
         <div class="jec-im-ico">😴</div>
         <div class="jec-im-title">¿Sigues ahí?</div>
         <div class="jec-im-body">No detectamos actividad en los últimos 7 minutos.<br>
-          Te llevaremos a tu <b>panel principal</b> en <b id="jec-im-count">6:00</b> si no respondes.<br>
-          <span style="font-size:11.5px;color:#777;">(No te preocupes: <b>no cerramos tu sesión</b>. El tiempo inactivo no cuenta como práctica.)</span>
+          Tu sesión se cerrará en <b id="jec-im-count">6:00</b> si no respondes.<br>
+          <span style="font-size:11.5px;color:#777;">(El tiempo inactivo no cuenta como práctica)</span>
         </div>
         <button id="jec-im-resume" class="jec-im-btn">Sí, sigo aquí ✓</button>
       </div>
@@ -66,12 +66,12 @@
     if (modal) { modal.remove(); modal = null; }
   };
 
-  // Inactividad en la PLATAFORMA: no cerramos sesión (eso solo pasa dentro de
-  // los materiales de práctica). Simplemente devolvemos al alumno a su panel
-  // principal recargando la plataforma (vuelve al dashboard, sin perder login).
-  const goToPanel = () => {
+  const doLogout = () => {
     hideWarning();
-    window.location.href = 'index.html';
+    localStorage.removeItem('jucum_user');
+    document.body.removeAttribute('data-level');
+    alert('Tu sesión se cerró por inactividad.');
+    window.location.href = '../students/index.html';
   };
 
   const resetTimers = () => {
@@ -82,7 +82,7 @@
     warnTimer = setTimeout(() => {
       warned = true;
       showWarning();
-      logoutTimer = setTimeout(goToPanel, LOGOUT_MS);
+      logoutTimer = setTimeout(doLogout, LOGOUT_MS);
     }, WARN_MS);
   };
 

@@ -17,31 +17,22 @@
     return client;
   }
 
-  /* ── Auth (custom, against users table) ──
-   * Robusto: tolera usuarios DUPLICADOS en la base (no usa maybeSingle, que
-   * fallaba con error si había más de una fila), mayúsculas y espacios. */
+  /* ── Auth (custom, against users table) ── */
   async function login(username, password) {
     const sb = getClient();
-    const uname = (username || '').trim().toLowerCase();
-    const pass  = (password  || '').trim();
-    if (!uname) return { ok: false, reason: 'Escribe tu usuario.' };
-    // ilike = búsqueda sin distinguir mayúsculas; devuelve lista (no falla con duplicados)
-    const { data, error } = await sb.from('users').select('*').ilike('username', uname);
+    const { data, error } = await sb.from('users')
+      .select('*')
+      .eq('username', username.trim().toLowerCase())
+      .maybeSingle();
     if (error) throw error;
-    const rows = data || [];
-    if (!rows.length) return { ok: false, reason: 'Usuario no encontrado. Revisa que esté bien escrito, sin espacios.' };
-    // Si hay duplicados, prioriza la fila cuya contraseña coincide.
-    const match = rows.find(r => (r.password || '').trim() === pass) || rows[0];
-    if ((match.password || '').trim() !== pass) return { ok: false, reason: 'Contraseña incorrecta.' };
-    const data2 = match;
-    const role = data2.is_admin ? 'admin' : (data2.is_dev || data2.username === 'dev') ? 'dev' : data2.role;
+    if (!data) return { ok: false, reason: 'Usuario no encontrado.' };
+    if (data.password !== password) return { ok: false, reason: 'Contraseña incorrecta.' };
     const session = {
-      role,
-      studentId: role === 'student' ? data2.id : null,
-      name: data2.full_name,
-      username: data2.username,
-      level: data2.level,
-      groupId: data2.group_id,
+      role: data.role,
+      studentId: data.role === 'student' ? data.id : null,
+      name: data.full_name,
+      level: data.level,
+      groupId: data.group_id,
     };
     localStorage.setItem('jucum_user', JSON.stringify(session));
     return { ok: true, session };
@@ -65,16 +56,6 @@
     if (error) throw error;
   }
 
-  /* ── Verificar la contraseña del profesor (para acciones sensibles:
-   *    resetear contraseña de un alumno, etc.) sin alterar la sesión. ── */
-  async function verifyTeacherPassword(password) {
-    try {
-      const { data, error } = await getClient().from('users').select('password').eq('role', 'teacher');
-      if (error) throw error;
-      return (data || []).some(u => u.password === password);
-    } catch (e) { return false; }
-  }
-
   /* ── Connection test ── */
   async function testConnection() {
     try {
@@ -86,5 +67,5 @@
     }
   }
 
-  window.JUCUM_SB = { getClient, login, all, insert, update, remove, testConnection, verifyTeacherPassword };
+  window.JUCUM_SB = { getClient, login, all, insert, update, remove, testConnection };
 })();

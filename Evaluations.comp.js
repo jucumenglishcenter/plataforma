@@ -49,7 +49,6 @@ function AttachmentChip({ att, onRemove }) {
 
 function EvaluateForm({ student, onSave, onCancel }) {
   const [ratings, setRatings] = useState({ speaking: 3, listening: 3, comprehension: 3 });
-  const [included, setIncluded] = useState({ speaking: true, listening: true, comprehension: true });
   const [feedback, setFeedback] = useState('');
   const [attachments, setAttachments] = useState([]);
   const [err, setErr] = useState('');
@@ -105,28 +104,21 @@ function EvaluateForm({ student, onSave, onCancel }) {
 
   const save = () => {
     if (!feedback.trim()) { setErr('Escribe una retroalimentación antes de guardar.'); return; }
-    const includedKeys = CRITERIA.filter(c => included[c.key]).map(c => c.key);
-    if (includedKeys.length === 0) { setErr('Selecciona al menos una categoría para enviar.'); return; }
     setSaving(true);
     try {
-      const finalRatings = {
-        speaking: included.speaking ? ratings.speaking : null,
-        listening: included.listening ? ratings.listening : null,
-        comprehension: included.comprehension ? ratings.comprehension : null,
-      };
       window.JUCUM_EVAL.saveEvaluation(student.id, {
         teacherName: 'Profesor',
-        ratings: finalRatings,
+        ratings,
         feedback: feedback.trim(),
         attachments,
       });
       // Notify student
       if (window.JUCUM_NOTIF) {
-        const avgN = (includedKeys.reduce((s,k)=>s+ratings[k],0) / includedKeys.length).toFixed(1);
+        const avg = ((ratings.speaking + ratings.listening + ratings.comprehension) / 3).toFixed(1);
         window.JUCUM_NOTIF.pushNotif(student.id, {
           type: 'teacher-feedback',
           title: 'Evaluación recibida',
-          body: `El profesor te evaluó (${includedKeys.length} categoría${includedKeys.length===1?'':'s'}, promedio ${avgN}/5). Revisa la retroalimentación.`,
+          body: `El profesor te evaluó con un promedio de ${avg}/5. Revisa la retroalimentación.`,
         });
       }
       onSave();
@@ -136,8 +128,7 @@ function EvaluateForm({ student, onSave, onCancel }) {
     }
   };
 
-  const includedKeys = CRITERIA.filter(c => included[c.key]).map(c => c.key);
-  const avg = includedKeys.length ? (includedKeys.reduce((s,k)=>s+ratings[k],0) / includedKeys.length).toFixed(1) : '—';
+  const avg = ((ratings.speaking + ratings.listening + ratings.comprehension) / 3).toFixed(1);
 
   return (
     <div className="eval-form">
@@ -152,24 +143,16 @@ function EvaluateForm({ student, onSave, onCancel }) {
       {err && <div className="err" style={{marginBottom:14}}>⚠ {err}</div>}
 
       <div className="scard">
-        <div className="sec-head"><div className="sec-title">Calificación</div><span className="sec-meta">Elige qué enviar · Promedio: <b>{avg}{avg==='—'?'':'/5'}</b></span></div>
-        <div className="settings-hint" style={{marginBottom:6}}>Desmarca las categorías que no quieras enviar — solo se enviarán las marcadas (ej: solo Speaking).</div>
-        {CRITERIA.map(c => {
-          const on = included[c.key];
-          return (
-          <div key={c.key} className="crit-row" style={{opacity: on ? 1 : 0.55}}>
-            <label className="check-row" style={{flex:1, alignItems:'flex-start'}}>
-              <input type="checkbox" checked={on} onChange={e => setIncluded({...included, [c.key]: e.target.checked})} />
-              <div className="crit-info">
-                <div className="crit-label">{c.label}</div>
-                <div className="crit-desc">{c.desc}</div>
-              </div>
-            </label>
-            {on
-              ? <StarRating value={ratings[c.key]} onChange={(v) => setRatings({...ratings, [c.key]:v})} />
-              : <span className="crit-desc" style={{fontWeight:800, whiteSpace:'nowrap'}}>No se enviará</span>}
+        <div className="sec-head"><div className="sec-title">Calificación</div><span className="sec-meta">Promedio: <b>{avg}/5</b></span></div>
+        {CRITERIA.map(c => (
+          <div key={c.key} className="crit-row">
+            <div className="crit-info">
+              <div className="crit-label">{c.label}</div>
+              <div className="crit-desc">{c.desc}</div>
+            </div>
+            <StarRating value={ratings[c.key]} onChange={(v) => setRatings({...ratings, [c.key]:v})} />
           </div>
-        );})}
+        ))}
       </div>
 
       <div className="scard" style={{marginTop:14}}>
@@ -189,7 +172,7 @@ function EvaluateForm({ student, onSave, onCancel }) {
           <div className="sec-title">Archivos adjuntos</div>
           <span className="sec-meta">{attachments.length} archivo{attachments.length === 1 ? '' : 's'}</span>
         </div>
-        <div className="att-hint">Sube un audio o video con ejemplos de pronunciación, ejercicios corregidos, o explicaciones. <b>Máx 50MB por archivo.</b></div>
+        <div className="att-hint">Sube un audio o video con ejemplos de pronunciación, ejercicios corregidos, o explicaciones. <b>Máx 5MB por archivo.</b></div>
 
         <div className="att-actions">
           <button type="button" className="att-btn" onClick={() => audioRef.current?.click()}>📁 Subir audio</button>
@@ -222,14 +205,14 @@ function EvaluateForm({ student, onSave, onCancel }) {
   );
 }
 
-function TeacherEvaluate({ onBack, hideBack }) {
+function TeacherEvaluate({ onBack }) {
   const { STUDENTS, GROUPS, LEVELS } = window.JUCUM_DATA;
   const [stage, setStage] = useState({ kind:'list' });
   const [refresh, setRefresh] = useState(0);
 
   return (
     <main>
-      {!hideBack && <button className="back-btn" onClick={onBack}>← Volver al panel</button>}
+      <button className="back-btn" onClick={onBack}>← Volver al panel</button>
       <div className="welcome teacher">
         <div className="welcome-text">
           <div className="eyebrow">📊 Evaluación presencial</div>
@@ -297,8 +280,7 @@ function StudentEvaluations({ studentId, isStudent = false }) {
 }
 
 function EvalCard({ ev, studentId, isStudent }) {
-  const present = CRITERIA.filter(c => typeof ev.ratings[c.key] === 'number');
-  const avg = present.length ? (present.reduce((s,c) => s + ev.ratings[c.key], 0) / present.length).toFixed(1) : '—';
+  const avg = ((ev.ratings.speaking + ev.ratings.listening + ev.ratings.comprehension) / 3).toFixed(1);
   const date = new Date(ev.date);
   const dateStr = date.toLocaleDateString('es-PE', { weekday:'long', day:'numeric', month:'long' });
   const timeStr = date.toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit' });
@@ -323,9 +305,7 @@ function EvalCard({ ev, studentId, isStudent }) {
       </div>
 
       <div className="eval-ratings">
-        {present.length === 0 ? (
-          <div className="crit-desc">Sin calificación por categorías — revisa la retroalimentación.</div>
-        ) : present.map(c => (
+        {CRITERIA.map(c => (
           <div key={c.key} className="eval-rating-row">
             <span className="eval-r-lbl">{c.label}</span>
             <span className="eval-r-stars">

@@ -20,17 +20,7 @@
     likes:    'jucum_likes_v1',
   };
   const read  = k => { try { return JSON.parse(localStorage.getItem(k) || '{}'); } catch { return {}; } };
-  const _stripHeavy = (node) => { if (Array.isArray(node)) { node.forEach(_stripHeavy); return; } if (node && typeof node === 'object') { if (typeof node.dataUrl === 'string') { delete node.dataUrl; if (!node.url) node.pending = true; } Object.keys(node).forEach(k => _stripHeavy(node[k])); } };
-  const _purgeKey = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); if (v) { _stripHeavy(v); localStorage.setItem(k, JSON.stringify(v)); } } catch (e) {} };
-  const write = (k, v) => {
-    try { localStorage.setItem(k, JSON.stringify(v)); }
-    catch (e) {
-      // Cupo lleno (base64 viejo): purga adjuntos pesados y reintenta.
-      try { _purgeKey('jucum_submissions_v1'); _purgeKey('jucum_assignments_v1'); } catch (e2) {}
-      try { const light = JSON.parse(JSON.stringify(v)); _stripHeavy(light); localStorage.setItem(k, JSON.stringify(light)); }
-      catch (e3) { console.warn('write quota:', k); }
-    }
-  };
+  const write = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 
   /* ── HYDRATE: pull all cloud data into localStorage ── */
   async function hydrate(groups, users) {
@@ -42,9 +32,6 @@
     groups.forEach(g => settings[g.id] = {
       activeModuleId: g.active_module_id, deadline: g.deadline,
       dailyTargetMin: g.daily_target_min ?? 15, isPaused: g.is_paused,
-      unlockMode: g.unlock_mode || 'sequential',
-      unlockedActivities: g.unlocked_activities || [],
-      activeModuleIds: g.active_module_ids || (g.active_module_id ? [g.active_module_id] : []),
     });
     write(KEYS.settings, settings);
 
@@ -117,56 +104,6 @@
     const mutesMap = {};
     (mutes || []).forEach(m => mutesMap[m.user_id] = m.until);
     write(KEYS.mutes, mutesMap);
-
-    // tareas (assignments + submissions)
-    try {
-      const [{ data: assigns }, { data: subs }] = await Promise.all([
-        sb.from('assignments').select('*'),
-        sb.from('submissions').select('*'),
-      ]);
-      const aArr = (assigns || []).map(a => ({
-        id: a.id, groupId: a.group_id, targetStudentIds: a.target_student_ids || [],
-        title: a.title, description: a.description, dueAt: a.due_at, gradable: a.gradable,
-        attachments: a.attachments || [], xp: a.xp ?? 40, date: a.created_at,
-      }));
-      write('jucum_assignments_v1', aArr);
-      const sMap = {};
-      (subs || []).forEach(s => {
-        sMap[s.assignment_id] = sMap[s.assignment_id] || {};
-        sMap[s.assignment_id][s.student_id] = {
-          id: s.id, submittedAt: s.submitted_at, text: s.text, attachments: s.attachments || [],
-          status: s.status, grade: s.grade, feedback: s.feedback, gradedAt: s.graded_at,
-        };
-      });
-      write('jucum_submissions_v1', sMap);
-    } catch (e) { console.warn('hydrate tasks:', e.message); }
-
-    // exámenes (definiciones + ventanas)
-    try {
-      const [{ data: exs }, { data: wins }] = await Promise.all([
-        sb.from('exams').select('*'),
-        sb.from('exam_windows').select('*'),
-      ]);
-      write('jucum_exams_v1', (exs || []).map(e => ({
-        id: e.id, level: e.level, moduleIds: e.module_ids || [], title: e.title, parts: e.parts || [], date: e.created_at,
-      })));
-      write('jucum_exam_windows_v1', (wins || []).map(w => ({
-        id: w.id, examId: w.exam_id, groupId: w.group_id, targetStudentIds: w.target_student_ids || [],
-        isOpen: w.is_open, closesAt: w.closes_at, allowOverrides: w.allow_overrides || [],
-        results: w.results || {}, submissions: w.submissions || {}, published: w.published || false, date: w.created_at,
-      })));
-    } catch (e) { console.warn('hydrate exams:', e.message); }
-
-    // asistencia
-    try {
-      const { data: att } = await sb.from('attendance').select('*');
-      const map = {};
-      (att || []).forEach(r => {
-        map[r.date] = map[r.date] || {};
-        map[r.date][r.student_id] = { status: r.status, participation: r.participation || 0, note: r.note || '', groupId: r.group_id };
-      });
-      write('jucum_attendance_v1', map);
-    } catch (e) { console.warn('hydrate attendance:', e.message); }
   }
 
   /* ── PUSH helpers (fire-and-forget; UI already updated localStorage) ── */
@@ -177,12 +114,6 @@
       active_module_id: s.activeModuleId, deadline: s.deadline || null,
       daily_target_min: s.dailyTargetMin, is_paused: s.isPaused,
     }).eq('id', groupId));
-    // unlock_mode lives in a separate update: if the column doesn't exist yet
-    // (script 5 not run), only this one fails and the rest still saves.
-    safe(SB().from('groups').update({ unlock_mode: s.unlockMode || 'sequential', unlocked_activities: s.unlockedActivities || [] }).eq('id', groupId));
-    // active_module_ids (script 7): update aparte para que si la columna aún no
-    // existe, solo falle esta y lo demás se guarde igual.
-    safe(SB().from('groups').update({ active_module_ids: s.activeModuleIds || [] }).eq('id', groupId));
   }
   function pushProgress(userId, moduleId, activityId, score, minutes) {
     safe(SB().from('progress').upsert({
@@ -245,210 +176,8 @@
   window.JUCUM_SYNC = {
     hydrate, pushSettings, pushProgress, pushNotif, markNotifRead, markAllNotifRead,
     pushEvaluation, pushPost, pushReply, pushPin, deletePostDb, deleteReplyDb, pushLike, pushMute,
-    pushModule, deleteModuleDb, fetchModules, computeStats,
-    pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb, uploadAttachments, refreshTasks, refreshProgress,
-    pushExam, deleteExamDb, pushWindow, deleteWindowDb,
-    pushAttendance, pushSurvey,
+    pushModule, deleteModuleDb, fetchModules,
   };
-
-  /* ── Tareas ── */
-  async function uploadAttachments(folder, attachments) {
-    const out = [];
-    for (const a of (attachments || [])) {
-      if (!a || !a.dataUrl) { out.push(a); continue; }
-      try {
-        const blob = await (await fetch(a.dataUrl)).blob();
-        const path = `${folder}/${Date.now()}-${a.name}`;
-        const { error } = await SB().storage.from(window.JUCUM_CONFIG.STORAGE_BUCKET).upload(path, blob, { upsert: true });
-        if (!error) {
-          const { data } = SB().storage.from(window.JUCUM_CONFIG.STORAGE_BUCKET).getPublicUrl(path);
-          out.push({ kind: a.kind, url: data.publicUrl, name: a.name, size: a.size });
-        } else { out.push(a); }
-      } catch { out.push(a); }
-    }
-    return out;
-  }
-  /* Relee tareas+entregas de la nube y actualiza el caché local (para ver
-   * tareas nuevas sin tener que cerrar y volver a entrar). */
-  async function refreshTasks() {
-    try {
-      const sb = SB();
-      const [{ data: assigns }, { data: subs }] = await Promise.all([
-        sb.from('assignments').select('*'),
-        sb.from('submissions').select('*'),
-      ]);
-      const aArr = (assigns || []).map(a => ({
-        id: a.id, groupId: a.group_id, targetStudentIds: a.target_student_ids || [],
-        title: a.title, description: a.description, dueAt: a.due_at, gradable: a.gradable,
-        attachments: a.attachments || [], xp: a.xp ?? 40, date: a.created_at,
-      }));
-      write('jucum_assignments_v1', aArr);
-      const sMap = {};
-      (subs || []).forEach(s => {
-        sMap[s.assignment_id] = sMap[s.assignment_id] || {};
-        sMap[s.assignment_id][s.student_id] = {
-          id: s.id, submittedAt: s.submitted_at, text: s.text, attachments: s.attachments || [],
-          status: s.status, grade: s.grade, feedback: s.feedback, gradedAt: s.graded_at,
-        };
-      });
-      write('jucum_submissions_v1', sMap);
-      return true;
-    } catch (e) { console.warn('refreshTasks:', e && e.message); return false; }
-  }
-  /* Relee SOLO el avance (tabla progress) de la nube y actualiza el caché +
-   * recalcula los puntos/estadísticas. Ligero: una sola consulta. Sirve para
-   * que los materiales que el alumno acaba de hacer aparezcan como completados
-   * y sus puntos suban sin tener que recargar toda la plataforma. */
-  async function refreshProgress() {
-    try {
-      const sb = SB();
-      const { data: prog, error } = await sb.from('progress').select('*');
-      if (error) return false;
-      const today = new Date().toISOString().slice(0, 10);
-      const cloud = {};
-      (prog || []).forEach(p => {
-        cloud[p.user_id] = cloud[p.user_id] || { completed:{}, todayMinutes:0, lastDay:null };
-        cloud[p.user_id].completed[`${p.module_id}:${p.activity_id}`] = {
-          score: p.score, minutes: p.minutes, date: p.completed_at,
-        };
-        const day = (p.completed_at || '').slice(0,10);
-        if (day === today) { cloud[p.user_id].todayMinutes += (p.minutes||0); cloud[p.user_id].lastDay = today; }
-      });
-      // La nube manda, pero conservamos los avances locales recién hechos que
-      // todavía no terminaron de subir (evita que un material recién completado
-      // "parpadee" y desaparezca antes de que su guardado llegue a la nube).
-      const local = read(KEYS.progress);
-      const merged = { ...cloud };
-      Object.keys(local || {}).forEach(u => {
-        const lc = (local[u] && local[u].completed) || {};
-        merged[u] = merged[u] || { completed:{}, todayMinutes:(local[u] && local[u].todayMinutes) || 0, lastDay:(local[u] && local[u].lastDay) || null };
-        Object.keys(lc).forEach(k => { if (!merged[u].completed[k]) merged[u].completed[k] = lc[k]; });
-      });
-      write(KEYS.progress, merged);
-      try { computeStats(); } catch (e) {}
-      return true;
-    } catch (e) { console.warn('refreshProgress:', e && e.message); return false; }
-  }
-  function pushAssignment(a) {
-    safe(SB().from('assignments').upsert({
-      id: a.id, group_id: a.groupId || null, target_student_ids: a.targetStudentIds || [],
-      title: a.title, description: a.description || null, due_at: a.dueAt || null,
-      gradable: !!a.gradable, attachments: a.attachments || [], xp: a.xp ?? 40,
-    }, { onConflict: 'id' }));
-  }
-  function deleteAssignmentDb(id) { safe(SB().from('assignments').delete().eq('id', id)); }
-  async function pushSubmission(assignmentId, studentId, sub) {
-    const uploaded = await uploadAttachments(`tareas/${studentId}`, sub.attachments);
-    safe(SB().from('submissions').upsert({
-      id: sub.id, assignment_id: assignmentId, student_id: studentId,
-      submitted_at: sub.submittedAt, text: sub.text || null, attachments: uploaded,
-      status: sub.status || 'submitted',
-    }, { onConflict: 'assignment_id,student_id' }));
-  }
-  function gradeSubmissionDb(assignmentId, studentId, sub) {
-    safe(SB().from('submissions').update({
-      status: 'graded', grade: (typeof sub.grade === 'number' ? sub.grade : null),
-      feedback: sub.feedback || null, graded_at: sub.gradedAt,
-    }).eq('assignment_id', assignmentId).eq('student_id', studentId));
-  }
-
-  /* ── Exámenes ── */
-  function pushExam(e) {
-    safe(SB().from('exams').upsert({
-      id: e.id, level: e.level || null, module_ids: e.moduleIds || [], title: e.title, parts: e.parts || [],
-    }));
-  }
-  function deleteExamDb(id) { safe(SB().from('exams').delete().eq('id', id)); }
-  async function pushWindow(w) {
-    const subs = { ...(w.submissions || {}) };
-    for (const sid of Object.keys(subs)) {
-      if (subs[sid] && subs[sid].attachments) subs[sid] = { ...subs[sid], attachments: await uploadAttachments(`examenes/${sid}`, subs[sid].attachments) };
-    }
-    safe(SB().from('exam_windows').upsert({
-      id: w.id, exam_id: w.examId, group_id: w.groupId || null, target_student_ids: w.targetStudentIds || [],
-      is_open: !!w.isOpen, closes_at: w.closesAt || null, allow_overrides: w.allowOverrides || [],
-      results: w.results || {}, submissions: subs, published: !!w.published,
-    }));
-  }
-  function deleteWindowDb(id) { safe(SB().from('exam_windows').delete().eq('id', id)); }
-
-  /* ── Asistencia ── */
-  function pushAttendance(date, groupId, studentId, rec) {
-    safe(SB().from('attendance').upsert({
-      id: `att-${date}-${studentId}`, date, group_id: groupId || null, student_id: studentId,
-      status: rec.status || 'asistio', participation: rec.participation || 0, note: rec.note || null, updated_at: new Date().toISOString(),
-    }));
-  }
-
-  /* ── Encuesta de satisfacción ── */
-  function pushSurvey(studentId, rec) {
-    safe(SB().from('surveys').insert({
-      id: `sv-${studentId}-${Date.now()}`, student_id: studentId,
-      satisfaction: rec.satisfaction || null, recommend: rec.recommend || null,
-      continue_plan: rec.continue_plan || null, suggestion: rec.suggestion || null,
-    }));
-  }
-
-  /* ── Stats: derive avgScore / streak / totalMinutes / completedModules /
-   *    lastActiveDays / achievements from the hydrated progress cache.
-   *    Call AFTER hydrate() and after the module catalog is loaded.
-   *    Patches window.JUCUM_DATA.STUDENTS in place. ── */
-  const dayStr = t => new Date(t).toISOString().slice(0, 10);
-  function computeStats() {
-    const D = window.JUCUM_DATA;
-    if (!D) return;
-    const DAY = 86400000;
-    const prog = read(KEYS.progress);
-    D.STUDENTS.forEach(s => {
-      const p = prog[s.id] || { completed: {} };
-      const completed = p.completed || {};
-      const entries = Object.values(completed);
-
-      let minutes = 0, scoreSum = 0, scoreN = 0, perfect = false, lastTs = 0;
-      const days = new Set();
-      entries.forEach(e => {
-        minutes += e.minutes || 0;
-        if (typeof e.score === 'number') {
-          // >10 = percent (0-100); ≤10 = out of 10 — same rule as getStudentXP
-          const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100);
-          scoreSum += pct; scoreN++;
-          if (pct >= 100) perfect = true;
-        }
-        if (e.date) {
-          days.add(e.date.slice(0, 10));
-          const ts = Date.parse(e.date);
-          if (ts > lastTs) lastTs = ts;
-        }
-      });
-
-      // streak = consecutive active days ending today (or yesterday)
-      let streak = 0, cur = Date.now();
-      if (!days.has(dayStr(cur))) cur -= DAY;
-      while (days.has(dayStr(cur))) { streak++; cur -= DAY; }
-
-      // completed modules of the student's CURRENT level
-      const mods = (D.MODULE_CATALOG[s.level] || []).filter(m => (m.activities || []).length > 0);
-      const doneMod = m => m.activities.every(a => completed[`${m.id}:${a.id}`]);
-      const completedModules = mods.filter(doneMod).length;
-
-      // achievements derived from real progress
-      const ach = [];
-      if (entries.length > 0) ach.push('first');
-      if (streak >= 3) ach.push('streak');
-      if (perfect) ach.push('perfect');
-      const m1 = mods.find(m => m.id === 'pa1-m1');
-      if (m1 && doneMod(m1)) ach.push('identity');
-
-      s.totalMinutes = minutes;
-      s.avgScore = scoreN ? Math.round(scoreSum / scoreN) : 0;
-      s.streak = streak;
-      s.completedModules = completedModules;
-      s.lastActiveDays = lastTs
-        ? Math.max(0, Math.round((Date.parse(dayStr(Date.now())) - Date.parse(dayStr(lastTs))) / DAY))
-        : 0; // alumno nuevo sin práctica todavía: NO mostrar "hace 99 días" ni alarma
-      s.achievements = ach;
-    });
-  }
 
   /* ── Module catalog (tabla module_catalog) ── */
   function pushModule(level, mod, sort) {
