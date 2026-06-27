@@ -11,6 +11,22 @@ const NEURO_CSS = `
 .nv-wellbar{height:11px;background:#EFE3EA;border-radius:7px;overflow:hidden;}
 .nv-wellbar span{display:block;height:100%;border-radius:7px;transition:width .6s ease;}
 .nv-wellscale{display:flex;justify-content:space-between;font-size:9.5px;font-weight:800;color:var(--text-mute,#A8A8A8);margin-top:5px;text-transform:uppercase;}
+.nv-seg{position:relative;height:16px;border-radius:9px;background:#F0E3EA;overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,.07);}
+.nv-seg-fill{position:absolute;inset:0 auto 0 0;border-radius:9px;transition:width .6s ease;}
+.nv-tick{position:absolute;top:0;bottom:0;width:2px;background:rgba(255,255,255,.8);z-index:2;}
+.nv-tick.passed{background:rgba(255,255,255,.5);}
+.nv-seglabels{position:relative;height:15px;margin-top:4px;}
+.nv-sl{position:absolute;transform:translateX(-50%);font-size:8.5px;font-weight:800;color:var(--text-mute,#A8A8A8);text-transform:uppercase;letter-spacing:.02em;white-space:nowrap;top:0;}
+.nv-sl i{display:block;width:6px;height:6px;border-radius:50%;background:#D9CCD3;margin:0 auto 2px;}
+.nv-sl.cur{color:var(--text);}
+.nv-sl.cur i{background:#FF5FA0;box-shadow:0 0 0 3px rgba(255,95,160,.20);}
+.nv-next{margin-top:11px;font-size:11.5px;font-weight:700;color:var(--text);background:#FFF6FA;border:1px solid #F6D9E7;border-radius:10px;padding:8px 11px;display:flex;gap:7px;align-items:flex-start;line-height:1.4;}
+.nv-next b{color:#E1357F;}
+.nv-dlg{background:#FBF4F7;border:1px solid #F2DCE7;border-radius:13px;padding:12px 14px;}
+.nv-dlg-who{font-family:'Fredoka',sans-serif;font-weight:600;font-size:11.5px;color:#E1357F;margin-bottom:4px;}
+.nv-dlg-msg{font-size:13px;font-weight:700;color:var(--text);line-height:1.5;}
+.nv-dlg-msg b{color:#E1357F;}
+.nv-dlg-step{margin-top:9px;font-size:11.5px;font-weight:800;color:#0E5A2A;background:#E7F6EC;border:1px solid #C9E9D3;border-radius:9px;padding:7px 10px;}
 .nv-narr{font-size:12.5px;font-weight:700;color:var(--text);line-height:1.45;}
 .nv-helps{margin-top:10px;}
 .nv-helps .nv-h{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text-soft,#6B6B6B);margin-bottom:6px;}
@@ -163,8 +179,27 @@ function NeuroLetter({ onClose }){
 function MascotCard({ student }) {
   if (!window.JUCUM_MASCOT) return null;
   const s = window.JUCUM_MASCOT.getMascotState(student);
+  const STAGES = window.JUCUM_MASCOT.STAGES;
+  // El diálogo cambia con las acciones del alumno; useMemo lo estabiliza (y
+  // hace que su efecto sobre localStorage corra solo cuando algo relevante cambia).
+  const dlg = React.useMemo(
+    () => window.JUCUM_MASCOT.getNeuroDialogue(student, s),
+    [student.id, s.stage, s.w, s.todayMin]
+  );
   const [showLetter, setShowLetter] = React.useState(false);
   const sceneHTML = neuroSceneHTML(s.stage, s.mood, s.color);
+
+  // Texto honesto de "cuánto falta" (calculado por simulación real en mascot.js)
+  let nextHint;
+  if (s.next && s.next.peak) {
+    nextHint = <span>Neuro está en <b>la cima</b>. Practica hoy para mantenerlo 🚀</span>;
+  } else if (s.next && s.next.days) {
+    nextHint = <span>Le faltan <b>{s.next.pts} pts</b>: <b>practica {s.next.days} día{s.next.days > 1 ? 's' : ''} más</b> y sube a <b>{s.next.nextLabel}</b>.</span>;
+  } else if (s.next && s.next.plateau) {
+    nextHint = <span>Le faltan <b>{s.next.pts} pts</b>. Sube tu <b>dominio</b> (prácticas con nota) para llegar a <b>{s.next.nextLabel}</b>.</span>;
+  } else if (s.next) {
+    nextHint = <span>Le faltan <b>{s.next.pts} pts</b> para subir a <b>{s.next.nextLabel}</b>.</span>;
+  }
 
   return (
     <div className="scard masc-card" style={{borderTopColor: s.color}}>
@@ -179,13 +214,24 @@ function MascotCard({ student }) {
              dangerouslySetInnerHTML={{__html: sceneHTML}} />
         <div>
           <div className="nv-welltop"><span>⚡ Energía de Neuro</span><b style={{color: s.color}}>{s.w}%</b></div>
-          <div className="nv-wellbar"><span style={{width: s.w + '%', background: s.color}}></span></div>
-          <div className="nv-wellscale"><span>Agotado</span><span>Imparable</span></div>
+          <div className="nv-seg">
+            <div className="nv-seg-fill" style={{width: s.w + '%', background: s.color}}></div>
+            {(s.bounds||[]).map((b,i)=>(<i key={i} className={'nv-tick'+(s.w>=b?' passed':'')} style={{left: b + '%'}}></i>))}
+          </div>
+          <div className="nv-seglabels">
+            {STAGES.map((stg,i)=>{ const lo = i===0?0:s.bounds[i-1]; const hi = i<6?s.bounds[i]:100; const c=(lo+hi)/2;
+              return <span key={i} className={'nv-sl'+(i===s.stage?' cur':'')} style={{left: c + '%'}}><i></i>{i===s.stage?stg.label:''}</span>; })}
+          </div>
+          {nextHint && <div className="nv-next">🎯 <div>{nextHint}</div></div>}
         </div>
       </div>
 
       <div className="nv-below">
-        <div className="nv-narr" dangerouslySetInnerHTML={{__html: s.narrative}} />
+        <div className="nv-dlg">
+          <div className="nv-dlg-who">{dlg.who}</div>
+          <div className="nv-dlg-msg" dangerouslySetInnerHTML={{__html: dlg.msg}} />
+          <div className="nv-dlg-step">👉 {dlg.step}</div>
+        </div>
         <div className="nv-helps">
           <div className="nv-h">¿Cómo ayudo a Neuro?</div>
           <ul>

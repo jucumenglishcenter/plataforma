@@ -103,10 +103,12 @@ function StudentDashboard({ user, onLogout }) {
     const refresh = () => window.JUCUM_SYNC.refreshProgress().then(ok => { if (ok && alive) setPTick(t => t + 1); }).catch(() => {});
     refresh();
     const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
+    const onPageShow = () => refresh(); // volver con "atrás" (bfcache) desde un material en la misma pestaña
     const iv = setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 20000);
     window.addEventListener('focus', refresh);
+    window.addEventListener('pageshow', onPageShow);
     document.addEventListener('visibilitychange', onVis);
-    return () => { alive = false; clearInterval(iv); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
+    return () => { alive = false; clearInterval(iv); window.removeEventListener('focus', refresh); window.removeEventListener('pageshow', onPageShow); document.removeEventListener('visibilitychange', onVis); };
   }, []);
   const forumUnread = window.JUCUM_FORUM ? window.JUCUM_FORUM.forumUnreadCount(student.id, student.group) : 0;
   const openForum = () => {
