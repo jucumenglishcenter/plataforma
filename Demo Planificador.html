@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Planificador · Vista</title>
+<style>
+  :root{ --cream:#FBF7EC; --ink:#2B2B2B; --soft:#6b6453; --navy:#0D1B5A; --blue:#3F5BB8; --gold:#cdb86a; --green:#2E7D32; }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Nunito',system-ui,sans-serif;background:var(--cream);color:var(--ink);}
+  .wrap{max-width:1080px;margin:0 auto;padding:30px 22px 80px;}
+  .lead{font-family:'Fredoka',sans-serif;font-size:15px;color:var(--soft);font-weight:700;margin:0 0 22px;}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;}
+  @media(max-width:900px){.cols{grid-template-columns:1fr;}}
+  .col-label{font-family:'Fredoka',sans-serif;font-weight:600;font-size:14px;color:var(--blue);margin:0 0 10px;display:flex;align-items:center;gap:7px;}
+  .col-label b{background:var(--blue);color:#fff;border-radius:20px;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;}
+
+  /* hero */
+  .hero{background:linear-gradient(135deg,#3F5BB8,#0D1B5A);color:#fff;border-radius:16px;padding:20px 24px;margin-bottom:22px;}
+  .hero .eye{font-size:11px;font-weight:800;letter-spacing:.08em;opacity:.7;text-transform:uppercase;}
+  .hero h1{font-family:'Fredoka',sans-serif;font-size:25px;margin:2px 0 4px;}
+  .hero p{margin:0;font-size:13px;opacity:.9;}
+
+  .card{background:#fff;border:1px solid #ECE4D2;border-radius:14px;padding:18px;box-shadow:0 2px 10px rgba(0,0,0,0.05);}
+  .ctitle{font-family:'Fredoka',sans-serif;font-weight:600;font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:8px;}
+  .pill{margin-left:auto;font-size:12px;font-weight:800;padding:5px 11px;border-radius:20px;background:#E8F5E9;color:var(--green);}
+
+  /* editable block */
+  .blk{border:1px solid #E3DCC9;border-radius:12px;padding:11px 12px;background:#FCFAF4;margin-bottom:9px;}
+  .blk-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .time{font-size:12px;font-weight:800;color:#1F3A8A;white-space:nowrap;}
+  .emoji-in{width:30px;text-align:center;border:1px solid #E3DCC9;border-radius:8px;padding:5px 2px;font-size:14px;background:#fff;}
+  .title-in{flex:1;min-width:110px;border:1px solid #E3DCC9;border-radius:8px;padding:6px 9px;font-weight:700;font-size:13px;background:#fff;}
+  .min-in{width:50px;border:1px solid #E3DCC9;border-radius:8px;padding:6px 6px;font-weight:700;font-size:12px;text-align:center;background:#fff;}
+  .lbl{font-size:11px;color:#999;font-weight:700;}
+  .ico{width:26px;height:26px;border:1px solid #E3DCC9;background:#fff;border-radius:7px;font-weight:800;font-size:12px;color:#666;display:inline-flex;align-items:center;justify-content:center;}
+  .steps{margin-top:7px;padding-left:5px;display:flex;flex-direction:column;gap:4px;}
+  .step{display:flex;align-items:center;gap:6px;}
+  .step span{color:#B0A88F;font-size:11px;}
+  .step .si{flex:1;border:1px solid #EFE8D6;border-radius:6px;padding:4px 8px;font-size:12px;color:#555;background:#fff;}
+  .addstep{align-self:flex-start;border:1px dashed var(--gold);background:none;color:#8a7320;border-radius:8px;padding:3px 9px;font-size:11px;font-weight:700;margin-top:3px;}
+  .actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px;}
+  .b-green{border:none;color:#fff;background:linear-gradient(135deg,#2E7D32,#1B5E20);border-radius:11px;padding:9px 15px;font-weight:700;font-size:13px;font-family:'Fredoka',sans-serif;}
+  .b-ghost{border:1.5px solid var(--gold);color:#6b5a1f;background:#fff;border-radius:11px;padding:9px 14px;font-weight:800;font-size:12.5px;}
+
+  /* print preview */
+  .paper{background:#fff;border:1px solid #ddd;border-radius:8px;padding:24px 26px;box-shadow:0 4px 18px rgba(0,0,0,0.08);font-family:'Segoe UI',system-ui,sans-serif;}
+  .paper h2{font-size:19px;margin:0 0 2px;}
+  .paper .meta{color:#666;font-size:12px;}
+  .chips{display:flex;gap:7px;flex-wrap:wrap;margin:11px 0 14px;}
+  .chip{background:#F0EAD9;border:1px solid #E3DCC9;border-radius:18px;padding:4px 11px;font-size:11px;font-weight:700;color:#6b5a2f;}
+  table{width:100%;border-collapse:collapse;}
+  td{border-bottom:1px solid #eee;padding:9px 7px;vertical-align:top;font-size:12.5px;}
+  td.t{white-space:nowrap;font-weight:700;color:#1F3A8A;width:92px;}
+  td.m{white-space:nowrap;color:#aaa;width:34px;font-weight:700;}
+  .bt{font-weight:800;font-size:13px;margin-bottom:2px;}
+  ul{margin:3px 0 0;padding-left:16px;color:#666;}
+  li{margin:1px 0;font-size:11.5px;}
+  .foot{margin-top:16px;color:#aaa;font-size:10px;border-top:1px solid #eee;padding-top:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div class="eye">🗓️ Planificador · Panel del profesor</div>
+    <h1>Plan de clase</h1>
+    <p>Pre-A1 · Personal Identity · Sesión 1 · 100 min · inicio 09:00 — generado automáticamente desde el módulo activo</p>
+  </div>
+  <p class="lead">Así se maneja: el profesor genera el plan con un clic, lo ajusta a su gusto (izquierda) y lo imprime / guarda en PDF (derecha).</p>
+
+  <div class="cols">
+    <!-- EDITABLE -->
+    <div>
+      <div class="col-label"><b>1</b> Genera y ajusta (editable en pantalla)</div>
+      <div class="card">
+        <div class="ctitle">📋 Personal Identity · Sesión 1 <span class="pill">⏱️ 100 / 100 min</span></div>
+
+        <div class="blk">
+          <div class="blk-top">
+            <span class="time">09:00–09:18</span>
+            <span class="emoji-in">🗂️</span>
+            <input class="title-in" value="Repaso de vocabulario" readonly>
+            <input class="min-in" value="18" readonly><span class="lbl">min</span>
+            <span style="display:inline-flex;gap:3px;"><span class="ico">↑</span><span class="ico">↓</span><span class="ico" style="color:#C0392B">×</span></span>
+          </div>
+          <div class="steps">
+            <div class="step"><span>•</span><input class="si" value="Quizlet Live / combinar (grupo vs 1)" readonly></div>
+            <div class="step"><span>•</span><input class="si" value="Traducir ES ↔ EN" readonly></div>
+            <button class="addstep">+ paso</button>
+          </div>
+        </div>
+
+        <div class="blk">
+          <div class="blk-top">
+            <span class="time">09:18–09:44</span>
+            <span class="emoji-in">📖</span>
+            <input class="title-in" value="Story / Lectura" readonly>
+            <input class="min-in" value="26" readonly><span class="lbl">min</span>
+            <span style="display:inline-flex;gap:3px;"><span class="ico">↑</span><span class="ico">↓</span><span class="ico" style="color:#C0392B">×</span></span>
+          </div>
+          <div class="steps">
+            <div class="step"><span>•</span><input class="si" value="Lee la traducción ES (idea general)" readonly></div>
+            <div class="step"><span>•</span><input class="si" value="Escucha + sigue la lectura (puntuación = pausas)" readonly></div>
+            <div class="step"><span>•</span><input class="si" value="Identifica lo que entiendes en inglés" readonly></div>
+            <div class="step"><span>•</span><input class="si" value="Escucha + lee en voz alta (por turnos)" readonly></div>
+            <button class="addstep">+ paso</button>
+          </div>
+        </div>
+
+        <div class="blk">
+          <div class="blk-top">
+            <span class="time">09:44–09:58</span>
+            <span class="emoji-in">🧠</span>
+            <input class="title-in" value="Repaso de gramática (Pasos 4–5)" readonly>
+            <input class="min-in" value="14" readonly><span class="lbl">min</span>
+            <span style="display:inline-flex;gap:3px;"><span class="ico">↑</span><span class="ico">↓</span><span class="ico" style="color:#C0392B">×</span></span>
+          </div>
+          <div class="steps">
+            <div class="step"><span>•</span><input class="si" value="Repaso del Paso 3" readonly></div>
+            <div class="step"><span>•</span><input class="si" value="Tips clave del L2 (con apoyo en español)" readonly></div>
+            <div class="step"><span>•</span><input class="si" value="MCQ de autochequeo" readonly></div>
+          </div>
+        </div>
+
+        <div class="blk">
+          <div class="blk-top">
+            <span class="time">09:58–10:16</span>
+            <span class="emoji-in">💬</span>
+            <input class="title-in" value="Diálogo · simulación" readonly>
+            <input class="min-in" value="18" readonly><span class="lbl">min</span>
+            <span style="display:inline-flex;gap:3px;"><span class="ico">↑</span><span class="ico">↓</span><span class="ico" style="color:#C0392B">×</span></span>
+          </div>
+          <div class="steps">
+            <div class="step"><span>•</span><input class="si" value="Lectura en parejas (con y sin español)" readonly></div>
+            <div class="step"><span>•</span><input class="si" value="Chequeo de comprensión" readonly></div>
+          </div>
+        </div>
+
+        <div class="blk">
+          <div class="blk-top">
+            <span class="time">10:16–10:34</span>
+            <span class="emoji-in">✍️</span>
+            <input class="title-in" value="Práctica de gramática (P1/P2/P3)" readonly>
+            <input class="min-in" value="18" readonly><span class="lbl">min</span>
+            <span style="display:inline-flex;gap:3px;"><span class="ico">↑</span><span class="ico">↓</span><span class="ico" style="color:#C0392B">×</span></span>
+          </div>
+          <div class="steps">
+            <div class="step"><span>•</span><input class="si" value="P3 Transform en clase" readonly></div>
+            <div class="step"><span>•</span><input class="si" value="Apoyo en español permitido (Pre-A1)" readonly></div>
+          </div>
+        </div>
+
+        <div class="blk">
+          <div class="blk-top">
+            <span class="time">10:34–10:40</span>
+            <span class="emoji-in">✅</span>
+            <input class="title-in" value="Cierre + práctica para casa" readonly>
+            <input class="min-in" value="6" readonly><span class="lbl">min</span>
+            <span style="display:inline-flex;gap:3px;"><span class="ico">↑</span><span class="ico">↓</span><span class="ico" style="color:#C0392B">×</span></span>
+          </div>
+          <div class="steps">
+            <div class="step"><span>•</span><input class="si" value="Re-leer Story (20 min)" readonly></div>
+            <div class="step"><span>•</span><input class="si" value="Práctica P2 del tema (20 min)" readonly></div>
+            <div class="step"><span>•</span><input class="si" value="Quizlet · ordenar oraciones (15 min)" readonly></div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="b-green">💾 Guardar plan</button>
+          <button class="b-ghost">⭐ Guardar como plantilla</button>
+          <button class="b-ghost">🖨️ Imprimir / PDF</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRINT -->
+    <div>
+      <div class="col-label"><b>2</b> Imprime o guarda en PDF (vista limpia)</div>
+      <div class="paper">
+        <h2>Plan de clase · Personal Identity</h2>
+        <div class="meta">PRE-A1 · Sesión 1 · 2026-06-21</div>
+        <div class="chips"><span class="chip">⏱️ 100 min</span><span class="chip">🎯 Vocabulario · Story/Diálogo · Gramática</span></div>
+        <table><tbody>
+          <tr><td class="t">09:00–09:18</td><td class="m">18'</td><td><div class="bt">🗂️ Repaso de vocabulario</div><ul><li>Quizlet Live / combinar (grupo vs 1)</li><li>Traducir ES ↔ EN</li></ul></td></tr>
+          <tr><td class="t">09:18–09:44</td><td class="m">26'</td><td><div class="bt">📖 Story / Lectura</div><ul><li>Lee la traducción ES (idea general)</li><li>Escucha + sigue la lectura</li><li>Identifica lo que entiendes</li><li>Escucha + lee en voz alta</li></ul></td></tr>
+          <tr><td class="t">09:44–09:58</td><td class="m">14'</td><td><div class="bt">🧠 Repaso de gramática (Pasos 4–5)</div><ul><li>Repaso del Paso 3</li><li>Tips clave del L2</li><li>MCQ de autochequeo</li></ul></td></tr>
+          <tr><td class="t">09:58–10:16</td><td class="m">18'</td><td><div class="bt">💬 Diálogo · simulación</div><ul><li>Lectura en parejas</li><li>Chequeo de comprensión</li></ul></td></tr>
+          <tr><td class="t">10:16–10:34</td><td class="m">18'</td><td><div class="bt">✍️ Práctica de gramática (P1/P2/P3)</div><ul><li>P3 Transform en clase</li></ul></td></tr>
+          <tr><td class="t">10:34–10:40</td><td class="m">6'</td><td><div class="bt">✅ Cierre + práctica para casa</div><ul><li>Re-leer Story · P2 · Quizlet</li></ul></td></tr>
+        </tbody></table>
+        <div class="foot">JUCUM English Center · generado por el planificador</div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

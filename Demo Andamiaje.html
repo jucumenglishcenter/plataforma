@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo · Andamiaje L1/L2</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:ital,wght@0,400;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<style>
+  :root{ --cream:#FBF7EC; --ink:#2B2B2B; --soft:#6b6453; --line:#E3DCC9; --gold:#cdb86a; }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Nunito',system-ui,sans-serif;background:var(--cream);color:var(--ink);}
+  .wrap{max-width:1080px;margin:0 auto;padding:30px 22px 90px;}
+  h1{font-family:'Fredoka',sans-serif;font-size:25px;margin:0 0 3px;}
+  .lead{color:var(--soft);font-weight:700;font-size:14px;margin:0 0 22px;max-width:760px;line-height:1.5;}
+
+  /* control bar */
+  .controls{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:0 2px 10px rgba(0,0,0,0.05);margin-bottom:20px;}
+  .ctl-row{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end;}
+  .ctl{display:flex;flex-direction:column;gap:7px;}
+  .ctl-label{font-size:11px;font-weight:800;color:var(--soft);text-transform:uppercase;letter-spacing:0.04em;}
+  .seg{display:inline-flex;background:#F0EAD9;border-radius:11px;padding:3px;gap:3px;}
+  .seg button{border:none;background:none;font-family:'Fredoka',sans-serif;font-weight:600;font-size:14px;color:var(--soft);padding:8px 18px;border-radius:9px;cursor:pointer;transition:all .15s;}
+  .seg button.on{color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.15);}
+  .week-wrap{flex:1;min-width:240px;}
+  .week-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;}
+  .week-now{font-family:'Fredoka',sans-serif;font-weight:600;font-size:15px;}
+  .week-total{font-size:12px;color:var(--soft);font-weight:700;}
+  input[type=range]{width:100%;height:7px;border-radius:5px;-webkit-appearance:none;appearance:none;outline:none;cursor:pointer;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;border:3px solid currentColor;cursor:pointer;box-shadow:0 2px 5px rgba(0,0,0,0.2);}
+  input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:3px solid currentColor;cursor:pointer;}
+
+  .tier{display:flex;align-items:center;gap:12px;margin-top:16px;padding:12px 15px;border-radius:12px;}
+  .tier-badge{font-family:'Fredoka',sans-serif;font-weight:600;font-size:14px;padding:5px 13px;border-radius:20px;color:#fff;white-space:nowrap;}
+  .tier-note{font-size:12.5px;font-weight:700;line-height:1.4;}
+
+  .grid{display:grid;grid-template-columns:1.15fr 1fr;gap:20px;align-items:start;}
+  @media(max-width:860px){.grid{grid-template-columns:1fr;}}
+  .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,0.05);}
+  .card h2{font-family:'Fredoka',sans-serif;font-size:16px;margin:0 0 4px;display:flex;align-items:center;gap:8px;}
+  .card .csub{font-size:12px;color:var(--soft);font-weight:700;margin-bottom:14px;}
+
+  /* steps */
+  .steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}
+  .step{display:flex;align-items:flex-start;gap:11px;border:1px solid var(--line);border-radius:11px;padding:11px 13px;cursor:pointer;transition:all .15s;background:#FCFAF4;}
+  .step.done{background:#F1FBF4;border-color:#BFE6CB;}
+  .step .box{flex-shrink:0;width:22px;height:22px;border-radius:7px;border:2px solid #cdc4ad;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#fff;margin-top:1px;}
+  .step.done .box{background:#2E9E5B;border-color:#2E9E5B;}
+  .step-n{font-size:11px;font-weight:800;color:#aaa;}
+  .step-txt{font-size:13.5px;font-weight:700;line-height:1.45;}
+  .step-flag{display:inline-block;font-size:11px;font-weight:800;padding:1px 7px;border-radius:10px;margin-left:6px;vertical-align:middle;}
+  .flag-es{background:#FFF3E0;color:#C77B12;}
+  .flag-en{background:#E8F0FE;color:#1565C0;}
+
+  /* reading */
+  .passage{margin-top:4px;display:flex;flex-direction:column;gap:11px;}
+  .sent{border-left:3px solid var(--gold);padding:3px 0 3px 12px;}
+  .sent .en{font-size:15px;font-weight:700;line-height:1.5;}
+  .sent .es{font-size:13.5px;color:#8a6a1f;font-weight:700;line-height:1.45;margin-top:4px;display:none;}
+  .sent .es.show{display:block;}
+  .sent .es::before{content:'🇪🇸 ';}
+  .rv{margin-top:5px;border:1.5px solid var(--line);background:#fff;color:var(--soft);font-family:'Nunito';font-weight:800;font-size:11px;padding:3px 10px;border-radius:8px;cursor:pointer;}
+  .rv.hiddenmode{opacity:.5;}
+  .inst{font-size:12.5px;font-weight:800;border-radius:10px;padding:9px 12px;margin-bottom:13px;line-height:1.45;}
+
+  .legend{font-size:12px;color:var(--soft);font-weight:700;margin-top:10px;line-height:1.5;}
+  .gr-note{background:#F4EEFB;border:1px solid #D9CEEC;border-radius:11px;padding:11px 13px;font-size:12.5px;color:#5a3f86;font-weight:700;line-height:1.5;margin-top:13px;}
+  .pill-fixed{background:#6C4FB0;color:#fff;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:800;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🧱 Andamiaje L1/L2 — demo interactiva</h1>
+  <p class="lead">El "andamiaje" es el apoyo en español que se le da al alumno y que se va retirando conforme avanza. Cambia el <b>nivel</b> y desliza la <b>semana</b> para ver cómo la <b>Comprensión lectora</b> reduce sus pasos y su español. El <b>Resumen de gramática</b> (derecha) se mantiene fijo en 5 pasos a propósito.</p>
+
+  <div class="controls">
+    <div class="ctl-row">
+      <div class="ctl">
+        <span class="ctl-label">Nivel</span>
+        <div class="seg" id="seg">
+          <button data-lv="pre-a1" class="on">Pre-A1</button>
+          <button data-lv="a1">A1</button>
+          <button data-lv="a2">A2</button>
+        </div>
+      </div>
+      <div class="ctl week-wrap">
+        <div class="week-top">
+          <span class="ctl-label">Semana desde que empezó el alumno</span>
+        </div>
+        <div class="week-top">
+          <span class="week-now" id="weekNow">Semana 1</span>
+          <span class="week-total" id="weekTotal">de 20</span>
+        </div>
+        <input type="range" id="week" min="1" max="20" value="1">
+      </div>
+    </div>
+    <div class="tier" id="tier">
+      <span class="tier-badge" id="tierBadge">Apoyo alto</span>
+      <span class="tier-note" id="tierNote"></span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Reading comprehension: level-variant -->
+    <div class="card" id="readCard">
+      <h2>📕 Comprensión lectora <span style="font-size:11px;font-weight:800;color:#C77B12;background:#FFF3E0;border-radius:20px;padding:2px 9px;">variable por nivel</span></h2>
+      <div class="csub" id="readSub">Personal Identity · los pasos y el español cambian según nivel + semana</div>
+      <div class="inst" id="inst"></div>
+      <ol class="steps" id="steps"></ol>
+
+      <div style="margin-top:16px;border-top:1px dashed var(--line);padding-top:14px;">
+        <div class="csub" style="margin-bottom:9px;">📖 La lectura (así la ve el alumno):</div>
+        <div class="passage" id="passage"></div>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <!-- Grammar review: level-invariant -->
+    <div class="card">
+      <h2>🧠 Resumen de gramática <span class="pill-fixed">5 pasos · fijo</span></h2>
+      <div class="csub">La estructura NO cambia entre niveles — solo cambia el contenido. El español es parte de los pasos, no un andamiaje que se retire.</div>
+      <ol class="steps" id="grSteps"></ol>
+      <div class="gr-note" id="grNote"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SCAFFOLD = {
+  'pre-a1': { label:'Pre-A1', color:'#2E7D32', weeks:20, baseSteps:5,
+    phases:[
+      { upTo:7,  tier:'Apoyo alto',  trans:'shown',    note:'5 pasos · traducción <b>visible por defecto</b> · instrucciones en español' },
+      { upTo:14, tier:'Apoyo medio', trans:'ondemand', note:'5 pasos · traducción <b>a un clic</b> (oculta) · instrucciones bilingües' },
+      { upTo:20, tier:'Apoyo bajo',  trans:'ondemand', note:'5 pasos · traducción a un clic · instrucciones <b>en inglés</b> (español solo si lo pide)' },
+    ]},
+  'a1': { label:'A1', color:'#1565C0', weeks:9, baseSteps:3,
+    phases:[
+      { upTo:4, tier:'Apoyo medio', trans:'ondemand', note:'3 pasos · traducción a un clic · instrucciones bilingües' },
+      { upTo:9, tier:'Apoyo bajo',  trans:'hidden',   note:'3 pasos · traducción <b>oculta</b> (disponible si se traba) · inglés' },
+    ]},
+  'a2': { label:'A2', color:'#6A1B9A', weeks:9, baseSteps:2,
+    phases:[
+      { upTo:9, tier:'Sin apoyo L1', trans:'hidden', note:'2 pasos · <b>sin español</b> de andamiaje (solo para confirmar) · todo en inglés' },
+    ]},
+};
+
+const READ_STEPS = {
+  'pre-a1':[
+    {t:'Lee la traducción en español para entender la idea general', f:'es'},
+    {t:'Escucha el audio siguiendo el texto en inglés', f:null},
+    {t:'Lee en inglés e identifica las palabras que ya conoces', f:null},
+    {t:'Escucha y lee en voz alta (pronunciación)', f:null},
+    {t:'Responde las preguntas de comprensión', f:null},
+  ],
+  'a1':[
+    {t:'Escucha y lee en inglés (usa la traducción solo si te trabas)', f:'en'},
+    {t:'Lee en voz alta cuidando la pronunciación', f:null},
+    {t:'Responde las preguntas de comprensión', f:null},
+  ],
+  'a2':[
+    {t:'Read and listen in English (translation hidden)', f:'en'},
+    {t:'Answer the comprehension questions in English', f:null},
+  ],
+};
+
+const GR_STEPS = {
+  'pre-a1':['Regla de gramática en español','Similitudes español ↔ inglés','Diferencias español ↔ inglés','4 tips clave para el inglés','Repaso (7 puntos clave)'],
+  'a1':['Regla de gramática en español','Similitudes español ↔ inglés','Diferencias español ↔ inglés','4 tips clave para el inglés','Repaso (7 puntos clave)'],
+  'a2':['Regla (breve, en inglés)','Similitudes (referencia)','Diferencias internas del inglés','4 tips clave para el inglés','Repaso (7 puntos clave)'],
+};
+const GR_NOTE = {
+  'pre-a1':'En Pre-A1 los 5 pasos se apoyan fuerte en español (L1). Estructura: 5 pasos.',
+  'a1':'En A1 los mismos 5 pasos, contenido más exigente. Estructura: 5 pasos.',
+  'a2':'En A2 el español aparece <b>solo para confirmar</b>, nunca para andamiar — el Paso 3 pasa a diferencias internas del inglés. Estructura: sigue siendo 5 pasos.',
+};
+
+const PASSAGE = [
+  {en:"Hi! My name is Ana and I am from Peru.", es:"¡Hola! Me llamo Ana y soy de Perú."},
+  {en:"I am a student and I live in Lima with my family.", es:"Soy estudiante y vivo en Lima con mi familia."},
+  {en:"My mother is a teacher and my father is a doctor.", es:"Mi madre es maestra y mi padre es doctor."},
+  {en:"I like reading books and learning English every day.", es:"Me gusta leer libros y aprender inglés todos los días."},
+];
+
+let level='pre-a1', week=1;
+const done={};
+
+function phaseFor(lv,wk){ const cfg=SCAFFOLD[lv]; return cfg.phases.find(p=>wk<=p.upTo) || cfg.phases[cfg.phases.length-1]; }
+
+function render(){
+  const cfg=SCAFFOLD[level]; const ph=phaseFor(level,week);
+  // controls color
+  document.querySelectorAll('#seg button').forEach(b=>{ const on=b.dataset.lv===level; b.classList.toggle('on',on); if(on) b.style.background=cfg.color; else b.style.background='none'; });
+  const range=document.getElementById('week');
+  range.max=cfg.weeks; if(week>cfg.weeks){week=cfg.weeks;} range.value=week; range.style.color=cfg.color;
+  document.getElementById('weekNow').textContent='Semana '+week;
+  document.getElementById('weekTotal').textContent='de '+cfg.weeks;
+  // tier
+  const tier=document.getElementById('tier'); tier.style.background=cfg.color+'14';
+  const badge=document.getElementById('tierBadge'); badge.textContent=ph.tier; badge.style.background=cfg.color;
+  document.getElementById('tierNote').innerHTML=ph.note;
+
+  // instruction line
+  const inst=document.getElementById('inst');
+  const instMap={ shown:{txt:'📋 Sigue los pasos en orden. La traducción aparece para ayudarte.',bg:'#F1FBF4',c:'#2E7D32'}, ondemand:{txt:'📋 Sigue los pasos. Toca "🇪🇸 traducción" solo cuando lo necesites.',bg:'#FFF7EC',c:'#C77B12'}, hidden:{txt:'📋 Read in English. Translation is available only to confirm meaning.',bg:'#F4EEFB',c:'#6A1B9A'} };
+  const im=instMap[ph.trans]; inst.textContent=im.txt; inst.style.background=im.bg; inst.style.color=im.c;
+
+  // steps
+  const steps=READ_STEPS[level];
+  document.getElementById('steps').innerHTML=steps.map((s,i)=>{
+    const k=level+'_'+i, dn=done[k];
+    const flag=s.f==='es'?'<span class="step-flag flag-es">español</span>':s.f==='en'?'<span class="step-flag flag-en">inglés</span>':'';
+    return '<li class="step '+(dn?'done':'')+'" data-k="'+k+'"><span class="box">'+(dn?'✓':'')+'</span><span><span class="step-n">PASO '+(i+1)+'</span><div class="step-txt">'+s.t+flag+'</div></span></li>';
+  }).join('');
+  document.querySelectorAll('#steps .step').forEach(el=>el.onclick=()=>{ const k=el.dataset.k; done[k]=!done[k]; render(); });
+  document.getElementById('readSub').textContent='Personal Identity · '+steps.length+' paso(s) en '+cfg.label;
+
+  // passage
+  document.getElementById('passage').innerHTML=PASSAGE.map((p,i)=>{
+    const showDefault = ph.trans==='shown';
+    const btnLabel = ph.trans==='hidden' ? '🇪🇸 confirmar' : '🇪🇸 traducción';
+    return '<div class="sent"><div class="en">'+p.en+'</div>'+
+      '<div class="es '+(showDefault?'show':'')+'" id="es'+i+'">'+p.es+'</div>'+
+      (showDefault?'':'<button class="rv '+(ph.trans==='hidden'?'hiddenmode':'')+'" data-i="'+i+'">'+btnLabel+'</button>')+
+      '</div>';
+  }).join('');
+  document.querySelectorAll('.rv').forEach(b=>b.onclick=()=>{ document.getElementById('es'+b.dataset.i).classList.toggle('show'); });
+
+  const legendMap={ shown:'🇪🇸 La traducción está <b>visible</b>: máximo apoyo, primeras semanas de Pre-A1.', ondemand:'La traducción está <b>oculta tras un botón</b>: el alumno la usa solo si la necesita.', hidden:'La traducción está <b>escondida</b> y el botón es discreto ("confirmar"): casi todo en inglés.' };
+  document.getElementById('legend').innerHTML=legendMap[ph.trans];
+
+  // grammar review (fixed 5)
+  document.getElementById('grSteps').innerHTML=GR_STEPS[level].map((s,i)=>
+    '<li class="step" style="cursor:default;background:#fff;"><span class="box" style="border-color:#D9CEEC;background:#F4EEFB;color:#6C4FB0;">'+(i+1)+'</span><span><div class="step-txt">'+s+'</div></span></li>'
+  ).join('');
+  document.getElementById('grNote').innerHTML=GR_NOTE[level];
+}
+
+document.querySelectorAll('#seg button').forEach(b=>b.onclick=()=>{ level=b.dataset.lv; if(week>SCAFFOLD[level].weeks)week=SCAFFOLD[level].weeks; render(); });
+document.getElementById('week').oninput=e=>{ week=+e.target.value; render(); };
+render();
+</script>
+</body>
+</html>

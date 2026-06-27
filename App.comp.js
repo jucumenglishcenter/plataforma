@@ -9,12 +9,13 @@ function App() {
     try { return JSON.parse(localStorage.getItem('jucum_user') || 'null'); }
     catch { return null; }
   });
-  const [ready, setReady] = React.useState(!window.JUCUM_SB); // local mode = ready immediately
+  const DEMO = !!(window.JUCUM_DEMO && window.JUCUM_DEMO.isDemo());
+  const [ready, setReady] = React.useState(!window.JUCUM_SB || DEMO); // local/demo = ready immediately
   const [bootErr, setBootErr] = React.useState('');
 
-  // Bootstrap real roster from Supabase
+  // Bootstrap real roster from Supabase (se omite en modo demostración)
   React.useEffect(() => {
-    if (!window.JUCUM_SB) return;
+    if (!window.JUCUM_SB || DEMO) { if (DEMO && window.JUCUM_DEMO) { try { window.JUCUM_DEMO.seedAll(); } catch {} } return; }
     (async () => {
       try {
         const sb = window.JUCUM_SB.getClient();
@@ -31,6 +32,9 @@ function App() {
           startDate: g.start_date, _settings: {
             activeModuleId: g.active_module_id, deadline: g.deadline,
             dailyTargetMin: g.daily_target_min ?? 15, isPaused: g.is_paused,
+            unlockMode: g.unlock_mode || 'sequential',
+            unlockedActivities: g.unlocked_activities || [],
+            activeModuleIds: g.active_module_ids || (g.active_module_id ? [g.active_module_id] : []),
           },
         }));
 
@@ -54,10 +58,42 @@ function App() {
             const seedM1 = (CAT['pre-a1'] || []).find(m => m.id === 'pa1-m1');
             if (rows && rows.length > 0) {
               Object.keys(CAT).forEach(k => CAT[k].length = 0);
+              // De-dup: la tabla en la nube puede traer el MISMO módulo repetido
+              // (mismo nombre, distinto id) si se importó dos veces. Conservamos
+              // una sola copia por nombre (la más completa), reapuntamos los
+              // grupos que tuvieran activada la copia descartada y borramos las
+              // filas sobrantes de la nube para que no vuelvan a aparecer.
+              const seenMod = {};   // `${level}::${nombre}` -> módulo conservado
+              const dupRemap = {};  // idDescartado -> idConservado
               rows.forEach(r => {
-                CAT[r.level] = CAT[r.level] || [];
-                CAT[r.level].push({ id:r.id, name:r.name, emoji:r.emoji, topics:r.topics||[], activities:r.activities||[] });
+                const mod = { id:r.id, name:r.name, emoji:r.emoji, topics:r.topics||[], activities:r.activities||[] };
+                const key = r.level + '::' + String(r.name || '').trim().toLowerCase();
+                const prev = seenMod[key];
+                if (!prev) {
+                  seenMod[key] = mod;
+                  CAT[r.level] = CAT[r.level] || [];
+                  CAT[r.level].push(mod);
+                  return;
+                }
+                const keep = (mod.activities.length > prev.activities.length) ? mod : prev;
+                const drop = (keep === mod) ? prev : mod;
+                if (keep === mod) {
+                  const arr = CAT[r.level]; arr[arr.indexOf(prev)] = mod; seenMod[key] = mod;
+                }
+                dupRemap[drop.id] = keep.id;
               });
+              const dupIds = Object.keys(dupRemap);
+              if (dupIds.length) {
+                (window.JUCUM_DATA.GROUPS || []).forEach(g => {
+                  const st = window.JUCUM_DATA.getGroupSettings(g.id);
+                  const ids = (st.activeModuleIds && st.activeModuleIds.length) ? st.activeModuleIds : (st.activeModuleId ? [st.activeModuleId] : []);
+                  if (ids.some(id => dupRemap[id])) {
+                    const next = [...new Set(ids.map(id => dupRemap[id] || id))];
+                    window.JUCUM_DATA.setGroupSettings(g.id, { activeModuleIds: next });
+                  }
+                });
+                if (window.JUCUM_SYNC.deleteModuleDb) dupIds.forEach(id => { try { window.JUCUM_SYNC.deleteModuleDb(id); } catch {} });
+              }
               // One-time upgrade: if the cloud copy of M1 has no URLs but the
               // built-in seed does, replace it with the URL-loaded seed.
               const cloudM1 = (CAT['pre-a1'] || []).find(m => m.id === 'pa1-m1');
@@ -73,6 +109,8 @@ function App() {
             }
             try { localStorage.setItem('jucum_module_catalog_cache', JSON.stringify(CAT)); } catch {}
           } catch (e) { console.warn('modules:', e.message); }
+          // Real stats (minutes, avg score, streak, completed modules) from progress
+          try { window.JUCUM_SYNC.computeStats(); } catch (e) { console.warn('stats:', e.message); }
         }
 
         setReady(true);
@@ -85,6 +123,7 @@ function App() {
 
   const onLogin = (u) => { setUser(u); localStorage.setItem('jucum_user', JSON.stringify(u)); };
   const onLogout = () => {
+    if (window.JUCUM_NAV) window.JUCUM_NAV.clearAll();
     setUser(null);
     localStorage.removeItem('jucum_user');
     document.body.removeAttribute('data-level');
@@ -93,7 +132,7 @@ function App() {
   if (!ready) {
     return (
       <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:14,fontFamily:'Nunito,sans-serif',color:'#777'}}>
-        <img src="logo-jucum.png" alt="JUCUM EC" style={{height:80}} />
+        <img src={window.JUCUM_LOGO || 'logo-jucum.png'} alt="JUCUM EC" style={{height:80}} />
         <div style={{fontWeight:700}}>Conectando con la base de datos…</div>
       </div>
     );
@@ -103,7 +142,9 @@ function App() {
   }
 
   if (!user) return <Login onLogin={onLogin} />;
-  if (user.role === 'teacher') return <TeacherDashboard onLogout={onLogout} />;
+  if (user.role === 'admin') return <AdminDashboard user={user} onLogout={onLogout} />;
+  if (user.role === 'dev') return <DevDashboard user={user} onLogout={onLogout} />;
+  if (user.role === 'teacher') return <TeacherDashboard onLogout={onLogout} user={user} />;
   return <StudentDashboard user={user} onLogout={onLogout} />;
 }
 

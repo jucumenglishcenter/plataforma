@@ -108,6 +108,7 @@
       assignToStudents: pp.assignToStudents !== false,    // true: actualiza la práctica del alumno
       bonusXp: pp.bonusXp != null ? pp.bonusXp : 0,
       note: pp.note || '',
+      guide: pp.guide || null,                            // instructivo editado (cómo practicar) — antes se perdía al guardar
       createdAt: new Date().toISOString() };
     all.unshift(e); savePracticePlans(all); return e.id;
   }

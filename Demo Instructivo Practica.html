@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Demo · Instructivo de práctica en la plataforma</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--blue:#1F3A8A;--blue2:#3F5BB8;--ink:#2A2A2A;--soft:#6b6b6b;--border:#E3DCC9;--bg:#F3F1EA;--purple:#6C4FB0;}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);font-family:'Nunito',sans-serif;color:var(--ink);}
+.top{background:#fff;border-bottom:1px solid #E6E2D6;padding:11px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;}
+.top .bd{font-family:'Fredoka',sans-serif;font-weight:600;font-size:16px;color:#16245A;}
+.seg{margin-left:auto;display:flex;background:#EEEAdd;border-radius:11px;padding:3px;gap:3px;}
+.seg button{border:none;background:transparent;font-family:inherit;font-weight:800;font-size:13px;color:#7a7363;padding:8px 15px;border-radius:9px;cursor:pointer;}
+.seg button.on{background:#fff;color:var(--blue);box-shadow:0 2px 6px rgba(0,0,0,.08);}
+.wrap{max-width:760px;margin:0 auto;padding:20px 16px 70px;}
+.coach{background:#EAF2FF;border:1px solid #BBD3F5;border-radius:13px;padding:12px 15px;font-size:13px;font-weight:700;color:#15356b;line-height:1.5;display:flex;gap:9px;margin-bottom:16px;}
+.scard{background:#fff;border:1px solid #EDE7D7;border-radius:15px;box-shadow:0 3px 14px rgba(20,20,40,.05);padding:16px;margin-bottom:16px;}
+.sec-title{font-family:'Fredoka',sans-serif;font-weight:600;font-size:15.5px;color:#16245A;margin-bottom:3px;}
+.muted{font-size:12.5px;color:#8a7f6a;font-weight:700;}
+.fld{display:flex;flex-direction:column;gap:5px;}
+.fld span{font-size:11px;font-weight:800;color:#8a7f6a;text-transform:uppercase;letter-spacing:.03em;}
+.fld input,.fld select{border:1px solid var(--border);border-radius:9px;padding:8px 10px;font:inherit;font-weight:600;font-size:13px;background:#fff;}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;}
+.act{display:flex;align-items:center;gap:10px;text-align:left;cursor:pointer;border:1px solid var(--border);background:#fff;border-radius:10px;padding:9px 12px;font:inherit;width:100%;}
+.act.on{border-color:#9FB0DA;background:#EEF2FC;}
+.cbx{width:20px;height:20px;border-radius:6px;border:2px solid #cdc4ad;background:#fff;color:#fff;font-size:13px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;}
+.act.on .cbx{border-color:var(--blue2);background:var(--blue2);}
+.actname{flex:1;font-weight:700;font-size:13px;}
+.actname small{display:block;font-size:11px;color:#8a7f6a;font-weight:700;}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;}
+.cal .h{font-size:10.5px;font-weight:800;color:#9b9484;text-align:center;padding:3px 0;}
+.cal button{min-height:36px;border:1px solid #ECE4D2;background:#fff;border-radius:8px;font-weight:800;font-size:12.5px;cursor:pointer;color:#2b2b2b;}
+.cal button.on{background:var(--purple);border-color:var(--purple);color:#fff;}
+.btn{border:none;cursor:pointer;font-family:'Fredoka',sans-serif;font-weight:600;font-size:13.5px;color:#fff;border-radius:11px;padding:10px 17px;}
+.btn.blue{background:linear-gradient(135deg,#3F5BB8,#0D1B5A);}
+.btn.green{background:linear-gradient(135deg,#2E7D32,#1B5E20);}
+.ghost{border:1.5px solid #cdb86a;background:#fff;color:#6b5a1f;font-family:inherit;font-weight:800;font-size:13px;border-radius:11px;padding:9px 15px;cursor:pointer;}
+.ghost.blue{border-color:#9FB0DA;color:#3F5BB8;}
+.dash{display:flex;align-items:center;gap:12px;background:#FBFAF5;border:1px dashed #D8CEB4;border-radius:12px;padding:15px;}
+.prev{border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.prev .ph{display:flex;align-items:center;gap:9px;padding:10px 13px;background:#EAF2FF;border-bottom:1px solid #CFE0F6;font-weight:800;font-size:13px;color:#15356b;}
+.prow{display:flex;gap:10px;align-items:flex-start;padding:8px 13px;border-top:1px solid #F0ECE2;}
+.prow:first-child{border-top:none;}
+.pn{width:22px;height:22px;flex-shrink:0;border-radius:7px;background:var(--blue);color:#fff;font-weight:800;font-size:12px;display:inline-flex;align-items:center;justify-content:center;}
+.pt{font-weight:800;font-size:13px;}
+.pd{font-size:12px;color:#6b6453;font-weight:600;margin-top:2px;}
+.flowtip{font-size:11.5px;color:#9b9080;font-weight:700;text-align:center;margin:-6px 0 16px;}
+/* student */
+.stud{background:#fff;border:1px solid #90CAF9;border-radius:15px;overflow:hidden;box-shadow:0 3px 14px rgba(20,20,40,.05);}
+.stud .hd{padding:12px 15px;display:flex;align-items:center;gap:11px;background:#EAF3FE;border-bottom:1px solid #C5DEF7;}
+.stud .hd b{flex:1;font-size:12.8px;font-weight:700;color:#1B3B6F;}
+.gbtn{display:flex;align-items:center;gap:11px;width:100%;text-align:left;cursor:pointer;border:none;border-bottom:1px solid #E7DFF5;background:linear-gradient(120deg,#F3EEFC,#FBFAFF);padding:13px 15px;font:inherit;}
+.gbtn .t{flex:1;}
+.gbtn .t b{font-weight:800;font-size:13.8px;color:#4A2E86;}
+.gbtn .t small{display:block;font-size:11.5px;font-weight:700;color:#7A66B0;}
+.gbtn .go{font-size:12px;font-weight:800;color:#fff;background:var(--purple);border-radius:16px;padding:7px 13px;white-space:nowrap;}
+.nrow{display:flex;flex-direction:column;gap:8px;padding:12px 13px;}
+.ncard{display:flex;align-items:center;gap:11px;border:1px solid #E6EEF8;border-radius:11px;padding:10px 12px;background:#fff;}
+.ncard .ico{font-size:17px;}
+.ncard .nf{flex:1;}.ncard .nf b{font-size:13px;}.ncard .nf span{display:block;font-size:11px;color:#8a7f6a;font-weight:700;}
+.ncard .arr{color:#9FB0DA;font-weight:800;}
+.daypill{font-size:11px;font-weight:700;color:#5B7BA8;text-transform:capitalize;}
+</style></head>
+<body>
+<div class="top">
+  <span class="bd">🧠 JUCUM · Instructivo de práctica</span>
+  <div class="seg">
+    <button id="seg-t" class="on" onclick="setRole('t')">👨‍🏫 Profesor</button>
+    <button id="seg-s" onclick="setRole('s')">🎓 Alumno</button>
+  </div>
+</div>
+<div class="wrap" id="view"></div>
+
+<script src="practice-guide.js"></script>
+<script>
+const LEVEL='a1', MODNAME='Daily Life & Personal Routines · Sesión 1';
+const ACTS=[
+ {type:'quizlet',label:'Repaso de vocabulario',group:null},
+ {type:'story',label:'Stories y Diálogos',group:null},
+ {type:'reading',label:'Comprensión lectora',group:null},
+ {type:'summary',label:'Resumen · Present Simple',group:'Present Simple'},
+ {type:'grammar',label:'P1 · Fill in',group:'Present Simple'},
+ {type:'grammar',label:'P3 · Transform',group:'Past Simple'},
+];
+const TEMAS=['Present Simple','Past Simple','Imperatives','Modals'];
+const PASTMOD={name:'Personal Identity',acts:[
+ {type:'summary',label:'Resumen · Verbo To be',group:'Verbo To be'},
+ {type:'grammar',label:'Fill in · To be',group:'Verbo To be'},
+ {type:'grammar',label:'Transform · To be',group:'Verbo To be'},
+ {type:'summary',label:'Resumen · There is/are',group:'There is / There are'},
+ {type:'grammar',label:'Fill in · There is/are',group:'There is / There are'},
+]};
+let reviewOn=false, reviewTema='', reviewPicks=[];
+let lang='es';
+function setLang(lg){ lang=lg; if(guide){guide.lang=lg;} render(); }
+const ICON={story:'📖',reading:'📕',listening:'🎧',grammar:'✍️',summary:'🧠',quizlet:'🗂️'};
+let role='t';
+let picked=[0,1,3,4]; // índices preseleccionados
+let days=[]; (function(){const d=new Date();for(let i=0;i<5;i++){const x=new Date(d);x.setDate(d.getDate()+i);days.push(x.getDate());}})();
+let guide=null;
+let note='Enfócate en la pronunciación 🎧';
+let favs=[]; // {id,name,level,guide}
+function editLines(i,v){ const k=lang==='en'?'linesEn':'linesEs'; guide.steps[i][k]=v.split('\n').filter(x=>x.trim()!==''); }
+function editL(i,lg,v){ guide.steps[i][lg==='en'?'linesEn':'linesEs']=v.split('\n').filter(x=>x.trim()!==''); }
+function editNote(i,v){ guide.steps[i][lang==='en'?'noteEn':'noteEs']=v; }
+function focusText(s){ if(s.type==='story'){const a=[];if(s.storyNo)a.push('Historia #'+s.storyNo);if(s.dialogNo)a.push('Diálogo #'+s.dialogNo);return a.join(' · ');} if(s.type==='reading'){return s.storyNo?('Historia #'+s.storyNo):'';} if(s.type==='summary'||s.type==='grammar'){return s.tema?('Tema: '+s.tema):'';} return ''; }
+function setMeta(i,k,v){ const s=guide.steps[i]; s[k]=(k==='storyNo'||k==='dialogNo')?(v?Number(v):null):(v||null); if(k==='tema')s.group=v||s.group; s.focus=focusText(s); render(); }
+function move(i,d){ const j=i+d; if(j<0||j>=guide.steps.length)return; const t=guide.steps[i];guide.steps[i]=guide.steps[j];guide.steps[j]=t; render(); }
+function delStep(i){ guide.steps.splice(i,1); render(); }
+function saveFav(){ if(!guide)buildGuide(); const name=prompt('Ponle un nombre a este instructivo favorito (para reconocerlo después):', guide.title||'Mi instructivo'); if(!name)return; favs.unshift({id:'gf'+Date.now(),name:name.trim(),level:LEVEL,guide:JSON.parse(JSON.stringify(guide))}); alert('⭐ Guardado en favoritos como “'+name.trim()+'”'); render(); }
+function loadFav(id){ const f=favs.find(x=>x.id===id); if(!f)return; guide=JSON.parse(JSON.stringify(f.guide)); render(); }
+
+function buildGuide(){
+ const pk=picked.map(i=>({type:ACTS[i].type,label:ACTS[i].label,group:ACTS[i].group}));
+ reviewPicks.forEach(j=>{const a=PASTMOD.acts[j];pk.push({type:a.type,label:a.label,group:a.group,review:true,moduleName:PASTMOD.name});});
+ guide=window.JUCUM_GUIDE.build(LEVEL,pk,MODNAME,{title:'Cómo practicar hoy',note,lang});
+}
+function togRev(j){ reviewPicks=reviewPicks.includes(j)?reviewPicks.filter(x=>x!==j):[...reviewPicks,j]; if(guide)buildGuide(); render(); }
+function toggleReview(){ reviewOn=!reviewOn; render(); }
+function setReviewTema(v){ reviewTema=v; render(); }
+function preview(){ if(!guide) buildGuide(); window.JUCUM_GUIDE.openOverlay(guide,{studentName:'Milagros'}); }
+
+function teacherView(){
+ const cells=[]; const today=new Date(); const mfirst=new Date(today.getFullYear(),today.getMonth(),1);
+ const start=new Date(mfirst); start.setDate(1-((mfirst.getDay()+6)%7+1)+1);
+ for(let i=0;i<35;i++){const dd=new Date(today.getFullYear(),today.getMonth(),1+i);cells.push(dd);}
+ return `
+ <div class="coach"><span style="font-size:18px;">👆</span><div>Así crea el profesor el instructivo. Marca actividades, elige los días y toca <b>Generar instructivo</b>. Luego <b>previsualiza</b> lo que verá el alumno.</div></div>
+ <div class="scard">
+   <div class="sec-title">📝 Set de práctica</div>
+   <div class="grid3" style="margin-top:8px;">
+     <label class="fld"><span>Título</span><input value="Práctica de la semana"></label>
+     <label class="fld"><span>Grupo</span><select><option>Grupo Mañana · A1</option></select></label>
+     <label class="fld"><span>Módulo</span><select><option>${MODNAME}</option></select></label>
+   </div>
+ </div>
+ <div class="scard">
+   <div class="sec-title">1 · Elige las actividades</div>
+   <div style="display:flex;flex-direction:column;gap:7px;margin-top:8px;">
+     ${ACTS.map((a,i)=>{const on=picked.includes(i);return `<button class="act ${on?'on':''}" onclick="togAct(${i})"><span class="cbx">${on?'✓':''}</span><span style="font-size:15px">${ICON[a.type]}</span><span class="actname">${a.label}${a.group?`<small>${a.group}</small>`:''}</span></button>`;}).join('')}
+   </div>
+   <div class="muted" style="margin-top:9px;">${picked.length} actividad(es) elegida(s)</div>
+ </div>
+ <div class="scard">
+   <button onclick="toggleReview()" style="display:flex;align-items:center;gap:11px;width:100%;text-align:left;cursor:pointer;border:none;background:transparent;font:inherit;padding:0;">
+     <span style="width:24px;height:24px;border-radius:7px;background:${reviewOn?'#E67E00':'#F0E6D4'};color:#fff;font-size:15px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;">${reviewOn?'✓':'＋'}</span>
+     <div style="flex:1;"><div class="sec-title" style="margin:0;">🔁 Integrar repaso de otro módulo</div><div class="muted">¿Un tema de un módulo anterior que aún no dominan? Agrégalo. Al alumno le saldrá “Repasamos nuevamente el módulo…”.</div></div>
+   </button>
+   ${reviewOn?`
+   <div style="margin-top:13px;border-top:1px dashed var(--border);padding-top:13px;">
+     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+       <label class="fld"><span>1) Módulo a repasar</span><select disabled><option>${PASTMOD.name}</option></select></label>
+       <label class="fld"><span>2) Tema</span><select onchange="setReviewTema(this.value)"><option value="">— Todos los temas —</option>${[...new Set(PASTMOD.acts.map(a=>a.group))].map(t=>`<option value="${t}" ${reviewTema===t?'selected':''}>${t}</option>`).join('')}</select></label>
+     </div>
+     <div style="font-size:11.5px;font-weight:800;color:#8a7f6a;text-transform:uppercase;margin:12px 0 6px;">3) Material a practicar</div>
+     <div style="display:flex;flex-direction:column;gap:7px;">
+       ${PASTMOD.acts.map((a,j)=>(!reviewTema||a.group===reviewTema)?`<button class="act ${reviewPicks.includes(j)?'on':''}" style="${reviewPicks.includes(j)?'border-color:#F2C99A;background:#FFF6EC;':''}" onclick="togRev(${j})"><span class="cbx" style="${reviewPicks.includes(j)?'border-color:#E67E00;background:#E67E00;':''}">${reviewPicks.includes(j)?'✓':''}</span><span style="font-size:15px">${ICON[a.type]}</span><span class="actname">${a.label}<small>${a.group}</small></span></button>`:'').join('')}
+     </div>
+     <div class="muted" style="margin-top:9px;color:#9c4a00;">${reviewPicks.length} material(es) de repaso agregado(s)</div>
+   </div>`:''}
+ </div>
+ <div class="scard">
+   <div class="sec-title">2 · ¿Qué días aplica?</div>
+   <div class="muted" style="margin:2px 0 10px;">Toca los días (se mantiene igual que antes).</div>
+   <div class="cal">
+     ${['L','M','M','J','V','S','D'].map(h=>`<div class="h">${h}</div>`).join('')}
+     ${cells.map(dd=>{const on=days.includes(dd.getDate());return `<button class="${on?'on':''}" onclick="togDay(${dd.getDate()})">${dd.getDate()}</button>`;}).join('')}
+   </div>
+   <div class="muted" style="text-align:right;margin-top:8px;color:var(--purple);">${days.length} día(s) seleccionado(s)</div>
+ </div>
+ <div class="scard">
+   <div class="sec-title">3 · Instructivo · cómo practicar</div>
+   <div class="muted" style="margin:2px 0 10px;">Trae los <b>pasos oficiales por nivel</b>. Edítalos y guárdalos como <b>favoritos</b> (con nombre) para reutilizar.</div>
+   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#FBF7FF;border:1px solid #E2D5F3;border-radius:11px;padding:10px 12px;margin-bottom:12px;">
+     <span style="font-size:16px;">⭐</span><span style="font-size:12.5px;font-weight:800;color:#5B3FA0;">Plantillas favoritas:</span>
+     ${favs.length===0?`<span style="font-size:12px;font-weight:700;color:#9b8fc0;">aún no tienes — genera y guarda una abajo</span>`
+       :`<select onchange="if(this.value){loadFav(this.value);this.value='';}" style="flex:1;min-width:200px;max-width:320px;border:1px solid var(--border);border-radius:9px;padding:8px 10px;font:inherit;font-weight:600;font-size:13px;"><option value="">＋ Usar una plantilla favorita…</option>${favs.map(f=>`<option value="${f.id}">${f.name} · ${(f.level||'').toUpperCase()}</option>`).join('')}</select>`}
+   </div>
+   ${!guide?`
+   <div class="dash"><span style="font-size:26px;">📋</span><div style="flex:1;font-size:13px;font-weight:700;color:#6b6453;">Aún no has generado el instructivo. Elige actividades y genera los pasos oficiales del nivel.</div><button class="btn blue" onclick="gen()">⚡ Generar instructivo</button></div>`
+   :`
+   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;background:#F4F7FD;border:1px solid #D8E3F5;border-radius:11px;padding:9px 12px;">
+     <span style="font-size:12.5px;font-weight:800;color:#1F3A8A;">🌐 Idioma:</span>
+     ${[['es','Español'],['en','English'],['par','Paralelo (EN + ES)']].map(([k,lbl])=>`<button onclick="setLang('${k}')" style="border:1.5px solid ${lang===k?'#1F3A8A':'#C9D6F0'};background:${lang===k?'#1F3A8A':'#fff'};color:${lang===k?'#fff':'#3A4A66'};font-family:inherit;font-weight:800;font-size:12px;padding:6px 12px;border-radius:18px;cursor:pointer;">${lbl}</button>`).join('')}
+   </div>
+   <div style="display:flex;flex-direction:column;gap:10px;">
+     ${guide.steps.map((s,i)=>`<div style="border:1px solid var(--border);border-radius:12px;padding:11px 13px;background:#fff;">
+       <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px;"><span class="pn">${i+1}</span><div style="flex:1;font-weight:800;font-size:13.5px;">${s.emoji} ${s.title} ${s.group?`<span style="color:var(--purple);font-size:11px;">· ${s.group}</span>`:''}</div>
+       <button onclick="move(${i},-1)" ${i===0?'disabled':''} style="border:1px solid var(--border);background:#fff;border-radius:7px;width:28px;height:28px;cursor:pointer;font-weight:800;${i===0?'opacity:.4;':''}">↑</button>
+       <button onclick="move(${i},1)" ${i===guide.steps.length-1?'disabled':''} style="border:1px solid var(--border);background:#fff;border-radius:7px;width:28px;height:28px;cursor:pointer;font-weight:800;${i===guide.steps.length-1?'opacity:.4;':''}">↓</button>
+       <button onclick="delStep(${i})" style="border:1px solid #E2B6AE;background:#fff;border-radius:7px;width:28px;height:28px;cursor:pointer;color:#C0392B;">🗑️</button></div>
+       ${(s.type==='summary'||s.type==='grammar')?`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;"><span style="font-size:11.5px;font-weight:800;color:var(--purple);">📚 Tema:</span><select onchange="setMeta(${i},'tema',this.value)" style="border:1px solid var(--border);border-radius:9px;padding:6px 9px;font:inherit;font-weight:600;font-size:12.5px;"><option value="">— Sin tema específico —</option>${TEMAS.map(t=>`<option value="${t}" ${s.tema===t?'selected':''}>${t}</option>`).join('')}</select></div>`:''}
+       ${(s.type==='story'||s.type==='reading')?`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;"><span style="font-size:11.5px;font-weight:800;color:var(--purple);">📖 ¿Qué leer?:</span><select onchange="setMeta(${i},'storyNo',this.value)" style="border:1px solid var(--border);border-radius:9px;padding:6px 9px;font:inherit;font-weight:600;font-size:12.5px;"><option value="">Historia —</option>${[1,2,3,4].map(n=>`<option value="${n}" ${s.storyNo===n?'selected':''}>Historia #${n}</option>`).join('')}</select>${s.type==='story'?`<select onchange="setMeta(${i},'dialogNo',this.value)" style="border:1px solid var(--border);border-radius:9px;padding:6px 9px;font:inherit;font-weight:600;font-size:12.5px;"><option value="">Diálogo —</option>${[1,2,3,4].map(n=>`<option value="${n}" ${s.dialogNo===n?'selected':''}>Diálogo #${n}</option>`).join('')}</select>`:''}</div>`:''}
+       ${s.focus?`<div style="display:inline-block;font-size:12px;font-weight:800;color:#fff;background:linear-gradient(135deg,#6C4FB0,#4A2E86);border-radius:8px;padding:4px 11px;margin-bottom:7px;">🎯 ${s.focus}</div>`:''}
+       <div style="font-size:10.5px;font-weight:800;color:#8a7f6a;text-transform:uppercase;margin-bottom:3px;">Pasos · ${lang==='en'?'English':lang==='par'?'English + traducción':'Español'} (uno por línea)</div>
+       ${lang!=='par'?`<textarea oninput="editLines(${i},this.value)" rows="${Math.max(2,((lang==='en'?s.linesEn:s.linesEs)||[]).length)}" style="width:100%;border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-size:12.5px;font-family:inherit;font-weight:600;line-height:1.5;resize:vertical;color:#444;">${((lang==='en'?s.linesEn:s.linesEs)||[]).join('\n')}</textarea>`
+       :`<textarea oninput="editL(${i},'en',this.value)" rows="${Math.max(2,(s.linesEn||[]).length)}" style="width:100%;border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-size:12.5px;font-family:inherit;font-weight:600;line-height:1.5;resize:vertical;color:#444;">${(s.linesEn||[]).join('\n')}</textarea><div style="font-size:10px;font-weight:800;color:#8a7f6a;text-transform:uppercase;margin:6px 0 3px;">Traducción · Español</div><textarea oninput="editL(${i},'es',this.value)" rows="${Math.max(2,(s.linesEs||[]).length)}" style="width:100%;border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-size:12.5px;font-family:inherit;font-weight:600;line-height:1.5;resize:vertical;color:#777;font-style:italic;">${(s.linesEs||[]).join('\n')}</textarea>`}
+       <div style="display:flex;align-items:center;gap:8px;margin-top:7px;"><span style="font-size:12px;font-weight:800;color:#9c6a00;">📌</span><input value="${((lang==='en'?s.noteEn:s.noteEs)||'').replace(/"/g,'&quot;')}" oninput="editNote(${i},this.value)" placeholder="Nota del paso (opcional)" style="flex:1;border:1px solid #F2DFB0;background:#FFFDF7;border-radius:8px;padding:6px 9px;font-size:12px;font-family:inherit;font-weight:700;color:#9c6a00;"></div>
+     </div>`).join('')}
+   </div>
+   <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+     <button class="ghost blue" onclick="preview()">👁️ Ver como lo verá el alumno</button>
+     <button class="ghost" style="border-color:#C9A8E8;color:#5B3FA0;" onclick="saveFav()">⭐ Guardar como favorito</button>
+     <button class="ghost" onclick="gen()">↺ Restaurar pasos oficiales</button>
+   </div>`}
+ </div>
+ <div class="scard">
+   <div class="sec-title">4 · ¿Cómo se usa?</div>
+   <div class="act on" style="margin-top:8px;cursor:default;"><span style="font-size:18px;">👥</span><div class="actname">Asignar a los alumnos<small>Aparece como “Tu práctica de hoy” en su panel, solo los días elegidos.</small></div><span style="color:#3F5BB8;font-weight:900;">●</span></div>
+   <label class="fld" style="margin-top:12px;"><span>Nota para los alumnos (opcional)</span><input value="${note}" oninput="note=this.value;if(guide)buildGuide();render()"></label>
+   <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">
+     <button class="btn green" onclick="alert('✅ Set guardado y asignado. El alumno ya verá su instructivo en Tu práctica de hoy.')">💾 Guardar set de práctica</button>
+   </div>
+ </div>
+ <div class="flowtip">— Cambia a 🎓 <b>Alumno</b> (arriba) para ver cómo lo recibe —</div>`;
+}
+
+function studentView(){
+ return `
+ <div class="coach"><span style="font-size:18px;">👆</span><div>Así lo ve el alumno en su panel. Toca <b>“Cómo practicar hoy”</b> para abrir el instructivo visual con los pasos en orden.</div></div>
+ <div style="font-family:'Fredoka',sans-serif;font-weight:600;font-size:18px;color:#1B3B6F;margin:6px 0 10px;">🎯 Tu práctica de hoy</div>
+ <div class="stud">
+   <div class="hd"><span style="font-size:20px;">🗓️</span><b>Lo que tu profesor te dejó para hoy</b><span class="daypill">${['domingo','lunes','martes','miércoles','jueves','viernes','sábado'][new Date().getDay()]}</span></div>
+   <button class="gbtn" onclick="studentOpen()"><span style="font-size:22px;">📋</span><div class="t"><b>Cómo practicar hoy</b><small>Abre el instructivo con los pasos en orden</small></div><span class="go">Ver →</span></button>
+   <div class="nrow">
+     ${picked.map(i=>{const a=ACTS[i];return `<div class="ncard"><span class="ico">${ICON[a.type]}</span><div class="nf"><b>${a.label}</b><span>Indicado por tu profesor</span></div><span class="arr">→</span></div>`;}).join('')}
+   </div>
+ </div>
+ <div class="flowtip" style="margin-top:18px;">— También puede 🖨️ Imprimir / PDF desde el instructivo —</div>`;
+}
+function studentOpen(){
+ if(!guide) buildGuide();
+ // simular enlaces "Empezar" en cada paso
+ const links=guide.steps.map(()=> '#');
+ window.JUCUM_GUIDE.openOverlay(guide,{links,studentName:'Milagros'});
+}
+
+function togAct(i){ picked=picked.includes(i)?picked.filter(x=>x!==i):[...picked,i].sort(); if(guide)buildGuide(); render(); }
+function togDay(d){ days=days.includes(d)?days.filter(x=>x!==d):[...days,d]; render(); }
+function gen(){ buildGuide(); render(); }
+function setRole(r){ role=r; document.getElementById('seg-t').classList.toggle('on',r==='t'); document.getElementById('seg-s').classList.toggle('on',r==='s'); render(); }
+function render(){ document.getElementById('view').innerHTML = role==='t'?teacherView():studentView(); }
+buildGuide(); render();
+</script>
+</body></html>
