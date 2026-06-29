@@ -207,9 +207,11 @@
    * mensajito de felicitación que aparece una vez y desaparece) */
   function pendingConfirmCelebration(studentId) {
     const seen = (() => { try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '{}'); } catch { return {}; } })();
-    const conf = getStudentPayments(studentId).find(p => p.status === 'confirmado');
-    if (conf && !seen[conf.id]) return conf;
-    return null;
+    // El primer pago confirmado AÚN NO visto. Antes tomaba solo el primero del
+    // arreglo: si ese ya estaba visto, los pagos confirmados de meses siguientes
+    // nunca felicitaban.
+    const conf = getStudentPayments(studentId).filter(p => p.status === 'confirmado').find(p => !seen[p.id]);
+    return conf || null;
   }
   function markCelebrationSeen(paymentId) {
     let seen = {}; try { seen = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}'); } catch {}

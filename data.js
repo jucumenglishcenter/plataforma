@@ -58,6 +58,16 @@ function promoteStudent(studentId, newLevel, newGroupId, examScore) {
   return true;
 }
 
+/* ── Día calendario en horario de Perú (UTC−5) ───────────────────────
+ * TODA conversión fecha→día (hoy, semana, vencimientos) debe pasar por aquí.
+ * Antes se usaba el día UTC, que cambia a las ~7 PM de Perú y "adelantaba" hoy,
+ * la racha, la meta diaria, la liga semanal y los repasos. */
+function peruNow() { return new Date(Date.now() - 5 * 3600000); }   // campos UTC = hora Perú
+function peruDayStr(t) {
+  const ms = (t == null) ? Date.now() : (typeof t === 'number' ? t : Date.parse(t));
+  return new Date(ms - 5 * 3600000).toISOString().slice(0, 10);
+}
+
 /* Eligibility: completed all modules of current level + activated by teacher */
 function isEligibleForExam(student) {
   const mods = MODULE_CATALOG[student.level] || [];
@@ -785,7 +795,7 @@ function markActivityComplete(studentId, moduleId, activityId, score, minutes, m
     pct,
     passed: entryPassed({ score: finalScore }, level, _stu.group),   // hint; el valor real se re-juzga al leer
   };
-  const today = new Date().toISOString().slice(0, 10);
+  const today = peruDayStr();   // día en hora Perú (no UTC): la meta de hoy corta a medianoche de Lima
   if (prev.lastDay !== today) { prev.todayMinutes = 0; prev.lastDay = today; }
   prev.todayMinutes += (minutes || 0);
   all[studentId] = prev;
@@ -941,10 +951,10 @@ try { localStorage.setItem('jucum_module_catalog_cache', JSON.stringify(MODULE_C
 /* ── Mejora E · Weekly league (resets every Monday) ─────────────── */
 const LEAGUE_KEY = 'jucum_league_v1';
 function weekId() {
-  const d = new Date();
-  const day = (d.getDay() + 6) % 7;          // 0 = Monday
-  d.setDate(d.getDate() - day);
-  return d.toISOString().slice(0, 10);       // Monday of this week
+  const p = peruNow();                       // "ahora" en Perú (campos UTC = hora Perú)
+  const day = (p.getUTCDay() + 6) % 7;       // 0 = lunes
+  p.setUTCDate(p.getUTCDate() - day);
+  return p.toISOString().slice(0, 10);       // lunes de esta semana (fecha Perú)
 }
 function getWeeklyXP(studentId) {
   let all = {};
@@ -969,7 +979,7 @@ function getWeeklyXPFromProgress(student) {
   const monday = weekId();
   let xp = 0;
   for (const [key, entry] of Object.entries(progress.completed || {})) {
-    if (!entry || !entry.date || String(entry.date).slice(0, 10) < monday) continue;
+    if (!entry || !entry.date || peruDayStr(entry.date) < monday) continue;
     const [modId, actId] = key.split(':');
     const mods = MODULE_CATALOG[student.level] || [];
     const act = mods.find(m => m.id === modId)?.activities.find(a => a.id === actId);
@@ -987,8 +997,8 @@ function getWeeklyRanking(groupId) {
     .sort((a, b) => b.xp - a.xp);
 }
 function daysUntilMonday() {
-  const d = new Date();
-  return ((8 - d.getDay()) % 7) || 7;
+  const p = peruNow();
+  return ((8 - p.getUTCDay()) % 7) || 7;
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -1003,12 +1013,12 @@ function daysUntilMonday() {
 const LEAGUE_STATE_KEY = 'jucum_league_state_v1';
 const LEAGUE_SCENARIOS = ['theme-gold','theme-mountains','theme-night','theme-aurora','theme-ocean','theme-party'];
 function lastWeekId() {                       // lunes de la semana ANTERIOR (la cerrada)
-  const d = new Date(); const day = (d.getDay() + 6) % 7;
-  d.setDate(d.getDate() - day - 7);
-  return d.toISOString().slice(0, 10);
+  const p = peruNow(); const day = (p.getUTCDay() + 6) % 7;
+  p.setUTCDate(p.getUTCDate() - day - 7);
+  return p.toISOString().slice(0, 10);
 }
 function _nextMonday(mondayStr) {
-  const d = new Date(mondayStr + 'T00:00:00'); d.setDate(d.getDate() + 7);
+  const d = new Date(mondayStr + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 7);
   return d.toISOString().slice(0, 10);
 }
 /* XP de un alumno DENTRO de una semana concreta [lunes, lunes+7) */
@@ -1018,7 +1028,7 @@ function getWeeklyXPForWeek(student, mondayStr) {
   let xp = 0;
   for (const [key, entry] of Object.entries(progress.completed || {})) {
     if (!entry || !entry.date) continue;
-    const day = String(entry.date).slice(0, 10);
+    const day = peruDayStr(entry.date);
     if (day < mondayStr || day >= end) continue;
     const [modId, actId] = key.split(':');
     const mods = MODULE_CATALOG[student.level] || [];
@@ -1173,7 +1183,7 @@ function getStudentMastery(student) {
     // PASO 2 · cuenta como hecha si APROBÓ, o es participación (sin nota o baja exigencia)
     if (e && (entryPassed(e, student.level, student.group) || low)) {
       done++;
-      if (typeof e.score === 'number' && !low) {
+      if (typeof e.score === 'number' && !low && a.type !== 'story') {
         const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100);
         scoreSum += pct; scoreN++;
       } else { scoreSum += 70; scoreN++; } // participación (story / resumen / quizlet / sin nota)
@@ -1241,7 +1251,7 @@ function getStudentReadiness(student) {
       const e = completed[`${mod.id}:${a.id}`];
       if (e && entryPassed(e, student.level, student.group)) {
         done++;
-        if (typeof e.score === 'number') { const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100); sSum += pct; sN++; }
+        if (typeof e.score === 'number' && a.type !== 'story' && !isLowStakesType(a.type)) { const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100); sSum += pct; sN++; }
         else { sSum += 70; sN++; }
       }
     }));
@@ -1369,7 +1379,7 @@ function getStudentMonthlyPractice(student) {
   Object.values(completed).forEach(e => {
     if (!e || !e.date) return;
     const d = new Date(e.date);
-    if (d.getFullYear() === y && d.getMonth() === mo) { days.add(String(e.date).slice(0, 10)); minutes += e.minutes || 0; }
+    if (d.getFullYear() === y && d.getMonth() === mo) { days.add(peruDayStr(e.date)); minutes += e.minutes || 0; }
   });
   const targetDays = Math.max(1, Math.round(elapsedDays * 5 / 7));
   const daysStudied = days.size;
@@ -1389,7 +1399,8 @@ function getStudentTrends(student) {
   Object.entries(completed).forEach(([k, e]) => {
     if (!e || typeof e.score !== 'number' || !e.date) return;
     const t = typeOf[k];
-    let comp = t === 'listening' ? 'listening' : t === 'reading' ? 'reading' : (t === 'grammar' || t === 'summary') ? 'grammar' : t === 'story' ? 'speaking' : null;
+    if (t === 'story') return; // lectura: sin nota real, no alimenta tendencia (Speaking se mide por la evaluación del profesor)
+    let comp = t === 'listening' ? 'listening' : t === 'reading' ? 'reading' : (t === 'grammar' || t === 'summary') ? 'grammar' : null;
     if (!comp) return;
     const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100);
     series[comp].push({ date: e.date, pct });
@@ -1435,7 +1446,7 @@ function getModuleStats(student, module) {
   (module.activities || []).forEach(a => {
     total++;
     const e = completed[`${module.id}:${a.id}`];
-    if (e && entryPassed(e, student.level, student.group)) { done++; if (typeof e.score === 'number') { const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100); sSum += pct; sN++; } else { sSum += 70; sN++; } }
+    if (e && entryPassed(e, student.level, student.group)) { done++; if (typeof e.score === 'number' && a.type !== 'story' && !isLowStakesType(a.type)) { const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100); sSum += pct; sN++; } else { sSum += 70; sN++; } }
   });
   const coverage = total ? done / total : 0;
   const quality = sN ? (sSum / sN) / 100 : 0;
@@ -1525,8 +1536,8 @@ const REVIEW_KEY = 'jucum_reviews_v1';
 const REVIEW_LADDER_DAYS = [7, 21, 42];   // aprobada: 1 sem → 3 sem → 6 sem
 const REVIEW_RELEARN_DAYS = 3;            // reprobó o bajó → vuelve en 3 días
 
-function _todayStr() { return new Date().toISOString().slice(0, 10); }
-function _addDays(days) { const d = new Date(); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); }
+function _todayStr() { return peruDayStr(); }
+function _addDays(days) { return peruDayStr(Date.now() + days * 86400000); }
 function _daysBetween(aStr, bStr) { return Math.round((new Date(bStr) - new Date(aStr)) / 86400000); }
 
 function getReviews(studentId) {
@@ -1852,7 +1863,9 @@ function latentGate(mod, a, i, progress, level) {
   const acts = mod.activities || [];
   const prev = i > 0 ? acts[i - 1] : null;
   const gate = prev ? (progress.completed || {})[`${mod.id}:${prev.id}`] : null;
-  if (!gate || !gate.date) return { latent: true, ready: false, daysLeft: null, availableOn: null }; // aún no aprueba la previa
+  // El reloj de 7 días arranca al APROBAR la previa. Si aún no la aprueba, no es
+  // "latente en espera": que el desbloqueo secuencial normal la gobierne.
+  if (!gate || !gate.date || !entryPassed(gate, level)) return { latent: false, ready: true, daysLeft: 0, availableOn: null };
   const avail = new Date(new Date(gate.date).getTime() + LATENT_DELAY_DAYS * 86400000);
   const now = new Date();
   const daysLeft = Math.ceil((avail - now) / 86400000);

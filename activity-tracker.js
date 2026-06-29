@@ -21,6 +21,9 @@
   if (!m) return;
   const pageType = m[1];
 
+  // Día en horario de Perú (UTC−5): el "día de hoy" para los minutos debe cortar
+  // a medianoche de Lima, no a medianoche UTC (~7 PM Perú).
+  const peruDayStr = () => new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
   // Local copies of platform data helpers (data.js isn't loaded here)
   const SETTINGS_KEY = 'jucum_group_settings_v1';
   const PROGRESS_KEY = 'jucum_student_progress_v1';
@@ -86,7 +89,7 @@
     const key = `${moduleId}:${activityId}`;
     const already = !!prog.completed[key];
     prog.completed[key] = { score, minutes, date: new Date().toISOString() };
-    const today = new Date().toISOString().slice(0, 10);
+    const today = peruDayStr();
     if (prog.lastDay !== today) { prog.todayMinutes = 0; prog.lastDay = today; }
     prog.todayMinutes += minutes;
     saveProgress(user.studentId, prog);
@@ -108,7 +111,7 @@
     if (completed || activeSeconds < 60) return;
     const minutes = Math.round(activeSeconds / 60);
     const prog = getProgress(user.studentId);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = peruDayStr();
     if (prog.lastDay !== today) { prog.todayMinutes = 0; prog.lastDay = today; }
     prog.todayMinutes += minutes;
     saveProgress(user.studentId, prog);

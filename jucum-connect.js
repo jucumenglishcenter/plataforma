@@ -196,10 +196,10 @@
           if (!done && activeSec >= AUTO_DONE_SEC && !teacher && !exam) {
             done = true; // marcada como practicada (desbloquea la siguiente) — sin cooldown ni tarjeta
             try { if (window.parent && window.parent !== window) window.parent.postMessage({ source: 'jucum-connect', type: 'done', uid: uid, mod: modId, act: actId, score: null, minutes: Math.max(1, capMin) }, '*'); } catch (e) {}
-            if (!demo) pushProgress(100, Math.max(1, capMin));
+            if (!demo) pushProgress(null, Math.max(1, capMin)); // lectura = participación (sin nota): no infla dominio ni Speaking
           }
           // refresca el tiempo de lectura cada 2 min (hasta el tope) para que el profesor lo vea
-          if (!demo && done && activeSec % 120 === 0 && Math.round(activeSec / 60) <= READING_CAP_MIN) pushProgress(100, capMin);
+          if (!demo && done && activeSec % 120 === 0 && Math.round(activeSec / 60) <= READING_CAP_MIN) pushProgress(null, capMin);
           if (teacher && activeSec % 60 === 0) logClass();
         }
         updateChip();
@@ -335,7 +335,7 @@
     // Guardar tiempo parcial al salir (si practicó al menos 1 min y no completó)
     window.addEventListener('beforeunload', function () {
       if (teacher) { logClass(); return; }
-      if (IS_STORY) { if (!demo && activeSec >= 60) pushProgress(100, Math.min(READING_CAP_MIN, Math.round(activeSec / 60))); return; }
+      if (IS_STORY) { if (!demo && activeSec >= 60) pushProgress(null, Math.min(READING_CAP_MIN, Math.round(activeSec / 60))); return; }
       if (done || activeSec < 60) return;
       pushProgress(0, Math.round(activeSec / 60));
     });

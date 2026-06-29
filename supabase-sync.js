@@ -56,8 +56,8 @@
       progByUser[p.user_id].completed[`${p.module_id}:${p.activity_id}`] = {
         score: p.score, minutes: p.minutes, date: p.completed_at,
       };
-      const day = (p.completed_at || '').slice(0,10);
-      const today = new Date().toISOString().slice(0,10);
+      const day = p.completed_at ? dayStr(Date.parse(p.completed_at)) : '';   // día en hora Perú
+      const today = dayStr(Date.now());
       if (day === today) { progByUser[p.user_id].todayMinutes += (p.minutes||0); progByUser[p.user_id].lastDay = today; }
     });
     write(KEYS.progress, progByUser);
@@ -304,14 +304,14 @@
       const sb = SB();
       const { data: prog, error } = await sb.from('progress').select('*');
       if (error) return false;
-      const today = new Date().toISOString().slice(0, 10);
+      const today = dayStr(Date.now());   // día en hora Perú
       const cloud = {};
       (prog || []).forEach(p => {
         cloud[p.user_id] = cloud[p.user_id] || { completed:{}, todayMinutes:0, lastDay:null };
         cloud[p.user_id].completed[`${p.module_id}:${p.activity_id}`] = {
           score: p.score, minutes: p.minutes, date: p.completed_at,
         };
-        const day = (p.completed_at || '').slice(0,10);
+        const day = p.completed_at ? dayStr(Date.parse(p.completed_at)) : '';
         if (day === today) { cloud[p.user_id].todayMinutes += (p.minutes||0); cloud[p.user_id].lastDay = today; }
       });
       // La nube manda, pero conservamos los avances locales recién hechos que
@@ -435,14 +435,6 @@
       const doneMod = m => m.activities.every(a => completed[`${m.id}:${a.id}`]);
       const completedModules = mods.filter(doneMod).length;
 
-      // achievements derived from real progress
-      const ach = [];
-      if (entries.length > 0) ach.push('first');
-      if (streak >= 3) ach.push('streak');
-      if (perfect) ach.push('perfect');
-      const m1 = mods.find(m => m.id === 'pa1-m1');
-      if (m1 && doneMod(m1)) ach.push('identity');
-
       s.totalMinutes = minutes;
       s.avgScore = scoreN ? Math.round(scoreSum / scoreN) : 0;
       s.streak = streak;
@@ -450,7 +442,10 @@
       s.lastActiveDays = lastTs
         ? Math.max(0, Math.round((Date.parse(dayStr(Date.now())) - Date.parse(dayStr(lastTs))) / DAY))
         : 0; // alumno nuevo sin práctica todavía: NO mostrar "hace 99 días" ni alarma
-      s.achievements = ach;
+      // Logros = las medallas REALMENTE conseguidas (las mismas que ve el alumno),
+      // calculadas con las estadísticas recién asignadas arriba. Antes solo se
+      // regeneraban 4 claves sueltas → el XP por logros no cuadraba con las medallas.
+      try { s.achievements = D.earnedMedals(s); } catch (e) { s.achievements = []; }
     });
   }
 
