@@ -1231,7 +1231,7 @@ const COMPETENCIES = [
   { key:'listening', label:'Comprensión auditiva', icon:'🎧', types:['listening'] },
   { key:'reading',   label:'Comprensión lectora',  icon:'📖', types:['reading'] },
   { key:'grammar',   label:'Gramática',            icon:'📝', types:['grammar','summary'] },
-  { key:'speaking',  label:'Speaking',             icon:'🗣️', types:['story'] },
+  { key:'speaking',  label:'Speaking',             icon:'🗣️', types:[], byTeacher:true, optionalLevels:['pre-a1'] },
 ];
 
 function getStudentReadiness(student) {
@@ -1269,6 +1269,10 @@ function getStudentReadiness(student) {
       comp.speaking = comp.speaking == null ? evalScore : Math.round(comp.speaking * 0.5 + evalScore * 0.5);
     }
   } catch {}
+
+  // Speaking: no hay material en la plataforma → se evalúa con el profesor (presencial) y se
+  // practica por TAREAS. En los niveles donde es opcional (Pre-A1) no se exige ni se muestra.
+  if ((COMPETENCIES.find(c => c.key === 'speaking').optionalLevels || []).includes(student.level)) delete comp.speaking;
 
   const compVals = COMPETENCIES.map(c => comp[c.key]).filter(v => typeof v === 'number');
   const practiceAvg = compVals.length ? Math.round(compVals.reduce((a, b) => a + b, 0) / compVals.length) : 0;

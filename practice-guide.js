@@ -308,7 +308,9 @@
     var prev = document.getElementById('jg-overlay'); if (prev) prev.remove();
     var ov = document.createElement('div');
     ov.id = 'jg-overlay';
-    ov.setAttribute('style', 'position:fixed;inset:0;z-index:9999;background:rgba(18,22,40,.62);backdrop-filter:blur(3px);overflow-y:auto;overflow-x:hidden;padding:22px 14px 60px;box-sizing:border-box;');
+    // z-index al tope: debe quedar POR ENCIMA del visualizador "Ver como alumno"
+    // (que usa 2147483601). Así la guía se ve DENTRO del visualizador, no solo al salir.
+    ov.setAttribute('style', 'position:fixed;inset:0;z-index:2147483647;background:rgba(18,22,40,.62);backdrop-filter:blur(3px);overflow-y:auto;overflow-x:hidden;padding:22px 14px 60px;box-sizing:border-box;');
     ov.innerHTML =
       '<style>' + CSS + '</style>' +
       '<div class="jg-scope" style="position:relative;">' +

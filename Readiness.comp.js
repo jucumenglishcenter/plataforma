@@ -24,6 +24,9 @@ function ReadinessCard({ student, forTeacher }) {
   const { getStudentReadiness, COMPETENCIES } = window.JUCUM_DATA;
   const r = getStudentReadiness(student);
   const apt = r.apt;
+  // Speaking es opcional en algunos niveles (Pre-A1): no se muestra ni se exige.
+  const comps = COMPETENCIES.filter(c => !(c.optionalLevels || []).includes(student.level));
+  const showSpeakingNote = comps.some(c => c.key === 'speaking');
   const barColor = apt ? '#2EA84B' : r.overall >= 50 ? '#F9A825' : '#E53935';
 
   return (
@@ -56,7 +59,14 @@ function ReadinessCard({ student, forTeacher }) {
           <span className="mm-chip" style={{background:'#FFF8E1', color:'#E65100'}}>Aún no cubre la mayoría de los temas</span>}
       </div>
 
-      {COMPETENCIES.map(c => <CompBar key={c.key} icon={c.icon} label={c.label} value={r.competencies[c.key]} />)}
+      {comps.map(c => <CompBar key={c.key} icon={c.icon} label={c.label} value={r.competencies[c.key]} />)}
+
+      {showSpeakingNote &&
+        <div style={{fontSize:11, color:'var(--text-soft)', margin:'-2px 0 10px', lineHeight:1.45}}>
+          {forTeacher
+            ? '🗣️ El Speaking no tiene material en la plataforma: se practica por tareas y su % sale de tu evaluación presencial (estrellas de Speaking).'
+            : '🗣️ Tu Speaking se practica con las tareas; la nota la pone tu profesor en clase. ¡Tú sigue practicando! 💪'}
+        </div>}
 
       {r.taskCompliance != null && <CompBar icon="📝" label="Cumplimiento de tareas" value={r.taskCompliance} />}
 
