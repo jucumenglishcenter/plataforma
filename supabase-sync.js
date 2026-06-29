@@ -393,7 +393,11 @@
    *    lastActiveDays / achievements from the hydrated progress cache.
    *    Call AFTER hydrate() and after the module catalog is loaded.
    *    Patches window.JUCUM_DATA.STUDENTS in place. ── */
-  const dayStr = t => new Date(t).toISOString().slice(0, 10);
+  // Días en horario de Perú (UTC−5): el corte de día es medianoche de Lima, no
+  // medianoche UTC (que caía ~7 PM Perú y "adelantaba" el día → falsos "días sin
+  // practicar" por la tarde-noche aunque el alumno SÍ practicó hoy).
+  const PERU_OFFSET_MS = 5 * 3600000;
+  const dayStr = t => new Date(t - PERU_OFFSET_MS).toISOString().slice(0, 10);
   function computeStats() {
     const D = window.JUCUM_DATA;
     if (!D) return;
@@ -415,8 +419,8 @@
           if (pct >= 100) perfect = true;
         }
         if (e.date) {
-          days.add(e.date.slice(0, 10));
           const ts = Date.parse(e.date);
+          days.add(dayStr(ts));           // bucket por día de Perú (igual que la racha)
           if (ts > lastTs) lastTs = ts;
         }
       });

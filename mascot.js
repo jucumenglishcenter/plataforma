@@ -42,7 +42,9 @@
     w += (Math.min(c.masteryPct || 0, 100) / 100) * 14;        // dominio hasta +14
     if ((c.todayMin || 0) >= (c.target || 15)) w += 10;        // meta de hoy cumplida
     else if ((c.todayMin || 0) > 0) w += 4;                    // algo de práctica hoy
-    w -= Math.min(c.inactive || 0, 8) * 7;                     // inactividad hasta −56
+    // El 1.er día sin practicar es la ventana normal del día (racha aún viva): NO penaliza.
+    // La inactividad real penaliza desde el 2.º día sin practicar (−7/día, hasta −56).
+    w -= Math.min(Math.max(0, (c.inactive || 0) - 1), 8) * 7;
     return Math.max(0, Math.min(100, Math.round(w)));
   }
   function stageOf(w) { return Math.max(0, Math.min(6, Math.round((w / 100) * 6))); }

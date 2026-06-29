@@ -241,8 +241,8 @@ function MascotCard({ student }) {
             <li className={s.streak > 0 ? 'ok' : ''}>
               {s.streak > 0 ? `✓ Mantienes una racha de ${s.streak} día${s.streak === 1 ? '' : 's'}` : 'Empieza una racha practicando hoy'}
             </li>
-            <li className={s.inactive === 0 ? 'ok' : ''}>
-              {s.inactive === 0 ? '✓ Estás al día con tu práctica' : `Llevas ${s.inactive} día${s.inactive === 1 ? '' : 's'} sin practicar — ¡retoma!`}
+            <li className={s.inactive <= 1 ? 'ok' : ''}>
+              {s.inactive <= 1 ? '✓ Estás al día con tu práctica' : `Llevas ${s.inactive} días sin practicar — ¡retoma!`}
             </li>
           </ul>
         </div>

@@ -672,6 +672,45 @@ async function loadPassThresholdsFromCloud() {
   } catch {}
 }
 
+/* ── MODO MANTENIMIENTO ───────────────────────────────────────────────
+ * El Desarrollador (rol 'dev') puede "cerrar" la plataforma mientras hace
+ * tareas técnicas. Mientras está activo, nadie que no sea 'dev' puede usarla.
+ * Se guarda local (caché) + nube (app_settings key 'maintenance') para que
+ * aplique en TODOS los dispositivos. App.jsx lo consulta al arrancar y lo
+ * sondea cada pocos segundos para expulsar/liberar a los alumnos en vivo. */
+const MAINTENANCE_KEY = 'jucum_maintenance_v1';
+const DEFAULT_MAINTENANCE = {
+  active: false,
+  message: 'Estamos haciendo mejoras en la plataforma. Volvemos en un ratito 💛',
+  updatedAt: null,
+};
+function getMaintenance() {
+  try {
+    const s = JSON.parse(localStorage.getItem(MAINTENANCE_KEY) || 'null');
+    if (s && typeof s === 'object') return { ...DEFAULT_MAINTENANCE, ...s };
+  } catch {}
+  return { ...DEFAULT_MAINTENANCE };
+}
+function setMaintenance(partial) {
+  const next = { ...getMaintenance(), ...partial, updatedAt: new Date().toISOString() };
+  localStorage.setItem(MAINTENANCE_KEY, JSON.stringify(next));
+  try { if (window.JUCUM_SB) window.JUCUM_SB.getClient().from('app_settings').upsert({ key: 'maintenance', value: next }, { onConflict: 'key' }).then(() => {}, () => {}); } catch {}
+  return next;
+}
+/* Carga best-effort desde la nube. Devuelve el estado vigente (o null si falla). */
+async function loadMaintenanceFromCloud() {
+  if (!window.JUCUM_SB) return getMaintenance();
+  try {
+    const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key', 'maintenance').maybeSingle();
+    if (data && data.value && typeof data.value === 'object') {
+      const v = { ...DEFAULT_MAINTENANCE, ...data.value };
+      localStorage.setItem(MAINTENANCE_KEY, JSON.stringify(v));
+      return v;
+    }
+  } catch {}
+  return getMaintenance();
+}
+
 /* Normaliza una nota a porcentaje 0-100.
  * Convención de la plataforma: notas >10 = porcentaje (0-100); ≤10 = escala /10.
  * Devuelve null si la actividad no tiene nota (story / diálogo / quizlet). */
@@ -1143,12 +1182,13 @@ function getStudentMastery(student) {
   const coverage = total ? done / total : 0;
   const quality = scoreN ? (scoreSum / scoreN) / 100 : 0;
   // constancia: días activos de los últimos 7 (meta ~5/7 días)
+  // Día en horario de Perú (UTC−5), consistente con la racha de supabase-sync.
+  const peruDay = t => new Date((typeof t === 'number' ? t : Date.parse(t)) - 5 * 3600000).toISOString().slice(0, 10);
   const activeDays = new Set();
-  Object.values(completed).forEach(e => { if (e && e.date) activeDays.add(String(e.date).slice(0, 10)); });
+  Object.values(completed).forEach(e => { if (e && e.date) activeDays.add(peruDay(e.date)); });
   let active7 = 0;
   for (let i = 0; i < 7; i++) {
-    const d = new Date(); d.setDate(d.getDate() - i);
-    if (activeDays.has(d.toISOString().slice(0, 10))) active7++;
+    if (activeDays.has(peruDay(Date.now() - i * 86400000))) active7++;
   }
   const constancy = Math.min(1, active7 / 5);
   let constancyFactor = 0.85 + 0.20 * constancy; // 0.85 (nunca) → 1.05 (constante)
@@ -1822,6 +1862,8 @@ function latentGate(mod, a, i, progress, level) {
 window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getAchievementAlert, achievementDecayFactor, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness, getStudentGrades, getStudentMonthlyPractice, getStudentTrends,
   /* PASO 2 · umbral + anti-farmeo */
   passThreshold, getPassThresholds, setPassThreshold, setGroupThreshold, getGroupThreshold, loadPassThresholdsFromCloud, scorePct, entryPassed, getDirectedBonusXP, getFarmingFlag, getActivitiesToImprove,
+  /* Modo mantenimiento (rol dev) */
+  getMaintenance, setMaintenance, loadMaintenanceFromCloud,
   /* PASO 3 · repaso espaciado + retención + explicación al bajar */
   getReviews, recordReviewAttempt, getDueReviews, getLastReviewResult, markReviewResultSeen, getRetention, reviewTrend, loadReviewsFromCloud, getDropExplanation, ackDropExplanation,
   /* PASO 4 · ruta de módulos + récord de racha */
