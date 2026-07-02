@@ -196,10 +196,11 @@
           if (!done && activeSec >= AUTO_DONE_SEC && !teacher && !exam) {
             done = true; // marcada como practicada (desbloquea la siguiente) — sin cooldown ni tarjeta
             try { if (window.parent && window.parent !== window) window.parent.postMessage({ source: 'jucum-connect', type: 'done', uid: uid, mod: modId, act: actId, score: null, minutes: Math.max(1, capMin) }, '*'); } catch (e) {}
-            if (!demo) pushProgress(null, Math.max(1, capMin)); // lectura = participación (sin nota): no infla dominio ni Speaking
+            if (!demo) pushProgress(100, Math.max(1, capMin));
+            if (!demo && activePart != null) pushPart(activePart, null, Math.max(1, capMin)); // qué historia leyó (nube)
           }
           // refresca el tiempo de lectura cada 2 min (hasta el tope) para que el profesor lo vea
-          if (!demo && done && activeSec % 120 === 0 && Math.round(activeSec / 60) <= READING_CAP_MIN) pushProgress(null, capMin);
+          if (!demo && done && activeSec % 120 === 0 && Math.round(activeSec / 60) <= READING_CAP_MIN) pushProgress(100, capMin);
           if (teacher && activeSec % 60 === 0) logClass();
         }
         updateChip();
@@ -282,10 +283,45 @@
       });
     }
 
+    // ── Progreso POR PARTE (historia/audio/diálogo dentro del material) ──
+    // Se guarda en la tabla activity_parts SIN tocar la fila principal de
+    // 'progress' (que alimenta el dominio). Así el profesor ve exactamente qué
+    // historia/comprensión/audio hizo, y el material puede sembrar su desbloqueo
+    // secuencial desde la nube en CUALQUIER equipo.
+    var activePart = null;
+    function pushPart(part, score, minutes) {
+      if (demo || part == null || !ensureSb()) return;
+      sb.from('activity_parts').upsert({
+        user_id: uid, module_id: modId, activity_id: actId, part: Number(part),
+        score: (score == null ? null : score), minutes: minutes || 0,
+        completed_at: new Date().toISOString()
+      }, { onConflict: 'user_id,module_id,activity_id,part' }).then(function (r) {
+        if (r && r.error) console.warn('jucum-connect parts:', r.error.message);
+      }, function () {});
+    }
+    window.JUCUM_CONNECT = window.JUCUM_CONNECT || {};
+    // El material avisa qué parte está abierta (para stories sin quiz).
+    window.JUCUM_CONNECT.setActivePart = function (n) { activePart = (n == null ? null : Number(n)); };
+    // El material lee qué partes ya completó el alumno (desde la nube) para sembrar
+    // su desbloqueo secuencial en cualquier equipo. cb recibe [{part, score}, ...].
+    window.JUCUM_CONNECT.getCompletedParts = function (cb) {
+      if (typeof cb !== 'function') return;
+      if (demo || !ensureSb()) { cb([]); return; }
+      sb.from('activity_parts').select('part,score')
+        .eq('user_id', uid).eq('module_id', modId).eq('activity_id', actId)
+        .then(function (r) { cb(((r && r.data) || []).map(function (x) { return { part: x.part, score: x.score }; })); },
+              function () { cb([]); });
+    };
+    // Guardado explícito de una parte (por si el material lo prefiere directo).
+    window.JUCUM_CONNECT.savePart = function (part, score, minutes) { pushPart(part, score, minutes); };
+
     // Quizzes (readings, listenings, gramática, resúmenes MCQ) avisan así:
     window.addEventListener('jucum:done', function (e) {
       var d = e.detail || {};
       var lowStakes = d.type === 'summary' || d.type === 'quizlet';
+      // Nota por PARTE: el material envía story/audio/part; lo guardamos aparte.
+      var part = (d.part != null) ? d.part : (d.story != null ? d.story : (d.audio != null ? d.audio : null));
+      if (part != null) pushPart(part, (d.score != null) ? d.score : null, Math.max(1, Math.round(activeSec / 60)));
       complete((d.score != null) ? d.score : 80, lowStakes);
     });
 
@@ -335,7 +371,7 @@
     // Guardar tiempo parcial al salir (si practicó al menos 1 min y no completó)
     window.addEventListener('beforeunload', function () {
       if (teacher) { logClass(); return; }
-      if (IS_STORY) { if (!demo && activeSec >= 60) pushProgress(null, Math.min(READING_CAP_MIN, Math.round(activeSec / 60))); return; }
+      if (IS_STORY) { if (!demo && activeSec >= 60) pushProgress(100, Math.min(READING_CAP_MIN, Math.round(activeSec / 60))); return; }
       if (done || activeSec < 60) return;
       pushProgress(0, Math.round(activeSec / 60));
     });
