@@ -215,7 +215,6 @@ function StudentDashboard({ user, onLogout }) {
           <a className={`nav-link ${view==='exam'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('exam');}}>🎓 Examen</a>
           <a className={`nav-link ${(view==='diagnosis'||view==='report'||view==='avance')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('avance');}}>📈 Mi avance</a>
           <a className={`nav-link ${view==='payments'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('payments');}} style={{position:'relative', color:(acct.blocked||acct.state==='por_vencer')?'#C62828':undefined}}>💳 Pagos{(acct.blocked||acct.state==='por_vencer') && <span className="nav-dot">!</span>}</a>
-          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault(); setView('dashboard'); setTimeout(()=>{ if (window.JUCUM_TUTORIAL && window.JUCUM_TUTORIAL.start) window.JUCUM_TUTORIAL.start(); }, 350);}} title="Ver el recorrido de la plataforma">🎓 Tour</a>
           <span data-tut="bell" style={{display:'inline-flex'}}><NotifBell userId={student.id} onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); else if (n.link === 'tasks') setView('tasks'); else if (n.link === 'exam') setView('exam'); else if (n.link === 'messages') setView('mensajes'); }} /></span>
           <div className="user-pill">
             <div className="ava" style={{background:`linear-gradient(135deg,${level.color}80,${level.dark})`}}>
@@ -226,6 +225,8 @@ function StudentDashboard({ user, onLogout }) {
           <button className="logout-btn" onClick={onLogout} title="Cerrar sesión">⎋ Salir</button>
         </div>
       </header>
+
+      {window.StudentTutorial && <StudentTutorial student={student} onGoHome={() => setView('dashboard')} />}
 
       {acct.state === 'por_vencer' && view !== 'payments' && <PayReminderBar status={acct} onGo={() => setView('payments')} />}
 
@@ -247,7 +248,9 @@ function StudentDashboard({ user, onLogout }) {
           <Forum user={user} groupOverride={student.group} />
         </>
       ) : view === 'mensajes' ? (
-        <StudentMessages student={student} onBack={() => setView('dashboard')} />
+        window.StudentMessages
+          ? <StudentMessages student={student} onBack={() => setView('dashboard')} />
+          : <main><div className="empty-state"><div className="icon">✉️</div>El módulo de mensajes aún no está instalado.<br/>Faltan <b>messages.js</b> y <b>messages-ui.comp.js</b> en el servidor.</div></main>
       ) : view === 'practica' ? (
         <StudentPractice student={student} settings={settings} onBack={() => setView('dashboard')} />
       ) : (
@@ -267,7 +270,6 @@ function StudentDashboard({ user, onLogout }) {
         </div>
 
         {/* — Neuro + (Racha fusionada con Meta de hoy) — */}
-        {window.StudentTutorial && <StudentTutorial student={student} />}
         <div className="two-col" style={{gridTemplateColumns:'1.4fr 1fr', marginTop:18}}>
           <div data-tut="neuro"><MascotCard student={student} /></div>
           <div data-tut="meta"><DayCard student={student} streak={student.streak} todayMin={todayMin} target={targetMin} /></div>

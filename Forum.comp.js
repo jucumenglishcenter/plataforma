@@ -2,6 +2,35 @@
 
 const { useState: fUseState, useEffect: fUseEffect } = React;
 
+/* Reacciones disponibles (1 por usuario; elegir otra la reemplaza) */
+const F_REACTS = ['👍','❤️','😂','😮','🎉'];
+
+/* Adjunto de foto/video mostrado en publicaciones y respuestas */
+function FMedia({ url, kind, small }) {
+  if (!url) return null;
+  if (kind === 'video') return <video src={url} controls style={{maxWidth: small ? 220 : 300, width:'100%', borderRadius: 12, display:'block', marginTop: 8}} />;
+  return <img src={url} alt="" style={{maxWidth: small ? 220 : 300, borderRadius: 12, display:'block', marginTop: 8}} />;
+}
+
+/* Botón “📎 Foto/Video” para los composers (sube a la nube vía JUCUM_MSG) */
+function FAttach({ pending, setPending }) {
+  const ref = React.useRef(null);
+  const [busy, setBusy] = fUseState(false);
+  const onFile = async (e) => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    if (!window.JUCUM_MSG || !window.JUCUM_MSG.uploadMedia) { alert('Adjuntos no disponibles todavía en esta versión.'); return; }
+    setBusy(true);
+    try { const up = await window.JUCUM_MSG.uploadMedia(f); setPending({ ...up, name: f.name }); }
+    catch (err) { alert('No se pudo subir el archivo: ' + err.message); }
+    setBusy(false); if (ref.current) ref.current.value = '';
+  };
+  return (<>
+    <input ref={ref} type="file" accept="image/*,video/*" style={{display:'none'}} onChange={onFile} />
+    <button type="button" className="att-btn" onClick={() => ref.current && ref.current.click()} disabled={busy}>{busy ? '⏳ Subiendo…' : '📎 Foto/Video'}</button>
+    {pending && <span style={{display:'inline-flex', alignItems:'center', gap:6, background:'#EAF1FF', border:'1px solid #C6D8F5', borderRadius:9, padding:'4px 9px', fontSize:12, fontWeight:700, color:'#1F3A8A'}}>{pending.kind === 'image' ? '🖼️' : '🎥'} {pending.name}<button type="button" onClick={() => setPending(null)} style={{border:'none', background:'#1F3A8A', color:'#fff', width:16, height:16, borderRadius:'50%', cursor:'pointer', fontSize:9, lineHeight:1}}>✕</button></span>}
+  </>);
+}
+
 function Forum({ user, groupOverride }) {
   const { STUDENTS, GROUPS, LEVELS } = window.JUCUM_DATA;
   const F = window.JUCUM_FORUM;
@@ -92,6 +121,7 @@ function NewPostBox({ user, groupId, onPost, muted }) {
   const [title, setTitle] = fUseState('');
   const [body, setBody] = fUseState('');
   const [err, setErr] = fUseState('');
+  const [media, setMedia] = fUseState(null);
 
   if (muted) {
     return (
@@ -103,7 +133,7 @@ function NewPostBox({ user, groupId, onPost, muted }) {
 
   const submit = () => {
     if (!title.trim()) { setErr('Pon un título a tu pregunta.'); return; }
-    if (!body.trim()) { setErr('Escribe el cuerpo de tu mensaje.'); return; }
+    if (!body.trim() && !media) { setErr('Escribe el cuerpo de tu mensaje.'); return; }
     const { STUDENTS } = window.JUCUM_DATA;
     const me = user.role === 'teacher'
       ? { id: 'teacher', name: 'Profesor', role: 'teacher' }
@@ -111,15 +141,16 @@ function NewPostBox({ user, groupId, onPost, muted }) {
     window.JUCUM_FORUM.createPost(groupId, {
       authorId: me.id, authorName: me.name, authorRole: me.role,
       title: title.trim(), body: body.trim(),
+      mediaUrl: media ? media.url : null, mediaKind: media ? media.kind : null,
     });
-    setTitle(''); setBody(''); setErr(''); setOpen(false);
+    setTitle(''); setBody(''); setErr(''); setMedia(null); setOpen(false);
     onPost();
   };
 
   if (!open) {
     return (
       <button className="forum-new-trigger" onClick={() => setOpen(true)}>
-        ✍️ Publicar una pregunta o comentario
+        ✍️ Publicar una pregunta o comentario — puedes adjuntar 📷 foto o 🎥 video
       </button>
     );
   }
@@ -128,9 +159,12 @@ function NewPostBox({ user, groupId, onPost, muted }) {
       {err && <div className="err" style={{marginBottom:10}}>⚠ {err}</div>}
       <input className="input-text" placeholder="Título de tu pregunta" value={title} onChange={e => setTitle(e.target.value)} />
       <textarea className="eval-textarea" placeholder="Escribe tu mensaje aquí…" rows={4} value={body} onChange={e => setBody(e.target.value)} />
-      <div className="forum-new-actions">
-        <button className="btn-cancel" onClick={() => { setOpen(false); setErr(''); }}>Cancelar</button>
-        <button className="btn-save" onClick={submit}>Publicar</button>
+      <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
+        <FAttach pending={media} setPending={setMedia} />
+        <div className="forum-new-actions" style={{marginLeft:'auto'}}>
+          <button className="btn-cancel" onClick={() => { setOpen(false); setErr(''); setMedia(null); }}>Cancelar</button>
+          <button className="btn-save" onClick={submit}>Publicar</button>
+        </div>
       </div>
     </div>
   );
@@ -142,15 +176,17 @@ function PostCard({ post, user, groupId, onChange }) {
   const myId = isTeacher ? 'teacher' : user.studentId;
   const [showReply, setShowReply] = fUseState(false);
   const [replyBody, setReplyBody] = fUseState('');
+  const [pickOpen, setPickOpen] = fUseState(false);
+  const [replyMedia, setReplyMedia] = fUseState(null);
 
-  const likes = F.postLikes(post.id);
-  const iLiked = likes.includes(myId);
+  const reacts = F.getReactions ? F.getReactions(post.id) : (F.postLikes(post.id) || []).map(u => ({ u, e: '❤️' }));
+  const myReact = reacts.find(r => r.u === myId);
 
   const onPin = () => { F.togglePin(groupId, post.id); onChange(); };
   const onDelete = () => {
     if (confirm('¿Eliminar esta publicación?')) { F.deletePost(groupId, post.id); onChange(); }
   };
-  const onLike = () => { F.toggleLike(post.id, myId); onChange(); };
+  const onReact = (emoji) => { if (F.toggleReaction) F.toggleReaction(post.id, myId, emoji); else F.toggleLike(post.id, myId); setPickOpen(false); onChange(); };
   const onMute = () => {
     const days = parseInt(prompt(`Silenciar a ${post.authorName} por cuántos días?`, '3') || '0', 10);
     if (!days || days < 1) return;
@@ -160,7 +196,7 @@ function PostCard({ post, user, groupId, onChange }) {
   const onUnmute = () => { F.setMute(post.authorId, null); onChange(); };
 
   const submitReply = () => {
-    if (!replyBody.trim()) return;
+    if (!replyBody.trim() && !replyMedia) return;
     const { STUDENTS } = window.JUCUM_DATA;
     const me = isTeacher
       ? { id: 'teacher', name: 'Profesor', role: 'teacher' }
@@ -168,9 +204,10 @@ function PostCard({ post, user, groupId, onChange }) {
     if (!isTeacher && F.isMuted(me.id)) { alert('Estás silenciado.'); return; }
     F.addReply(groupId, post.id, {
       authorId: me.id, authorName: me.name, authorRole: me.role,
-      body: replyBody.trim(),
+      body: replyBody.trim(), parentId: null,
+      mediaUrl: replyMedia ? replyMedia.url : null, mediaKind: replyMedia ? replyMedia.kind : null,
     });
-    setReplyBody(''); setShowReply(false); onChange();
+    setReplyBody(''); setReplyMedia(null); setShowReply(false); onChange();
   };
 
   const dateStr = relativeTime(post.date);
@@ -203,11 +240,20 @@ function PostCard({ post, user, groupId, onChange }) {
 
       <div className="fpost-title">{post.title}</div>
       <div className="fpost-body">{post.body}</div>
+      {post.mediaUrl && <FMedia url={post.mediaUrl} kind={post.mediaKind} />}
 
-      <div className="fpost-actions">
-        <button className={`fp-like ${iLiked ? 'on' : ''}`} onClick={onLike}>
-          {iLiked ? '❤️' : '🤍'} {likes.length || ''}
-        </button>
+      <div className="fpost-actions" style={{flexWrap:'wrap', alignItems:'center'}}>
+        {(() => { const groups = {}; reacts.forEach(r => { groups[r.e] = (groups[r.e] || 0) + 1; }); return Object.entries(groups).map(([e, n]) => (
+          <button key={e} className={`fp-like ${myReact && myReact.e === e ? 'on' : ''}`} onClick={() => onReact(e)}>{e} {n}</button>
+        )); })()}
+        <div style={{position:'relative'}}>
+          <button className="fp-like" onClick={() => setPickOpen(o => !o)} title="Reaccionar">🙂＋</button>
+          {pickOpen && (
+            <div style={{position:'absolute', bottom:36, left:0, background:'#fff', border:'1px solid var(--border)', borderRadius:22, padding:'5px 8px', display:'flex', gap:3, boxShadow:'0 6px 18px rgba(0,0,0,.18)', zIndex:20}}>
+              {F_REACTS.map(e => <button key={e} onClick={() => onReact(e)} style={{border:'none', background:'none', fontSize:19, cursor:'pointer', padding:'3px 4px', borderRadius:'50%'}}>{e}</button>)}
+            </div>
+          )}
+        </div>
         <button className="fp-reply" onClick={() => setShowReply(s => !s)}>
           💬 {post.replies?.length || 0} respuesta{(post.replies?.length || 0) === 1 ? '' : 's'}
         </button>
@@ -215,15 +261,18 @@ function PostCard({ post, user, groupId, onChange }) {
 
       {(post.replies?.length > 0 || showReply) && (
         <div className="fpost-replies">
-          {(post.replies || []).map(r => (
-            <ReplyRow key={r.id} reply={r} post={post} user={user} groupId={groupId} onChange={onChange} isTeacher={isTeacher} />
-          ))}
+          {(() => { const all = post.replies || []; const tops = all.filter(r => !r.parentId); const kidsOf = (id) => all.filter(r => r.parentId === id); return tops.map(r => (
+            <ReplyRow key={r.id} reply={r} post={post} user={user} groupId={groupId} onChange={onChange} isTeacher={isTeacher} kidsOf={kidsOf} depth={0} />
+          )); })()}
           {showReply && (
             <div className="freply-new">
               <textarea className="eval-textarea" rows={2} placeholder="Escribe tu respuesta…" value={replyBody} onChange={e => setReplyBody(e.target.value)} />
-              <div className="forum-new-actions">
-                <button className="btn-cancel" onClick={() => { setShowReply(false); setReplyBody(''); }}>Cancelar</button>
-                <button className="btn-save" onClick={submitReply}>Responder</button>
+              <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
+                <FAttach pending={replyMedia} setPending={setReplyMedia} />
+                <div className="forum-new-actions" style={{marginLeft:'auto'}}>
+                  <button className="btn-cancel" onClick={() => { setShowReply(false); setReplyBody(''); setReplyMedia(null); }}>Cancelar</button>
+                  <button className="btn-save" onClick={submitReply}>Responder</button>
+                </div>
               </div>
             </div>
           )}
@@ -233,27 +282,63 @@ function PostCard({ post, user, groupId, onChange }) {
   );
 }
 
-function ReplyRow({ reply, post, user, groupId, onChange, isTeacher }) {
+function ReplyRow({ reply, post, user, groupId, onChange, isTeacher, kidsOf, depth }) {
   const F = window.JUCUM_FORUM;
+  const myId = isTeacher ? 'teacher' : user.studentId;
+  const [showR, setShowR] = fUseState(false);
+  const [body, setBody] = fUseState('');
+  const [media, setMedia] = fUseState(null);
   const onDelete = () => {
     if (confirm('¿Eliminar esta respuesta?')) { F.deleteReply(groupId, post.id, reply.id); onChange(); }
   };
+  const submit = () => {
+    if (!body.trim() && !media) return;
+    const { STUDENTS } = window.JUCUM_DATA;
+    const me = isTeacher
+      ? { id: 'teacher', name: 'Profesor', role: 'teacher' }
+      : (() => { const s = STUDENTS.find(s => s.id === myId); return { id: s.id, name: s.fullName, role: 'student' }; })();
+    if (!isTeacher && F.isMuted(me.id)) { alert('Estás silenciado.'); return; }
+    F.addReply(groupId, post.id, {
+      authorId: me.id, authorName: me.name, authorRole: me.role,
+      body: body.trim(), parentId: reply.id,
+      mediaUrl: media ? media.url : null, mediaKind: media ? media.kind : null,
+    });
+    setBody(''); setMedia(null); setShowR(false); onChange();
+  };
   const isTeacherReply = reply.authorRole === 'teacher';
   const initials = reply.authorName.split(' ').map(n=>n[0]).slice(0,2).join('').toUpperCase();
+  const kids = kidsOf ? kidsOf(reply.id) : [];
   return (
-    <div className="freply">
-      <div className={`fpost-ava sm ${isTeacherReply ? 't' : ''}`}>{isTeacherReply ? '👨‍🏫' : initials}</div>
-      <div className="freply-body">
-        <div className="fpost-author sm">
-          {reply.authorName}
-          {isTeacherReply && <span className="fpost-role">PROFESOR</span>}
-          <span className="fpost-date sm"> · {relativeTime(reply.date)}</span>
+    <div style={depth > 0 ? {marginLeft: Math.min(depth, 3) * 16} : undefined}>
+      <div className="freply">
+        <div className={`fpost-ava sm ${isTeacherReply ? 't' : ''}`}>{isTeacherReply ? '👨‍🏫' : initials}</div>
+        <div className="freply-body">
+          <div className="fpost-author sm">
+            {reply.authorName}
+            {isTeacherReply && <span className="fpost-role">PROFESOR</span>}
+            <span className="fpost-date sm"> · {relativeTime(reply.date)}</span>
+          </div>
+          <div className="fpost-body sm">{reply.body}</div>
+          {reply.mediaUrl && <FMedia url={reply.mediaUrl} kind={reply.mediaKind} small />}
+          <button onClick={() => setShowR(o => !o)} style={{border:'none', background:'none', color:'#1F3A8A', fontFamily:'inherit', fontWeight:800, fontSize:11.5, cursor:'pointer', padding:'4px 0 0'}}>↩ Responder</button>
+          {showR && (
+            <div className="freply-new" style={{marginTop:6}}>
+              <textarea className="eval-textarea" rows={2} placeholder="Escribe tu respuesta…" value={body} onChange={e => setBody(e.target.value)} />
+              <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
+                <FAttach pending={media} setPending={setMedia} />
+                <div className="forum-new-actions" style={{marginLeft:'auto'}}>
+                  <button className="btn-cancel" onClick={() => { setShowR(false); setBody(''); setMedia(null); }}>Cancelar</button>
+                  <button className="btn-save" onClick={submit}>Responder</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-        <div className="fpost-body sm">{reply.body}</div>
+        {isTeacher && (
+          <button className="ftool del sm" onClick={onDelete} title="Eliminar">🗑</button>
+        )}
       </div>
-      {isTeacher && (
-        <button className="ftool del sm" onClick={onDelete} title="Eliminar">🗑</button>
-      )}
+      {kids.map(c => <ReplyRow key={c.id} reply={c} post={post} user={user} groupId={groupId} onChange={onChange} isTeacher={isTeacher} kidsOf={kidsOf} depth={(depth || 0) + 1} />)}
     </div>
   );
 }

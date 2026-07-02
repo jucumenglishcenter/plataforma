@@ -153,7 +153,7 @@
       min: MIN_OF[kind] || 10,
       linesEs: (es.lines || []).slice(), linesEn: (en.lines || []).slice(),
       noteEs: es.note || '', noteEn: en.note || '',
-      tema: a.group || null, storyNo: null, dialogNo: null, focus: '',
+      tema: a.group || null, storyNo: a.storyNo || null, dialogNo: a.dialogNo || null, focus: '',
       review: !!a.review, reviewModule: a.moduleName || '',
       moduleId: a.moduleId || null, activityId: a.activityId || null
     };

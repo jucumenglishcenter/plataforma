@@ -71,15 +71,23 @@ function getLikes() {
   try { return JSON.parse(localStorage.getItem(LIKES_KEY) || '{}'); }
   catch { return {}; }
 }
-function toggleLike(postId, userId) {
+/* Reacciones: [{u:userId, e:emoji}] por publicación. 1 reacción por usuario
+ * (elegir otra la reemplaza). Migra el formato viejo (array de userIds = ❤️). */
+function getReactions(postId) {
+  const raw = getLikes()[postId] || [];
+  return raw.map(x => typeof x === 'string' ? { u: x, e: '❤️' } : x);
+}
+function toggleReaction(postId, userId, emoji) {
   const all = getLikes();
-  all[postId] = all[postId] || [];
-  const i = all[postId].indexOf(userId);
+  let list = (all[postId] || []).map(x => typeof x === 'string' ? { u: x, e: '❤️' } : x);
+  const mine = list.find(r => r.u === userId);
   let added = false;
-  if (i >= 0) all[postId].splice(i, 1);
-  else { all[postId].push(userId); added = true; }
+  if (mine && mine.e === emoji) { list = list.filter(r => r.u !== userId); }
+  else if (mine) { mine.e = emoji; added = true; }
+  else { list.push({ u: userId, e: emoji }); added = true; }
+  all[postId] = list;
   localStorage.setItem(LIKES_KEY, JSON.stringify(all));
-  if (window.JUCUM_SYNC) window.JUCUM_SYNC.pushLike(postId, userId, all[postId].includes(userId));
+  if (window.JUCUM_SYNC && window.JUCUM_SYNC.pushLike) window.JUCUM_SYNC.pushLike(postId, userId, added ? emoji : null);
   // Aviso en la campanita del AUTOR cuando reaccionan a SU publicación
   if (added && window.JUCUM_NOTIF) {
     const found = findPostById(postId);
@@ -87,16 +95,17 @@ function toggleLike(postId, userId) {
     if (p && p.authorId && p.authorId !== userId && p.authorRole === 'student') {
       window.JUCUM_NOTIF.pushNotif(p.authorId, {
         type: 'forum-like',
-        title: `❤️ A ${_forumName(userId)} le gustó tu publicación`,
+        title: `${emoji} A ${_forumName(userId)} le gustó tu publicación`,
         body: `Reaccionó a “${p.title}” en el foro.`,
         link: 'forum',
       });
     }
   }
-  return all[postId];
+  return list;
 }
+function toggleLike(postId, userId) { return toggleReaction(postId, userId, '❤️').map(r => r.u); }
 function postLikes(postId) {
-  return getLikes()[postId] || [];
+  return getReactions(postId).map(r => r.u);
 }
 
 function getGroupForum(groupId) {
@@ -220,6 +229,6 @@ seedSampleForum();
 
 window.JUCUM_FORUM = {
   getGroupForum, createPost, addReply, togglePin, deletePost, deleteReply,
-  isMuted, setMute, getMutes, toggleLike, postLikes,
+  isMuted, setMute, getMutes, toggleLike, postLikes, getReactions, toggleReaction,
   markForumSeen, forumUnreadCount, findPostById,
 };

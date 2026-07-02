@@ -630,6 +630,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
   const focusText = (s) => {
     if (s.type === 'story') { const a = []; if (s.storyNo) a.push('Historia #' + s.storyNo); if (s.dialogNo) a.push('Diálogo #' + s.dialogNo); return a.join(' · '); }
     if (s.type === 'reading') { return s.storyNo ? ('Historia #' + s.storyNo) : ''; }
+    if (s.type === 'listening') { return s.storyNo ? ('Audio #' + s.storyNo) : ''; }
     if (s.type === 'summary' || s.type === 'grammar') { return s.tema ? ('Tema: ' + s.tema) : ''; }
     return '';
   };
@@ -646,6 +647,8 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
   const isPicked = (m, a) => picked.some(p => p.moduleId === m.id && p.activityId === a.id);
   const togglePick = (m, a) => setPicked(arr => isPicked(m, a) ? arr.filter(p => !(p.moduleId === m.id && p.activityId === a.id)) : [...arr, { moduleId: m.id, activityId: a.id, label: a.name, type: a.type, group: a.group || null }]);
   const togglePickReview = (m, a) => setPicked(arr => isPicked(m, a) ? arr.filter(p => !(p.moduleId === m.id && p.activityId === a.id)) : [...arr, { moduleId: m.id, activityId: a.id, label: a.name, type: a.type, group: a.group || null, review: true, moduleName: m.name }]);
+  const setPickedPart = (m, a, n) => setPicked(arr => arr.map(p => (p.moduleId === m.id && p.activityId === a.id) ? { ...p, storyNo: n || null, dialogNo: (a.type === 'story' ? (n || null) : p.dialogNo) } : p));
+  const pickedPart = (m, a) => { const p = picked.find(x => x.moduleId === m.id && x.activityId === a.id); return p ? (p.storyNo || '') : ''; };
   const reviewMod = mods.find(m => m.id === reviewModId) || null;
   const reviewTemas = reviewMod ? Array.from(new Set((reviewMod.activities || []).map(a => a.group).filter(Boolean))) : [];
   const toggleDate = (dstr) => setDates(arr => arr.includes(dstr) ? arr.filter(x => x !== dstr) : [...arr, dstr].sort());
@@ -729,12 +732,24 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
                         {g.items.map(a => {
                           const on = isPicked(mod, a);
                           return (
-                            <button key={a.id} onClick={() => togglePick(mod, a)} style={{display:'flex', alignItems:'center', gap:10, textAlign:'left', cursor:'pointer', border:'1px solid ' + (on ? '#9FB0DA' : '#E3DCC9'), background: on ? '#EEF2FC' : '#fff', borderRadius:10, padding:'9px 12px', font:'inherit'}}>
+                            <React.Fragment key={a.id}>
+                            <button onClick={() => togglePick(mod, a)} style={{display:'flex', alignItems:'center', gap:10, textAlign:'left', cursor:'pointer', border:'1px solid ' + (on ? '#9FB0DA' : '#E3DCC9'), background: on ? '#EEF2FC' : '#fff', borderRadius:10, padding:'9px 12px', font:'inherit', width:'100%'}}>
                               <span style={{width:20, height:20, borderRadius:6, border:'2px solid ' + (on ? '#3F5BB8' : '#cdc4ad'), background: on ? '#3F5BB8' : '#fff', color:'#fff', fontSize:13, fontWeight:900, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>{on ? '✓' : ''}</span>
                               <span style={{fontSize:15}}>{typeIcon(a.type)}</span>
                               <span style={{flex:1, fontWeight:700, fontSize:13}}>{a.name}</span>
                               {!a.url && <span style={{fontSize:10.5, fontWeight:800, color:'#9C5D00', background:'#FFF3E0', borderRadius:20, padding:'2px 8px'}}>sin archivo</span>}
                             </button>
+                            {on && (a.type === 'story' || a.type === 'reading' || a.type === 'listening') && (
+                              <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', margin:'-2px 0 2px 30px', background:'#F4F7FD', border:'1px solid #D8E3F5', borderRadius:9, padding:'7px 10px'}}>
+                                <span style={{fontSize:11.5, fontWeight:800, color:'#1F3A8A'}}>{a.type === 'listening' ? '🎧 ¿Cuál audio?' : '📖 ¿Cuál historia?'}</span>
+                                <select value={pickedPart(mod, a)} onChange={e => setPickedPart(mod, a, e.target.value ? Number(e.target.value) : null)} style={{fontFamily:'inherit', fontWeight:800, fontSize:12.5, border:'1.5px solid #C9D6F0', borderRadius:9, padding:'6px 9px', cursor:'pointer', background:'#fff'}}>
+                                  <option value="">Todas / libre</option>
+                                  {[1,2,3,4].map(n => <option key={n} value={n}>{a.type === 'listening' ? 'Audio' : 'Historia'} #{n}</option>)}
+                                </select>
+                                <span style={{fontSize:10.5, fontWeight:700, color:'#8a7f6a'}}>se indica en el instructivo</span>
+                              </div>
+                            )}
+                            </React.Fragment>
                           );
                         })}
                       </div>}
@@ -885,12 +900,12 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
                       </select>
                     </div>
                   )}
-                  {(s.type === 'story' || s.type === 'reading') && (
+                  {(s.type === 'story' || s.type === 'reading' || s.type === 'listening') && (
                     <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:8, flexWrap:'wrap'}}>
-                      <span style={{fontSize:11.5, fontWeight:800, color:'#6C4FB0'}}>📖 ¿Qué leer?:</span>
+                      <span style={{fontSize:11.5, fontWeight:800, color:'#6C4FB0'}}>{s.type === 'listening' ? '🎧 ¿Qué audio?:' : '📖 ¿Qué leer?:'}</span>
                       <select value={s.storyNo || ''} onChange={e => setStepMeta(i, { storyNo: e.target.value ? Number(e.target.value) : null })} style={{...selStyle, width:'auto'}}>
-                        <option value="">Historia —</option>
-                        {[1,2,3,4].map(n => <option key={n} value={n}>Historia #{n}</option>)}
+                        <option value="">{s.type === 'listening' ? 'Audio —' : 'Historia —'}</option>
+                        {[1,2,3,4].map(n => <option key={n} value={n}>{s.type === 'listening' ? 'Audio' : 'Historia'} #{n}</option>)}
                       </select>
                       {s.type === 'story' && (
                         <select value={s.dialogNo || ''} onChange={e => setStepMeta(i, { dialogNo: e.target.value ? Number(e.target.value) : null })} style={{...selStyle, width:'auto'}}>

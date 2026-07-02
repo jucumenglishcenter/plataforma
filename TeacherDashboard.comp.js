@@ -51,6 +51,7 @@ function TeacherDashboard({ onLogout, user }) {
           <a className={`nav-link ${view.kind==='class'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'class'});}}>🏫 Clase</a>
           <a className={`nav-link ${(view.kind==='assess'||view.kind==='evaluate'||view.kind==='exams')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'assess'});}}>📊 Evaluación</a>
           <a className={`nav-link ${view.kind==='planner'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'planner'});}}>🗓️ Planificar</a>
+          <a className={`nav-link ${view.kind==='messages'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'messages'});}} style={{position:'relative'}}>✉️ Mensajes{(() => { const n = window.JUCUM_MSG ? window.JUCUM_MSG.unreadForTeacher() : 0; return n > 0 ? <span className="nav-dot">{n > 9 ? '9+' : n}</span> : null; })()}</a>
           <TeacherForumNav onOpen={(gid)=>setView({kind:'forum', group:gid})} />
           <NotifBell userId="teacher" />
           <div className="user-pill">
@@ -63,6 +64,8 @@ function TeacherDashboard({ onLogout, user }) {
 
       {view.kind === 'assess' ? (
         <TeacherAssessment onBack={() => setView({kind:'groups'})} initialTab={view.tab} />
+      ) : view.kind === 'messages' ? (
+        <TeacherMessages onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'planner' ? (
         <ClassPlanner onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'evaluate' ? (
@@ -135,19 +138,73 @@ function TeacherDashboard({ onLogout, user }) {
  * (pedido del teacher — antes eran dos entradas separadas "Evaluar" y "Exámenes"). */
 function TeacherAssessment({ onBack, canDefine, initialTab }) {
   const [tab, setTab] = React.useState(initialTab === 'exams' ? 'exams' : 'eval');
+  const CARDS = [
+    { k:'eval',   ico:'🗣️', title:'Evaluación presencial', sub:'Speaking · Listening · Comprehension + audio/video' },
+    { k:'exams',  ico:'🎓', title:'Exámenes de avance',   sub:'Define, abre ventana y califica' },
+    { k:'tareas', ico:'📝', title:'Calificar tareas',     sub:'Revisa y pon nota a lo que entregaron' },
+    { k:'notas',  ico:'📊', title:'Preparación y notas',  sub:'Quién está listo (≥75%) + boletín por alumno' },
+  ];
   return (
     <div>
       <div style={{display:'flex', alignItems:'center', gap:14, flexWrap:'wrap', padding:'14px 28px 0'}}>
         <button className="back-btn" style={{margin:0}} onClick={onBack}>← Volver al panel</button>
-        <div className="mm-tabs" style={{margin:0}}>
-          <button className={`mm-tab ${tab==='eval'?'on':''}`} onClick={() => setTab('eval')}>📊 Evaluación presencial</button>
-          <button className={`mm-tab ${tab==='exams'?'on':''}`} onClick={() => setTab('exams')}>🎓 Exámenes de avance</button>
+      </div>
+      <div style={{maxWidth:1100, margin:'0 auto', padding:'10px 24px 0'}}>
+        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(215px,1fr))', gap:12}}>
+          {CARDS.map(c => (
+            <button key={c.k} onClick={() => setTab(c.k)} style={{textAlign:'left', cursor:'pointer', fontFamily:'inherit', background: tab === c.k ? '#F4F7FE' : '#fff', border:'1px solid ' + (tab === c.k ? '#1F3A8A' : 'var(--border)'), borderTop:'3.5px solid #1F3A8A', borderRadius:14, padding:'13px 15px', boxShadow: tab === c.k ? '0 4px 14px rgba(31,58,138,.18)' : '0 2px 4px rgba(0,0,0,.06)'}}>
+              <div style={{fontSize:22}}>{c.ico}</div>
+              <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14.5, margin:'4px 0 2px'}}>{c.title}</div>
+              <div style={{fontSize:11.5, color:'var(--text-soft)', fontWeight:600, lineHeight:1.35}}>{c.sub}</div>
+            </button>
+          ))}
         </div>
       </div>
-      {tab === 'eval'
-        ? <TeacherEvaluate onBack={onBack} hideBack />
-        : <TeacherExams onBack={onBack} canDefine={canDefine} hideBack />}
+      {tab === 'eval' ? <TeacherEvaluate onBack={onBack} hideBack />
+        : tab === 'exams' ? <TeacherExams onBack={onBack} canDefine={canDefine} hideBack />
+        : tab === 'tareas' ? (window.TeacherPractice ? <TeacherPractice onBack={onBack} /> : <main><div className="empty-state">Falta el módulo de tareas.</div></main>)
+        : <PrepNotas />}
     </div>
+  );
+}
+
+/* Preparación y notas — funcional DENTRO de Evaluación: elige grupo y abre a
+ * cada alumno su preparación (≥75%) y su boletín de notas, sin salir de aquí. */
+function PrepNotas() {
+  const { GROUPS, STUDENTS, LEVELS } = window.JUCUM_DATA;
+  const [gid, setGid] = React.useState(GROUPS[0] ? GROUPS[0].id : null);
+  const [openId, setOpenId] = React.useState(null);
+  const g = GROUPS.find(x => x.id === gid);
+  const level = g ? LEVELS[g.level] : null;
+  const members = STUDENTS.filter(s => s.group === gid);
+  return (
+    <main>
+      <div className="tt-toolbar" style={{marginTop:14}}>
+        <span className="tt-sort-lab">Grupo</span>
+        <select value={gid || ''} onChange={e => { setGid(e.target.value); setOpenId(null); }} style={{fontFamily:'inherit', fontWeight:800, fontSize:13, border:'1.5px solid var(--border)', borderRadius:10, padding:'8px 11px', cursor:'pointer', background:'#fff'}}>
+          {GROUPS.map(x => <option key={x.id} value={x.id}>{LEVELS[x.level].code} · {x.name}</option>)}
+        </select>
+        <span className="tt-sort-lab" style={{marginLeft:'auto'}}>{members.length} alumno{members.length === 1 ? '' : 's'}</span>
+      </div>
+      <div style={{display:'flex', flexDirection:'column', gap:8, marginTop:12}}>
+        {members.map(s => (
+          <div key={s.id} style={{border:'1px solid var(--border)', borderRadius:12, background:'#fff', overflow:'hidden'}}>
+            <button onClick={() => setOpenId(openId === s.id ? null : s.id)} style={{display:'flex', alignItems:'center', gap:10, width:'100%', textAlign:'left', cursor:'pointer', border:'none', background:'none', padding:'11px 14px', fontFamily:'inherit'}}>
+              <div className="st-ava" style={{background:`linear-gradient(135deg,${level ? level.color : '#999'}80,${level ? level.dark : '#666'})`}}>{s.fullName.split(' ').map(n => n[0]).slice(0, 2).join('')}</div>
+              <div style={{flex:1, minWidth:0}}><div style={{fontWeight:800, fontSize:13.5}}>{s.fullName}</div><div style={{fontSize:11.5, color:'var(--text-soft)', fontWeight:600}}>@{s.username}</div></div>
+              <span style={{fontSize:12, color:'#1F3A8A', fontWeight:800}}>{openId === s.id ? '▲ Cerrar' : '▼ Preparación y notas'}</span>
+            </button>
+            {openId === s.id && (
+              <div style={{padding:'0 14px 14px'}}>
+                {window.ReadinessCard ? <ReadinessCard student={s} forTeacher /> : <div className="empty-state">Sin módulo de preparación.</div>}
+                <div style={{marginTop:12}}>{window.GradesRecord ? <GradesRecord student={s} forTeacher /> : null}</div>
+              </div>
+            )}
+          </div>
+        ))}
+        {members.length === 0 && <div className="empty-state">Este grupo no tiene alumnos.</div>}
+      </div>
+    </main>
   );
 }
 
@@ -214,6 +271,8 @@ function GroupsView({ stats, onSelectGroup, teacherName }) {
           );
         })}
       </div>
+
+      {window.TutorialAdminCard && <TutorialAdminCard />}
     </>
   );
 }
@@ -327,7 +386,21 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
   React.useEffect(() => { document.body.setAttribute('data-level', group.level); return () => document.body.removeAttribute('data-level'); }, [group.level]);
 
   const groupAvg = members.length ? Math.round(members.reduce((s,x)=>s+getStudentMastery(x).pct,0)/members.length) : 0;
-  const sorted = [...members].sort((a, b) => getStudentMastery(b).pct - getStudentMastery(a).pct);
+  const [q, setQ] = React.useState('');
+  const [sortKey, setSortKey] = React.useState('dominio');
+  const SORTS = {
+    dominio:        (a,b)=>getStudentMastery(b).pct - getStudentMastery(a).pct,
+    practica_mas:   (a,b)=>(b.totalMinutes||0) - (a.totalMinutes||0),
+    practica_menos: (a,b)=>(a.totalMinutes||0) - (b.totalMinutes||0),
+    racha:          (a,b)=>(b.streak||0) - (a.streak||0),
+    az:             (a,b)=>a.fullName.localeCompare(b.fullName,'es'),
+  };
+  const shown = React.useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return [...members]
+      .filter(s => !needle || (s.fullName + ' ' + s.username).toLowerCase().includes(needle))
+      .sort(SORTS[sortKey] || SORTS.dominio);
+  }, [members, q, sortKey]);
 
   if (showReport) return <GroupReport groupId={groupId} onBack={() => setShowReport(false)} />;
 
@@ -351,6 +424,24 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
 
       <WeeklyPlan groupId={groupId} />
 
+      <div className="tt-toolbar">
+        <label className="tt-search">
+          <span aria-hidden="true">🔍</span>
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar alumno por nombre o usuario…" />
+        </label>
+        <div className="tt-sort">
+          <span className="tt-sort-lab">Ordenar</span>
+          <select value={sortKey} onChange={e=>setSortKey(e.target.value)}>
+            <option value="practica_mas">🔥 Practica más</option>
+            <option value="practica_menos">💤 Practica menos</option>
+            <option value="dominio">Dominio ↓</option>
+            <option value="racha">Racha ↓</option>
+            <option value="az">A → Z</option>
+          </select>
+        </div>
+      </div>
+      <div className="tt-count">{shown.length} de {members.length} alumno{members.length===1?'':'s'}{q ? ` · filtrando «${q}»` : ''}</div>
+
       <div className="student-table">
         <div className="st-head">
           <div className="col-name">Alumno</div>
@@ -361,7 +452,8 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
           <div className="col-last">Última actividad</div>
           <div className="col-status">Estado</div>
         </div>
-        {sorted.map((s, i) => <StudentRow key={s.id} stu={s} rank={i+1} level={level} onClick={() => onSelectStudent(s.id)} />)}
+        {shown.map((s, i) => <StudentRow key={s.id} stu={s} rank={i+1} level={level} onClick={() => onSelectStudent(s.id)} />)}
+        {shown.length === 0 && <div style={{padding:'26px',textAlign:'center',color:'#999',fontWeight:700}}>Sin resultados para «{q}»</div>}
       </div>
 
       {showSettings && <GroupSettingsModal groupId={groupId} level={level} onClose={() => setShowSettings(false)} />}
@@ -955,7 +1047,18 @@ function StudentPartsCard({ studentId }) {
     } else setParts([]);
     return () => { alive = false; };
   }, [studentId]);
-  if (!parts || !parts.length) return null; // cargando o sin datos por parte todavía
+  if (!parts) return null; // cargando
+  if (!parts.length) return (
+    <div className="scard" style={{marginTop:18}}>
+      <div className="sec-head">
+        <div className="sec-title">📍 Detalle por historia / audio</div>
+        <span className="sec-meta">qué parte exacta hizo</span>
+      </div>
+      <div style={{fontSize:12.5, color:'var(--text-soft)', fontWeight:600, lineHeight:1.5, background:'#FAFAF6', border:'1px dashed var(--border)', borderRadius:10, padding:'12px 14px'}}>
+        Aún no hay registro por historia para este alumno. Aparecerá automáticamente cuando practique una <b>Comprensión lectora</b>, <b>auditiva</b> o <b>Story</b> con los materiales actualizados (indica Historia/Audio #1–4 y su nota).
+      </div>
+    </div>
+  );
   const META = {
     reading:   { ico:'📚', label:'Comprensión lectora', unit:'Historia' },
     listening: { ico:'🎧', label:'Comprensión auditiva', unit:'Audio' },

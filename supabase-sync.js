@@ -98,20 +98,20 @@
       forum[p.group_id].posts.push({
         id:p.id, date:p.created_at, pinned:p.pinned,
         authorId:p.author_id, authorName:p.author_name, authorRole:p.author_role,
-        title:p.title, body:p.body, replies:[],
+        title:p.title, body:p.body, mediaUrl:p.media_url || null, mediaKind:p.media_kind || null, replies:[],
       });
     });
     const postIndex = {};
     Object.values(forum).forEach(g => g.posts.forEach(p => postIndex[p.id] = p));
     (replies || []).forEach(r => {
       const p = postIndex[r.post_id];
-      if (p) p.replies.push({ id:r.id, date:r.created_at, authorId:r.author_id, authorName:r.author_name, authorRole:r.author_role, body:r.body });
+      if (p) p.replies.push({ id:r.id, date:r.created_at, authorId:r.author_id, authorName:r.author_name, authorRole:r.author_role, body:r.body, parentId:r.parent_id || null, mediaUrl:r.media_url || null, mediaKind:r.media_kind || null });
     });
     Object.values(forum).forEach(g => g.posts.sort((a,b)=>b.date.localeCompare(a.date)));
     write(KEYS.forum, forum);
 
     const likesMap = {};
-    (likes || []).forEach(l => { likesMap[l.post_id] = likesMap[l.post_id] || []; likesMap[l.post_id].push(l.user_id); });
+    (likes || []).forEach(l => { likesMap[l.post_id] = likesMap[l.post_id] || []; likesMap[l.post_id].push({ u: l.user_id, e: l.emoji || '❤️' }); });
     write(KEYS.likes, likesMap);
 
     const mutesMap = {};
@@ -222,19 +222,21 @@
     safe(SB().from('forum_posts').insert({
       id: post.id, group_id: groupId, author_id: post.authorId, author_name: post.authorName,
       author_role: post.authorRole, title: post.title, body: post.body, pinned: false,
+      media_url: post.mediaUrl || null, media_kind: post.mediaKind || null,
     }));
   }
   function pushReply(postId, reply) {
     safe(SB().from('forum_replies').insert({
       id: reply.id, post_id: postId, author_id: reply.authorId, author_name: reply.authorName,
       author_role: reply.authorRole, body: reply.body,
+      parent_id: reply.parentId || null, media_url: reply.mediaUrl || null, media_kind: reply.mediaKind || null,
     }));
   }
   function pushPin(postId, pinned) { safe(SB().from('forum_posts').update({ pinned }).eq('id', postId)); }
   function deletePostDb(postId) { safe(SB().from('forum_posts').delete().eq('id', postId)); }
   function deleteReplyDb(replyId) { safe(SB().from('forum_replies').delete().eq('id', replyId)); }
-  function pushLike(postId, userId, liked) {
-    if (liked) safe(SB().from('forum_likes').insert({ post_id: postId, user_id: userId }));
+  function pushLike(postId, userId, emojiOrNull) {
+    if (emojiOrNull) safe(SB().from('forum_likes').upsert({ post_id: postId, user_id: userId, emoji: emojiOrNull }, { onConflict: 'post_id,user_id' }));
     else safe(SB().from('forum_likes').delete().eq('post_id', postId).eq('user_id', userId));
   }
   function pushMute(userId, until) {
