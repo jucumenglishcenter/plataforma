@@ -680,6 +680,8 @@ function StudentDetail({ studentId, onBack }) {
 
       {window.TeacherStudentNotes && <TeacherStudentNotes studentId={stu.id} />}
 
+      <StudentPartsCard studentId={stu.id} />
+
       <div className="scard" style={{marginTop:18}}>
         <div className="sec-head">
           <div className="sec-title">Historial de actividad</div>
@@ -941,6 +943,63 @@ function DetailModal({ category, ico, items, date, onClose }) {
     </div>
   );
 }
+/* Detalle POR PARTE: qué historia/audio (1-4) hizo el alumno dentro de cada
+ * material (Stories, Comprensión lectora, Comprensión auditiva). Lee la tabla
+ * activity_parts de la nube (la llena el conector jucum-connect.js). */
+function StudentPartsCard({ studentId }) {
+  const [parts, setParts] = React.useState(null);
+  React.useEffect(() => {
+    let alive = true;
+    if (window.JUCUM_SYNC && window.JUCUM_SYNC.fetchActivityParts) {
+      window.JUCUM_SYNC.fetchActivityParts(studentId).then(r => { if (alive) setParts(r || []); }).catch(() => { if (alive) setParts([]); });
+    } else setParts([]);
+    return () => { alive = false; };
+  }, [studentId]);
+  if (!parts || !parts.length) return null; // cargando o sin datos por parte todavía
+  const META = {
+    reading:   { ico:'📚', label:'Comprensión lectora', unit:'Historia' },
+    listening: { ico:'🎧', label:'Comprensión auditiva', unit:'Audio' },
+    story:     { ico:'📖', label:'Stories y Diálogos', unit:'Historia' },
+  };
+  const groups = {};
+  parts.forEach(p => { const k = p.module_id + '|' + p.activity_id; (groups[k] = groups[k] || []).push(p); });
+  return (
+    <div className="scard" style={{marginTop:18}}>
+      <div className="sec-head">
+        <div className="sec-title">📍 Detalle por historia / audio</div>
+        <span className="sec-meta">qué parte exacta hizo</span>
+      </div>
+      {Object.keys(groups).map(k => {
+        const rows = groups[k];
+        const actId = k.split('|')[1];
+        const m = META[actId] || { ico:'📄', label: actId, unit:'Parte' };
+        const maxPart = Math.max(4, ...rows.map(r => r.part));
+        const byPart = {}; rows.forEach(r => { byPart[r.part] = r; });
+        return (
+          <div key={k} style={{border:'1px solid var(--border)', borderRadius:12, padding:'11px 13px', marginBottom:10}}>
+            <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:9}}>
+              <span style={{fontSize:18}}>{m.ico}</span>
+              <b style={{flex:1, fontSize:13.5}}>{m.label}</b>
+              <span style={{fontSize:11, fontWeight:800, color:'#1F3A8A', background:'#E3E9F8', borderRadius:11, padding:'2px 9px'}}>{rows.length}/{maxPart} {m.unit.toLowerCase()}s</span>
+            </div>
+            <div style={{display:'grid', gridTemplateColumns:`repeat(${maxPart},1fr)`, gap:8}}>
+              {Array.from({length: maxPart}, (_, i) => i + 1).map(n => {
+                const r = byPart[n];
+                return (
+                  <div key={n} style={{border:'1.5px solid ' + (r ? '#A5D6A7' : 'var(--border)'), borderRadius:10, padding:'9px 6px', textAlign:'center', background: r ? '#F0FAF1' : '#FAFAF6', opacity: r ? 1 : .5}}>
+                    <div style={{fontSize:10.5, fontWeight:800, color: r ? '#2E7D32' : 'var(--text-soft)'}}>{m.unit} {n}</div>
+                    <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13, marginTop:3}}>{r ? (r.score != null ? r.score + '%' : '✓') : '🔒'}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* Group activity events by calendar day, newest first */
 function ActivityByDay({ events }) {
   const groups = {};

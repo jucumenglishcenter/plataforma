@@ -245,8 +245,7 @@
   window.JUCUM_SYNC = {
     hydrate, pushSettings, pushProgress, pushNotif, markNotifRead, markAllNotifRead,
     pushEvaluation, pushPost, pushReply, pushPin, deletePostDb, deleteReplyDb, pushLike, pushMute,
-    pushModule, deleteModuleDb, fetchModules, computeStats,
-    pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb, uploadAttachments, refreshTasks, refreshProgress,
+    pushModule, deleteModuleDb, fetchModules, fetchActivityParts, computeStats,    pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb, uploadAttachments, refreshTasks, refreshProgress,
     pushExam, deleteExamDb, pushWindow, deleteWindowDb,
     pushAttendance, pushSurvey,
   };
@@ -461,5 +460,13 @@
     const { data, error } = await SB().from('module_catalog').select('*').order('sort');
     if (error) { console.warn('fetchModules:', error.message); return null; }
     return data;
+  }
+  /* Progreso POR PARTE (historia/audio 1-4 dentro de un material). Lo llena el
+   * conector jucum-connect.js en la tabla activity_parts. Devuelve las filas
+   * del alumno para que el panel del profesor muestre qué historia/audio hizo. */
+  async function fetchActivityParts(studentId) {
+    const { data, error } = await SB().from('activity_parts').select('*').eq('user_id', studentId);
+    if (error) { console.warn('fetchActivityParts:', error.message); return []; }
+    return data || [];
   }
 })();
