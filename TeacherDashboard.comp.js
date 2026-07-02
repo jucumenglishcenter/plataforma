@@ -51,6 +51,7 @@ function TeacherDashboard({ onLogout, user }) {
           <a className={`nav-link ${view.kind==='class'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'class'});}}>🏫 Clase</a>
           <a className={`nav-link ${(view.kind==='assess'||view.kind==='evaluate'||view.kind==='exams')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'assess'});}}>📊 Evaluación</a>
           <a className={`nav-link ${view.kind==='planner'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'planner'});}}>🗓️ Planificar</a>
+          <a className={`nav-link ${view.kind==='messages'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'messages'});}} style={{position:'relative'}}>✉️ Mensajes{(() => { const n = window.JUCUM_MSG ? window.JUCUM_MSG.unreadForTeacher() : 0; return n > 0 ? <span className="nav-dot">{n > 9 ? '9+' : n}</span> : null; })()}</a>
           <TeacherForumNav onOpen={(gid)=>setView({kind:'forum', group:gid})} />
           <NotifBell userId="teacher" />
           <div className="user-pill">
@@ -63,6 +64,8 @@ function TeacherDashboard({ onLogout, user }) {
 
       {view.kind === 'assess' ? (
         <TeacherAssessment onBack={() => setView({kind:'groups'})} initialTab={view.tab} />
+      ) : view.kind === 'messages' ? (
+        <TeacherMessages onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'planner' ? (
         <ClassPlanner onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'evaluate' ? (
@@ -214,6 +217,8 @@ function GroupsView({ stats, onSelectGroup, teacherName }) {
           );
         })}
       </div>
+
+      {window.TutorialAdminCard && <TutorialAdminCard />}
     </>
   );
 }

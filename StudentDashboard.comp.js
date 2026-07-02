@@ -111,6 +111,7 @@ function StudentDashboard({ user, onLogout }) {
     return () => { alive = false; clearInterval(iv); window.removeEventListener('focus', refresh); window.removeEventListener('pageshow', onPageShow); document.removeEventListener('visibilitychange', onVis); };
   }, []);
   const forumUnread = window.JUCUM_FORUM ? window.JUCUM_FORUM.forumUnreadCount(student.id, student.group) : 0;
+  const msgUnread = window.JUCUM_MSG ? window.JUCUM_MSG.unreadForStudent(student.id) : 0;
   const openForum = () => {
     if (window.JUCUM_FORUM) window.JUCUM_FORUM.markForumSeen(student.id, student.group);
     setFTick(t => t + 1);
@@ -204,16 +205,18 @@ function StudentDashboard({ user, onLogout }) {
           <img src={window.JUCUM_LOGO || 'logo-jucum.png'} alt="JUCUM EC" />
           <div className="pgtitle">Mi panel de aprendizaje</div>
         </div>
-        <div className="app-right">
+        <div className="app-right" data-tut="nav">
           <span className="role-pill s">🎓 Alumno</span>
           <a className={`nav-link ${view==='practica'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('practica');}}>📚 Mi práctica</a>
           <a className={`nav-link ${view==='profile'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('profile');}}>👤 Mi perfil</a>
           <a className={`nav-link ${view==='forum'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();openForum();}} style={{position:'relative'}}>💬 Foro{forumUnread > 0 && <span className="nav-dot">{forumUnread > 9 ? '9+' : forumUnread}</span>}</a>
+          <a className={`nav-link ${view==='mensajes'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('mensajes');}} style={{position:'relative'}}>✉️ Mensajes{msgUnread > 0 && <span className="nav-dot">{msgUnread > 9 ? '9+' : msgUnread}</span>}</a>
           <a className={`nav-link ${view==='tasks'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('tasks');}}>📝 Tareas</a>
           <a className={`nav-link ${view==='exam'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('exam');}}>🎓 Examen</a>
           <a className={`nav-link ${(view==='diagnosis'||view==='report'||view==='avance')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('avance');}}>📈 Mi avance</a>
           <a className={`nav-link ${view==='payments'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('payments');}} style={{position:'relative', color:(acct.blocked||acct.state==='por_vencer')?'#C62828':undefined}}>💳 Pagos{(acct.blocked||acct.state==='por_vencer') && <span className="nav-dot">!</span>}</a>
-          <NotifBell userId={student.id} onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); else if (n.link === 'tasks') setView('tasks'); else if (n.link === 'exam') setView('exam'); }} />
+          <a className="nav-link" href="#" onClick={(e)=>{e.preventDefault(); setView('dashboard'); setTimeout(()=>{ if (window.JUCUM_TUTORIAL && window.JUCUM_TUTORIAL.start) window.JUCUM_TUTORIAL.start(); }, 350);}} title="Ver el recorrido de la plataforma">🎓 Tour</a>
+          <span data-tut="bell" style={{display:'inline-flex'}}><NotifBell userId={student.id} onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); else if (n.link === 'tasks') setView('tasks'); else if (n.link === 'exam') setView('exam'); else if (n.link === 'messages') setView('mensajes'); }} /></span>
           <div className="user-pill">
             <div className="ava" style={{background:`linear-gradient(135deg,${level.color}80,${level.dark})`}}>
               {student.fullName.split(' ').map(n=>n[0]).slice(0,2).join('')}
@@ -243,6 +246,8 @@ function StudentDashboard({ user, onLogout }) {
           <button className="back-btn" onClick={() => setView('dashboard')} style={{padding:'10px 28px 0'}}>← Volver al panel</button>
           <Forum user={user} groupOverride={student.group} />
         </>
+      ) : view === 'mensajes' ? (
+        <StudentMessages student={student} onBack={() => setView('dashboard')} />
       ) : view === 'practica' ? (
         <StudentPractice student={student} settings={settings} onBack={() => setView('dashboard')} />
       ) : (
@@ -262,9 +267,10 @@ function StudentDashboard({ user, onLogout }) {
         </div>
 
         {/* — Neuro + (Racha fusionada con Meta de hoy) — */}
+        {window.StudentTutorial && <StudentTutorial student={student} />}
         <div className="two-col" style={{gridTemplateColumns:'1.4fr 1fr', marginTop:18}}>
-          <MascotCard student={student} />
-          <DayCard student={student} streak={student.streak} todayMin={todayMin} target={targetMin} />
+          <div data-tut="neuro"><MascotCard student={student} /></div>
+          <div data-tut="meta"><DayCard student={student} streak={student.streak} todayMin={todayMin} target={targetMin} /></div>
         </div>
 
         {/* — Campeones de la semana (protagonista) + Top del grupo (simple) — */}
@@ -274,7 +280,7 @@ function StudentDashboard({ user, onLogout }) {
         </div>
 
         {/* — CTA: todo el material vive en "Mi práctica" — */}
-        <button type="button" onClick={() => setView('practica')} style={{marginTop:18, width:'100%', border:'none', cursor:'pointer', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:20, color:'#fff', background:'linear-gradient(135deg,#F4A02C,#E07A12)', borderRadius:18, padding:18, display:'flex', alignItems:'center', justifyContent:'center', gap:12, boxShadow:'0 10px 24px rgba(224,122,18,.32)'}}>▶ Empieza a practicar →</button>
+        <button type="button" data-tut="practica" onClick={() => setView('practica')} style={{marginTop:18, width:'100%', border:'none', cursor:'pointer', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:20, color:'#fff', background:'linear-gradient(135deg,#F4A02C,#E07A12)', borderRadius:18, padding:18, display:'flex', alignItems:'center', justifyContent:'center', gap:12, boxShadow:'0 10px 24px rgba(224,122,18,.32)'}}>▶ Empieza a practicar →</button>
         <div style={{textAlign:'center', fontSize:12, color:'var(--text-mute,#A8A8A8)', fontWeight:700, marginTop:9}}>Todo tu material y tus repasos de hoy en un solo lugar</div>
 
         {/* ── Recordatorio suave de vocabulario (2–3x al día) ── */}
