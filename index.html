@@ -12,7 +12,7 @@
    aquí a propósito: así no depende de subir ningún archivo extra. */
 (function(){if(window.JUCUM_NAV)return;function uid(){try{var u=JSON.parse(localStorage.getItem('jucum_user')||'null');return u?String(u.id||u.username||u.role||''):'';}catch(e){return'';}}function key(s){return'jucum_nav_'+s+'_'+uid();}window.JUCUM_NAV={load:function(s,f){try{var r=sessionStorage.getItem(key(s));return r==null?f:JSON.parse(r);}catch(e){return f;}},save:function(s,v){try{sessionStorage.setItem(key(s),JSON.stringify(v));}catch(e){}},clearAll:function(){try{var d=[];for(var i=0;i<sessionStorage.length;i++){var k=sessionStorage.key(i);if(k&&k.indexOf('jucum_nav_')===0)d.push(k);}d.forEach(function(k){sessionStorage.removeItem(k);});}catch(e){}}};})();
 </script>
-<link rel="stylesheet" href="colors_and_type.css?v=20260704a">
+<link rel="stylesheet" href="colors_and_type.css?v=20260704b">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Nunito',sans-serif;background:var(--bg-tint);color:var(--text);min-height:100vh;}
@@ -982,72 +982,39 @@ main{max-width:1100px;margin:0 auto;padding:28px 24px 80px;}
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 </head>
 <body data-screen-label="00 Auth · Login">
 <div id="root"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=20260704a"></script>
-<script src="logo.js?v=20260704a"></script>
-<script src="supabase-client.js?v=20260704a"></script>
+<script src="config.js?v=20260704b"></script>
+<script src="logo.js?v=20260704b"></script>
+<script src="supabase-client.js?v=20260704b"></script>
 <script>/* La demostración ya NO desconecta Supabase: el ingreso real SIEMPRE funciona. Limpiamos cualquier marca de demo atascada para que el dispositivo se auto-repare. */try{localStorage.removeItem('jucum_demo_mode');}catch(e){}</script>
-<script src="supabase-sync.js?v=20260704a"></script>
-<script type="text/babel" src="data.js?v=20260704a"></script>
-<script src="evaluations.js?v=20260704a"></script>
-<script src="forum.js?v=20260704a"></script>
-<script src="sounds.js?v=20260704a"></script>
-<script src="notifications.js?v=20260704a"></script>
-<script src="messages.js?v=20260704a"></script>
-<script src="mascot.js?v=20260704a"></script>
-<script src="payments.js?v=20260704a"></script>
-<script src="teacher-tools.js?v=20260704a"></script>
-<script src="practice-guide.js?v=20260704a"></script>
-<script src="assignments.js?v=20260704a"></script>
-<script src="exams.js?v=20260704a"></script>
-<script src="attendance.js?v=20260704a"></script>
-<script src="survey.js?v=20260704a"></script>
-<script src="evolution.js?v=20260704a"></script>
-<script src="demo-seed.js?v=20260704a"></script>
-<script src="registration.js?v=20260704a"></script>
-<script src="retention.js?v=20260704a"></script>
-<script type="text/babel" src="Evaluations.comp.js?v=20260704a"></script>
-<script type="text/babel" src="Assignments.comp.js?v=20260704a"></script>
-<script type="text/babel" src="Readiness.comp.js?v=20260704a"></script>
-<script type="text/babel" src="Exams.comp.js?v=20260704a"></script>
-<script type="text/babel" src="Attendance.comp.js?v=20260704a"></script>
-<script type="text/babel" src="Survey.comp.js?v=20260704a"></script>
-<script type="text/babel" src="MyEvolution.comp.js?v=20260704a"></script>
-<script type="text/babel" src="WeeklyPlan.comp.js?v=20260704a"></script>
-<script type="text/babel" src="AdminRegister.comp.js?v=20260704a"></script>
-<script type="text/babel" src="Retention.comp.js?v=20260704a"></script>
-<script type="text/babel" src="Grades.comp.js?v=20260704a"></script>
-<script type="text/babel" src="StudentReport.comp.js?v=20260704a"></script>
-<script type="text/babel" src="ManageGroups.comp.js?v=20260704a"></script>
-<script type="text/babel" src="ManageModules.comp.js?v=20260704a"></script>
-<script type="text/babel" src="TeacherMaterials.comp.js?v=20260704a"></script>
-<script type="text/babel" src="ManageStudents.comp.js?v=20260704a"></script>
-<script type="text/babel" src="LevelPromotion.comp.js?v=20260704a"></script>
-<script type="text/babel" src="Forum.comp.js?v=20260704a"></script>
-<script type="text/babel" src="Onboarding.comp.js?v=20260704a"></script>
-<script type="text/babel" src="Profile.comp.js?v=20260704a"></script>
-<script type="text/babel" src="GroupReport.comp.js?v=20260704a"></script>
-<script type="text/babel" src="Notifications.comp.js?v=20260704a"></script>
-<script type="text/babel" src="Mascot.comp.js?v=20260704a"></script>
-<script type="text/babel" src="Login.comp.js?v=20260704a"></script>
-<script type="text/babel" src="StudentDiagnosis.comp.js?v=20260704a"></script>
-<script type="text/babel" src="StudentPayments.comp.js?v=20260704a"></script>
-<script type="text/babel" src="AdminDashboard.comp.js?v=20260704a"></script>
-<script type="text/babel" src="TeacherClass.comp.js?v=20260704a"></script>
-<script type="text/babel" src="ClassPlanner.comp.js?v=20260704a"></script>
-<script type="text/babel" src="messages-ui.comp.js?v=20260704a"></script>
-<script type="text/babel" src="tutorial.comp.js?v=20260704a"></script>
-<script type="text/babel" src="StudentDashboard.comp.js?v=20260704a"></script>
-<script type="text/babel" src="TeacherDashboard.comp.js?v=20260704a"></script>
-<script type="text/babel" src="DevDashboard.comp.js?v=20260704a"></script>
-<script type="text/babel" src="App.comp.js?v=20260704a"></script>
-<script src="student-preview.js?v=20260704a"></script>
-<script src="inactivity.js?v=20260704a"></script>
-<script src="app-update.js?v=20260704a"></script>
+<script src="supabase-sync.js?v=20260704b"></script>
+<script src="evaluations.js?v=20260704b"></script>
+<script src="forum.js?v=20260704b"></script>
+<script src="sounds.js?v=20260704b"></script>
+<script src="notifications.js?v=20260704b"></script>
+<script src="messages.js?v=20260704b"></script>
+<script src="mascot.js?v=20260704b"></script>
+<script src="payments.js?v=20260704b"></script>
+<script src="teacher-tools.js?v=20260704b"></script>
+<script src="practice-guide.js?v=20260704b"></script>
+<script src="assignments.js?v=20260704b"></script>
+<script src="exams.js?v=20260704b"></script>
+<script src="attendance.js?v=20260704b"></script>
+<script src="survey.js?v=20260704b"></script>
+<script src="evolution.js?v=20260704b"></script>
+<script src="demo-seed.js?v=20260704b"></script>
+<script src="registration.js?v=20260704b"></script>
+<script src="retention.js?v=20260704b"></script>
+<script src="student-preview.js?v=20260704b"></script>
+<script src="inactivity.js?v=20260704b"></script>
+<script src="app-update.js?v=20260704b"></script>
+
+<!-- ⚡ Carga rápida: compila 1 vez y cachea; luego entra directo (ver fast-loader.js) -->
+<script>window.__JUCUM_APP_SCRIPTS=["data.js?v=20260704b","Evaluations.comp.js?v=20260704b","Assignments.comp.js?v=20260704b","Readiness.comp.js?v=20260704b","Exams.comp.js?v=20260704b","Attendance.comp.js?v=20260704b","Survey.comp.js?v=20260704b","MyEvolution.comp.js?v=20260704b","WeeklyPlan.comp.js?v=20260704b","AdminRegister.comp.js?v=20260704b","Retention.comp.js?v=20260704b","Grades.comp.js?v=20260704b","StudentReport.comp.js?v=20260704b","ManageGroups.comp.js?v=20260704b","ManageModules.comp.js?v=20260704b","TeacherMaterials.comp.js?v=20260704b","ManageStudents.comp.js?v=20260704b","LevelPromotion.comp.js?v=20260704b","Forum.comp.js?v=20260704b","Onboarding.comp.js?v=20260704b","Profile.comp.js?v=20260704b","GroupReport.comp.js?v=20260704b","Notifications.comp.js?v=20260704b","Mascot.comp.js?v=20260704b","Login.comp.js?v=20260704b","StudentDiagnosis.comp.js?v=20260704b","StudentPayments.comp.js?v=20260704b","AdminDashboard.comp.js?v=20260704b","TeacherClass.comp.js?v=20260704b","ClassPlanner.comp.js?v=20260704b","messages-ui.comp.js?v=20260704b","tutorial.comp.js?v=20260704b","StudentDashboard.comp.js?v=20260704b","TeacherDashboard.comp.js?v=20260704b","DevDashboard.comp.js?v=20260704b","App.comp.js?v=20260704b"];</script>
+<script src="fast-loader.js?v=20260704b"></script>
 </body>
 </html>
