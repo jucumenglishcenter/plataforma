@@ -56,8 +56,8 @@ function TeacherClass({ onBack }) {
 }
 
 /* ── Prácticas (sección del menú): Práctica del día + dirigida + Tareas ── */
-function TeacherPractice({ onBack }) {
-  const [tab, setTab] = React.useState('daily');
+function TeacherPractice({ onBack, only }) {
+  const [tab, setTab] = React.useState(only === 'tasks' ? 'tasks' : 'daily');
   const [, setTick] = React.useState(0);
   const refresh = () => setTick(t => t + 1);
   React.useEffect(() => { if (window.JUCUM_TT) window.JUCUM_TT.cloudLoadAll().then(refresh); }, []);
@@ -73,11 +73,11 @@ function TeacherPractice({ onBack }) {
         </div>
       </div>
 
-      <div className="mm-tabs" style={{flexWrap:'wrap'}}>
+      {only !== 'tasks' && <div className="mm-tabs" style={{flexWrap:'wrap'}}>
         <button className={`mm-tab ${tab==='daily'?'on':''}`} onClick={()=>setTab('daily')}>📅 Práctica del día</button>
         <button className={`mm-tab ${tab==='directed'?'on':''}`} onClick={()=>setTab('directed')}>📌 Práctica dirigida</button>
         <button className={`mm-tab ${tab==='tasks'?'on':''}`} onClick={()=>setTab('tasks')}>📄 Tareas</button>
-      </div>
+      </div>}
 
       {tab==='daily' ? <DailyPracticePanel onChange={refresh} />
         : tab==='directed' ? <DirectedPracticePanel onChange={refresh} />

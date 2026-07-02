@@ -48,10 +48,9 @@ function TeacherDashboard({ onLogout, user }) {
         <div className="app-right">
           <span className="role-pill t">👨‍🏫 Profesor</span>
           <a className={`nav-link ${['groups','group','student'].includes(view.kind)?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'groups'});}}>👥 Mis grupos</a>
-          <a className={`nav-link ${view.kind==='class'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'class'});}}>🏫 Clase</a>
-          <a className={`nav-link ${(view.kind==='assess'||view.kind==='evaluate'||view.kind==='exams')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'assess'});}}>📊 Evaluación</a>
           <a className={`nav-link ${view.kind==='planner'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'planner'});}}>🗓️ Planificar</a>
-          <a className={`nav-link ${view.kind==='messages'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'messages'});}} style={{position:'relative'}}>✉️ Mensajes{(() => { const n = window.JUCUM_MSG ? window.JUCUM_MSG.unreadForTeacher() : 0; return n > 0 ? <span className="nav-dot">{n > 9 ? '9+' : n}</span> : null; })()}</a>
+          <a className={`nav-link ${(view.kind==='assess'||view.kind==='evaluate'||view.kind==='exams')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'assess'});}}>📊 Evaluación</a>
+          <a className={`nav-link ${view.kind==='messages'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'messages'});}} style={{position:'relative'}}>💬 Chats{(() => { const n = window.JUCUM_MSG ? window.JUCUM_MSG.unreadForTeacher() : 0; return n > 0 ? <span className="nav-dot">{n > 9 ? '9+' : n}</span> : null; })()}</a>
           <TeacherForumNav onOpen={(gid)=>setView({kind:'forum', group:gid})} />
           <NotifBell userId="teacher" />
           <div className="user-pill">
@@ -65,7 +64,7 @@ function TeacherDashboard({ onLogout, user }) {
       {view.kind === 'assess' ? (
         <TeacherAssessment onBack={() => setView({kind:'groups'})} initialTab={view.tab} />
       ) : view.kind === 'messages' ? (
-        <TeacherMessages onBack={() => setView({kind:'groups'})} />
+        <TeacherMessages onBack={() => setView({kind:'groups'})} initialOpen={view.open} />
       ) : view.kind === 'planner' ? (
         <ClassPlanner onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'evaluate' ? (
@@ -123,6 +122,7 @@ function TeacherDashboard({ onLogout, user }) {
         {view.kind === 'student' && (
           <StudentDetail
             studentId={view.id}
+            onContact={(sid) => setView({kind:'messages', open: sid})}
             onBack={() => { const stu = STUDENTS.find(s => s.id === view.id); setView({kind:'group', id:stu.group}); }}
           />
         )}
@@ -162,7 +162,7 @@ function TeacherAssessment({ onBack, canDefine, initialTab }) {
       </div>
       {tab === 'eval' ? <TeacherEvaluate onBack={onBack} hideBack />
         : tab === 'exams' ? <TeacherExams onBack={onBack} canDefine={canDefine} hideBack />
-        : tab === 'tareas' ? (window.TeacherPractice ? <TeacherPractice onBack={onBack} /> : <main><div className="empty-state">Falta el módulo de tareas.</div></main>)
+        : tab === 'tareas' ? (window.TeacherPractice ? <TeacherPractice onBack={onBack} only="tasks" /> : <main><div className="empty-state">Falta el módulo de tareas.</div></main>)
         : <PrepNotas />}
     </div>
   );
@@ -388,6 +388,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
   const groupAvg = members.length ? Math.round(members.reduce((s,x)=>s+getStudentMastery(x).pct,0)/members.length) : 0;
   const [q, setQ] = React.useState('');
   const [sortKey, setSortKey] = React.useState('dominio');
+  const [deleting, setDeleting] = React.useState(null);
   const SORTS = {
     dominio:        (a,b)=>getStudentMastery(b).pct - getStudentMastery(a).pct,
     practica_mas:   (a,b)=>(b.totalMinutes||0) - (a.totalMinutes||0),
@@ -451,10 +452,28 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
           <div className="col-time">Tiempo</div>
           <div className="col-last">Última actividad</div>
           <div className="col-status">Estado</div>
+          <div></div>
         </div>
-        {shown.map((s, i) => <StudentRow key={s.id} stu={s} rank={i+1} level={level} onClick={() => onSelectStudent(s.id)} />)}
+        {shown.map((s, i) => <StudentRow key={s.id} stu={s} rank={i+1} level={level} onClick={() => onSelectStudent(s.id)} onDelete={() => setDeleting(s)} />)}
         {shown.length === 0 && <div style={{padding:'26px',textAlign:'center',color:'#999',fontWeight:700}}>Sin resultados para «{q}»</div>}
       </div>
+
+      {deleting && window.TeacherPasswordGate && (
+        <TeacherPasswordGate
+          danger
+          title="🗑️ Eliminar alumno"
+          message={`Vas a eliminar a ${deleting.fullName} (@${deleting.username}). Esto borra PARA SIEMPRE su cuenta y acceso, todo su progreso, XP y racha, sus tareas y notas, y su historial de práctica. Esta acción NO se puede deshacer. Ingresa tu contraseña de profesor para confirmar.`}
+          confirmLabel="🗑️ Eliminar definitivamente"
+          onConfirm={() => {
+            const { STUDENTS, saveStudents } = window.JUCUM_DATA;
+            const i = STUDENTS.findIndex(x => x.id === deleting.id);
+            if (i >= 0) { STUDENTS.splice(i, 1); saveStudents(STUDENTS); }
+            if (window.JUCUM_SB) window.JUCUM_SB.remove('users', deleting.id).catch(() => {});
+            setDeleting(null); setQ(x => x + '');
+          }}
+          onClose={() => setDeleting(null)}
+        />
+      )}
 
       {showSettings && <GroupSettingsModal groupId={groupId} level={level} onClose={() => setShowSettings(false)} />}
     </>
@@ -672,7 +691,7 @@ function ModuleChecklist({ stu, group }) {
   );
 }
 
-function StudentRow({ stu, rank, level, onClick }) {
+function StudentRow({ stu, rank, level, onClick, onDelete }) {
   const mastery = window.JUCUM_DATA.getStudentMastery(stu).pct;
   const status = stu.lastActiveDays === 0 ? {label:'🟢 Hoy',cls:'ok'}
               : stu.lastActiveDays <= 2 ? {label:`🟢 hace ${stu.lastActiveDays}d`,cls:'ok'}
@@ -697,13 +716,14 @@ function StudentRow({ stu, rank, level, onClick }) {
       <div className="col-time">{Math.floor(stu.totalMinutes/60) > 0 ? `${Math.floor(stu.totalMinutes/60)}h ${stu.totalMinutes%60}m` : `${stu.totalMinutes}m`}</div>
       <div className="col-last">{stu.achievements.length} 🏆</div>
       <div className={`col-status ${status.cls}`}>{status.label}</div>
+      {onDelete ? <button className="row-del" title="Eliminar alumno" onClick={(e) => { e.stopPropagation(); onDelete(); }}>🗑️</button> : <span></span>}
     </div>
   );
 }
 
 /* ─── Student detail view ──────────────────────────────────────────── */
 
-function StudentDetail({ studentId, onBack }) {
+function StudentDetail({ studentId, onBack, onContact }) {
   const { STUDENTS, GROUPS, LEVELS, ACHIEVEMENT_DEFS, ACTIVITY_LOG, getStudentMastery } = window.JUCUM_DATA;
   const stu = STUDENTS.find(s => s.id === studentId);
   const mastery = getStudentMastery(stu);
@@ -737,7 +757,7 @@ function StudentDetail({ studentId, onBack }) {
         </div>
         <div className="sh-actions">
           <button className="btn-soft" onClick={() => setShowReport(true)}>📄 Reporte de avance</button>
-          <button className="btn-soft">📧 Contactar</button>
+          <button className="btn-soft" onClick={() => onContact && onContact(stu.id)}>💬 Contactar</button>
           <button className="btn-soft" onClick={() => setResetting(true)}>🔑 Resetear contraseña</button>
         </div>
       </div>

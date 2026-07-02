@@ -51,7 +51,17 @@ function StudentDashboard({ user, onLogout }) {
   const activeModule = activeModules[0] || allModules[0];
   const [view, setView] = React.useState(() => (window.JUCUM_NAV ? window.JUCUM_NAV.load('student', 'dashboard') : 'dashboard'));
   React.useEffect(() => { if (window.JUCUM_NAV) window.JUCUM_NAV.save('student', view); }, [view]);
-  const [showOnb, setShowOnb] = React.useState(() => !localStorage.getItem(`jucum_onboarded_${user.studentId}`));
+  const [showOnb, setShowOnb] = React.useState(() => {
+    if (localStorage.getItem(`jucum_onboarded_${user.studentId}`)) return false;
+    // Perfil con uso real → no volver a mostrar la bienvenida (y dejarlo marcado)
+    try {
+      const s = (window.JUCUM_DATA.STUDENTS || []).find(x => x.id === user.studentId);
+      const prog = window.JUCUM_DATA.getStudentProgress(user.studentId) || {};
+      const used = (s && ((s.streak || 0) > 0 || (s.totalMinutes || 0) > 15 || (s.completedModules || 0) > 0)) || Object.keys(prog.completed || {}).length > 0 || (prog.todayMinutes || 0) > 0;
+      if (used) { localStorage.setItem(`jucum_onboarded_${user.studentId}`, '1'); return false; }
+    } catch (e) {}
+    return true;
+  });
   const [surveyDue, setSurveyDue] = React.useState(false);
   React.useEffect(() => {
     try { if (window.JUCUM_SURVEY) setSurveyDue(window.JUCUM_SURVEY.isSurveyDue(student)); } catch {}
@@ -142,6 +152,7 @@ function StudentDashboard({ user, onLogout }) {
       const missing = targetMin - todayMin;
       window.JUCUM_NOTIF.pushNotif(student.id, {
         type: 'daily-reminder',
+        link: 'practica',
         title: '🎯 Tu meta diaria te espera',
         body: todayMin === 0
           ? `Aún no has practicado hoy. Necesitas ${targetMin} min para cumplir tu meta.`
@@ -156,10 +167,49 @@ function StudentDashboard({ user, onLogout }) {
       if (!localStorage.getItem(streakKey)) {
         window.JUCUM_NOTIF.pushNotif(student.id, {
           type: 'streak',
+          link: 'practica',
           title: '🔥 Tu racha está en peligro',
           body: `Lleva ${student.streak} día${student.streak === 1 ? '' : 's'} seguidos. Practica antes de medianoche para no perderla.`,
         });
         localStorage.setItem(streakKey, '1');
+      }
+    }
+  }, [student.id, progress.todayMinutes, settings.dailyTargetMin]);
+
+  // 🔥 Bono de racha al cumplir la meta diaria + 📉 aviso honesto de XP por inactividad
+  React.useEffect(() => {
+    if (!window.JUCUM_NOTIF) return;
+    const D = window.JUCUM_DATA;
+    const today = new Date().toISOString().slice(0, 10);
+    const tMin = progress.todayMinutes || 0;
+    const goal = settings.dailyTargetMin || 15;
+    if (tMin >= goal) {
+      const k = `jucum_goalbonus_${student.id}_${today}`;
+      if (!localStorage.getItem(k)) {
+        const streakNow = Math.max(1, (student.streak || 0));
+        const gained = Math.min(streakNow, 14) * 30;
+        const tomorrow = Math.min(streakNow + 1, 14) * 30;
+        window.JUCUM_NOTIF.pushNotif(student.id, {
+          type: 'streak', link: 'practica',
+          title: `🔥 ¡Meta cumplida! Racha de ${streakNow} día${streakNow === 1 ? '' : 's'}`,
+          body: tomorrow > gained
+            ? `Tu racha te da +${gained} XP. Vuelve mañana y sube a +${tomorrow} XP — mientras más larga tu racha, más XP. ¿Quieres más hoy? Los refuerzos ✨ también suman.`
+            : `Tu racha te da +${gained} XP (¡tope alcanzado!). No la sueltes — y los refuerzos ✨ siguen sumando XP extra.`,
+        });
+        localStorage.setItem(k, '1');
+      }
+    }
+    const d = D.getRealInactiveDays ? D.getRealInactiveDays(student) : 0;
+    if (d >= 2 && D.getInactivityXPLoss) {
+      const k2 = `jucum_xploss_${student.id}_${today}`;
+      if (!localStorage.getItem(k2)) {
+        const loss = D.getInactivityXPLoss(d), next = D.getInactivityXPLoss(d + 1);
+        window.JUCUM_NOTIF.pushNotif(student.id, {
+          type: 'daily-reminder', link: 'practica',
+          title: `📉 Estás perdiendo ${loss} XP por no practicar`,
+          body: `Llevas ${d} días sin practicar. Mañana la pérdida sube a ${next} XP. Practica hoy: recuperas tu XP y tu racha vuelve a sumar 💪`,
+        });
+        localStorage.setItem(k2, '1');
       }
     }
   }, [student.id, progress.todayMinutes, settings.dailyTargetMin]);
@@ -210,12 +260,12 @@ function StudentDashboard({ user, onLogout }) {
           <a className={`nav-link ${view==='practica'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('practica');}}>📚 Mi práctica</a>
           <a className={`nav-link ${view==='profile'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('profile');}}>👤 Mi perfil</a>
           <a className={`nav-link ${view==='forum'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();openForum();}} style={{position:'relative'}}>💬 Foro{forumUnread > 0 && <span className="nav-dot">{forumUnread > 9 ? '9+' : forumUnread}</span>}</a>
-          <a className={`nav-link ${view==='mensajes'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('mensajes');}} style={{position:'relative'}}>✉️ Mensajes{msgUnread > 0 && <span className="nav-dot">{msgUnread > 9 ? '9+' : msgUnread}</span>}</a>
+          <a className={`nav-link ${view==='mensajes'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('mensajes');}} style={{position:'relative'}}><span className="jwave" style={{marginRight:5}}>👨‍🏫</span>Hablemos{msgUnread > 0 && <span className="nav-dot">{msgUnread > 9 ? '9+' : msgUnread}</span>}</a>
           <a className={`nav-link ${view==='tasks'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('tasks');}}>📝 Tareas</a>
           <a className={`nav-link ${view==='exam'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('exam');}}>🎓 Examen</a>
           <a className={`nav-link ${(view==='diagnosis'||view==='report'||view==='avance')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('avance');}}>📈 Mi avance</a>
           <a className={`nav-link ${view==='payments'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('payments');}} style={{position:'relative', color:(acct.blocked||acct.state==='por_vencer')?'#C62828':undefined}}>💳 Pagos{(acct.blocked||acct.state==='por_vencer') && <span className="nav-dot">!</span>}</a>
-          <span data-tut="bell" style={{display:'inline-flex'}}><NotifBell userId={student.id} onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); else if (n.link === 'tasks') setView('tasks'); else if (n.link === 'exam') setView('exam'); else if (n.link === 'messages') setView('mensajes'); }} /></span>
+          <span data-tut="bell" style={{display:'inline-flex'}}><NotifBell userId={student.id} onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); else if (n.link === 'tasks') setView('tasks'); else if (n.link === 'exam') setView('exam'); else if (n.link === 'messages') setView('mensajes'); else if (n.link === 'practica' || n.type === 'daily-reminder' || n.type === 'streak' || n.type === 'achievement') setView('practica'); }} /></span>
           <div className="user-pill">
             <div className="ava" style={{background:`linear-gradient(135deg,${level.color}80,${level.dark})`}}>
               {student.fullName.split(' ').map(n=>n[0]).slice(0,2).join('')}
@@ -1162,24 +1212,37 @@ function Podium({ student, onSeeTop }) {
   );
 }
 
-/* Ruta de módulos — mapa con desbloqueo secuencial (escala a 7+) */
+/* Ruta de módulos — mapa con desbloqueo secuencial (escala a 7+)
+ * · verde sólido ✓ = módulo completado · anillo que se rellena = % de avance
+ * · “Aquí vas” + borde azul SOLO en el módulo actual (el último activo)
+ * · A1/A2 muestran el emoji del módulo en vez del número · 🔁 = repaso pendiente */
 function ModuleRoute({ student, selectedId, onSelect }) {
   const route = window.JUCUM_DATA.getModuleRoute(student);
-  const curIdx = (route.find(x => x.state === 'cur') || route[0] || {}).idx || 0;
-  const colors = { done:{bg:'#2EA84B',fg:'#fff'}, cur:{bg:'#1F3A8A',fg:'#fff'}, lock:{bg:'#E7E2D6',fg:'#A8A8A8'} };
+  let lastCur = -1;
+  route.forEach((x, i) => { if (x.state === 'cur') lastCur = i; });
+  if (lastCur < 0) lastCur = 0;
+  const useEmoji = student.level === 'a1' || student.level === 'a2';
   return (
     <div style={{background:'#fff', border:'1px solid var(--border)', borderRadius:16, padding:'14px 8px 6px', marginTop:4}}>
-      <div style={{fontSize:11, fontWeight:800, letterSpacing:'.06em', textTransform:'uppercase', color:'var(--text-mute,#A8A8A8)', margin:'0 10px 4px'}}>🗺️ Tu ruta · Módulo {curIdx + 1} de {route.length} · toca un módulo para ver su contenido</div>
-      <div style={{display:'flex', overflowX:'auto', padding:'14px 6px 10px', gap:0}}>
+      <div style={{fontSize:11, fontWeight:800, letterSpacing:'.06em', textTransform:'uppercase', color:'var(--text-mute,#A8A8A8)', margin:'0 10px 4px'}}>🗺️ Tu ruta · Módulo {lastCur + 1} de {route.length} · toca un módulo para ver su contenido</div>
+      <div style={{display:'flex', overflowX:'auto', padding:'16px 6px 10px', gap:0}}>
         {route.map((x, i) => {
-          const c = colors[x.state]; const sel = x.mod.id === selectedId;
+          const sel = x.mod.id === selectedId;
+          const done = x.state === 'done';
+          const lock = x.state === 'lock';
+          const isCur = i === lastCur && !done && !lock;
+          const pct = x.total ? Math.round(((x.doneCount || 0) / x.total) * 100) : 0;
+          const face = done ? '✓' : lock ? '🔒' : (useEmoji && x.mod.emoji ? x.mod.emoji : (i + 1));
+          const ring = done ? '#2EA84B' : lock ? '#EDE9DE' : `conic-gradient(#2EA84B ${pct * 3.6}deg, #E3E9F8 0deg)`;
           return (
-            <button key={x.mod.id} onClick={() => onSelect(x.mod.id)} style={{flex:'none', width:108, display:'flex', flexDirection:'column', alignItems:'center', gap:8, position:'relative', cursor:'pointer', background:'none', border:'none', fontFamily:'inherit', padding:0}}>
-              {x.state === 'cur' && <span style={{position:'absolute', top:-13, fontSize:9, fontWeight:800, background:'#1F3A8A', color:'#fff', padding:'2px 7px', borderRadius:10, whiteSpace:'nowrap', zIndex:2}}>Aquí vas</span>}
-              {x.hasReview && <span style={{position:'absolute', top:-3, right:24, width:21, height:21, borderRadius:'50%', background:'#5B3FA0', color:'#fff', fontSize:11, display:'flex', alignItems:'center', justifyContent:'center', zIndex:3, border:'2px solid #fff'}}>🔁</span>}
-              {i < route.length - 1 && <span style={{position:'absolute', top:23, left:77, width:56, height:3, background:x.state==='done'?'#2EA84B':'var(--border)', borderRadius:2, zIndex:0}}></span>}
-              <span style={{width:46, height:46, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize:16, zIndex:1, border:'3px solid #fff', background:c.bg, color:c.fg, boxShadow: sel ? '0 0 0 4px rgba(242,148,30,.35)' : (x.state==='cur' ? '0 0 0 4px rgba(31,58,138,.16)' : 'none')}}>{x.state==='done'?'✓':x.state==='lock'?'🔒':i+1}</span>
-              <span style={{fontSize:10.5, fontWeight:800, color:x.state==='lock'?'var(--text-mute,#A8A8A8)':'var(--text-soft,#6B6B6B)', textAlign:'center', lineHeight:1.2, maxWidth:98}}>M{i+1}<br/>{x.mod.name}</span>
+            <button key={x.mod.id} onClick={() => onSelect(x.mod.id)} style={{flex:'none', width:108, display:'flex', flexDirection:'column', alignItems:'center', gap:7, position:'relative', cursor:'pointer', background:'none', border:'none', fontFamily:'inherit', padding:0}}>
+              {isCur && <span style={{position:'absolute', top:-14, fontSize:9, fontWeight:800, background:'#1F3A8A', color:'#fff', padding:'2px 7px', borderRadius:10, whiteSpace:'nowrap', zIndex:2}}>Aquí vas</span>}
+              {x.hasReview && <span title="Tienes un repaso pendiente aquí" style={{position:'absolute', top:-4, right:26, width:17, height:17, borderRadius:'50%', background:'#5B3FA0', color:'#fff', fontSize:9, display:'flex', alignItems:'center', justifyContent:'center', zIndex:3, border:'2px solid #fff'}}>🔁</span>}
+              {i < route.length - 1 && <span style={{position:'absolute', top:24, left:78, width:54, height:3, background:done?'#2EA84B':'var(--border)', borderRadius:2, zIndex:0}}></span>}
+              <span style={{width:48, height:48, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', background:ring, zIndex:1, border: isCur ? '3px solid #1F3A8A' : '3px solid #fff', boxShadow: sel ? '0 0 0 4px rgba(242,148,30,.35)' : 'none'}}>
+                <span style={{width:34, height:34, borderRadius:'50%', background: done ? 'transparent' : '#fff', color: done ? '#fff' : lock ? '#A8A8A8' : '#1F3A8A', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize: (useEmoji && !done && !lock) ? 17 : 15}}>{face}</span>
+              </span>
+              <span style={{fontSize:10.5, fontWeight:800, color:lock?'var(--text-mute,#A8A8A8)':'var(--text-soft,#6B6B6B)', textAlign:'center', lineHeight:1.2, maxWidth:98}}>M{i + 1}<br/>{x.mod.name}{!done && !lock && <span style={{display:'block', color:'#2EA84B', fontSize:9.5, marginTop:1}}>{pct}% completado</span>}</span>
             </button>
           );
         })}
@@ -1265,16 +1328,26 @@ function NeuroCoach({ student }) {
   const [open, setOpen] = React.useState(false);
   const [topic, setTopic] = React.useState(null);
   const QA = [
-    { q:'⚡ ¿Cómo subo mi XP?', a:<span>Cada práctica que <b>apruebas (≥75%)</b> te da XP. Las <b>stories</b> dan XP por tiempo de lectura (10 min +5 · 20 min +10 · 30 min +15). Y si <b>repites</b> una práctica al día siguiente y subes tu nota, ¡también suma! Mientras más constante, más XP 💪</span> },
+    { q:'⚡ ¿Cómo subo mi XP?', a:<span>Cada práctica que <b>apruebas (≥75%)</b> te da XP. Las <b>stories</b> dan XP por tiempo de lectura (10 min +5 · 20 min +10 · 30 min +15). Tu <b>racha</b> también suma: <b>+30 XP por cada día seguido</b> (hasta 14). ¡Mientras más constante, más XP! 💪</span> },
     { q:'📚 ¿Cómo funcionan las prácticas?', a:<span>Se abren <b>en orden</b>: completa una para desbloquear la siguiente. Lee o escucha <b>sin traducir</b>, responde, y si fallas traduce <b>solo esa parte</b>. Vuelve al día siguiente para afianzar lo aprendido ✨</span> },
-    { q:'💛 ¿Cómo hago que Neuro se sienta mejor?', a:<span>¡Fácil! Practica <b>un poquito cada día</b>. Mi energía sube con tu constancia y subo de etapa (¡hasta <b>imparable</b> 🚀!). Si dejas de practicar me pongo triste y pierdo energía… ¡no me dejes solito! 🧠</span> },
+    { q:'🔁 ¿Por qué me vuelve a salir algo que ya hice?', a:<span>¡No es un error! Es el <b>repaso espaciado</b>: tu cerebro guarda mejor lo que repasa después de unos días de descanso. Cuando veas 🔁 en un módulo, esa práctica <b>toca repasarla</b> — hacerla de nuevo te da XP y fija lo aprendido para siempre 🧠</span> },
+    { q:'📊 ¿Qué significan los porcentajes?', a:<span>Cada material muestra <b>tu mejor nota</b> en él (ej. 85%). Necesitas <b>≥75%</b> para aprobar y desbloquear lo siguiente. Y el % del <b>módulo</b> en tu ruta es cuánto llevas completado de él. Si repites y subes tu nota, ¡el porcentaje sube contigo!</span> },
+    { q:'🏁 Ya terminé todo, ¿y ahora?', a:<span>¡Bravo! Pero ojo: terminar todo en un día <b>no termina tu camino</b> 😉 Cada día tendrás tu <b>práctica diaria</b> y <b>refuerzos ✨</b> (repasar lo aprobado): dan <b>XP extra</b> y mantienen tu racha viva. El que practica a diario le gana al que hace todo de golpe 🔥</span> },
+    { q:'💛 ¿Cómo hago que Neuro se sienta mejor?', a:<span>¡Fácil! Practica <b>un poquito cada día</b>. Mi energía sube con tu constancia y subo de etapa (¡hasta <b>imparable</b> 🚀!). Si dejas de practicar pierdo energía y tú pierdes XP… ¡no me dejes solito! 🧠</span> },
   ];
   return (
     <div style={{background:'#fff', border:'1px solid var(--border,#E8E5DC)', borderTop:'4px solid #FF5FA0', borderRadius:16, padding:'14px 16px', marginTop:14, boxShadow:'0 2px 4px rgba(0,0,0,.06)'}}>
       <div style={{display:'flex', alignItems:'center', gap:13}}>
-        <div style={{width:52, height:48, flexShrink:0, borderRadius:'50% 50% 47% 47%', background:'radial-gradient(circle at 50% 34%,#FF9CC6,#FF5FA0)', boxShadow:'inset 0 -5px 9px rgba(0,0,0,.13), 0 0 0 4px rgba(255,95,160,.18)', position:'relative'}}>
-          <span style={{position:'absolute', top:17, left:14, width:8, height:8, borderRadius:'50%', background:'#3A2230'}}></span>
-          <span style={{position:'absolute', top:17, right:14, width:8, height:8, borderRadius:'50%', background:'#3A2230'}}></span>
+        <div style={{position:'relative', flexShrink:0}}>
+          <div style={{width:58, height:54, borderRadius:'50% 50% 47% 47%', background:'radial-gradient(circle at 50% 30%,#FF9CC6,#FF5FA0)', boxShadow:'inset 0 -6px 10px rgba(0,0,0,.12), 0 0 0 4px rgba(255,95,160,.18)', position:'relative'}}>
+            <span style={{position:'absolute', top:5, left:'50%', transform:'translateX(-50%)', width:3, height:15, background:'rgba(122,32,72,.22)', borderRadius:2}}></span>
+            <span style={{position:'absolute', top:20, left:13, width:9, height:9, borderRadius:'50%', background:'#3A2230'}}></span>
+            <span style={{position:'absolute', top:20, right:13, width:9, height:9, borderRadius:'50%', background:'#3A2230'}}></span>
+            <span style={{position:'absolute', top:31, left:'50%', transform:'translateX(-50%)', width:18, height:9, borderBottom:'3.5px solid #7A2048', borderRadius:'0 0 16px 16px'}}></span>
+            <span style={{position:'absolute', top:28, left:6, width:9, height:5, borderRadius:'50%', background:'rgba(255,255,255,.5)'}}></span>
+            <span style={{position:'absolute', top:28, right:6, width:9, height:5, borderRadius:'50%', background:'rgba(255,255,255,.5)'}}></span>
+          </div>
+          <span className="jwave" style={{position:'absolute', right:-11, bottom:-3, fontSize:21}}>👋</span>
         </div>
         <button type="button" onClick={() => setOpen(o => !o)} style={{flex:1, textAlign:'left', background:'#FFF0F6', border:'1.5px solid #FFC9DE', borderRadius:14, padding:'12px 15px', cursor:'pointer', fontFamily:'inherit', fontWeight:800, fontSize:13.5, color:'#B23A77', lineHeight:1.45}}>
           👋 ¡Clic aquí y te explico cómo <b>aumentar tu XP</b>, cómo funcionan las <b>prácticas</b> y cómo hacer que <b>yo me sienta mejor</b>! 💛
@@ -1397,8 +1470,9 @@ function StudentPractice({ student, settings, onBack }) {
 function AchievementWarning({ student }) {
   const { getAchievementAlert } = window.JUCUM_DATA;
   const alert = getAchievementAlert(student);
+  if (alert && window.JUCUM_DATA.getRealInactiveDays) alert.days = window.JUCUM_DATA.getRealInactiveDays(student);
   React.useEffect(() => {
-    if (!alert || !window.JUCUM_NOTIF) return;
+    if (!alert || alert.days < 2 || !window.JUCUM_NOTIF) return;
     const today = new Date().toISOString().slice(0,10);
     const key = 'jucum_ach_warn_' + student.id;
     if (localStorage.getItem(key) === today) return;
@@ -1407,10 +1481,10 @@ function AchievementWarning({ student }) {
       type: 'achievement',
       title: '⚠️ Tus logros están en peligro',
       body: `Hace ${alert.days} días no practicas. ${alert.lost > 0 ? `Ya empezaste a perder ${alert.lost} logro${alert.lost===1?'':'s'}.` : `${alert.atRisk} logro${alert.atRisk===1?'':'s'} en riesgo.`} ¡Practica hoy para recuperarlos!`,
-      link: 'dashboard',
+      link: 'practica',
     });
   }, [alert && alert.days]);
-  if (!alert) return null;
+  if (!alert || alert.days < 2) return null;
   return (
     <div className="ach-warn">
       <span className="ach-warn-ico">⚠️</span>

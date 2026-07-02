@@ -864,8 +864,27 @@ function getStudentXP(student) {
       if (s) { xp += 40; if (typeof s.grade === 'number' && s.grade >= 70) xp += 20; }
     });
   } catch {}
-  return xp;
+  // Penalización suave por inactividad (crece cada día, tope 60) — se recupera al volver a practicar
+  xp -= getInactivityXPLoss(getRealInactiveDays(student));
+  return Math.max(0, xp);
 }
+
+/* Días reales sin practicar, derivados del progreso (no del campo estático de demo). */
+function getRealInactiveDays(student) {
+  try {
+    const prog = getStudentProgress(student.id) || {};
+    if ((prog.todayMinutes || 0) > 0) return 0;
+    if (prog.lastDay) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const last = new Date(prog.lastDay + 'T00:00:00');
+      return Math.max(0, Math.round((today - last) / 86400000));
+    }
+  } catch (e) {}
+  return typeof student.lastActiveDays === 'number' ? student.lastActiveDays : 0;
+}
+
+/* Pérdida de XP por días sin practicar: día 2 → 2 · día 3 → 6 · día 4 → 12 · día 5 → 20… (tope 60) */
+function getInactivityXPLoss(days) { if (!days || days < 2) return 0; return Math.min((days - 1) * days, 60); }
 
 /* Suma de bonos de prácticas dirigidas COMPLETADAS a tiempo y aprobadas.
  * Lee el estado real desde JUCUM_TT (que ya usa passThreshold). */
@@ -1886,7 +1905,9 @@ window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, 
   /* PASO 4 · ruta de módulos + récord de racha */
   getModuleRoute, getFocusModuleId, getBestStreak,
   /* PASO 5 · refuerzo opcional + estructuras latentes ★ */
-  getRefuerzo, latentGate };
+  getRefuerzo, latentGate,
+  /* Neuro/XP honestos: días reales sin practicar + pérdida por inactividad */
+  getRealInactiveDays, getInactivityXPLoss };
 
 /* ── Metodología del teacher: fase de práctica (P1/P2/P3) + dónde se hace ──
  * Confirmado por el teacher:

@@ -12,7 +12,7 @@
    aquí a propósito: así no depende de subir ningún archivo extra. */
 (function(){if(window.JUCUM_NAV)return;function uid(){try{var u=JSON.parse(localStorage.getItem('jucum_user')||'null');return u?String(u.id||u.username||u.role||''):'';}catch(e){return'';}}function key(s){return'jucum_nav_'+s+'_'+uid();}window.JUCUM_NAV={load:function(s,f){try{var r=sessionStorage.getItem(key(s));return r==null?f:JSON.parse(r);}catch(e){return f;}},save:function(s,v){try{sessionStorage.setItem(key(s),JSON.stringify(v));}catch(e){}},clearAll:function(){try{var d=[];for(var i=0;i<sessionStorage.length;i++){var k=sessionStorage.key(i);if(k&&k.indexOf('jucum_nav_')===0)d.push(k);}d.forEach(function(k){sessionStorage.removeItem(k);});}catch(e){}}};})();
 </script>
-<link rel="stylesheet" href="colors_and_type.css?v=20260703a">
+<link rel="stylesheet" href="colors_and_type.css?v=20260704a">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Nunito',sans-serif;background:var(--bg-tint);color:var(--text);min-height:100vh;}
@@ -244,7 +244,7 @@ main{max-width:1100px;margin:0 auto;padding:28px 24px 80px;}
 .tt-sort select{font-family:inherit;font-weight:800;font-size:13px;color:var(--text);background:#fff;border:1.5px solid var(--border);border-radius:10px;padding:8px 11px;cursor:pointer;}
 .tt-count{font-size:11.5px;color:var(--text-soft);font-weight:700;margin-top:9px;padding-left:3px;}
 .student-table{background:#fff;border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,0.09),0 6px 18px rgba(0,0,0,0.15);margin-top:12px;}
-.st-head, .st-row{display:grid;grid-template-columns:2.4fr 0.7fr 0.9fr 0.7fr 0.9fr 0.7fr 1.1fr;gap:8px;padding:12px 18px;align-items:center;font-size:13px;}
+.st-head, .st-row{display:grid;grid-template-columns:2.4fr 0.7fr 0.9fr 0.7fr 0.9fr 0.7fr 1.1fr 0.4fr;gap:8px;padding:12px 18px;align-items:center;font-size:13px;}
 .st-head{background:#FAFAF6;border-bottom:1px solid var(--border);font-size:10.5px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-soft);}
 .st-row{border-bottom:1px solid var(--border-soft);cursor:pointer;transition:background 0.12s;}
 .st-row:hover{background:#FAFAF6;}
@@ -740,6 +740,14 @@ main{max-width:1100px;margin:0 auto;padding:28px 24px 80px;}
 }
 
 /* ── Mejora C · Mobile responsive ─────────────────────────── */
+.row-del{width:30px;height:30px;border-radius:8px;border:1.5px solid #F0C9C9;background:#fff;color:#C0392B;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;justify-self:end;}
+.row-del:hover{background:#C0392B;color:#fff;border-color:#C0392B;}
+.jwave{display:inline-block;animation:jwave 2.4s ease-in-out infinite;transform-origin:70% 70%;}
+@keyframes jwave{0%,55%,100%{transform:rotate(0)}15%{transform:rotate(16deg)}30%{transform:rotate(-8deg)}45%{transform:rotate(10deg)}}
+@media (max-width: 1150px) {
+  .app-header{height:auto;min-height:60px;flex-wrap:wrap;row-gap:4px;padding-top:8px;padding-bottom:8px;}
+  .app-right{flex-wrap:wrap;row-gap:4px;justify-content:flex-end;}
+}
 @media (max-width: 700px) {
   .app-header{padding:0 12px;height:auto;min-height:60px;flex-wrap:wrap;gap:6px;padding-top:8px;padding-bottom:8px;}
   .app-logo img{height:36px;}
@@ -980,66 +988,66 @@ main{max-width:1100px;margin:0 auto;padding:28px 24px 80px;}
 <div id="root"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=20260703a"></script>
-<script src="logo.js?v=20260703a"></script>
-<script src="supabase-client.js?v=20260703a"></script>
+<script src="config.js?v=20260704a"></script>
+<script src="logo.js?v=20260704a"></script>
+<script src="supabase-client.js?v=20260704a"></script>
 <script>/* La demostración ya NO desconecta Supabase: el ingreso real SIEMPRE funciona. Limpiamos cualquier marca de demo atascada para que el dispositivo se auto-repare. */try{localStorage.removeItem('jucum_demo_mode');}catch(e){}</script>
-<script src="supabase-sync.js?v=20260703a"></script>
-<script type="text/babel" src="data.js?v=20260703a"></script>
-<script src="evaluations.js?v=20260703a"></script>
-<script src="forum.js?v=20260703a"></script>
-<script src="sounds.js?v=20260703a"></script>
-<script src="notifications.js?v=20260703a"></script>
-<script src="messages.js?v=20260703a"></script>
-<script src="mascot.js?v=20260703a"></script>
-<script src="payments.js?v=20260703a"></script>
-<script src="teacher-tools.js?v=20260703a"></script>
-<script src="practice-guide.js?v=20260703a"></script>
-<script src="assignments.js?v=20260703a"></script>
-<script src="exams.js?v=20260703a"></script>
-<script src="attendance.js?v=20260703a"></script>
-<script src="survey.js?v=20260703a"></script>
-<script src="evolution.js?v=20260703a"></script>
-<script src="demo-seed.js?v=20260703a"></script>
-<script src="registration.js?v=20260703a"></script>
-<script src="retention.js?v=20260703a"></script>
-<script type="text/babel" src="Evaluations.comp.js?v=20260703a"></script>
-<script type="text/babel" src="Assignments.comp.js?v=20260703a"></script>
-<script type="text/babel" src="Readiness.comp.js?v=20260703a"></script>
-<script type="text/babel" src="Exams.comp.js?v=20260703a"></script>
-<script type="text/babel" src="Attendance.comp.js?v=20260703a"></script>
-<script type="text/babel" src="Survey.comp.js?v=20260703a"></script>
-<script type="text/babel" src="MyEvolution.comp.js?v=20260703a"></script>
-<script type="text/babel" src="WeeklyPlan.comp.js?v=20260703a"></script>
-<script type="text/babel" src="AdminRegister.comp.js?v=20260703a"></script>
-<script type="text/babel" src="Retention.comp.js?v=20260703a"></script>
-<script type="text/babel" src="Grades.comp.js?v=20260703a"></script>
-<script type="text/babel" src="StudentReport.comp.js?v=20260703a"></script>
-<script type="text/babel" src="ManageGroups.comp.js?v=20260703a"></script>
-<script type="text/babel" src="ManageModules.comp.js?v=20260703a"></script>
-<script type="text/babel" src="TeacherMaterials.comp.js?v=20260703a"></script>
-<script type="text/babel" src="ManageStudents.comp.js?v=20260703a"></script>
-<script type="text/babel" src="LevelPromotion.comp.js?v=20260703a"></script>
-<script type="text/babel" src="Forum.comp.js?v=20260703a"></script>
-<script type="text/babel" src="Onboarding.comp.js?v=20260703a"></script>
-<script type="text/babel" src="Profile.comp.js?v=20260703a"></script>
-<script type="text/babel" src="GroupReport.comp.js?v=20260703a"></script>
-<script type="text/babel" src="Notifications.comp.js?v=20260703a"></script>
-<script type="text/babel" src="Mascot.comp.js?v=20260703a"></script>
-<script type="text/babel" src="Login.comp.js?v=20260703a"></script>
-<script type="text/babel" src="StudentDiagnosis.comp.js?v=20260703a"></script>
-<script type="text/babel" src="StudentPayments.comp.js?v=20260703a"></script>
-<script type="text/babel" src="AdminDashboard.comp.js?v=20260703a"></script>
-<script type="text/babel" src="TeacherClass.comp.js?v=20260703a"></script>
-<script type="text/babel" src="ClassPlanner.comp.js?v=20260703a"></script>
-<script type="text/babel" src="messages-ui.comp.js?v=20260703a"></script>
-<script type="text/babel" src="tutorial.comp.js?v=20260703a"></script>
-<script type="text/babel" src="StudentDashboard.comp.js?v=20260703a"></script>
-<script type="text/babel" src="TeacherDashboard.comp.js?v=20260703a"></script>
-<script type="text/babel" src="DevDashboard.comp.js?v=20260703a"></script>
-<script type="text/babel" src="App.comp.js?v=20260703a"></script>
-<script src="student-preview.js?v=20260703a"></script>
-<script src="inactivity.js?v=20260703a"></script>
-<script src="app-update.js?v=20260703a"></script>
+<script src="supabase-sync.js?v=20260704a"></script>
+<script type="text/babel" src="data.js?v=20260704a"></script>
+<script src="evaluations.js?v=20260704a"></script>
+<script src="forum.js?v=20260704a"></script>
+<script src="sounds.js?v=20260704a"></script>
+<script src="notifications.js?v=20260704a"></script>
+<script src="messages.js?v=20260704a"></script>
+<script src="mascot.js?v=20260704a"></script>
+<script src="payments.js?v=20260704a"></script>
+<script src="teacher-tools.js?v=20260704a"></script>
+<script src="practice-guide.js?v=20260704a"></script>
+<script src="assignments.js?v=20260704a"></script>
+<script src="exams.js?v=20260704a"></script>
+<script src="attendance.js?v=20260704a"></script>
+<script src="survey.js?v=20260704a"></script>
+<script src="evolution.js?v=20260704a"></script>
+<script src="demo-seed.js?v=20260704a"></script>
+<script src="registration.js?v=20260704a"></script>
+<script src="retention.js?v=20260704a"></script>
+<script type="text/babel" src="Evaluations.comp.js?v=20260704a"></script>
+<script type="text/babel" src="Assignments.comp.js?v=20260704a"></script>
+<script type="text/babel" src="Readiness.comp.js?v=20260704a"></script>
+<script type="text/babel" src="Exams.comp.js?v=20260704a"></script>
+<script type="text/babel" src="Attendance.comp.js?v=20260704a"></script>
+<script type="text/babel" src="Survey.comp.js?v=20260704a"></script>
+<script type="text/babel" src="MyEvolution.comp.js?v=20260704a"></script>
+<script type="text/babel" src="WeeklyPlan.comp.js?v=20260704a"></script>
+<script type="text/babel" src="AdminRegister.comp.js?v=20260704a"></script>
+<script type="text/babel" src="Retention.comp.js?v=20260704a"></script>
+<script type="text/babel" src="Grades.comp.js?v=20260704a"></script>
+<script type="text/babel" src="StudentReport.comp.js?v=20260704a"></script>
+<script type="text/babel" src="ManageGroups.comp.js?v=20260704a"></script>
+<script type="text/babel" src="ManageModules.comp.js?v=20260704a"></script>
+<script type="text/babel" src="TeacherMaterials.comp.js?v=20260704a"></script>
+<script type="text/babel" src="ManageStudents.comp.js?v=20260704a"></script>
+<script type="text/babel" src="LevelPromotion.comp.js?v=20260704a"></script>
+<script type="text/babel" src="Forum.comp.js?v=20260704a"></script>
+<script type="text/babel" src="Onboarding.comp.js?v=20260704a"></script>
+<script type="text/babel" src="Profile.comp.js?v=20260704a"></script>
+<script type="text/babel" src="GroupReport.comp.js?v=20260704a"></script>
+<script type="text/babel" src="Notifications.comp.js?v=20260704a"></script>
+<script type="text/babel" src="Mascot.comp.js?v=20260704a"></script>
+<script type="text/babel" src="Login.comp.js?v=20260704a"></script>
+<script type="text/babel" src="StudentDiagnosis.comp.js?v=20260704a"></script>
+<script type="text/babel" src="StudentPayments.comp.js?v=20260704a"></script>
+<script type="text/babel" src="AdminDashboard.comp.js?v=20260704a"></script>
+<script type="text/babel" src="TeacherClass.comp.js?v=20260704a"></script>
+<script type="text/babel" src="ClassPlanner.comp.js?v=20260704a"></script>
+<script type="text/babel" src="messages-ui.comp.js?v=20260704a"></script>
+<script type="text/babel" src="tutorial.comp.js?v=20260704a"></script>
+<script type="text/babel" src="StudentDashboard.comp.js?v=20260704a"></script>
+<script type="text/babel" src="TeacherDashboard.comp.js?v=20260704a"></script>
+<script type="text/babel" src="DevDashboard.comp.js?v=20260704a"></script>
+<script type="text/babel" src="App.comp.js?v=20260704a"></script>
+<script src="student-preview.js?v=20260704a"></script>
+<script src="inactivity.js?v=20260704a"></script>
+<script src="app-update.js?v=20260704a"></script>
 </body>
 </html>

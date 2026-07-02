@@ -23,7 +23,11 @@ function WeeklyPlan({ groupId }) {
   // módulo activo + próximas actividades que la mayoría no ha hecho
   const settings = D.getGroupSettings(groupId);
   const activeIds = (settings.activeModuleIds && settings.activeModuleIds.length) ? settings.activeModuleIds : (settings.activeModuleId ? [settings.activeModuleId] : []);
-  const mods = (D.MODULE_CATALOG[group.level] || []).filter(m => activeIds.includes(m.id));
+  // módulo ACTUAL del grupo (el más avanzado de los activos) — lo recomendado se basa en él, no en módulos anteriores
+  const catalog = D.MODULE_CATALOG[group.level] || [];
+  const activeInOrder = catalog.filter(m => activeIds.includes(m.id));
+  const current = activeInOrder[activeInOrder.length - 1] || null;
+  const mods = current ? [current] : [];
   const pending = [];
   mods.forEach(m => (m.activities||[]).forEach(a => {
     const done = members.filter(s => (D.getStudentProgress(s.id).completed||{})[`${m.id}:${a.id}`]).length;
@@ -44,7 +48,7 @@ function WeeklyPlan({ groupId }) {
     <div className="scard" style={{marginBottom:16, background:'#F5F8FF', borderColor:'#C9D4F0'}}>
       <div className="sec-head">
         <div className="sec-title">📌 Recomendado esta semana</div>
-        <span className="sec-meta">Para {group.name}</span>
+        <span className="sec-meta">Para {group.name}{current ? ` · módulo actual: ${current.name}` : ''}</span>
       </div>
 
       {weakest && (

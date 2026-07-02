@@ -83,7 +83,8 @@
     let target = 15;
     try { target = (D.getGroupSettings(student.group) || {}).dailyTargetMin || 15; } catch {}
     const todayMin = prog.todayMinutes || 0;
-    const inactive = typeof student.lastActiveDays === 'number' ? student.lastActiveDays : 0;
+    const inactive = (D.getRealInactiveDays ? D.getRealInactiveDays(student)
+                     : (typeof student.lastActiveDays === 'number' ? student.lastActiveDays : 0));
     const streak = student.streak || 0;
     const active7 = mastery.active7 || 0;
     const masteryPct = Math.min(mastery.pct || 0, 100);
