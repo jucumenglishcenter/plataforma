@@ -767,7 +767,19 @@ const PROGRESS_KEY = 'jucum_student_progress_v1';
 function getStudentProgress(studentId) {
   let all = {};
   try { all = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); } catch {}
-  return all[studentId] || { completed: {}, todayMinutes: 0, lastDay: null };
+  const base = all[studentId] || { completed: {}, todayMinutes: 0, lastDay: null };
+  /* Meta diaria multi-equipo: los minutos de HOY también viven en la nube
+   * (daily_sessions, escritos por jucum-connect desde los materiales). Se toma
+   * el MAYOR entre lo local y lo de la nube. */
+  try {
+    const cd = window.__JEC_DAILY && window.__JEC_DAILY[studentId];
+    if (cd && cd.day === peruDayStr()) {
+      const localMin = (base.lastDay === peruDayStr()) ? (base.todayMinutes || 0) : 0;
+      base.todayMinutes = Math.max(localMin, cd.minutes || 0);
+      base.lastDay = peruDayStr();
+    }
+  } catch (e) {}
+  return base;
 }
 function markActivityComplete(studentId, moduleId, activityId, score, minutes, meta) {
   let all = {};
@@ -1979,3 +1991,28 @@ window.JUCUM_DATA.setChampionEmoji = setChampionEmoji;
 window.JUCUM_DATA.setLeagueScenario = setLeagueScenario;
 window.JUCUM_DATA.loadLeagueFromCloud = loadLeagueFromCloud;
 window.JUCUM_DATA.LEAGUE_SCENARIOS = LEAGUE_SCENARIOS;
+
+
+/* ── Meta diaria multi-equipo: hidratar minutos de HOY desde la nube ──
+ * Los materiales (jucum-connect) escriben daily_sessions; aquí se suman por
+ * alumno y getStudentProgress los mezcla con lo local. Refresco cada 3 min. */
+(function jecDailyLoader() {
+  function load() {
+    try {
+      if (!window.JUCUM_SB || !window.JUCUM_SB.getClient) return;
+      var day = peruDayStr();
+      window.JUCUM_SB.getClient().from('daily_sessions').select('user_id,minutes').eq('day', day)
+        .then(function (r) {
+          var rows = (r && r.data) || [];
+          var map = {};
+          rows.forEach(function (x) {
+            map[x.user_id] = map[x.user_id] || { day: day, minutes: 0 };
+            map[x.user_id].minutes += (x.minutes || 0);
+          });
+          window.__JEC_DAILY = map;
+        }, function () {});
+    } catch (e) {}
+  }
+  setTimeout(load, 2500);
+  setInterval(load, 3 * 60 * 1000);
+})();

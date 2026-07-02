@@ -65,6 +65,52 @@ function TrendBadge({ tr }) {
   return <span style={{fontSize:11.5, color:m.c, fontWeight:800}}>{m.a} {m.t} <span style={{color:'#9E9E9E', fontWeight:600}}>({tr.first}%→{tr.last}%)</span></span>;
 }
 
+/* Historias/partes completadas por material (nube · activity_parts) */
+function SRStoriesCloud({ student }) {
+  const [rows, setRows] = React.useState(null);
+  React.useEffect(() => {
+    let alive = true;
+    try {
+      if (!window.JUCUM_SB || !window.JUCUM_SB.getClient) { setRows([]); return; }
+      window.JUCUM_SB.getClient().from('activity_parts')
+        .select('module_id,activity_id,part,score,completed_at')
+        .eq('user_id', student.id)
+        .then(r => { if (alive) setRows((r && r.data) || []); }, () => { if (alive) setRows([]); });
+    } catch (e) { setRows([]); }
+    return () => { alive = false; };
+  }, [student.id]);
+  if (!rows || !rows.length) return null;
+  const groups = {};
+  rows.forEach(x => {
+    const k = `${x.module_id}·${x.activity_id}`;
+    (groups[k] = groups[k] || { mod: x.module_id, act: x.activity_id, parts: {} }).parts[x.part] =
+      { score: x.score, date: (x.completed_at || '').slice(0, 10) };
+  });
+  const label = a => /read/i.test(a) ? '📖 Comprensión lectora' : /listen/i.test(a) ? '🎧 Comprensión auditiva' : /story/i.test(a) ? '📚 Stories y diálogos' : '📘 ' + a;
+  return (
+    <div className="scard" style={{marginTop:8}}>
+      <div className="sec-head"><div className="sec-title">📚 Historias practicadas · por material</div></div>
+      {Object.values(groups).map(g => (
+        <div key={g.mod + g.act} style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', padding:'7px 0', borderBottom:'1px dashed #E8E5DC', fontSize:12.5}}>
+          <b style={{minWidth:190}}>{label(g.act)} <span style={{color:'#9E9E9E', fontWeight:700}}>· {g.mod}</span></b>
+          {[1,2,3,4].map(n => {
+            const p = g.parts[n];
+            return (
+              <span key={n} title={p ? (`completada ${p.date}` + (p.score != null ? ` · ${p.score}%` : '')) : 'sin completar'}
+                style={{borderRadius:14, padding:'2px 10px', fontWeight:800, fontSize:11,
+                  background: p ? '#E8F5E9' : '#F5F5F0', color: p ? '#2E7D32' : '#9E9E9E',
+                  border: '1px solid ' + (p ? '#A5D6A7' : '#E0E0E0')}}>
+                S{n} {p ? '✓' : '—'}{p && p.score != null ? ' ' + p.score + '%' : ''}
+              </span>
+            );
+          })}
+        </div>
+      ))}
+      <div style={{fontSize:10.5, color:'#9E9E9E', fontWeight:700, marginTop:6}}>Se registra al completar cada historia/audio dentro del material — por usuario, desde cualquier equipo.</div>
+    </div>
+  );
+}
+
 function StudentReport({ student, onBack, forTeacher, topTabs }) {
   const D = window.JUCUM_DATA;
   const group = D.GROUPS.find(g => g.id === student.group);
@@ -101,6 +147,8 @@ function StudentReport({ student, onBack, forTeacher, topTabs }) {
         <div className="rstat"><b>{student.streak}</b> días de racha</div>
         <div className="rstat"><b style={{color: dx.r.apt?'#2E7D32':'#E65100'}}>{dx.r.overall}%</b> cumplimiento general {dx.r.apt?'· apto':'· falta 75%'}</div>
       </div>
+
+      <SRStoriesCloud student={student} />
 
       {/* Competencias con comparación inicio↔ahora */}
       <div className="scard" style={{marginTop:8}}>

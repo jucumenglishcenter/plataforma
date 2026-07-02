@@ -696,7 +696,14 @@ function linkFor(a, mod, studentId) {
   const base = a.url;
   // Adjunta la identidad para que jucum-connect.js registre el progreso
   const sep = base.includes('?') ? '&' : '?';
-  return `${base}${sep}jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent(mod.id)}&jucum_act=${encodeURIComponent(a.id)}&jucum_kind=${encodeURIComponent(a.type||'')}`;
+  // Grupo con candado libre (unlockMode 'free'): el material desbloquea todas las historias
+  let free = '';
+  try {
+    const stu = (window.JUCUM_DATA.STUDENTS || []).find(s => s.id === studentId);
+    const gs = stu && window.JUCUM_DATA.getGroupSettings(stu.group);
+    if (gs && gs.unlockMode === 'free') free = '&jucum_free=1';
+  } catch (e) {}
+  return `${base}${sep}jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent(mod.id)}&jucum_act=${encodeURIComponent(a.id)}&jucum_kind=${encodeURIComponent(a.type||'')}${free}`;
 }
 
 /* ─── Bloque C · gamification components ─── */
