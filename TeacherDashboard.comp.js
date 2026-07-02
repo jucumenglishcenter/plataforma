@@ -51,7 +51,6 @@ function TeacherDashboard({ onLogout, user }) {
           <a className={`nav-link ${view.kind==='class'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'class'});}}>🏫 Clase</a>
           <a className={`nav-link ${(view.kind==='assess'||view.kind==='evaluate'||view.kind==='exams')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'assess'});}}>📊 Evaluación</a>
           <a className={`nav-link ${view.kind==='planner'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'planner'});}}>🗓️ Planificar</a>
-          <a className={`nav-link ${view.kind==='messages'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'messages'});}} style={{position:'relative'}}>✉️ Mensajes{(() => { const n = window.JUCUM_MSG ? window.JUCUM_MSG.unreadForTeacher() : 0; return n > 0 ? <span className="nav-dot">{n > 9 ? '9+' : n}</span> : null; })()}</a>
           <TeacherForumNav onOpen={(gid)=>setView({kind:'forum', group:gid})} />
           <NotifBell userId="teacher" />
           <div className="user-pill">
@@ -64,8 +63,6 @@ function TeacherDashboard({ onLogout, user }) {
 
       {view.kind === 'assess' ? (
         <TeacherAssessment onBack={() => setView({kind:'groups'})} initialTab={view.tab} />
-      ) : view.kind === 'messages' ? (
-        <TeacherMessages onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'planner' ? (
         <ClassPlanner onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'evaluate' ? (
@@ -217,8 +214,6 @@ function GroupsView({ stats, onSelectGroup, teacherName }) {
           );
         })}
       </div>
-
-      {window.TutorialAdminCard && <TutorialAdminCard />}
     </>
   );
 }
@@ -332,21 +327,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
   React.useEffect(() => { document.body.setAttribute('data-level', group.level); return () => document.body.removeAttribute('data-level'); }, [group.level]);
 
   const groupAvg = members.length ? Math.round(members.reduce((s,x)=>s+getStudentMastery(x).pct,0)/members.length) : 0;
-  const [q, setQ] = React.useState('');
-  const [sortKey, setSortKey] = React.useState('dominio');
-  const SORTS = {
-    dominio:        (a,b)=>getStudentMastery(b).pct - getStudentMastery(a).pct,
-    practica_mas:   (a,b)=>(b.totalMinutes||0) - (a.totalMinutes||0),
-    practica_menos: (a,b)=>(a.totalMinutes||0) - (b.totalMinutes||0),
-    racha:          (a,b)=>(b.streak||0) - (a.streak||0),
-    az:             (a,b)=>a.fullName.localeCompare(b.fullName,'es'),
-  };
-  const shown = React.useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return [...members]
-      .filter(s => !needle || (s.fullName + ' ' + s.username).toLowerCase().includes(needle))
-      .sort(SORTS[sortKey] || SORTS.dominio);
-  }, [members, q, sortKey]);
+  const sorted = [...members].sort((a, b) => getStudentMastery(b).pct - getStudentMastery(a).pct);
 
   if (showReport) return <GroupReport groupId={groupId} onBack={() => setShowReport(false)} />;
 
@@ -370,24 +351,6 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
 
       <WeeklyPlan groupId={groupId} />
 
-      <div className="tt-toolbar">
-        <label className="tt-search">
-          <span aria-hidden="true">🔍</span>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar alumno por nombre o usuario…" />
-        </label>
-        <div className="tt-sort">
-          <span className="tt-sort-lab">Ordenar</span>
-          <select value={sortKey} onChange={e=>setSortKey(e.target.value)}>
-            <option value="practica_mas">🔥 Practica más</option>
-            <option value="practica_menos">💤 Practica menos</option>
-            <option value="dominio">Dominio ↓</option>
-            <option value="racha">Racha ↓</option>
-            <option value="az">A → Z</option>
-          </select>
-        </div>
-      </div>
-      <div className="tt-count">{shown.length} de {members.length} alumno{members.length===1?'':'s'}{q ? ` · filtrando «${q}»` : ''}</div>
-
       <div className="student-table">
         <div className="st-head">
           <div className="col-name">Alumno</div>
@@ -398,8 +361,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
           <div className="col-last">Última actividad</div>
           <div className="col-status">Estado</div>
         </div>
-        {shown.map((s, i) => <StudentRow key={s.id} stu={s} rank={i+1} level={level} onClick={() => onSelectStudent(s.id)} />)}
-        {shown.length === 0 && <div style={{padding:'26px',textAlign:'center',color:'#999',fontWeight:700}}>Sin resultados para «{q}»</div>}
+        {sorted.map((s, i) => <StudentRow key={s.id} stu={s} rank={i+1} level={level} onClick={() => onSelectStudent(s.id)} />)}
       </div>
 
       {showSettings && <GroupSettingsModal groupId={groupId} level={level} onClose={() => setShowSettings(false)} />}
