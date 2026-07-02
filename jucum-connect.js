@@ -163,6 +163,71 @@
       el.addEventListener('pointercancel', end);
     })(chip);
 
+    // ── 🐞 Reporte de problemas (llega al perfil de Desarrollo de la plataforma) ──
+    (function reportButton() {
+      var btn = document.createElement('button');
+      btn.id = 'jec-report-btn';
+      btn.title = 'Reportar un problema de este material';
+      btn.textContent = '🐞';
+      btn.style.cssText = 'position:fixed;bottom:14px;left:14px;z-index:999997;width:40px;height:40px;border-radius:50%;border:2px solid #fff;background:#B23A77;color:#fff;font-size:18px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.25);line-height:1;padding:0;';
+      document.body.appendChild(btn);
+
+      function ensureReportSb(cb) {
+        function make() { try { return window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch (e) { return null; } }
+        if (window.supabase) return cb(make());
+        var s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+        s.onload = function () { cb(make()); };
+        s.onerror = function () { cb(null); };
+        document.head.appendChild(s);
+      }
+
+      btn.onclick = function () {
+        if (document.getElementById('jec-report-ov')) return;
+        var ov = document.createElement('div');
+        ov.id = 'jec-report-ov';
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.6);z-index:1000001;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;padding:16px;';
+        ov.innerHTML =
+          '<div style="background:#fff;border-radius:18px;max-width:420px;width:100%;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,0.4);">' +
+          '<div style="background:#FDF1F7;padding:16px 20px;display:flex;align-items:center;gap:10px;">' +
+          '<span style="font-size:24px;">🐞</span><div><div style="font-weight:800;font-size:16px;color:#B23A77;">Reportar un problema</div>' +
+          '<div style="font-size:12px;font-weight:600;color:#8a6b7b;">Tu reporte llega directo al equipo t\u00e9cnico</div></div></div>' +
+          '<div style="padding:16px 20px;">' +
+          '<textarea id="jec-report-txt" rows="4" placeholder="Cu\u00e9ntanos qu\u00e9 sali\u00f3 mal: qu\u00e9 bot\u00f3n fallaba, qu\u00e9 pregunta estaba mal escrita, qu\u00e9 no cargaba\u2026" style="width:100%;box-sizing:border-box;border:1.5px solid #E3D5DC;border-radius:11px;padding:10px 12px;font:600 13.5px system-ui,sans-serif;resize:vertical;outline:none;"></textarea>' +
+          '<div style="font-size:11px;font-weight:600;color:#999;margin-top:8px;">Se env\u00eda junto con el material y el punto exacto donde est\u00e1s \u2014 no necesitas explicar cu\u00e1l es.</div>' +
+          '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">' +
+          '<button id="jec-report-cancel" style="padding:9px 16px;border:1.5px solid #ddd;background:#fff;border-radius:20px;font:800 12.5px system-ui,sans-serif;cursor:pointer;color:#777;">Cancelar</button>' +
+          '<button id="jec-report-send" style="padding:9px 18px;border:none;background:#B23A77;color:#fff;border-radius:20px;font:800 12.5px system-ui,sans-serif;cursor:pointer;">Enviar reporte</button>' +
+          '</div></div></div>';
+        document.body.appendChild(ov);
+        document.getElementById('jec-report-cancel').onclick = function () { ov.remove(); };
+        ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+        document.getElementById('jec-report-send').onclick = function () {
+          var txt = (document.getElementById('jec-report-txt').value || '').trim();
+          if (!txt) { document.getElementById('jec-report-txt').focus(); return; }
+          var sendBtn = document.getElementById('jec-report-send');
+          sendBtn.disabled = true; sendBtn.textContent = 'Enviando\u2026';
+          ensureReportSb(function (client) {
+            if (!client) { sendBtn.disabled = false; sendBtn.textContent = 'Enviar reporte'; alert('Sin conexi\u00f3n \u2014 int\u00e9ntalo de nuevo en un momento.'); return; }
+            client.from('error_reports').insert({
+              id: 'er-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+              user_id: uid || null,
+              reporter: teacher ? 'teacher' : (uid ? 'student' : 'anon'),
+              group_id: groupId || null, module_id: modId, activity_id: actId,
+              material_kind: KIND || '', material_name: matName || document.title || '',
+              part: (activePart == null ? null : Number(activePart)),
+              url: location.href.slice(0, 500),
+              message: txt.slice(0, 1200),
+              status: 'nuevo',
+            }).then(function (r) {
+              if (r && r.error) { sendBtn.disabled = false; sendBtn.textContent = 'Enviar reporte'; alert('No se pudo enviar: ' + r.error.message); return; }
+              ov.remove(); toast('\u2705 \u00a1Gracias! Tu reporte lleg\u00f3 al equipo t\u00e9cnico.');
+            }, function () { sendBtn.disabled = false; sendBtn.textContent = 'Enviar reporte'; alert('No se pudo enviar. Revisa tu conexi\u00f3n.'); });
+          });
+        };
+      };
+    })();
+
     function fmt(sec) {
       return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
     }

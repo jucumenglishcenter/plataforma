@@ -58,7 +58,8 @@
       };
       const day = p.completed_at ? dayStr(Date.parse(p.completed_at)) : '';   // día en hora Perú
       const today = dayStr(Date.now());
-      if (day === today) { progByUser[p.user_id].todayMinutes += (p.minutes||0); progByUser[p.user_id].lastDay = today; }
+      if (day === today) progByUser[p.user_id].todayMinutes += (p.minutes||0);
+      if (day && (!progByUser[p.user_id].lastDay || day > progByUser[p.user_id].lastDay)) progByUser[p.user_id].lastDay = day;
     });
     write(KEYS.progress, progByUser);
 
@@ -313,7 +314,8 @@
           score: p.score, minutes: p.minutes, date: p.completed_at,
         };
         const day = p.completed_at ? dayStr(Date.parse(p.completed_at)) : '';
-        if (day === today) { cloud[p.user_id].todayMinutes += (p.minutes||0); cloud[p.user_id].lastDay = today; }
+        if (day === today) cloud[p.user_id].todayMinutes += (p.minutes||0);
+        if (day && (!cloud[p.user_id].lastDay || day > cloud[p.user_id].lastDay)) cloud[p.user_id].lastDay = day;
       });
       // La nube manda, pero conservamos los avances locales recién hechos que
       // todavía no terminaron de subir (evita que un material recién completado
@@ -323,6 +325,8 @@
       Object.keys(local || {}).forEach(u => {
         const lc = (local[u] && local[u].completed) || {};
         merged[u] = merged[u] || { completed:{}, todayMinutes:(local[u] && local[u].todayMinutes) || 0, lastDay:(local[u] && local[u].lastDay) || null };
+        const ld = local[u] && local[u].lastDay;
+        if (ld && (!merged[u].lastDay || ld > merged[u].lastDay)) merged[u].lastDay = ld;
         Object.keys(lc).forEach(k => { if (!merged[u].completed[k]) merged[u].completed[k] = lc[k]; });
       });
       write(KEYS.progress, merged);
@@ -442,7 +446,7 @@
       s.completedModules = completedModules;
       s.lastActiveDays = lastTs
         ? Math.max(0, Math.round((Date.parse(dayStr(Date.now())) - Date.parse(dayStr(lastTs))) / DAY))
-        : 0; // alumno nuevo sin práctica todavía: NO mostrar "hace 99 días" ni alarma
+        : null; // alumno sin práctica todavía → “Sin actividad aún” (nunca “Hoy” falso)
       // Logros = las medallas REALMENTE conseguidas (las mismas que ve el alumno),
       // calculadas con las estadísticas recién asignadas arriba. Antes solo se
       // regeneraban 4 claves sueltas → el XP por logros no cuadraba con las medallas.

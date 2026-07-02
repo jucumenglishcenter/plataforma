@@ -450,8 +450,8 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
           <div className="col-avg">Dominio</div>
           <div className="col-streak">Racha</div>
           <div className="col-time">Tiempo</div>
-          <div className="col-last">Última actividad</div>
-          <div className="col-status">Estado</div>
+          <div className="col-last">🏆 Logros</div>
+          <div className="col-status">Última actividad</div>
           <div></div>
         </div>
         {shown.map((s, i) => <StudentRow key={s.id} stu={s} rank={i+1} level={level} onClick={() => onSelectStudent(s.id)} onDelete={() => setDeleting(s)} />)}
@@ -693,7 +693,8 @@ function ModuleChecklist({ stu, group }) {
 
 function StudentRow({ stu, rank, level, onClick, onDelete }) {
   const mastery = window.JUCUM_DATA.getStudentMastery(stu).pct;
-  const status = stu.lastActiveDays === 0 ? {label:'🟢 Hoy',cls:'ok'}
+  const status = (stu.lastActiveDays == null) ? {label:'⚪ Sin actividad aún',cls:'na'}
+              : stu.lastActiveDays === 0 ? {label:'🟢 Hoy',cls:'ok'}
               : stu.lastActiveDays <= 2 ? {label:`🟢 hace ${stu.lastActiveDays}d`,cls:'ok'}
               : stu.lastActiveDays <= 6 ? {label:`🟡 hace ${stu.lastActiveDays}d`,cls:'warn'}
               : {label:`🔴 hace ${stu.lastActiveDays}d`,cls:'bad'};
@@ -715,7 +716,7 @@ function StudentRow({ stu, rank, level, onClick, onDelete }) {
       <div className="col-streak">{stu.streak > 0 ? `🔥 ${stu.streak}` : '—'}</div>
       <div className="col-time">{Math.floor(stu.totalMinutes/60) > 0 ? `${Math.floor(stu.totalMinutes/60)}h ${stu.totalMinutes%60}m` : `${stu.totalMinutes}m`}</div>
       <div className="col-last">{stu.achievements.length} 🏆</div>
-      <div className={`col-status ${status.cls}`}>{status.label}</div>
+      <div className={`col-status ${status.cls}`} style={status.cls === 'na' ? {color:'#A8A8A8'} : undefined}>{status.label}</div>
       {onDelete ? <button className="row-del" title="Eliminar alumno" onClick={(e) => { e.stopPropagation(); onDelete(); }}>🗑️</button> : <span></span>}
     </div>
   );
