@@ -11,6 +11,7 @@ function ManageStudents({ onBack }) {
   const [tick, setTick] = smUseState(0);
   const [resetting, setResetting] = smUseState(null);
   const [importing, setImporting] = smUseState(false);
+  const [deleting, setDeleting] = smUseState(null);
   const refresh = () => setTick(t => t + 1);
 
   const LVL_RANK = { 'pre-a1': 0, 'a1': 1, 'a2': 2, 'b1': 3 };
@@ -35,11 +36,13 @@ function ManageStudents({ onBack }) {
 
   const handleDelete = (id) => {
     const s = STUDENTS.find(x => x.id === id);
-    if (!confirm(`¿Eliminar a ${s.fullName}? Esta acción no se puede deshacer.`)) return;
-    const idx = STUDENTS.findIndex(x => x.id === id);
-    STUDENTS.splice(idx, 1);
-    saveStudents(STUDENTS);
-    if (window.JUCUM_SB) window.JUCUM_SB.remove('users', id).catch(e => console.warn('delStudent:', e.message));
+    if (s) setDeleting(s);
+  };
+  const doDelete = (s) => {
+    const idx = STUDENTS.findIndex(x => x.id === s.id);
+    if (idx >= 0) { STUDENTS.splice(idx, 1); saveStudents(STUDENTS); }
+    if (window.JUCUM_SB) window.JUCUM_SB.remove('users', s.id).catch(e => console.warn('delStudent:', e.message));
+    setDeleting(null);
     refresh();
   };
 
@@ -188,6 +191,17 @@ function ManageStudents({ onBack }) {
         />
       )}
 
+      {deleting && (
+        <TeacherPasswordGate
+          danger
+          title="🗑️ Eliminar alumno"
+          message={`Vas a eliminar a ${deleting.fullName} (@${deleting.username}). Esto borra PARA SIEMPRE su cuenta y acceso, todo su progreso, XP y racha, sus tareas y notas, y su historial de práctica. Esta acción NO se puede deshacer. Ingresa tu contraseña de profesor para confirmar.`}
+          confirmLabel="🗑️ Eliminar definitivamente"
+          onConfirm={() => doDelete(deleting)}
+          onClose={() => setDeleting(null)}
+        />
+      )}
+
       {importing && (
         <BulkImportModal
           onClose={() => setImporting(false)}
@@ -311,7 +325,7 @@ function StudentFormModal({ student, defaultGroup, onClose, onSave }) {
 
 /* Modal de aprobación — pide la contraseña del profesor antes de una acción
  * sensible (reset de contraseña de un alumno, etc.) para evitar clics por error. */
-function TeacherPasswordGate({ title, message, confirmLabel, onConfirm, onClose }) {
+function TeacherPasswordGate({ title, message, confirmLabel, onConfirm, onClose, danger }) {
   const [pwd, setPwd] = smUseState('');
   const [err, setErr] = smUseState('');
   const [busy, setBusy] = smUseState(false);
@@ -329,7 +343,7 @@ function TeacherPasswordGate({ title, message, confirmLabel, onConfirm, onClose 
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal settings-modal" style={{maxWidth:430}} onClick={e => e.stopPropagation()}>
         <div className="modal-head">
-          <div className="modal-title">🔐 {title}</div>
+          <div className="modal-title">{danger ? '⚠️' : '🔐'} {title}</div>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
@@ -340,7 +354,7 @@ function TeacherPasswordGate({ title, message, confirmLabel, onConfirm, onClose 
                  onKeyDown={e => { if (e.key === 'Enter') submit(); }} style={{width:'100%'}} />
           <div className="modal-actions">
             <button className="btn-cancel" onClick={onClose}>Cancelar</button>
-            <button className="btn-save" onClick={submit} disabled={busy}>{busy ? 'Verificando…' : (confirmLabel || 'Confirmar')}</button>
+            <button className="btn-save" onClick={submit} disabled={busy} style={danger ? {background:'linear-gradient(135deg,#E11930,#B71C1C)'} : undefined}>{busy ? 'Verificando…' : (confirmLabel || 'Confirmar')}</button>
           </div>
         </div>
       </div>

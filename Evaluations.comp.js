@@ -226,6 +226,20 @@ function TeacherEvaluate({ onBack, hideBack }) {
   const { STUDENTS, GROUPS, LEVELS } = window.JUCUM_DATA;
   const [stage, setStage] = useState({ kind:'list' });
   const [refresh, setRefresh] = useState(0);
+  const [groupFilter, setGroupFilter] = useState('all');
+  const [q, setQ] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all'); // all | sin | con
+  const matchStudent = (s) => {
+    const needle = q.trim().toLowerCase();
+    if (needle && !(s.fullName + ' ' + s.username).toLowerCase().includes(needle)) return false;
+    if (statusFilter !== 'all') {
+      const n = (window.JUCUM_EVAL.getEvaluations(s.id) || []).length;
+      if (statusFilter === 'sin' && n > 0) return false;
+      if (statusFilter === 'con' && n === 0) return false;
+    }
+    return true;
+  };
+  const shownGroups = GROUPS.filter(g => groupFilter === 'all' || g.id === groupFilter);
 
   return (
     <main>
@@ -239,10 +253,30 @@ function TeacherEvaluate({ onBack, hideBack }) {
       </div>
 
       {stage.kind === 'list' ? (
-        <div className="eval-list">
-          {GROUPS.map(g => {
+        <>
+        <div className="tt-toolbar">
+          <label className="tt-search">
+            <span aria-hidden="true">🔍</span>
+            <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar alumno…" />
+          </label>
+          <div className="tt-sort">
+            <span className="tt-sort-lab">Grupo</span>
+            <select value={groupFilter} onChange={e=>setGroupFilter(e.target.value)}>
+              <option value="all">Todos los grupos</option>
+              {GROUPS.map(g => <option key={g.id} value={g.id}>{LEVELS[g.level].code} · {g.name}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="tt-count" style={{display:'flex',gap:7}}>
+          {[['all','Todos'],['sin','⚠️ Sin evaluar'],['con','✅ Evaluados']].map(([k,l]) => (
+            <button key={k} type="button" onClick={()=>setStatusFilter(k)} style={{border:'1.5px solid var(--border)',background:statusFilter===k?'#1F3A8A':'#fff',color:statusFilter===k?'#fff':'var(--text-soft)',fontFamily:'inherit',fontWeight:800,fontSize:12,borderRadius:18,padding:'6px 13px',cursor:'pointer'}}>{l}</button>
+          ))}
+        </div>
+        <div className="eval-list" style={{marginTop:12}}>
+          {shownGroups.map(g => {
             const level = LEVELS[g.level];
-            const members = STUDENTS.filter(s => s.group === g.id);
+            const members = STUDENTS.filter(s => s.group === g.id).filter(matchStudent);
+            if (members.length === 0) return null;
             return (
               <div key={g.id} className="eval-group">
                 <div className="eval-group-head">
@@ -250,7 +284,7 @@ function TeacherEvaluate({ onBack, hideBack }) {
                     {level.emoji} {level.code}
                   </span>
                   <span className="eval-group-name">{g.name}</span>
-                  <span className="eval-group-count">{members.length} alumnos</span>
+                  <span className="eval-group-count">{members.length} alumno{members.length===1?'':'s'}</span>
                 </div>
                 <div className="eval-students">
                   {members.map(s => {
@@ -262,7 +296,7 @@ function TeacherEvaluate({ onBack, hideBack }) {
                         </div>
                         <div className="eval-st-info">
                           <div className="eval-st-name">{s.fullName}</div>
-                          <div className="eval-st-meta">@{s.username} · {evals.length} evaluacion{evals.length === 1 ? '' : 'es'} previa{evals.length === 1 ? '' : 's'}</div>
+                          <div className="eval-st-meta">@{s.username} · {evals.length === 0 ? '⚠️ sin evaluar' : `${evals.length} evaluación${evals.length === 1 ? '' : 'es'} previa${evals.length === 1 ? '' : 's'}`}</div>
                         </div>
                         <span className="eval-st-cta">Evaluar →</span>
                       </button>
@@ -272,7 +306,11 @@ function TeacherEvaluate({ onBack, hideBack }) {
               </div>
             );
           })}
+          {shownGroups.every(g => STUDENTS.filter(s => s.group === g.id).filter(matchStudent).length === 0) && (
+            <div style={{padding:'26px',textAlign:'center',color:'#999',fontWeight:700}}>Sin alumnos en este filtro</div>
+          )}
         </div>
+        </>
       ) : (
         <EvaluateForm
           student={stage.student}

@@ -1253,6 +1253,42 @@ function PracHead({ emoji, title, color, tint, line }) {
 }
 
 /* ════════ Vista "Mi práctica" — ruta + temas + repaso + por mejorar ════════ */
+function NeuroCoach({ student }) {
+  const [open, setOpen] = React.useState(false);
+  const [topic, setTopic] = React.useState(null);
+  const QA = [
+    { q:'⚡ ¿Cómo subo mi XP?', a:<span>Cada práctica que <b>apruebas (≥75%)</b> te da XP. Las <b>stories</b> dan XP por tiempo de lectura (10 min +5 · 20 min +10 · 30 min +15). Y si <b>repites</b> una práctica al día siguiente y subes tu nota, ¡también suma! Mientras más constante, más XP 💪</span> },
+    { q:'📚 ¿Cómo funcionan las prácticas?', a:<span>Se abren <b>en orden</b>: completa una para desbloquear la siguiente. Lee o escucha <b>sin traducir</b>, responde, y si fallas traduce <b>solo esa parte</b>. Vuelve al día siguiente para afianzar lo aprendido ✨</span> },
+    { q:'💛 ¿Cómo hago que Neuro se sienta mejor?', a:<span>¡Fácil! Practica <b>un poquito cada día</b>. Mi energía sube con tu constancia y subo de etapa (¡hasta <b>imparable</b> 🚀!). Si dejas de practicar me pongo triste y pierdo energía… ¡no me dejes solito! 🧠</span> },
+  ];
+  return (
+    <div style={{background:'#fff', border:'1px solid var(--border,#E8E5DC)', borderTop:'4px solid #FF5FA0', borderRadius:16, padding:'14px 16px', marginTop:14, boxShadow:'0 2px 4px rgba(0,0,0,.06)'}}>
+      <div style={{display:'flex', alignItems:'center', gap:13}}>
+        <div style={{width:52, height:48, flexShrink:0, borderRadius:'50% 50% 47% 47%', background:'radial-gradient(circle at 50% 34%,#FF9CC6,#FF5FA0)', boxShadow:'inset 0 -5px 9px rgba(0,0,0,.13), 0 0 0 4px rgba(255,95,160,.18)', position:'relative'}}>
+          <span style={{position:'absolute', top:17, left:14, width:8, height:8, borderRadius:'50%', background:'#3A2230'}}></span>
+          <span style={{position:'absolute', top:17, right:14, width:8, height:8, borderRadius:'50%', background:'#3A2230'}}></span>
+        </div>
+        <button type="button" onClick={() => setOpen(o => !o)} style={{flex:1, textAlign:'left', background:'#FFF0F6', border:'1.5px solid #FFC9DE', borderRadius:14, padding:'12px 15px', cursor:'pointer', fontFamily:'inherit', fontWeight:800, fontSize:13.5, color:'#B23A77', lineHeight:1.45}}>
+          👋 ¡Clic aquí y te explico cómo <b>aumentar tu XP</b>, cómo funcionan las <b>prácticas</b> y cómo hacer que <b>yo me sienta mejor</b>! 💛
+        </button>
+      </div>
+      {open && (
+        <div style={{marginTop:12, border:'1.5px solid #FFC9DE', borderRadius:14, overflow:'hidden'}}>
+          <div style={{background:'linear-gradient(135deg,#FF7FB2,#FF5FA0)', color:'#fff', padding:'11px 15px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14}}>🧠 Neuro te cuenta…</div>
+          {QA.map((t, i) => (
+            <div key={i} style={{borderBottom: i < QA.length-1 ? '1px solid #F3E1E9' : 'none', background:'#fff'}}>
+              <button type="button" onClick={() => setTopic(topic === i ? null : i)} style={{width:'100%', textAlign:'left', background:'none', border:'none', padding:'12px 15px', fontFamily:'inherit', fontWeight:800, fontSize:13, color:'#B23A77', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between', gap:10}}>
+                {t.q}<span style={{fontSize:11, transform: topic === i ? 'rotate(180deg)' : 'none', transition:'transform .18s', display:'inline-block'}}>▾</span>
+              </button>
+              {topic === i && <div style={{padding:'0 15px 13px', fontSize:13, lineHeight:1.6, color:'var(--text,#2A2A2A)', fontWeight:600}}>{t.a}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StudentPractice({ student, settings, onBack }) {
   const D = window.JUCUM_DATA;
   const { MODULE_CATALOG, getStudentProgress, getModuleRoute, getFocusModuleId, getDueReviews } = D;
@@ -1289,6 +1325,8 @@ function StudentPractice({ student, settings, onBack }) {
       </div>
 
       <MetaSmartMessage metaMet={metaMet} hasPending={hasPending} minsLeft={Math.max(0, targetMin - todayMin)} onReview={pastReview ? () => goReviewModule(pastReview.moduleId) : null} />
+
+      <NeuroCoach student={student} />
 
       {/* ── 1) Tu ruta de módulos ── */}
       <div style={{marginTop:16}}>
