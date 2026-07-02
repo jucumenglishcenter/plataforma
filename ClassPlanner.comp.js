@@ -143,13 +143,13 @@ function ClassPlanner({ onBack }) {
           onEditPractice={(p) => { setEditPractice(p); setScreen('practice'); }} onClassMode={goClassMode} onOpenTasks={() => setScreen('tareas')} refreshKey={tick} onChange={refresh} />
       )}
       {screen === 'class' && (
-        <ClassPlanEditor date={selDate} initial={editPlan} defaultGroupId={defaultGroup} onClassMode={goClassMode} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
+        <ClassPlanEditor key={editPlan ? editPlan.id || 'tpl' : 'new'} date={selDate} initial={editPlan} defaultGroupId={defaultGroup} onClassMode={goClassMode} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
       )}
       {screen === 'classmode' && (
         <ClassMode plan={classModePlan} onBack={() => setScreen('calendar')} />
       )}
       {screen === 'practice' && (
-        <PracticePlanEditor date={selDate} initial={editPractice} defaultGroupId={defaultGroup} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
+        <PracticePlanEditor key={editPractice ? editPractice.id || 'tpl' : 'new'} date={selDate} initial={editPractice} defaultGroupId={defaultGroup} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
       )}
       {screen === 'tareas' && (
         <TeacherAssignments embedded onBack={() => setScreen('calendar')} />
@@ -166,6 +166,8 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
   const TT = window.JUCUM_TT;
   const { GROUPS } = window.JUCUM_DATA;
   const [groupId, setGroupId] = React.useState(GROUPS[0] ? GROUPS[0].id : null);
+  const [summaryDate, setSummaryDate] = React.useState(null);   // ✅ resumen de la clase realizada
+  const [dupPlan, setDupPlan] = React.useState(null);           // ⧉ duplicar plan a otro grupo
   const cells = monthMatrix(cursor.y, cursor.m);
   const prevM = () => setCursor(c => { const d = new Date(c.y, c.m - 1, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
   const nextM = () => setCursor(c => { const d = new Date(c.y, c.m + 1, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
@@ -245,7 +247,7 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
         {sel.classPlans.map(p => (
           <DayRow key={p.id} icon="📘" tint="#EEF2FC" border="#C9D6F5" title={`${p.moduleName} · ${p.sessionLabel}`}
             sub={`Plan de clase · ${p.lengthMin} min · ${(p.blocks || []).length} bloques`}
-            onPlay={() => onClassMode(p)} onOpen={() => onEditClass(p)} onDelete={() => { TT.deleteClassPlan(p.id); onChange(); }} />
+            onPlay={() => onClassMode(p)} onOpen={() => onEditClass(p)} onDup={() => setDupPlan(p)} onDelete={() => { TT.deleteClassPlan(p.id); onChange(); }} />
         ))}
         {sel.practicePlans.map(p => (
           <DayRow key={p.id} icon="📝" tint="#F4EEFB" border="#D9CEEC" title={p.title}
@@ -254,24 +256,178 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
         ))}
         {selLog.length > 0 && (
           <div style={{marginTop:10, borderTop:'1px dashed #E3DCC9', paddingTop:10}}>
-            <div style={{fontSize:12, fontWeight:800, color:'#2E7D32', marginBottom:6}}>✅ Realizado en clase (registro automático)</div>
-            {selLog.map(e => (
-              <div key={e.id} style={{display:'flex', alignItems:'center', gap:9, fontSize:12.5, color:'#555', padding:'4px 0'}}>
-                <span style={{fontWeight:700, color:'#2E7D32', whiteSpace:'nowrap'}}>{e.from || '—'}</span>
-                <span style={{flex:1}}>{e.materialName}</span>
-                <span style={{color:'#999', fontWeight:700}}>{e.minutes}′</span>
-              </div>
-            ))}
+            <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:7, flexWrap:'wrap'}}>
+              <div style={{fontSize:12, fontWeight:800, color:'#2E7D32', flex:1}}>✅ Realizado en clase (registro automático)</div>
+              <button onClick={() => setSummaryDate(selDate)} style={{...btnGhost, padding:'5px 11px', fontSize:12, borderColor:'#9FD3A4', color:'#2E7D32'}}>👁️ Ver resumen de la clase</button>
+            </div>
+            <button onClick={() => setSummaryDate(selDate)} style={{display:'block', width:'100%', textAlign:'left', cursor:'pointer', border:'1px solid #BFE3C4', background:'#F3FAF4', borderRadius:11, padding:'9px 11px', font:'inherit'}}>
+              {selLog.map(e => (
+                <span key={e.id} style={{display:'flex', alignItems:'center', gap:11, padding:'4px 0'}}>
+                  <span style={{fontSize:11, fontWeight:800, color:'#2E7D32', background:'#E6F4E8', border:'1px solid #BFE3C4', borderRadius:7, padding:'3px 8px', whiteSpace:'nowrap'}}>⏰ {fmtLogClock(e.from)}</span>
+                  <span style={{flex:1, minWidth:0, fontWeight:700, fontSize:12.5, color:'#2b2b2b', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{e.materialName}</span>
+                  <span style={{fontSize:12, color:'#7a8a7c', fontWeight:800, whiteSpace:'nowrap'}}>{e.minutes} min</span>
+                </span>
+              ))}
+              <span style={{display:'block', fontSize:11.5, color:'#5a8a5f', fontWeight:700, marginTop:5}}>👆 Toca para ver el plan dado, la asistencia y los comentarios — y duplicar la clase a otro grupo.</span>
+            </button>
           </div>
         )}
       </div>
+      {summaryDate && <ClassSummaryModal date={summaryDate} groupId={groupId} onClose={() => setSummaryDate(null)} onDuplicate={(p) => { setSummaryDate(null); setDupPlan(p); }} />}
+      {dupPlan && <DuplicateClassModal plan={dupPlan} onClose={() => setDupPlan(null)} onDone={() => { setDupPlan(null); onChange(); }} />}
     </>
   );
 }
 
-function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay }) {
+/* ════════ Resumen de la clase realizada (plan dado · asistencia · comentarios) ════════ */
+function ClassSummaryModal({ date, groupId, onClose, onDuplicate }) {
+  const TT = window.JUCUM_TT; const A = window.JUCUM_ATT;
+  const { STUDENTS, GROUPS } = window.JUCUM_DATA;
+  const group = (GROUPS || []).find(g => g.id === groupId) || null;
+  const planned = TT.getPlannedForDay ? TT.getPlannedForDay(date) : { classPlans: [] };
+  const classPlans = (planned.classPlans || []).filter(p => !groupId || p.groupId === groupId);
+  const log = (TT.getClassLogForDay ? TT.getClassLogForDay(date) : []).filter(e => !groupId || e.groupId === groupId);
+  const students = (STUDENTS || []).filter(s => !groupId || s.group === groupId);
+  const att = students.map(s => ({ s, st: (A && A.getStudentRecord(date, s.id) || {}).status || null }));
+  const present = att.filter(a => a.st === 'asistio' || a.st === 'tarde').length;
+  const marked = att.filter(a => a.st).length;
+  // Comentarios de clase de ese día (notas con fecha = ese día, de este grupo o de sus alumnos)
+  const sIds = new Set(students.map(s => s.id));
+  const notes = (TT.getNotes ? TT.getNotes() : []).filter(n => String(n.date).slice(0,10) === date && (n.groupId === groupId || (n.studentId && sIds.has(n.studentId)) || (!n.groupId && !n.studentId)));
+  const generalNotes = notes.filter(n => !n.studentId);
+  const studentNotes = notes.filter(n => n.studentId);
+  const ATT_META = { asistio:{l:'P',c:'#2E7D32'}, tarde:{l:'T',c:'#F2820D'}, falto:{l:'A',c:'#C0392B'} };
+  const totalMin = log.reduce((a,e) => a + (e.minutes || 0), 0);
+  const sName = (id) => { const st = students.find(x => x.id === id); return st ? (st.fullName || st.username) : 'Alumno'; };
+
   return (
-    <div style={{display:'flex', alignItems:'center', gap:11, border:'1px solid ' + border, background: tint, borderRadius:11, padding:'10px 12px', marginBottom:8}}>
+    <div onClick={onClose} style={{position:'fixed', inset:0, zIndex:1000, background:'rgba(15,23,42,0.5)', backdropFilter:'blur(3px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
+      <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, width:'100%', maxWidth:620, maxHeight:'88vh', display:'flex', flexDirection:'column', boxShadow:'0 24px 60px rgba(0,0,0,0.35)'}}>
+        <div style={{padding:'16px 20px 13px', borderBottom:'1.5px solid #E3DCC9', position:'relative'}}>
+          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, lineHeight:1.2, color:'#2E7D32', display:'flex', alignItems:'center', gap:9}}>✅ Resumen de la clase</div>
+          <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginTop:3, textTransform:'capitalize'}}>{fmtDateLong(date)}{group ? ' · ' + group.name : ''}</div>
+          <button onClick={onClose} style={{position:'absolute', top:14, right:14, width:32, height:32, borderRadius:'50%', border:'none', background:'#FAFAF6', color:'#8a7f6a', fontSize:14, fontWeight:800, cursor:'pointer'}}>✕</button>
+        </div>
+        <div style={{padding:'14px 20px 18px', overflowY:'auto', flex:1, display:'flex', flexDirection:'column', gap:16}}>
+          {/* Plan dado */}
+          <div>
+            <div style={lblStyle}>📘 Plan de clase {classPlans.length ? '(lo que se preparó)' : ''}</div>
+            {classPlans.length === 0 ? <div style={mutedStyle}>No había un plan de clase agendado para este día (solo bitácora de materiales).</div>
+              : classPlans.map(p => (
+              <div key={p.id} style={{border:'1px solid #C9D6F5', background:'#EEF2FC', borderRadius:11, padding:'10px 12px', marginBottom:8}}>
+                <div style={{fontWeight:800, fontSize:13.5, marginBottom:6}}>{p.moduleName} · {p.sessionLabel} <span style={{fontSize:11, color:'#8a7f6a', fontWeight:700}}>· {p.lengthMin} min</span></div>
+                {withClock(p.blocks || [], p.startTime).map(b => (
+                  <div key={b.id} style={{display:'flex', alignItems:'center', gap:9, fontSize:12.5, color:'#3a4a66', padding:'2px 0'}}>
+                    <span style={{fontWeight:800, color:'#1F3A8A', whiteSpace:'nowrap', fontSize:11.5}}>{b.from}–{b.to}</span>
+                    <span>{b.emoji}</span><span style={{flex:1, fontWeight:700}}>{b.title}</span>
+                    <span style={{color:'#999', fontWeight:700}}>{b.mins}′</span>
+                  </div>
+                ))}
+                <div style={{marginTop:8}}><button onClick={() => onDuplicate(p)} style={{...btnGhost, padding:'6px 12px', fontSize:12, borderColor:'#9FB0DA', color:'#3F5BB8'}}>⧉ Duplicar esta clase a otro grupo</button></div>
+              </div>
+            ))}
+          </div>
+          {/* Materiales usados (bitácora) */}
+          <div>
+            <div style={lblStyle}>📎 Materiales usados (bitácora automática){totalMin ? ` · ${totalMin} min en total` : ''}</div>
+            {log.length === 0 ? <div style={mutedStyle}>No se registraron materiales abiertos en clase este día.</div>
+              : log.map(e => (
+              <div key={e.id} style={{display:'flex', alignItems:'center', gap:9, fontSize:12.5, color:'#555', padding:'4px 0', borderBottom:'1px solid #F2ECDD'}}>
+                <span style={{fontWeight:800, color:'#2E7D32', whiteSpace:'nowrap', fontSize:11.5}}>⏰ {fmtLogClock(e.from)}</span>
+                <span style={{flex:1, fontWeight:700}}>{e.materialName}</span>
+                <span style={{color:'#999', fontWeight:700}}>{e.minutes}′</span>
+              </div>
+            ))}
+          </div>
+          {/* Asistencia */}
+          <div>
+            <div style={lblStyle}>📝 Asistencia · {present}/{students.length} presentes{marked < students.length ? ` · ${students.length - marked} sin marcar` : ''}</div>
+            {students.length === 0 ? <div style={mutedStyle}>Este grupo no tiene alumnos.</div>
+              : <div style={{display:'flex', flexDirection:'column', gap:5}}>
+              {att.map(({ s, st }) => {
+                const ini = (s.fullName || s.username || '?').split(' ').map(x => x[0]).slice(0,2).join('').toUpperCase();
+                const m = ATT_META[st];
+                return (
+                  <div key={s.id} style={{display:'flex', alignItems:'center', gap:9, padding:'3px 0'}}>
+                    <span style={{width:28, height:28, borderRadius:'50%', background:'#FCEFD8', color:'#C77B12', fontWeight:800, fontSize:11, display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>{ini}</span>
+                    <span style={{flex:1, fontWeight:700, fontSize:12.5, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{s.fullName || s.username}</span>
+                    {m ? <span style={{width:24, height:24, borderRadius:7, background:m.c, color:'#fff', fontWeight:900, fontSize:11.5, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>{m.l}</span>
+                       : <span style={{fontSize:10.5, color:'#b0a88f', fontWeight:800}}>sin marcar</span>}
+                  </div>
+                );
+              })}
+            </div>}
+          </div>
+          {/* Comentarios */}
+          <div>
+            <div style={lblStyle}>💬 Comentarios de la clase</div>
+            {generalNotes.length === 0 && studentNotes.length === 0 ? <div style={mutedStyle}>No anotaste comentarios este día. Puedes anotarlos desde 👥 en el modo clase.</div> : null}
+            {generalNotes.map(n => (
+              <div key={n.id} style={{fontSize:13, color:'#7a5e1f', background:'#FFFDE7', border:'1px solid #FBC02D', borderRadius:9, padding:'9px 11px', fontWeight:600, marginBottom:7}}>{n.text}</div>
+            ))}
+            {studentNotes.map(n => (
+              <div key={n.id} style={{display:'flex', gap:8, fontSize:12.5, color:'#555', padding:'3px 0'}}>
+                <span style={{fontWeight:800, color:'#1F3A8A', flexShrink:0}}>✎ {sName(n.studentId).split(' ')[0]}:</span>
+                <span style={{flex:1}}>{n.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{display:'flex', gap:10, justifyContent:'space-between', alignItems:'center', padding:'13px 20px', borderTop:'1.5px solid #E3DCC9', flexWrap:'wrap'}}>
+          {classPlans[0] ? <button onClick={() => onDuplicate(classPlans[0])} style={{...btnGhost, padding:'8px 14px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>⧉ Duplicar la clase a otro grupo</button> : <span />}
+          <button onClick={onClose} style={{...btnGhost, padding:'8px 16px', fontSize:12.5}}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════ Duplicar un plan de clase a otro grupo ════════ */
+function DuplicateClassModal({ plan, onClose, onDone }) {
+  const TT = window.JUCUM_TT;
+  const { GROUPS, MODULE_CATALOG } = window.JUCUM_DATA;
+  const others = (GROUPS || []).filter(g => g.id !== plan.groupId);
+  const [gid, setGid] = React.useState(others[0] ? others[0].id : (plan.groupId || null));
+  const [date, setDate] = React.useState(plan.date || todayYMD());
+  const dup = () => {
+    const g = (GROUPS || []).find(x => x.id === gid);
+    const lvl = (g && g.level) || plan.level;
+    const copy = { ...plan, id: undefined, groupId: gid, level: lvl, date,
+      blocks: (plan.blocks || []).map(b => ({ ...b, id: 'b_' + Math.random().toString(36).slice(2,7) })) };
+    TT.upsertClassPlan(copy);
+    alert('⧉ Clase duplicada al grupo seleccionado el ' + date + '. Ábrela en su calendario para ajustar lo que quieras (no se tocó el original).');
+    onDone();
+  };
+  return (
+    <div onClick={onClose} style={{position:'fixed', inset:0, zIndex:1001, background:'rgba(15,23,42,0.55)', backdropFilter:'blur(3px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
+      <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, width:'100%', maxWidth:440, boxShadow:'0 24px 60px rgba(0,0,0,0.35)'}}>
+        <div style={{padding:'16px 20px 13px', borderBottom:'1.5px solid #E3DCC9', position:'relative'}}>
+          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, color:'#3F5BB8'}}>⧉ Duplicar a otro grupo</div>
+          <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginTop:3}}>{plan.moduleName} · {plan.sessionLabel}</div>
+          <button onClick={onClose} style={{position:'absolute', top:14, right:14, width:32, height:32, borderRadius:'50%', border:'none', background:'#FAFAF6', color:'#8a7f6a', fontSize:14, fontWeight:800, cursor:'pointer'}}>✕</button>
+        </div>
+        <div style={{padding:'16px 20px 6px'}}>
+          {others.length === 0 ? <div style={mutedStyle}>No tienes otro grupo al que duplicar todavía.</div> : (
+            <>
+              <Field label="Grupo destino"><select value={gid || ''} onChange={e => setGid(e.target.value)} style={selStyle}>{others.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></Field>
+              <div style={{height:12}} />
+              <Field label="Fecha en ese grupo"><input type="date" value={date} onChange={e => setDate(e.target.value)} style={selStyle} /></Field>
+              <div style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700, margin:'10px 0 2px'}}>Se crea una <b>copia idéntica</b> (secuencia y materiales). El original no se modifica.</div>
+            </>
+          )}
+        </div>
+        <div style={{display:'flex', gap:10, justifyContent:'flex-end', padding:'13px 20px', borderTop:'1.5px solid #E3DCC9'}}>
+          <button onClick={onClose} style={{...btnGhost, padding:'9px 16px', fontSize:12.5}}>Cancelar</button>
+          {others.length > 0 && <button onClick={dup} style={{...btnPrimary, padding:'9px 18px', fontSize:13, background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>⧉ Duplicar aquí</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDup }) {
+  return (
+    <div style={{display:'flex', alignItems:'center', gap:11, border:'1px solid ' + border, background: tint, borderRadius:11, padding:'10px 12px', marginBottom:8, flexWrap:'wrap'}}>
       <span style={{fontSize:19}}>{icon}</span>
       <div style={{flex:1, minWidth:0}}>
         <div style={{fontWeight:800, fontSize:13.5}}>{title}</div>
@@ -279,6 +435,7 @@ function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay }) {
       </div>
       {onPlay && <button onClick={onPlay} style={{...btnPrimary, padding:'6px 12px', fontSize:12.5, background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>▶ Modo clase</button>}
       <button onClick={onOpen} style={{...btnGhost, padding:'6px 12px', fontSize:12.5}}>Abrir</button>
+      {onDup && <button onClick={onDup} title="Duplicar a otro grupo" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>⧉ Duplicar</button>}
       <button onClick={onDelete} title="Eliminar" style={{...iconBtn, color:'#C0392B'}}>×</button>
     </div>
   );
@@ -319,8 +476,15 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
 
   const save = (asTemplate) => {
     if (!plan) return;
-    const rec = { ...plan, groupId: cfg.groupId, date: cfg.date || date, sessionLabel: cfg.sessionLabel, startTime: cfg.startTime, lengthMin: totalMin, id: initial ? initial.id : undefined };
-    if (asTemplate) { const tpls = loadLS(PLAN_TPL_KEY); tpls.unshift({ ...rec, id: 'tpl_' + Date.now(), isTemplate: true }); saveLS(PLAN_TPL_KEY, tpls); alert('✅ Guardado como plantilla reutilizable'); return; }
+    if (asTemplate) {
+      const name = window.prompt('Nombre para esta plantilla de clase:', plan.moduleName + ' · ' + cfg.sessionLabel);
+      if (!name) return;
+      const payload = { ...plan, groupId: cfg.groupId, sessionLabel: cfg.sessionLabel, startTime: cfg.startTime, lengthMin: totalMin, date: undefined, id: undefined };
+      TT.addTemplate({ kind: 'class', name: name.trim(), level: cfg.level, payload });
+      alert('⭐ Plantilla "' + name.trim() + '" guardada. La encuentras en 📁 Guardados.');
+      return;
+    }
+    const rec = { ...plan, groupId: cfg.groupId, date: cfg.date || date, sessionLabel: cfg.sessionLabel, startTime: cfg.startTime, lengthMin: totalMin, id: initial && !initial._tpl ? initial.id : undefined };
     TT.upsertClassPlan(rec); alert('✅ Plan de clase guardado en el calendario'); onSaved();
   };
   const printPlan = () => printClassPlan(plan, cfg, totalMin);
@@ -329,6 +493,16 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
     <>
       <div className="scard">
         <div className="sec-head"><div className="sec-title">📘 Plan de clase · {fmtDateLong(cfg.date || date)}</div></div>
+        {initial && !initial._tpl && (
+          <div style={{display:'flex', alignItems:'center', gap:9, background:'#EEF2FC', border:'1px solid #C9D6F5', borderRadius:11, padding:'9px 13px', margin:'4px 0 10px', fontSize:12.5, fontWeight:700, color:'#1F3A8A'}}>
+            ✏️ Estás <b>editando un plan guardado</b>. Cambia lo que quieras abajo y pulsa <b>💾 Guardar</b> — se actualiza en su mismo día (no se duplica).
+          </div>
+        )}
+        {initial && initial._tpl && (
+          <div style={{display:'flex', alignItems:'center', gap:9, background:'#FBF7FF', border:'1px solid #E2D5F3', borderRadius:11, padding:'9px 13px', margin:'4px 0 10px', fontSize:12.5, fontWeight:700, color:'#5B3FA0'}}>
+            ⭐ Partiste de una <b>plantilla</b>. Ajusta la fecha y el grupo, y guárdalo para agendarlo en el calendario.
+          </div>
+        )}
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:14, marginTop:6}}>
           <Field label="Fecha"><input type="date" value={cfg.date || date} onChange={e => setCfg(c => ({ ...c, date: e.target.value }))} style={selStyle} /></Field>
           <Field label="Grupo"><select value={cfg.groupId || ''} onChange={e => { const g = GROUPS.find(x => x.id === e.target.value); const lvl = g ? g.level : cfg.level; const m = (MODULE_CATALOG[lvl] || [])[0]; setCfg(c => ({ ...c, groupId: e.target.value, level: lvl, moduleId: m ? m.id : c.moduleId, themeGroup: '' })); }} style={selStyle}>{GROUPS.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></Field>
@@ -340,7 +514,7 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
           <Field label="Hora de inicio"><input type="time" value={cfg.startTime} onChange={e => setCfg(c => ({ ...c, startTime: e.target.value }))} style={selStyle} /></Field>
         </div>
         <div style={{display:'flex', gap:10, marginTop:16, flexWrap:'wrap'}}>
-          <button onClick={generate} style={{...btnPrimary, background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>⚡ {plan ? 'Regenerar' : 'Generar plan'}</button>
+          <button onClick={() => { if (plan && !window.confirm('¿Regenerar desde cero? Se perderán los cambios que hiciste a los bloques.')) return; generate(); }} style={{...btnPrimary, background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>⚡ {plan ? 'Regenerar' : 'Generar plan'}</button>
           <button onClick={onCancel} style={btnGhost}>Cancelar</button>
         </div>
       </div>
@@ -427,16 +601,6 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
 }
 
 /* ════════ Editor de SET DE PRÁCTICA ════════ */
-// Quita líneas vacías de cada paso. Se PERMITEN mientras editas (para poder pulsar
-// Enter y añadir pasos nuevos); se limpian al previsualizar / guardar / imprimir.
-function sanitizeGuide(g) {
-  if (!g) return g;
-  return { ...g, steps: (g.steps || []).map(s => ({
-    ...s,
-    linesEs: (s.linesEs || []).filter(x => x && x.trim() !== ''),
-    linesEn: (s.linesEn || []).filter(x => x && x.trim() !== ''),
-  })) };
-}
 function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }) {
   const { MODULE_CATALOG, GROUPS } = window.JUCUM_DATA;
   const TT = window.JUCUM_TT;
@@ -460,7 +624,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
   const lang = (guide && guide.lang) || 'es';
   const setLang = (lg) => setGuide(g => g ? { ...g, lang: lg } : g);
   const regenGuide = () => setGuide(window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }));
-  const previewGuide = () => { const g = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }); if (!guide) setGuide(g); window.JUCUM_GUIDE.openOverlay(sanitizeGuide(g), {}); };
+  const previewGuide = () => { const g = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }); if (!guide) setGuide(g); window.JUCUM_GUIDE.openOverlay(g, {}); };
   const updateStep = (i, patch) => setGuide(g => ({ ...g, steps: g.steps.map((s, k) => k === i ? { ...s, ...patch } : s) }));
   const allTemas = Array.from(new Set(mods.flatMap(m => (m.activities || []).map(a => a.group).filter(Boolean))));
   const focusText = (s) => {
@@ -473,10 +637,12 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
   const moveStep = (i, dir) => setGuide(g => { const arr = g.steps.slice(); const j = i + dir; if (j < 0 || j >= arr.length) return g; const t = arr[i]; arr[i] = arr[j]; arr[j] = t; return { ...g, steps: arr }; });
   const delStep = (i) => setGuide(g => ({ ...g, steps: g.steps.filter((_, k) => k !== i) }));
   const loadFav = (favId) => { const f = (TT.getGuideFavs() || []).find(x => x.id === favId); if (!f) return; const g = JSON.parse(JSON.stringify(f.guide)); g.title = title; g.note = note; g.moduleName = mod ? mod.name : g.moduleName; setGuide(g); };
-  const saveFav = () => { const g = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }); if (!guide) setGuide(g); const name = window.prompt('Ponle un nombre a este instructivo favorito (para reconocerlo después):', title || 'Mi instructivo'); if (!name) return; TT.addGuideFav(name.trim(), sanitizeGuide(g)); setFavTick(t => t + 1); alert('⭐ Guardado en favoritos como “' + name.trim() + '”'); };
+  const saveFav = () => { const g = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }); if (!guide) setGuide(g); const name = window.prompt('Ponle un nombre a este instructivo favorito (para reconocerlo después):', title || 'Mi instructivo'); if (!name) return; TT.addGuideFav(name.trim(), g); setFavTick(t => t + 1); alert('⭐ Guardado en favoritos como “' + name.trim() + '”'); };
   const delFav = (id) => { if (window.confirm('¿Borrar este instructivo favorito?')) { TT.deleteGuideFav(id); setFavTick(t => t + 1); } };
   const cur = new Date(); const [pcur, setPcur] = React.useState({ y: cur.getFullYear(), m: cur.getMonth() });
 
+  const [actTypeFilter, setActTypeFilter] = React.useState('all');
+  const [collapsedTopics, setCollapsedTopics] = React.useState({});
   const isPicked = (m, a) => picked.some(p => p.moduleId === m.id && p.activityId === a.id);
   const togglePick = (m, a) => setPicked(arr => isPicked(m, a) ? arr.filter(p => !(p.moduleId === m.id && p.activityId === a.id)) : [...arr, { moduleId: m.id, activityId: a.id, label: a.name, type: a.type, group: a.group || null }]);
   const togglePickReview = (m, a) => setPicked(arr => isPicked(m, a) ? arr.filter(p => !(p.moduleId === m.id && p.activityId === a.id)) : [...arr, { moduleId: m.id, activityId: a.id, label: a.name, type: a.type, group: a.group || null, review: true, moduleName: m.name }]);
@@ -488,17 +654,21 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
   const save = () => {
     if (!picked.length) { alert('Elige al menos una actividad.'); return; }
     if (!dates.length) { alert('Elige al menos un día en el calendario.'); return; }
-    const finalGuide = sanitizeGuide(guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }));
+    const finalGuide = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang });
     const rec = { groupId, title, activities: picked, dates, assignToStudents: assign, note, guide: finalGuide };
-    if (initial) { TT.updatePracticePlan(initial.id, rec); alert('✅ Set de práctica actualizado'); }
+    if (initial && !initial._tpl) { TT.updatePracticePlan(initial.id, rec); alert('✅ Set de práctica actualizado'); }
     else { TT.addPracticePlan(rec); alert(assign ? '✅ Set guardado y asignado a los alumnos en esos días' : '✅ Set guardado (solo para ti)'); }
     onSaved();
   };
-  const printSet = () => {
-    const g = guide ? sanitizeGuide(guide) : null;
-    if (g && g.steps && g.steps.length) { window.JUCUM_GUIDE.printDoc(g, {}); }   // imprime TU instructivo editado
-    else { printPracticeSet({ title, group, level, picked, dates, mod }, MODULE_CATALOG); } // sin instructivo aún → lista de archivos
+  const saveAsTemplate = () => {
+    if (!picked.length) { alert('Elige al menos una actividad antes de guardar la plantilla.'); return; }
+    const name = window.prompt('Nombre para esta plantilla de práctica:', title);
+    if (!name) return;
+    const finalGuide = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang });
+    TT.addTemplate({ kind: 'practice', name: name.trim(), level, payload: { title, activities: picked, assignToStudents: assign, note, guide: finalGuide, dates: [] } });
+    alert('⭐ Plantilla "' + name.trim() + '" guardada. La encuentras en 📁 Guardados.');
   };
+  const printSet = () => printPracticeSet({ title, group, level, picked, dates, mod }, MODULE_CATALOG);
 
   const cells = monthMatrix(pcur.y, pcur.m);
   const prevM = () => setPcur(c => { const d = new Date(c.y, c.m - 1, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
@@ -508,6 +678,16 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
     <>
       <div className="scard">
         <div className="sec-head"><div className="sec-title">📝 Set de práctica</div></div>
+        {initial && !initial._tpl && (
+          <div style={{display:'flex', alignItems:'center', gap:9, background:'#F4EEFB', border:'1px solid #D9CEEC', borderRadius:11, padding:'9px 13px', margin:'4px 0 4px', fontSize:12.5, fontWeight:700, color:'#5B3FA0'}}>
+            ✏️ Estás <b>editando un set guardado</b>. Cambia actividades, días o destino y pulsa <b>💾 Guardar</b> — se actualiza el mismo set.
+          </div>
+        )}
+        {initial && initial._tpl && (
+          <div style={{display:'flex', alignItems:'center', gap:9, background:'#FBF7FF', border:'1px solid #E2D5F3', borderRadius:11, padding:'9px 13px', margin:'4px 0 4px', fontSize:12.5, fontWeight:700, color:'#5B3FA0'}}>
+            ⭐ Partiste de una <b>plantilla</b>. Elige los <b>días</b> y guárdalo para asignarlo.
+          </div>
+        )}
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:14, marginTop:6}}>
           <Field label="Título"><input value={title} onChange={e => setTitle(e.target.value)} style={selStyle} /></Field>
           <Field label="Grupo"><select value={groupId || ''} onChange={e => { setGroupId(e.target.value); const g = GROUPS.find(x => x.id === e.target.value); const lv = g ? g.level : level; const m = (MODULE_CATALOG[lv] || [])[0]; setModuleId(m ? m.id : null); setPicked([]); }} style={selStyle}>{GROUPS.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></Field>
@@ -518,20 +698,54 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
       {/* 1 · Actividades */}
       <div className="scard" style={{marginTop:16}}>
         <div className="sec-head"><div className="sec-title">1 · Elige las actividades</div></div>
-        <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginBottom:6}}>Tip: cambia el <b>Módulo</b> arriba (incluso uno pasado) y sigue marcando — se acumulan de varios módulos.</div>
-        <div style={{display:'flex', flexDirection:'column', gap:7, marginTop:6}}>
-          {(mod ? mod.activities : []).map(a => {
-            const on = isPicked(mod, a);
-            return (
-              <button key={a.id} onClick={() => togglePick(mod, a)} style={{display:'flex', alignItems:'center', gap:10, textAlign:'left', cursor:'pointer', border:'1px solid ' + (on ? '#9FB0DA' : '#E3DCC9'), background: on ? '#EEF2FC' : '#fff', borderRadius:10, padding:'9px 12px', font:'inherit'}}>
-                <span style={{width:20, height:20, borderRadius:6, border:'2px solid ' + (on ? '#3F5BB8' : '#cdc4ad'), background: on ? '#3F5BB8' : '#fff', color:'#fff', fontSize:13, fontWeight:900, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>{on ? '✓' : ''}</span>
-                <span style={{fontSize:15}}>{typeIcon(a.type)}</span>
-                <span style={{flex:1, fontWeight:700, fontSize:13}}>{a.name}{a.group ? <span style={{display:'block', fontSize:11, color:'#8a7f6a', fontWeight:700}}>{a.group}</span> : null}</span>
-                {!a.url && <span style={{fontSize:10.5, fontWeight:800, color:'#9C5D00', background:'#FFF3E0', borderRadius:20, padding:'2px 8px'}}>sin archivo</span>}
-              </button>
-            );
-          })}
-        </div>
+        <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginBottom:8}}>Tip: cambia el <b>Módulo</b> arriba (incluso uno pasado) y sigue marcando — se acumulan de varios módulos.</div>
+        {(() => {
+          const all = mod ? (mod.activities || []) : [];
+          const typesPresent = Array.from(new Set(all.map(a => a.type)));
+          const TLAB = { story:'📗 Stories', reading:'📖 Comprensión', listening:'🎧 Listening', summary:'📚 Resúmenes', grammar:'📝 Gramática', quizlet:'🃏 Quizlet' };
+          const pillStyle = (on) => ({ border:'1.5px solid ' + (on ? '#3F5BB8' : '#E3DCC9'), background: on ? '#3F5BB8' : '#fff', color: on ? '#fff' : '#6b6453', fontFamily:'inherit', fontWeight:800, fontSize:12, borderRadius:18, padding:'6px 12px', cursor:'pointer' });
+          const filtered = all.filter(a => actTypeFilter === 'all' || a.type === actTypeFilter);
+          const topicGroups = [];
+          filtered.forEach(a => { const key = a.group || 'General del módulo'; let g = topicGroups.find(x => x.key === key); if (!g) { g = { key, items: [] }; topicGroups.push(g); } g.items.push(a); });
+          return (
+            <>
+              <div style={{display:'flex', gap:7, flexWrap:'wrap', marginBottom:10}}>
+                <button onClick={() => setActTypeFilter('all')} style={pillStyle(actTypeFilter === 'all')}>Todas</button>
+                {typesPresent.map(t => <button key={t} onClick={() => setActTypeFilter(t)} style={pillStyle(actTypeFilter === t)}>{TLAB[t] || t}</button>)}
+              </div>
+              <div style={{display:'flex', flexDirection:'column', gap:8}}>
+                {topicGroups.map(g => {
+                  const collapsed = !!collapsedTopics[g.key];
+                  const pickedN = g.items.filter(a => isPicked(mod, a)).length;
+                  return (
+                    <div key={g.key} style={{border:'1px solid #E3DCC9', borderRadius:11, overflow:'hidden'}}>
+                      <button onClick={() => setCollapsedTopics(c => ({ ...c, [g.key]: !c[g.key] }))} style={{display:'flex', alignItems:'center', gap:9, width:'100%', textAlign:'left', cursor:'pointer', border:'none', background:'#FBF7FF', padding:'10px 12px', font:'inherit'}}>
+                        <span style={{flex:1, fontWeight:800, fontSize:13, color:'#54243F'}}>{g.key}</span>
+                        {pickedN > 0 && <span style={{fontSize:11, fontWeight:800, color:'#1F3A8A', background:'#E3E9F8', borderRadius:11, padding:'2px 9px'}}>{pickedN} ✓</span>}
+                        <span style={{fontSize:11, fontWeight:800, color:'#8a7f6a'}}>{g.items.length}</span>
+                        <span style={{fontSize:12, color:'#8a7f6a', transform: collapsed ? 'none' : 'rotate(180deg)', display:'inline-block'}}>▾</span>
+                      </button>
+                      {!collapsed && <div style={{display:'flex', flexDirection:'column', gap:7, padding:'8px 10px'}}>
+                        {g.items.map(a => {
+                          const on = isPicked(mod, a);
+                          return (
+                            <button key={a.id} onClick={() => togglePick(mod, a)} style={{display:'flex', alignItems:'center', gap:10, textAlign:'left', cursor:'pointer', border:'1px solid ' + (on ? '#9FB0DA' : '#E3DCC9'), background: on ? '#EEF2FC' : '#fff', borderRadius:10, padding:'9px 12px', font:'inherit'}}>
+                              <span style={{width:20, height:20, borderRadius:6, border:'2px solid ' + (on ? '#3F5BB8' : '#cdc4ad'), background: on ? '#3F5BB8' : '#fff', color:'#fff', fontSize:13, fontWeight:900, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>{on ? '✓' : ''}</span>
+                              <span style={{fontSize:15}}>{typeIcon(a.type)}</span>
+                              <span style={{flex:1, fontWeight:700, fontSize:13}}>{a.name}</span>
+                              {!a.url && <span style={{fontSize:10.5, fontWeight:800, color:'#9C5D00', background:'#FFF3E0', borderRadius:20, padding:'2px 8px'}}>sin archivo</span>}
+                            </button>
+                          );
+                        })}
+                      </div>}
+                    </div>
+                  );
+                })}
+                {topicGroups.length === 0 && <div style={{padding:'16px', textAlign:'center', color:'#999', fontWeight:700, fontSize:12.5}}>Sin actividades de este tipo en el módulo.</div>}
+              </div>
+            </>
+          );
+        })()}
         <div style={{marginTop:9, fontSize:12, fontWeight:700, color:'#6b6453'}}>{picked.length} actividad(es) elegida(s)</div>
       </div>
 
@@ -689,16 +903,16 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
 
                   {lang !== 'par' ? (<>
                     <div style={{fontSize:10.5, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'.03em', marginBottom:3}}>Pasos · {lang === 'en' ? 'English' : 'Español'} (uno por línea)</div>
-                    <textarea value={((lang === 'en' ? s.linesEn : s.linesEs) || []).join('\n')} onChange={e => updateStep(i, lang === 'en' ? { linesEn: e.target.value.split('\n') } : { linesEs: e.target.value.split('\n') })} rows={Math.max(2, ((lang === 'en' ? s.linesEn : s.linesEs) || []).length)} style={{width:'100%', border:'1px solid #E3DCC9', borderRadius:9, padding:'8px 10px', fontSize:12.5, fontFamily:'inherit', fontWeight:600, lineHeight:1.5, resize:'vertical', color:'#444'}} />
+                    <textarea value={((lang === 'en' ? s.linesEn : s.linesEs) || []).join('\n')} onChange={e => updateStep(i, lang === 'en' ? { linesEn: e.target.value.split('\n').filter(x => x.trim() !== '') } : { linesEs: e.target.value.split('\n').filter(x => x.trim() !== '') })} rows={Math.max(2, ((lang === 'en' ? s.linesEn : s.linesEs) || []).length)} style={{width:'100%', border:'1px solid #E3DCC9', borderRadius:9, padding:'8px 10px', fontSize:12.5, fontFamily:'inherit', fontWeight:600, lineHeight:1.5, resize:'vertical', color:'#444'}} />
                     <div style={{display:'flex', alignItems:'center', gap:8, marginTop:7}}>
                       <span style={{fontSize:12, fontWeight:800, color:'#9c6a00'}}>📌</span>
                       <input value={(lang === 'en' ? s.noteEn : s.noteEs) || ''} onChange={e => updateStep(i, lang === 'en' ? { noteEn: e.target.value } : { noteEs: e.target.value })} placeholder="Nota del paso (opcional)" style={{flex:1, border:'1px solid #F2DFB0', background:'#FFFDF7', borderRadius:8, padding:'6px 9px', fontSize:12, fontFamily:'inherit', fontWeight:700, color:'#9c6a00'}} />
                     </div>
                   </>) : (<>
                     <div style={{fontSize:10.5, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'.03em', marginBottom:3}}>Pasos · English (uno por línea)</div>
-                    <textarea value={(s.linesEn || []).join('\n')} onChange={e => updateStep(i, { linesEn: e.target.value.split('\n') })} rows={Math.max(2, (s.linesEn || []).length)} style={{width:'100%', border:'1px solid #E3DCC9', borderRadius:9, padding:'8px 10px', fontSize:12.5, fontFamily:'inherit', fontWeight:600, lineHeight:1.5, resize:'vertical', color:'#444'}} />
+                    <textarea value={(s.linesEn || []).join('\n')} onChange={e => updateStep(i, { linesEn: e.target.value.split('\n').filter(x => x.trim() !== '') })} rows={Math.max(2, (s.linesEn || []).length)} style={{width:'100%', border:'1px solid #E3DCC9', borderRadius:9, padding:'8px 10px', fontSize:12.5, fontFamily:'inherit', fontWeight:600, lineHeight:1.5, resize:'vertical', color:'#444'}} />
                     <div style={{fontSize:10.5, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'.03em', margin:'8px 0 3px'}}>Traducción · Español</div>
-                    <textarea value={(s.linesEs || []).join('\n')} onChange={e => updateStep(i, { linesEs: e.target.value.split('\n') })} rows={Math.max(2, (s.linesEs || []).length)} style={{width:'100%', border:'1px solid #E3DCC9', borderRadius:9, padding:'8px 10px', fontSize:12.5, fontFamily:'inherit', fontWeight:600, lineHeight:1.5, resize:'vertical', color:'#777', fontStyle:'italic'}} />
+                    <textarea value={(s.linesEs || []).join('\n')} onChange={e => updateStep(i, { linesEs: e.target.value.split('\n').filter(x => x.trim() !== '') })} rows={Math.max(2, (s.linesEs || []).length)} style={{width:'100%', border:'1px solid #E3DCC9', borderRadius:9, padding:'8px 10px', fontSize:12.5, fontFamily:'inherit', fontWeight:600, lineHeight:1.5, resize:'vertical', color:'#777', fontStyle:'italic'}} />
                   </>)}
                 </div>
               ))}
@@ -728,6 +942,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
         <Field label="Nota para los alumnos (opcional)" style={{marginTop:12}}><input value={note} onChange={e => setNote(e.target.value)} placeholder="Ej: enfócate en la pronunciación" style={selStyle} /></Field>
         <div style={{display:'flex', gap:10, flexWrap:'wrap', marginTop:16}}>
           <button onClick={save} style={btnPrimary}>💾 Guardar set de práctica</button>
+          <button onClick={saveAsTemplate} style={{...btnGhost, borderColor:'#C9A8E8', color:'#5B3FA0'}}>⭐ Plantilla</button>
           <button onClick={printSet} style={btnGhost}>🖨️ Archivos / PDF</button>
           <button onClick={onCancel} style={btnGhost}>Cancelar</button>
         </div>
@@ -944,33 +1159,101 @@ function QuizChips({ label, value, options, onPick }) {
 }
 function SavedItems({ onOpenClass, onOpenPractice, onChange, refreshKey }) {
   const TT = window.JUCUM_TT;
-  const classPlans = TT.getClassPlans();
-  const practicePlans = TT.getPracticePlans();
-  const templates = loadLS(PLAN_TPL_KEY);
-  const Row = ({ icon, title, sub, onOpen, onDel }) => (
-    <div style={{display:'flex', alignItems:'center', gap:11, border:'1px solid #E3DCC9', borderRadius:11, padding:'10px 13px', background:'#FCFAF4', marginBottom:8}}>
+  const { GROUPS, MODULE_CATALOG } = window.JUCUM_DATA;
+  const [fGroup, setFGroup] = React.useState('all');
+  const [fLevel, setFLevel] = React.useState('all');
+  const gName = (id) => { const g = GROUPS.find(x => x.id === id); return g ? g.name : (id === 'g1' ? 'Grupo' : '—'); };
+  const gLevel = (id) => { const g = GROUPS.find(x => x.id === id); return g ? g.level : null; };
+  const levels = Object.keys(MODULE_CATALOG);
+
+  let classPlans = TT.getClassPlans().slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  let practicePlans = TT.getPracticePlans().slice().sort((a, b) => String((b.dates || [])[0] || '').localeCompare(String((a.dates || [])[0] || '')));
+  let templates = (TT.getTemplates ? TT.getTemplates() : []);
+  if (fGroup !== 'all') { classPlans = classPlans.filter(p => p.groupId === fGroup); practicePlans = practicePlans.filter(p => p.groupId === fGroup); }
+  if (fLevel !== 'all') {
+    classPlans = classPlans.filter(p => (p.level || gLevel(p.groupId)) === fLevel);
+    practicePlans = practicePlans.filter(p => gLevel(p.groupId) === fLevel);
+    templates = templates.filter(t => !t.level || t.level === fLevel);
+  }
+  const classTpls = templates.filter(t => t.kind === 'class');
+  const pracTpls = templates.filter(t => t.kind === 'practice');
+
+  const dupClass = (p) => { const copy = { ...p, id: undefined, date: todayYMD(), sessionLabel: (p.sessionLabel || 'Sesión') + ' (copia)' }; TT.upsertClassPlan(copy); onChange(); alert('📋 Plan duplicado para hoy. Ábrelo para ajustar fecha y grupo.'); };
+  const dupPractice = (p) => { const copy = { ...p, title: (p.title || 'Práctica') + ' (copia)', dates: [] }; const id = TT.addPracticePlan(copy); onChange(); onOpenPractice({ ...TT.getPracticePlans().find(x => x.id === id) }); };
+  const useTpl = (t) => { if (t.kind === 'class') onOpenClass({ ...t.payload, _tpl: true, id: undefined }); else onOpenPractice({ ...t.payload, _tpl: true, id: undefined }); };
+  const dupTpl = (t) => { TT.addTemplate({ kind: t.kind, name: t.name + ' (copia)', level: t.level, payload: t.payload }); onChange(); };
+  const renameTpl = (t) => { const n = window.prompt('Nuevo nombre de la plantilla:', t.name); if (n && n.trim()) { TT.updateTemplate(t.id, { name: n.trim() }); onChange(); } };
+  const setTplLevel = (t, lv) => { TT.updateTemplate(t.id, { level: lv || null }); onChange(); };
+
+  const Row = ({ icon, tint, title, sub, children }) => (
+    <div style={{display:'flex', alignItems:'center', gap:11, border:'1px solid #E3DCC9', borderRadius:11, padding:'10px 13px', background: tint || '#FCFAF4', marginBottom:8, flexWrap:'wrap'}}>
       <span style={{fontSize:19}}>{icon}</span>
-      <div style={{flex:1, minWidth:0}}><div style={{fontWeight:800, fontSize:13.5}}>{title}</div><div style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700}}>{sub}</div></div>
-      <button onClick={onOpen} style={{...btnGhost, padding:'6px 12px', fontSize:12.5}}>Abrir</button>
-      {onDel && <button onClick={onDel} style={{...iconBtn, color:'#C0392B'}}>×</button>}
+      <div style={{flex:1, minWidth:140}}><div style={{fontWeight:800, fontSize:13.5}}>{title}</div><div style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700}}>{sub}</div></div>
+      <div style={{display:'flex', gap:6, flexWrap:'wrap'}}>{children}</div>
     </div>
   );
+  const Lvl = ({ lv }) => lv ? <span style={{fontSize:10, fontWeight:800, color:'#fff', background:'#3F5BB8', borderRadius:10, padding:'2px 7px', marginLeft:6}}>{lv.toUpperCase()}</span> : null;
+  const mini = { ...btnGhost, padding:'5px 10px', fontSize:12 };
+
   return (
     <>
       <div className="scard" style={{marginBottom:16}}>
-        <div className="sec-head"><div className="sec-title">📘 Planes de clase</div></div>
-        {classPlans.length === 0 ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">📭</div>Sin planes de clase aún.</div>
-          : classPlans.map(p => <Row key={p.id} icon="📘" title={`${p.moduleName} · ${p.sessionLabel}`} sub={`${p.date || 's/fecha'} · ${p.lengthMin} min`} onOpen={() => onOpenClass(p)} onDel={() => { TT.deleteClassPlan(p.id); onChange(); }} />)}
+        <div style={{display:'flex', alignItems:'center', gap:9, flexWrap:'wrap'}}>
+          <span style={{fontSize:12, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'.03em'}}>🔎 Filtrar</span>
+          <select value={fGroup} onChange={e => setFGroup(e.target.value)} style={{...selStyle, width:'auto', minWidth:150}}>
+            <option value="all">Todos los grupos</option>
+            {GROUPS.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+          <select value={fLevel} onChange={e => setFLevel(e.target.value)} style={{...selStyle, width:'auto', minWidth:120}}>
+            <option value="all">Todos los niveles</option>
+            {levels.map(lv => <option key={lv} value={lv}>{lv.toUpperCase()}</option>)}
+          </select>
+          <span style={{fontSize:11.5, color:'#A8A8A8', fontWeight:700}}>Aquí ves TODO lo que has hecho, de cualquier grupo o fecha.</span>
+        </div>
       </div>
+
       <div className="scard" style={{marginBottom:16}}>
-        <div className="sec-head"><div className="sec-title">📝 Sets de práctica</div></div>
-        {practicePlans.length === 0 ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">📭</div>Sin sets de práctica aún.</div>
-          : practicePlans.map(p => <Row key={p.id} icon="📝" title={p.title} sub={`${(p.activities || []).length} act. · ${(p.dates || []).length} día(s) · ${p.assignToStudents !== false ? '👥 alumnos' : '🙋 solo tú'}`} onOpen={() => onOpenPractice(p)} onDel={() => { TT.deletePracticePlan(p.id); onChange(); }} />)}
+        <div className="sec-head"><div className="sec-title">📘 Planes de clase <span style={{fontSize:12, color:'#8a7f6a'}}>({classPlans.length})</span></div></div>
+        {classPlans.length === 0 ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">📭</div>Sin planes de clase con este filtro.</div>
+          : classPlans.map(p => <Row key={p.id} icon="📘" tint="#EEF2FC" title={<>{p.moduleName} · {p.sessionLabel}<Lvl lv={p.level} /></>} sub={`${gName(p.groupId)} · ${p.date || 's/fecha'} · ${p.lengthMin} min`}>
+              <button onClick={() => onOpenClass(p)} style={mini}>Abrir</button>
+              <button onClick={() => dupClass(p)} style={mini}>⧉ Duplicar</button>
+              <button onClick={() => { if (window.confirm('¿Eliminar este plan de clase?')) { TT.deleteClassPlan(p.id); onChange(); } }} style={{...iconBtn, color:'#C0392B'}}>×</button>
+            </Row>)}
       </div>
+
+      <div className="scard" style={{marginBottom:16}}>
+        <div className="sec-head"><div className="sec-title">📝 Sets de práctica <span style={{fontSize:12, color:'#8a7f6a'}}>({practicePlans.length})</span></div></div>
+        {practicePlans.length === 0 ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">📭</div>Sin sets de práctica con este filtro.</div>
+          : practicePlans.map(p => <Row key={p.id} icon="📝" tint="#F4EEFB" title={p.title} sub={`${gName(p.groupId)} · ${(p.activities || []).length} act. · ${(p.dates || []).length} día(s) · ${p.assignToStudents !== false ? '👥 alumnos' : '🙋 solo tú'}`}>
+              <button onClick={() => onOpenPractice(p)} style={mini}>Abrir</button>
+              <button onClick={() => dupPractice(p)} style={mini}>⧉ Duplicar</button>
+              <button onClick={() => { if (window.confirm('¿Eliminar este set de práctica?')) { TT.deletePracticePlan(p.id); onChange(); } }} style={{...iconBtn, color:'#C0392B'}}>×</button>
+            </Row>)}
+      </div>
+
+      <div className="scard" style={{marginBottom:16}}>
+        <div className="sec-head"><div className="sec-title">⭐ Plantillas de clase <span style={{fontSize:12, color:'#8a7f6a'}}>({classTpls.length})</span></div></div>
+        {classTpls.length === 0 ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">📭</div>Guarda un plan como plantilla (botón ⭐ en el editor) para reutilizarlo.</div>
+          : classTpls.map(t => <Row key={t.id} icon="⭐" tint="#FBF7FF" title={<>{t.name}<Lvl lv={t.level} /></>} sub={`Plantilla de clase · ${(t.payload.blocks || []).length} bloques · ${t.payload.lengthMin || '—'} min`}>
+              <button onClick={() => useTpl(t)} style={{...mini, borderColor:'#9FB0DA', color:'#3F5BB8'}}>Usar</button>
+              <button onClick={() => dupTpl(t)} style={mini}>⧉ Duplicar</button>
+              <button onClick={() => renameTpl(t)} style={mini}>✎ Renombrar</button>
+              <select value={t.level || ''} onChange={e => setTplLevel(t, e.target.value)} style={{...selStyle, width:'auto', padding:'4px 7px', fontSize:11}}><option value="">Nivel —</option>{levels.map(lv => <option key={lv} value={lv}>{lv.toUpperCase()}</option>)}</select>
+              <button onClick={() => { if (window.confirm('¿Eliminar esta plantilla?')) { TT.deleteTemplate(t.id); onChange(); } }} style={{...iconBtn, color:'#C0392B'}}>×</button>
+            </Row>)}
+      </div>
+
       <div className="scard">
-        <div className="sec-head"><div className="sec-title">⭐ Plantillas de clase</div></div>
-        {templates.length === 0 ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">📭</div>Guarda un plan como plantilla para reutilizarlo.</div>
-          : templates.map(p => <Row key={p.id} icon="⭐" title={`${p.moduleName} · ${p.sessionLabel}`} sub={`Plantilla · ${p.lengthMin} min`} onOpen={() => onOpenClass({ ...p, id: undefined })} onDel={() => { saveLS(PLAN_TPL_KEY, loadLS(PLAN_TPL_KEY).filter(x => x.id !== p.id)); onChange(); }} />)}
+        <div className="sec-head"><div className="sec-title">⭐ Plantillas de práctica <span style={{fontSize:12, color:'#8a7f6a'}}>({pracTpls.length})</span></div></div>
+        {pracTpls.length === 0 ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">📭</div>Guarda un set como plantilla (botón ⭐ en el editor) para reutilizarlo.</div>
+          : pracTpls.map(t => <Row key={t.id} icon="⭐" tint="#FBF7FF" title={<>{t.name}<Lvl lv={t.level} /></>} sub={`Plantilla de práctica · ${(t.payload.activities || []).length} actividad(es)`}>
+              <button onClick={() => useTpl(t)} style={{...mini, borderColor:'#C9A8E8', color:'#5B3FA0'}}>Usar</button>
+              <button onClick={() => dupTpl(t)} style={mini}>⧉ Duplicar</button>
+              <button onClick={() => renameTpl(t)} style={mini}>✎ Renombrar</button>
+              <select value={t.level || ''} onChange={e => setTplLevel(t, e.target.value)} style={{...selStyle, width:'auto', padding:'4px 7px', fontSize:11}}><option value="">Nivel —</option>{levels.map(lv => <option key={lv} value={lv}>{lv.toUpperCase()}</option>)}</select>
+              <button onClick={() => { if (window.confirm('¿Eliminar esta plantilla?')) { TT.deleteTemplate(t.id); onChange(); } }} style={{...iconBtn, color:'#C0392B'}}>×</button>
+            </Row>)}
       </div>
     </>
   );
@@ -1022,6 +1305,9 @@ function saveLS(k, a) { try { localStorage.setItem(k, JSON.stringify(a)); } catc
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
 function fmtDateLong(s) { if (!s) return ''; const d = parseYMD(s); return `${DOW_ES[d.getDay()]} ${d.getDate()} de ${MONTHS_ES[d.getMonth()]} ${d.getFullYear()}`; }
 function fmtDateShort(s) { const d = parseYMD(s); return `${d.getDate()}/${d.getMonth() + 1}`; }
+function fmtLogClock(v) { if (!v) return '—'; const m = String(v).match(/(\d{1,2}):(\d{2})/); if (!m) return String(v); let h = +m[1]; const ap = h >= 12 ? 'p. m.' : 'a. m.'; h = h % 12 || 12; return `${h}:${m[2]} ${ap}`; }
+const lblStyle = { fontSize:10.5, fontWeight:800, letterSpacing:'0.06em', textTransform:'uppercase', color:'#8a7f6a', marginBottom:7 };
+const mutedStyle = { fontSize:12.5, color:'#a8a29a', fontWeight:700, fontStyle:'italic' };
 function typeIcon(t) { return ({ story:'📖', reading:'📕', listening:'🎧', grammar:'✍️', summary:'🧠', quizlet:'🗂️' })[t] || '•'; }
 function typeIconTxt(t) { return typeIcon(t); }
 /* Link directo a un material en MODO PROFESOR (abre sin restricción y registra
