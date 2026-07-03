@@ -187,7 +187,7 @@ function MrModule({ mod, levelKey, reviews, defaultOpen, filterFn, onOpen }) {
 }
 
 /* ── Visor de revisión (pantalla completa) ──────────────────────── */
-function MrDrawer({ list, index, setIndex, reviews, bump, onClose }) {
+function MrDrawer({ list, index, setIndex, reviews, bump, onClose, who }) {
   const item = list[index];
   const { mod, a, key } = item;
   const review = reviews[key] || {};
@@ -197,6 +197,7 @@ function MrDrawer({ list, index, setIndex, reviews, bump, onClose }) {
   const [saved, setSaved] = mrState('');
   const [sending, setSending] = mrState(false);
   const D = window.JUCUM_DATA;
+  const reviewer = who || window.JUCUM_TEACHER_NAME || 'Profesor';
   const checklist = mrChecklist(a.type);
   const checked = review.checklist || {};
 
@@ -214,15 +215,15 @@ function MrDrawer({ list, index, setIndex, reviews, bump, onClose }) {
   }, [index, list.length]);
 
   const flash = (t) => { setSaved(t); setTimeout(() => setSaved(''), 1800); };
-  const setStatus = (s) => { D.setMaterialReview(key, { status: s, reviewer: window.JUCUM_TEACHER_NAME || 'Profesor' }); bump(); flash('Estado guardado'); };
+  const setStatus = (s) => { D.setMaterialReview(key, { status: s, reviewer }); bump(); flash('Estado guardado'); };
   const saveNote = () => { D.setMaterialReview(key, { note }); bump(); flash('Nota guardada'); };
   const toggleCheck = (i) => { const next = { ...checked, [i]: !checked[i] }; D.setMaterialReview(key, { checklist: next }); bump(); };
   const sendSupport = async () => {
     const msg = note.trim();
     if (!msg) { flash('Escribe la observación primero'); return; }
     setSending(true);
-    D.setMaterialReview(key, { note, status: status === 'pendiente' ? 'fix' : status });
-    const r = await D.sendMaterialReport({ level: key.split(':')[0], module: mod, activity: a, url: a.url, message: msg, reviewer: window.JUCUM_TEACHER_NAME });
+    D.setMaterialReview(key, { note, status: status === 'pendiente' ? 'fix' : status, reviewer });
+    const r = await D.sendMaterialReport({ level: key.split(':')[0], module: mod, activity: a, url: a.url, message: msg, reviewer });
     setSending(false);
     if (r && r.ok) { D.setMaterialReview(key, { sentToSupport: new Date().toISOString() }); bump(); flash('📨 Enviado a soporte'); }
     else alert('No se pudo enviar: ' + ((r && r.reason) || 'sin conexión con la nube'));
@@ -325,7 +326,7 @@ function MrDrawer({ list, index, setIndex, reviews, bump, onClose }) {
 }
 
 /* ── Vista principal ────────────────────────────────────────────── */
-function MaterialsReview({ onBack }) {
+function MaterialsReview({ onBack, who }) {
   const D = window.JUCUM_DATA;
   const { MODULE_CATALOG, LEVELS } = D;
   const levelKeys = Object.keys(LEVELS);
@@ -432,7 +433,7 @@ function MaterialsReview({ onBack }) {
       </div>
 
       {openIdx !== null && flat[openIdx] && (
-        <MrDrawer list={flat} index={openIdx} setIndex={setOpenIdx} reviews={reviews} bump={bump} onClose={() => setOpenIdx(null)} />
+        <MrDrawer list={flat} index={openIdx} setIndex={setOpenIdx} reviews={reviews} bump={bump} onClose={() => setOpenIdx(null)} who={who} />
       )}
 
       <style>{`.mr-lbl{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-soft);margin-bottom:8px;}`}</style>
