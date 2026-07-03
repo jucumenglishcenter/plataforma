@@ -767,19 +767,7 @@ const PROGRESS_KEY = 'jucum_student_progress_v1';
 function getStudentProgress(studentId) {
   let all = {};
   try { all = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); } catch {}
-  const base = all[studentId] || { completed: {}, todayMinutes: 0, lastDay: null };
-  /* Meta diaria multi-equipo: los minutos de HOY también viven en la nube
-   * (daily_sessions, escritos por jucum-connect desde los materiales). Se toma
-   * el MAYOR entre lo local y lo de la nube. */
-  try {
-    const cd = window.__JEC_DAILY && window.__JEC_DAILY[studentId];
-    if (cd && cd.day === peruDayStr()) {
-      const localMin = (base.lastDay === peruDayStr()) ? (base.todayMinutes || 0) : 0;
-      base.todayMinutes = Math.max(localMin, cd.minutes || 0);
-      base.lastDay = peruDayStr();
-    }
-  } catch (e) {}
-  return base;
+  return all[studentId] || { completed: {}, todayMinutes: 0, lastDay: null };
 }
 function markActivityComplete(studentId, moduleId, activityId, score, minutes, meta) {
   let all = {};
@@ -1992,27 +1980,61 @@ window.JUCUM_DATA.setLeagueScenario = setLeagueScenario;
 window.JUCUM_DATA.loadLeagueFromCloud = loadLeagueFromCloud;
 window.JUCUM_DATA.LEAGUE_SCENARIOS = LEAGUE_SCENARIOS;
 
-
-/* ── Meta diaria multi-equipo: hidratar minutos de HOY desde la nube ──
- * Los materiales (jucum-connect) escriben daily_sessions; aquí se suman por
- * alumno y getStudentProgress los mezcla con lo local. Refresco cada 3 min. */
-(function jecDailyLoader() {
-  function load() {
-    try {
-      if (!window.JUCUM_SB || !window.JUCUM_SB.getClient) return;
-      var day = peruDayStr();
-      window.JUCUM_SB.getClient().from('daily_sessions').select('user_id,minutes').eq('day', day)
-        .then(function (r) {
-          var rows = (r && r.data) || [];
-          var map = {};
-          rows.forEach(function (x) {
-            map[x.user_id] = map[x.user_id] || { day: day, minutes: 0 };
-            map[x.user_id].minutes += (x.minutes || 0);
-          });
-          window.__JEC_DAILY = map;
-        }, function () {});
-    } catch (e) {}
-  }
-  setTimeout(load, 2500);
-  setInterval(load, 3 * 60 * 1000);
-})();
+/* ════════════════════════════════════════════════════════════════════
+ * 📚 Revisión de materiales (vista profesor · "Materiales")
+ * ════════════════════════════════════════════════════════════════════
+ * Tablero de QA: por cada material del catálogo el profesor guarda un
+ * estado (pendiente / ok / fix), un checklist de calidad y notas.
+ * Persistencia: localStorage (caché) + nube app_settings key
+ * 'material_reviews' (multidispositivo). NO toca el progreso de alumnos.
+ * "Enviar a soporte" inserta una fila en error_reports (reporter:'teacher')
+ * que aparece en la bandeja 🐞 Reportes del panel de desarrollo. */
+const MAT_REVIEW_KEY = 'jucum_material_reviews_v1';
+function materialReviewKey(level, moduleId, activityId) { return `${level}:${moduleId}:${activityId}`; }
+function getMaterialReviews() {
+  try { const v = JSON.parse(localStorage.getItem(MAT_REVIEW_KEY) || '{}'); return (v && typeof v === 'object') ? v : {}; } catch { return {}; }
+}
+function getMaterialReview(key) { return getMaterialReviews()[key] || null; }
+function _saveMaterialReviews(all) {
+  localStorage.setItem(MAT_REVIEW_KEY, JSON.stringify(all));
+  try { if (window.JUCUM_SB) window.JUCUM_SB.getClient().from('app_settings').upsert({ key: 'material_reviews', value: all }, { onConflict: 'key' }).then(() => {}, () => {}); } catch {}
+}
+function setMaterialReview(key, patch) {
+  const all = getMaterialReviews();
+  all[key] = { ...(all[key] || {}), ...patch, updatedAt: new Date().toISOString() };
+  _saveMaterialReviews(all);
+  return all[key];
+}
+async function loadMaterialReviewsFromCloud() {
+  if (!window.JUCUM_SB) return getMaterialReviews();
+  try {
+    const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key', 'material_reviews').maybeSingle();
+    if (data && data.value && typeof data.value === 'object') localStorage.setItem(MAT_REVIEW_KEY, JSON.stringify(data.value));
+  } catch {}
+  return getMaterialReviews();
+}
+/* Envía una observación a la bandeja de soporte (error_reports · script 21). */
+async function sendMaterialReport({ level, module, activity, url, message }) {
+  if (!window.JUCUM_SB) return { ok: false, reason: 'sin conexión con la nube' };
+  try {
+    const row = {
+      id: 'er-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      user_id: null, reporter: 'teacher', group_id: null,
+      module_id: module ? module.id : null,
+      activity_id: activity ? activity.id : null,
+      material_kind: activity ? activity.type : null,
+      material_name: activity ? activity.name : null,
+      part: null,
+      url: url || (activity ? activity.url : null) || null,
+      message: message, status: 'nuevo',
+    };
+    await window.JUCUM_SB.insert('error_reports', row);
+    return { ok: true, id: row.id };
+  } catch (e) { return { ok: false, reason: e.message }; }
+}
+window.JUCUM_DATA.materialReviewKey = materialReviewKey;
+window.JUCUM_DATA.getMaterialReviews = getMaterialReviews;
+window.JUCUM_DATA.getMaterialReview = getMaterialReview;
+window.JUCUM_DATA.setMaterialReview = setMaterialReview;
+window.JUCUM_DATA.loadMaterialReviewsFromCloud = loadMaterialReviewsFromCloud;
+window.JUCUM_DATA.sendMaterialReport = sendMaterialReport;

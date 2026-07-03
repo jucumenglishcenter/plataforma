@@ -29,6 +29,7 @@ function TeacherDashboard({ onLogout, user }) {
     return () => { alive = false; clearInterval(iv); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
   }, []);
   const teacherName = (user && user.name && user.name !== 'Profesor' && user.name !== 'Profesor JUCUM') ? user.name : 'Joe Miller';
+  React.useEffect(() => { window.JUCUM_TEACHER_NAME = teacherName; }, [teacherName]);
 
   // Reset palette
   React.useEffect(() => { document.body.removeAttribute('data-level'); }, []);
@@ -50,6 +51,7 @@ function TeacherDashboard({ onLogout, user }) {
           <a className={`nav-link ${['groups','group','student'].includes(view.kind)?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'groups'});}}>👥 Mis grupos</a>
           <a className={`nav-link ${view.kind==='planner'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'planner'});}}>🗓️ Planificar</a>
           <a className={`nav-link ${(view.kind==='assess'||view.kind==='evaluate'||view.kind==='exams')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'assess'});}}>📊 Evaluación</a>
+          <a className={`nav-link ${view.kind==='materials-review'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'materials-review'});}}>📚 Materiales</a>
           <a className={`nav-link ${view.kind==='messages'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'messages'});}} style={{position:'relative'}}>💬 Chats{(() => { const n = window.JUCUM_MSG ? window.JUCUM_MSG.unreadForTeacher() : 0; return n > 0 ? <span className="nav-dot">{n > 9 ? '9+' : n}</span> : null; })()}</a>
           <TeacherForumNav onOpen={(gid)=>setView({kind:'forum', group:gid})} />
           <NotifBell userId="teacher" />
@@ -79,6 +81,8 @@ function TeacherDashboard({ onLogout, user }) {
         <ManageModules onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'materials' ? (
         <TeacherMaterials onBack={() => setView({kind:'groups'})} />
+      ) : view.kind === 'materials-review' ? (
+        <MaterialsReview onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'class' ? (
         <TeacherClass onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'students' ? (
@@ -216,13 +220,13 @@ function GroupsView({ stats, onSelectGroup, teacherName }) {
         <div className="welcome-text">
           <div className="eyebrow t">👨‍🏫 Hola, {teacherName || 'Joe Miller'}</div>
           <h1>{stats.totalStudents} alumnos · 4 grupos activos</h1>
-          <p><b>{stats.activeToday}</b> alumnos activos hoy · Dominio general <b>{stats.avgMastery}%</b></p>
+          <p><b>{stats.activeToday}</b> alumnos practicaron hoy · Dominio general <b>{stats.avgMastery}%</b></p>
         </div>
       </div>
 
       <div className="kpi-grid">
         <div className="kpi"><div className="kpi-ico">👥</div><div className="kpi-num">{stats.totalStudents}</div><div className="kpi-lbl">Total alumnos</div></div>
-        <div className="kpi"><div className="kpi-ico">🟢</div><div className="kpi-num">{stats.activeToday}</div><div className="kpi-lbl">Activos hoy</div></div>
+        <div className="kpi"><div className="kpi-ico">🟢</div><div className="kpi-num">{stats.activeToday}</div><div className="kpi-lbl">Practicaron hoy</div></div>
         <div className="kpi"><div className="kpi-ico">📊</div><div className="kpi-num">{stats.avgMastery}%</div><div className="kpi-lbl">Dominio</div></div>
         <div className="kpi"><div className="kpi-ico">🎯</div><div className="kpi-num">4</div><div className="kpi-lbl">Grupos</div></div>
       </div>
@@ -249,8 +253,8 @@ function GroupsView({ stats, onSelectGroup, teacherName }) {
               <div className="gcard-sched">⏰ {g.schedule}</div>
               <div className="gcard-stats">
                 <div><b style={{color:level.dark}}>{groupAvg}%</b> dominio</div>
-                <div><b style={{color:'#2E7D32'}}>{activeNow}</b> activos</div>
-                {inactive > 0 && <div><b style={{color:'#C62828'}}>{inactive}</b> ausentes</div>}
+                <div><b style={{color:'#2E7D32'}}>{activeNow}</b> practicando</div>
+                {inactive > 0 && <div><b style={{color:'#C62828'}}>{inactive}</b> sin practicar 7d+</div>}
               </div>
               {(() => {
                 if (!window.JUCUM_DATA.getWeekChampions) return null;
@@ -451,7 +455,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
           <div className="col-streak">Racha</div>
           <div className="col-time">Tiempo</div>
           <div className="col-last">🏆 Logros</div>
-          <div className="col-status">Última actividad</div>
+          <div className="col-status">Última práctica</div>
           <div></div>
         </div>
         {shown.map((s, i) => <StudentRow key={s.id} stu={s} rank={i+1} level={level} onClick={() => onSelectStudent(s.id)} onDelete={() => setDeleting(s)} />)}
@@ -692,12 +696,22 @@ function ModuleChecklist({ stu, group }) {
 }
 
 function StudentRow({ stu, rank, level, onClick, onDelete }) {
-  const mastery = window.JUCUM_DATA.getStudentMastery(stu).pct;
-  const status = (stu.lastActiveDays == null) ? {label:'⚪ Sin actividad aún',cls:'na'}
-              : stu.lastActiveDays === 0 ? {label:'🟢 Hoy',cls:'ok'}
-              : stu.lastActiveDays <= 2 ? {label:`🟢 hace ${stu.lastActiveDays}d`,cls:'ok'}
-              : stu.lastActiveDays <= 6 ? {label:`🟡 hace ${stu.lastActiveDays}d`,cls:'warn'}
-              : {label:`🔴 hace ${stu.lastActiveDays}d`,cls:'bad'};
+  const m = window.JUCUM_DATA.getStudentMastery(stu);
+  const mastery = m.pct;
+  // ✅ "Al día" = terminó TODO lo asignado: que no practique no es una alerta
+  // (era la causa de "primeros lugares con 9 días sin conectarse": los mejores
+  // terminan todo y ya no tienen nada nuevo que completar).
+  const upToDate = m.total > 0 && m.done >= m.total;
+  const status = (stu.lastActiveDays == null) ? {label:'⚪ Sin práctica aún',cls:'na'}
+              : stu.lastActiveDays === 0 ? {label:'🟢 Practicó hoy',cls:'ok'}
+              : upToDate ? {label:`✅ Al día (hace ${stu.lastActiveDays}d)`,cls:'ok'}
+              : stu.lastActiveDays <= 2 ? {label:`🟢 practicó hace ${stu.lastActiveDays}d`,cls:'ok'}
+              : stu.lastActiveDays <= 6 ? {label:`🟡 sin practicar ${stu.lastActiveDays}d`,cls:'warn'}
+              : {label:`🔴 sin practicar ${stu.lastActiveDays}d`,cls:'bad'};
+  // 📶 Conexión real (si está registrada) — puede diferir de la práctica
+  const conn = (stu.lastSeenDays == null) ? null
+             : stu.lastSeenDays === 0 ? '📶 entró hoy'
+             : `📶 entró hace ${stu.lastSeenDays}d`;
   return (
     <div className="st-row" onClick={onClick}>
       <div className="col-name">
@@ -716,7 +730,10 @@ function StudentRow({ stu, rank, level, onClick, onDelete }) {
       <div className="col-streak">{stu.streak > 0 ? `🔥 ${stu.streak}` : '—'}</div>
       <div className="col-time">{Math.floor(stu.totalMinutes/60) > 0 ? `${Math.floor(stu.totalMinutes/60)}h ${stu.totalMinutes%60}m` : `${stu.totalMinutes}m`}</div>
       <div className="col-last">{stu.achievements.length} 🏆</div>
-      <div className={`col-status ${status.cls}`} style={status.cls === 'na' ? {color:'#A8A8A8'} : undefined}>{status.label}</div>
+      <div className={`col-status ${status.cls}`} style={status.cls === 'na' ? {color:'#A8A8A8'} : undefined}>
+        <div>{status.label}</div>
+        {conn && <div style={{fontSize:10.5,fontWeight:700,color:'#8B8B8B',marginTop:2}}>{conn}</div>}
+      </div>
       {onDelete ? <button className="row-del" title="Eliminar alumno" onClick={(e) => { e.stopPropagation(); onDelete(); }}>🗑️</button> : <span></span>}
     </div>
   );
@@ -770,7 +787,8 @@ function StudentDetail({ studentId, onBack, onContact }) {
         <div className="kpi"><div className="kpi-ico">🔥</div><div className="kpi-num">{stu.streak}</div><div className="kpi-lbl">Racha (días)</div></div>
         <div className="kpi"><div className="kpi-ico">⏱️</div><div className="kpi-num">{Math.floor(stu.totalMinutes/60)}h {stu.totalMinutes%60}m</div><div className="kpi-lbl">Tiempo total</div></div>
         <div className="kpi"><div className="kpi-ico">🏆</div><div className="kpi-num">{stu.achievements.length}</div><div className="kpi-lbl">Logros</div></div>
-        <div className="kpi"><div className="kpi-ico">📅</div><div className="kpi-num">{stu.lastActiveDays === 0 ? 'Hoy' : `${stu.lastActiveDays}d`}</div><div className="kpi-lbl">Última conexión</div></div>
+        <div className="kpi"><div className="kpi-ico">📅</div><div className="kpi-num">{stu.lastActiveDays == null ? '—' : stu.lastActiveDays === 0 ? 'Hoy' : `${stu.lastActiveDays}d`}</div><div className="kpi-lbl">Última práctica</div></div>
+        <div className="kpi" title="Última vez que entró a la plataforma. Se registra desde esta actualización (script 22); — = aún sin dato."><div className="kpi-ico">📶</div><div className="kpi-num">{stu.lastSeenDays == null ? '—' : stu.lastSeenDays === 0 ? 'Hoy' : `${stu.lastSeenDays}d`}</div><div className="kpi-lbl">Última conexión</div></div>
       </div>
 
       <ModuleChecklist stu={stu} group={group} />
@@ -831,6 +849,10 @@ function DiagnoseStudent({ stu }) {
   const strengths = [];
   const weaknesses = [];
   const plan = [];
+  // ✅ Al día = terminó todo lo asignado → no practicar no es una alerta.
+  const _m = window.JUCUM_DATA.getStudentMastery(stu);
+  const upToDate = _m.total > 0 && _m.done >= _m.total;
+  const conn = stu.lastSeenDays;   // 📶 conexión real (null = sin dato)
 
   if (stu.avgScore >= 90) strengths.push({title:'Comprensión sobresaliente', body:`Promedio de ${stu.avgScore}% — entre los mejores del grupo.`});
   else if (stu.avgScore >= 85) strengths.push({title:'Alto rendimiento', body:`${stu.avgScore}% de promedio — dominio sólido del contenido.`});
@@ -840,18 +862,20 @@ function DiagnoseStudent({ stu }) {
   if (stu.achievements.includes('perfect'))  strengths.push({title:'Perfección alcanzada', body:'Completó al menos un quiz sin errores.'});
   if (stu.avgScore >= 92) strengths.push({title:'Pensamiento crítico', body:'Promedio muy alto — capta mensajes implícitos del autor.'});
   if (stu.completedModules >= 2) strengths.push({title:'Avance sólido', body:`Ya completó ${stu.completedModules} módulos.`});
+  if (upToDate && stu.lastActiveDays >= 3) strengths.push({title:'Al día con lo asignado', body:`Terminó todas las actividades desbloqueadas — su última práctica fue hace ${stu.lastActiveDays} días porque no tiene pendientes. Para que siga practicando, actívale el siguiente módulo o sugiérele el refuerzo.`});
 
-  if (stu.lastActiveDays >= 14) weaknesses.push({title:'Inactividad crítica', body:`Sin conectarse hace ${stu.lastActiveDays} días. Riesgo de pérdida de hábito y olvido del vocabulario.`});
-  else if (stu.lastActiveDays >= 7) weaknesses.push({title:'Conexión irregular', body:`Lleva ${stu.lastActiveDays} días sin entrar. La adquisición bilingüe necesita exposición diaria.`});
+  if (!upToDate && stu.lastActiveDays >= 14) weaknesses.push({title:'Inactividad crítica', body:`Sin practicar hace ${stu.lastActiveDays} días. Riesgo de pérdida de hábito y olvido del vocabulario.`});
+  else if (!upToDate && stu.lastActiveDays >= 7) weaknesses.push({title:'Práctica irregular', body:`Lleva ${stu.lastActiveDays} días sin practicar. La adquisición bilingüe necesita exposición diaria.`});
+  if (!upToDate && conn != null && conn <= 2 && stu.lastActiveDays >= 5) weaknesses.push({title:'Entra pero no practica', body:`Se conectó ${conn === 0 ? 'hoy' : `hace ${conn} días`} pero su última práctica fue hace ${stu.lastActiveDays}. Puede estar bloqueado con una actividad — conversarlo.`});
   if (stu.avgScore > 0 && stu.avgScore < 60) weaknesses.push({title:'Comprensión general baja', body:`Promedio de ${stu.avgScore}%. Probable dificultad con vocabulario básico o estructuras del nivel.`});
   else if (stu.avgScore > 0 && stu.avgScore < 70) weaknesses.push({title:'Comprensión irregular', body:`Promedio de ${stu.avgScore}% — entiende lo literal pero falla en inferencias.`});
   if (stu.totalMinutes < 60 && stu.lastActiveDays >= 3) weaknesses.push({title:'Exposición muy baja', body:`Solo ${stu.totalMinutes} min totales de práctica. Krashen necesita volumen de input.`});
   if (stu.completedModules === 0 && stu.totalMinutes > 30) weaknesses.push({title:'No completa módulos', body:'Empieza pero no termina. Sugerir cerrar cada módulo antes de pasar al siguiente.'});
   if (stu.avgScore > 0 && stu.avgScore < 75 && stu.completedModules >= 1) weaknesses.push({title:'Inferencia pendiente', body:'Aún le cuesta deducir lo no explícito — reforzar preguntas inferenciales.'});
   if (stu.avgScore >= 80 && stu.avgScore < 90) weaknesses.push({title:'Pensamiento crítico pendiente', body:'Domina lo literal pero aún no capta del todo el mensaje del autor.'});
-  if (stu.streak === 0 && stu.lastActiveDays >= 2) weaknesses.push({title:'Sin racha', body:'No mantiene continuidad. La práctica espaciada > sesiones intensas esporádicas.'});
+  if (!upToDate && stu.streak === 0 && stu.lastActiveDays >= 2) weaknesses.push({title:'Sin racha', body:'No mantiene continuidad. La práctica espaciada > sesiones intensas esporádicas.'});
 
-  if (stu.lastActiveDays >= 7) plan.push({priority:'🔴', title:'Re-engagement inmediato', body:'Contactarlo por WhatsApp. Revisar si hay barreras (acceso, motivación, dificultad).'});
+  if (!upToDate && stu.lastActiveDays >= 7) plan.push({priority:'🔴', title:'Re-engagement inmediato', body:'Contactarlo por WhatsApp. Revisar si hay barreras (acceso, motivación, dificultad).'});
   if (stu.avgScore > 0 && stu.avgScore < 70) {
     plan.push({priority:'🔴', title:'Refuerzo de vocabulario', body:'Sesiones diarias de 10 min en Quizlet — set "Vocabulario 1" del nivel.'});
     plan.push({priority:'🟡', title:'Reescuchar listening', body:'Cada actividad puede oírse varias veces — sugerirle bajar la velocidad a 0.6×.'});
@@ -863,7 +887,7 @@ function DiagnoseStudent({ stu }) {
     plan.push({priority:'🟢', title:'Pensamiento crítico', body:'Discutir el mensaje de cada historia en clase. "¿Qué quiere decir el autor con esto?"'});
   }
   if (stu.completedModules === 0) plan.push({priority:'🟡', title:'Cerrar primer módulo', body:'Animarlo a completar Personal Identity al 100%. Refuerzo positivo al desbloquear el primer logro.'});
-  if (stu.streak === 0) plan.push({priority:'🟡', title:'Construir hábito', body:'Meta: 10 min diarios durante 7 días. Después del 7º día el hábito se automatiza.'});
+  if (!upToDate && stu.streak === 0) plan.push({priority:'🟡', title:'Construir hábito', body:'Meta: 10 min diarios durante 7 días. Después del 7º día el hábito se automatiza.'});
   if (stu.avgScore >= 85 && stu.avgScore < 95) plan.push({priority:'🟢', title:'Empuje a la excelencia', body:'Está cerca del 95%. Retar con preguntas críticas y Stories del siguiente módulo.'});
   if (stu.avgScore >= 90 && stu.completedModules >= 1) plan.push({priority:'🟢', title:'Listo para avance', body:'Considerar promoverlo al módulo siguiente o nivel A1/A2 si aplica.'});
   if (stu.totalMinutes < 60 && stu.lastActiveDays >= 3) plan.push({priority:'🔴', title:'Sesión de onboarding', body:'Sentarse con el alumno 15 min y recorrer la plataforma juntos. La barrera puede ser técnica.'});
