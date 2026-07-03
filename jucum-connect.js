@@ -181,6 +181,59 @@
       el.addEventListener('pointercancel', end);
     })(chip);
 
+    // ── 🐞 Reporte de errores UNIVERSAL (todos los materiales) ──
+    // Botón flotante junto al cronómetro; guarda en error_reports (bandeja 🐞 del panel).
+    function jecSendReport(msg, kindSel) {
+      var row = {
+        status: 'nuevo', reporter: teacher ? 'profesor' : (uid ? 'alumno' : 'anonimo'),
+        user_id: uid || 'demo', group_id: groupId || null, material_kind: KIND || '',
+        material_name: matName || (modId + ' · ' + actId), module_id: modId, activity_id: actId,
+        part: (typeof activePart !== 'undefined' && activePart != null) ? Number(activePart) : null,
+        message: (kindSel ? '[' + kindSel + '] ' : '') + msg,
+        url: location.href.split('?')[0], created_at: new Date().toISOString()
+      };
+      if (ensureSb()) {
+        sb.from('error_reports').insert(row).then(function () { toast('✓ Reporte enviado. ¡Gracias por avisar!'); },
+          function () { toast('No se pudo enviar. Intenta de nuevo con internet.'); });
+      } else if (teacher && window.supabase) {
+        try { window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY).from('error_reports').insert(row).then(function(){ toast('✓ Reporte enviado'); }, function(){ toast('No se pudo enviar.'); }); } catch (e) { toast('Sin conexión con la nube.'); }
+      } else {
+        toast('Modo prueba: el reporte no se registra.');
+      }
+    }
+    var bugBtn = document.createElement('button');
+    bugBtn.id = 'jec-bug-btn'; bugBtn.textContent = '🐞';
+    bugBtn.title = 'Reportar un error de este material';
+    bugBtn.style.cssText = 'position:fixed;bottom:14px;left:14px;z-index:999997;width:40px;height:40px;border-radius:50%;border:none;background:#8D6E63;color:#fff;font-size:18px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.25);';
+    bugBtn.onclick = function () {
+      if (document.getElementById('jec-bug-ov')) return;
+      var ov = document.createElement('div'); ov.id = 'jec-bug-ov';
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:1000000;display:flex;align-items:center;justify-content:center;padding:16px;font-family:system-ui,sans-serif;';
+      ov.innerHTML = '<div style="background:#fff;border-radius:18px;max-width:380px;width:100%;padding:18px 20px;">'
+        + '<div style="font-weight:800;font-size:16px;margin-bottom:2px;">🐞 Reportar un error</div>'
+        + '<div style="font-size:12px;color:#666;font-weight:600;margin-bottom:10px;">Cuéntanos qué viste en este material. Llega directo al equipo.</div>'
+        + '<select id="jec-bug-kind" style="width:100%;padding:9px;border:1.5px solid #ddd;border-radius:10px;font-weight:700;font-size:13px;margin-bottom:8px;">'
+        + '<option>Respuesta marcada parece equivocada</option><option>Error de escritura / traducción</option><option>Audio no se entiende</option><option>Algo no funciona (botón, pantalla)</option><option>Otro</option></select>'
+        + '<textarea id="jec-bug-msg" rows="3" placeholder="Describe el problema… (opcional pero ayuda)" style="width:100%;box-sizing:border-box;padding:9px;border:1.5px solid #ddd;border-radius:10px;font-size:13px;font-family:inherit;"></textarea>'
+        + '<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">'
+        + '<button id="jec-bug-cancel" style="padding:9px 16px;border:1.5px solid #ccc;background:#fff;border-radius:20px;font-weight:800;cursor:pointer;">Cancelar</button>'
+        + '<button id="jec-bug-send" style="padding:9px 18px;border:none;background:#8D6E63;color:#fff;border-radius:20px;font-weight:800;cursor:pointer;">Enviar reporte</button></div></div>';
+      document.body.appendChild(ov);
+      document.getElementById('jec-bug-cancel').onclick = function () { ov.remove(); };
+      document.getElementById('jec-bug-send').onclick = function () {
+        var k = document.getElementById('jec-bug-kind').value;
+        var m = document.getElementById('jec-bug-msg').value.trim();
+        ov.remove(); jecSendReport(m || '-', k);
+      };
+    };
+    document.body.appendChild(bugBtn);
+    window.JUCUM_CONNECT = window.JUCUM_CONNECT || {};
+    window.JUCUM_CONNECT.report = function (msg, kind, part) {
+      if (part != null) { try { activePart = Number(part); } catch (e) {} }
+      jecSendReport(String(msg || '-'), kind || null);
+    };
+
+
     function fmt(sec) {
       return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
     }

@@ -56,7 +56,7 @@ function TaskInstructions({ plain, structured, lang }) {
   const L = lang || 'par';
   return (
     <div style={{display:'flex', flexDirection:'column', gap:14}}>
-      {plain && <div className="fpost-body" style={{whiteSpace:'pre-wrap'}}>{plain}</div>}
+      {plain && <div className="fpost-body" style={{whiteSpace:'pre-wrap'}}><span style={{whiteSpace:'pre-wrap'}}>{plain}</span></div>}
       {s.resource && (s.resource.url || s.resource.label) && (
         <div>
           <div className="eval-fb-lbl">🔗 Recurso principal</div>
@@ -149,7 +149,7 @@ function StudentTaskPreview({ assignment, onClose }) {
             <div style={{display:'inline-flex', alignItems:'center', gap:6, fontSize:12, fontWeight:800, background:'rgba(255,255,255,0.16)', borderRadius:14, padding:'4px 11px'}}>⏰ {due ? due.txt : 'Sin fecha de cierre'}{assignment.gradable ? ' · calificable' : ' · sin nota'}</div>
           </div>
           {hasStructured(structured) && <div style={{margin:'2px 0'}}><TaskLangToggle lang={lang} setLang={setLang} /></div>}
-          <TaskInstructions plain={plain} structured={structured} lang={lang} />
+          <TaskInstructions plain=<span style={{whiteSpace:'pre-wrap'}}>{plain}</span> structured={structured} lang={lang} />
           <div style={{borderTop:'1px dashed var(--border)', paddingTop:12}}>
             <div className="eval-fb-lbl">📥 Cómo entregar</div>
             <HowToSubmit />
@@ -443,7 +443,7 @@ function AssignmentForm({ onClose, onSaved, initial }) {
           </div>
           <div className="settings-block">
             <div className="settings-label">Instrucciones (opcional)</div>
-            <textarea className="eval-textarea" rows={3} value={desc} onChange={e => setDesc(e.target.value)} placeholder="Una introducción breve o el contexto de la tarea…" />
+            <textarea className="eval-textarea" rows={5} value={desc} onChange={e => setDesc(e.target.value)} placeholder="Una introducción breve o el contexto de la tarea…" />
           </div>
 
           <div className="settings-block">
@@ -557,7 +557,7 @@ function TeacherSubmissions({ assignment, onBack }) {
             <div className="sec-title" style={{flex:1}}>📋 Instrucciones</div>
             {hasStructured(structured) && <TaskLangToggle lang={lang} setLang={setLang} />}
           </div>
-          <TaskInstructions plain={plain} structured={structured} lang={lang} />
+          <TaskInstructions plain=<span style={{whiteSpace:'pre-wrap'}}>{plain}</span> structured={structured} lang={lang} />
           <div style={{display:'flex', gap:9, flexWrap:'wrap', marginTop:14, borderTop:'1px dashed var(--border)', paddingTop:13}}>
             <button onClick={() => setPreview(true)} style={{border:'none', cursor:'pointer', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13, color:'#fff', background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)', borderRadius:11, padding:'9px 15px'}}>👁️ Vista previa · cómo lo verá el alumno</button>
             <button className="att-btn" onClick={() => setEditing(true)}>✏️ Editar instrucciones</button>
@@ -812,7 +812,7 @@ function StudentTaskCard({ a, student, onChange }) {
       {(plain || hasStructured(structured)) && (
         <div style={{marginBottom:10}}>
           {hasStructured(structured) && <div style={{marginBottom:10}}><TaskLangToggle lang={lang} setLang={setLang} /></div>}
-          <TaskInstructions plain={plain} structured={structured} lang={lang} />
+          <TaskInstructions plain=<span style={{whiteSpace:'pre-wrap'}}>{plain}</span> structured={structured} lang={lang} />
         </div>
       )}
       {fileAtts.length > 0 && (
