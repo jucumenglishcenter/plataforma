@@ -626,21 +626,6 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
   const setLang = (lg) => setGuide(g => g ? { ...g, lang: lg } : g);
   const regenGuide = () => setGuide(window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }));
   const themes = mod ? Array.from(new Set((mod.activities || []).filter(a => a.group).map(a => a.group))) : [];
-  const autoPickActs = (m, tg) => {
-    if (!m) return [];
-    return (m.activities || []).filter(a => {
-      if (a.type === 'story' || a.type === 'reading' || a.type === 'listening' || a.type === 'quizlet') return true;
-      if (a.type === 'summary' || a.type === 'grammar') return tg ? a.group === tg : true;
-      return false;
-    }).map(a => ({ moduleId: m.id, activityId: a.id, label: a.name, type: a.type, group: a.group || null }));
-  };
-  const generateSet = () => {
-    if (guide && !window.confirm('¿Regenerar el set desde cero? Se reemplazan las actividades y los pasos editados (el repaso de otro módulo se conserva).')) return;
-    const reviews = picked.filter(p => p.review);
-    const merged = [...autoPickActs(mod, themeGroup), ...reviews];
-    setPicked(merged);
-    setGuide(window.JUCUM_GUIDE.build(level, merged, mod ? mod.name : '', { title, note, lang }));
-  };
   const previewGuide = () => { const g = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }); if (!guide) setGuide(g); window.JUCUM_GUIDE.openOverlay(g, {}); };
   const updateStep = (i, patch) => setGuide(g => ({ ...g, steps: g.steps.map((s, k) => k === i ? { ...s, ...patch } : s) }));
   const allTemas = Array.from(new Set(mods.flatMap(m => (m.activities || []).map(a => a.group).filter(Boolean))));
@@ -719,21 +704,8 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
           <Field label="Módulo (puedes elegir uno pasado)"><select value={moduleId || ''} onChange={e => { setModuleId(e.target.value); setThemeGroup(''); }} style={selStyle}>{mods.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
           <Field label="Tema / foco (opcional)"><select value={themeGroup} onChange={e => setThemeGroup(e.target.value)} style={selStyle}><option value="">— Todo el módulo —</option>{themes.map(t => <option key={t} value={t}>{t}</option>)}</select></Field>
         </div>
-        <div style={{display:'flex', alignItems:'center', gap:10, marginTop:16, flexWrap:'wrap'}}>
-          <button onClick={generateSet} style={{...btnPrimary, background:'linear-gradient(135deg,#6C4FB0,#3A1F6E)'}}>⚡ {guide ? 'Regenerar set' : 'Generar set de práctica'}</button>
-          <span style={{fontSize:12, color:'#8a7f6a', fontWeight:700}}>Arma solo las actividades del módulo{themeGroup ? ' · ' + themeGroup : ''} con sus pasos. Luego afinas todo abajo.</span>
-        </div>
+        <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginTop:12}}>Elige abajo las actividades del módulo (o del tema/foco). El módulo puede ser incluso uno pasado.</div>
       </div>
-
-      {!guide && (
-        <div className="scard" style={{marginTop:16, textAlign:'center', padding:'26px 20px'}}>
-          <div style={{fontSize:30, marginBottom:8}}>📝</div>
-          <div style={{fontWeight:800, fontSize:15, color:'#5B3FA0', marginBottom:5}}>Configura arriba y pulsa ⚡ Generar set de práctica</div>
-          <div style={{fontSize:12.5, color:'#8a7f6a', fontWeight:700, maxWidth:460, margin:'0 auto'}}>Elige solo las actividades del módulo (o del tema/foco) y arma los pasos automáticamente. Después puedes afinar las actividades, agregar repaso de otro módulo y elegir los días.</div>
-        </div>
-      )}
-
-      {guide && (<>
 
       {/* 1 · Actividades */}
       <div className="scard" style={{marginTop:16}}>
@@ -850,35 +822,9 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
         )}
       </div>
 
-      {/* 2 · Días (multi-fecha) */}
-      <div className="scard" style={{marginTop:16}}>
-        <div className="sec-head"><div className="sec-title">2 · ¿Qué días aplica?</div></div>
-        <div style={{fontSize:12.5, color:'#8a7f6a', fontWeight:700, margin:'2px 0 10px'}}>Toca los días que quieras (viernes, sábado, intercalados, lo que sea). Puedes dejar listas varias semanas.</div>
-        <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:10}}>
-          <button onClick={prevM} style={navBtn}>‹</button>
-          <div style={{flex:1, textAlign:'center', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15, textTransform:'capitalize'}}>{MONTHS_ES[pcur.m]} {pcur.y}</div>
-          <button onClick={nextM} style={navBtn}>›</button>
-        </div>
-        <div className="cal-grid">
-          {DOW_ES.map(d => <div key={d} className="cal-h">{d}</div>)}
-          {cells.map((c, i) => {
-            const dstr = ymd(c.date); const on = dates.includes(dstr); const isToday = dstr === todayYMD();
-            return (
-              <button key={i} onClick={() => toggleDate(dstr)} style={{minHeight:40, border: on ? '2px solid #6C4FB0' : '1px solid #ECE4D2', background: on ? '#6C4FB0' : (c.inMonth ? (isToday ? '#F4EEFB' : '#fff') : '#F7F3E9'), color: on ? '#fff' : '#2b2b2b', borderRadius:9, cursor:'pointer', fontWeight:800, fontSize:13, opacity: c.inMonth ? 1 : 0.45}}>{c.date.getDate()}</button>
-            );
-          })}
-        </div>
-        <div style={{display:'flex', gap:8, flexWrap:'wrap', marginTop:10}}>
-          <button onClick={() => addWeek(0)} style={chipBtn}>+ Esta semana</button>
-          <button onClick={() => addWeek(1)} style={chipBtn}>+ Próxima semana</button>
-          <button onClick={() => setDates([])} style={{...chipBtn, color:'#C0392B', borderColor:'#E2B6AE'}}>Limpiar</button>
-          <span style={{marginLeft:'auto', fontSize:12, fontWeight:800, color:'#6C4FB0'}}>{dates.length} día(s) seleccionado(s)</span>
-        </div>
-      </div>
-
       {/* 3 · Instructivo (cómo practicar) — documento de pasos que ve el alumno */}
       <div className="scard" style={{marginTop:16}}>
-        <div className="sec-head"><div className="sec-title">3 · Instructivo · cómo practicar</div></div>
+        <div className="sec-head"><div className="sec-title">2 · Instructivo · cómo practicar</div></div>
         <div style={{fontSize:12.5, color:'#8a7f6a', fontWeight:700, margin:'2px 0 10px'}}>Trae los <b>pasos oficiales por nivel</b> ya cargados. Genera, edítalos a tu gusto y guárdalos como <b>favoritos</b> (con un nombre) para reutilizarlos.</div>
 
         {/* Favoritos */}
@@ -991,6 +937,32 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
         )}
       </div>
 
+      {/* 2 · Días (multi-fecha) */}
+      <div className="scard" style={{marginTop:16}}>
+        <div className="sec-head"><div className="sec-title">3 · ¿Qué días aplica?</div></div>
+        <div style={{fontSize:12.5, color:'#8a7f6a', fontWeight:700, margin:'2px 0 10px'}}>Toca los días que quieras (viernes, sábado, intercalados, lo que sea). Puedes dejar listas varias semanas.</div>
+        <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:10}}>
+          <button onClick={prevM} style={navBtn}>‹</button>
+          <div style={{flex:1, textAlign:'center', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15, textTransform:'capitalize'}}>{MONTHS_ES[pcur.m]} {pcur.y}</div>
+          <button onClick={nextM} style={navBtn}>›</button>
+        </div>
+        <div className="cal-grid">
+          {DOW_ES.map(d => <div key={d} className="cal-h">{d}</div>)}
+          {cells.map((c, i) => {
+            const dstr = ymd(c.date); const on = dates.includes(dstr); const isToday = dstr === todayYMD();
+            return (
+              <button key={i} onClick={() => toggleDate(dstr)} style={{minHeight:40, border: on ? '2px solid #6C4FB0' : '1px solid #ECE4D2', background: on ? '#6C4FB0' : (c.inMonth ? (isToday ? '#F4EEFB' : '#fff') : '#F7F3E9'), color: on ? '#fff' : '#2b2b2b', borderRadius:9, cursor:'pointer', fontWeight:800, fontSize:13, opacity: c.inMonth ? 1 : 0.45}}>{c.date.getDate()}</button>
+            );
+          })}
+        </div>
+        <div style={{display:'flex', gap:8, flexWrap:'wrap', marginTop:10}}>
+          <button onClick={() => addWeek(0)} style={chipBtn}>+ Esta semana</button>
+          <button onClick={() => addWeek(1)} style={chipBtn}>+ Próxima semana</button>
+          <button onClick={() => setDates([])} style={{...chipBtn, color:'#C0392B', borderColor:'#E2B6AE'}}>Limpiar</button>
+          <span style={{marginLeft:'auto', fontSize:12, fontWeight:800, color:'#6C4FB0'}}>{dates.length} día(s) seleccionado(s)</span>
+        </div>
+      </div>
+
       {/* 4 · Destino */}
       <div className="scard" style={{marginTop:16}}>
         <div className="sec-head"><div className="sec-title">4 · ¿Cómo se usa?</div></div>
@@ -1012,7 +984,6 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
           <button onClick={onCancel} style={btnGhost}>Cancelar</button>
         </div>
       </div>
-      </>)}
     </>
   );
 }
