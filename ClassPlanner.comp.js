@@ -607,9 +607,10 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
   const g0 = GROUPS.find(g => g.id === defaultGroupId) || GROUPS[0] || {};
   const [groupId, setGroupId] = React.useState(initial ? initial.groupId : (g0.id || null));
   const group = GROUPS.find(x => x.id === groupId) || g0;
-  const level = group.level || 'pre-a1';
+  const [level, setLevel] = React.useState(initial && initial.level ? initial.level : (group.level || 'pre-a1'));
   const mods = MODULE_CATALOG[level] || [];
   const [moduleId, setModuleId] = React.useState(initial && initial.activities[0] ? initial.activities[0].moduleId : (mods[0] ? mods[0].id : null));
+  const [themeGroup, setThemeGroup] = React.useState(initial && initial.themeGroup ? initial.themeGroup : '');
   const mod = mods.find(m => m.id === moduleId) || mods[0];
   const [title, setTitle] = React.useState(initial ? initial.title : 'Práctica de la semana');
   const [picked, setPicked] = React.useState(() => initial ? initial.activities.slice() : []);
@@ -624,6 +625,22 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
   const lang = (guide && guide.lang) || 'es';
   const setLang = (lg) => setGuide(g => g ? { ...g, lang: lg } : g);
   const regenGuide = () => setGuide(window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }));
+  const themes = mod ? Array.from(new Set((mod.activities || []).filter(a => a.group).map(a => a.group))) : [];
+  const autoPickActs = (m, tg) => {
+    if (!m) return [];
+    return (m.activities || []).filter(a => {
+      if (a.type === 'story' || a.type === 'reading' || a.type === 'listening' || a.type === 'quizlet') return true;
+      if (a.type === 'summary' || a.type === 'grammar') return tg ? a.group === tg : true;
+      return false;
+    }).map(a => ({ moduleId: m.id, activityId: a.id, label: a.name, type: a.type, group: a.group || null }));
+  };
+  const generateSet = () => {
+    if (guide && !window.confirm('¿Regenerar el set desde cero? Se reemplazan las actividades y los pasos editados (el repaso de otro módulo se conserva).')) return;
+    const reviews = picked.filter(p => p.review);
+    const merged = [...autoPickActs(mod, themeGroup), ...reviews];
+    setPicked(merged);
+    setGuide(window.JUCUM_GUIDE.build(level, merged, mod ? mod.name : '', { title, note, lang }));
+  };
   const previewGuide = () => { const g = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }); if (!guide) setGuide(g); window.JUCUM_GUIDE.openOverlay(g, {}); };
   const updateStep = (i, patch) => setGuide(g => ({ ...g, steps: g.steps.map((s, k) => k === i ? { ...s, ...patch } : s) }));
   const allTemas = Array.from(new Set(mods.flatMap(m => (m.activities || []).map(a => a.group).filter(Boolean))));
@@ -658,7 +675,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
     if (!picked.length) { alert('Elige al menos una actividad.'); return; }
     if (!dates.length) { alert('Elige al menos un día en el calendario.'); return; }
     const finalGuide = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang });
-    const rec = { groupId, title, activities: picked, dates, assignToStudents: assign, note, guide: finalGuide };
+    const rec = { groupId, level, themeGroup, title, activities: picked, dates, assignToStudents: assign, note, guide: finalGuide };
     if (initial && !initial._tpl) { TT.updatePracticePlan(initial.id, rec); alert('✅ Set de práctica actualizado'); }
     else { TT.addPracticePlan(rec); alert(assign ? '✅ Set guardado y asignado a los alumnos en esos días' : '✅ Set guardado (solo para ti)'); }
     onSaved();
@@ -691,12 +708,28 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
             ⭐ Partiste de una <b>plantilla</b>. Elige los <b>días</b> y guárdalo para asignarlo.
           </div>
         )}
-        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:14, marginTop:6}}>
+        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:14, marginTop:6}}>
           <Field label="Título"><input value={title} onChange={e => setTitle(e.target.value)} style={selStyle} /></Field>
-          <Field label="Grupo"><select value={groupId || ''} onChange={e => { setGroupId(e.target.value); const g = GROUPS.find(x => x.id === e.target.value); const lv = g ? g.level : level; const m = (MODULE_CATALOG[lv] || [])[0]; setModuleId(m ? m.id : null); setPicked([]); }} style={selStyle}>{GROUPS.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></Field>
-          <Field label="Módulo (puedes elegir uno pasado)"><select value={moduleId || ''} onChange={e => setModuleId(e.target.value)} style={selStyle}>{mods.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
+          <Field label="Grupo"><select value={groupId || ''} onChange={e => { const g = GROUPS.find(x => x.id === e.target.value); const lv = g ? g.level : level; setGroupId(e.target.value); setLevel(lv); const m = (MODULE_CATALOG[lv] || [])[0]; setModuleId(m ? m.id : null); setThemeGroup(''); setPicked([]); setGuide(null); }} style={selStyle}>{GROUPS.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></Field>
+          <Field label="Nivel"><select value={level} onChange={e => { const lv = e.target.value; setLevel(lv); const m = (MODULE_CATALOG[lv] || [])[0]; setModuleId(m ? m.id : null); setThemeGroup(''); setPicked([]); setGuide(null); }} style={selStyle}>{Object.keys(MODULE_CATALOG).map(lv => <option key={lv} value={lv}>{lv.toUpperCase()}</option>)}</select></Field>
+          <Field label="Módulo (puedes elegir uno pasado)"><select value={moduleId || ''} onChange={e => { setModuleId(e.target.value); setThemeGroup(''); }} style={selStyle}>{mods.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
+          <Field label="Tema / foco (opcional)"><select value={themeGroup} onChange={e => setThemeGroup(e.target.value)} style={selStyle}><option value="">— Todo el módulo —</option>{themes.map(t => <option key={t} value={t}>{t}</option>)}</select></Field>
+        </div>
+        <div style={{display:'flex', alignItems:'center', gap:10, marginTop:16, flexWrap:'wrap'}}>
+          <button onClick={generateSet} style={{...btnPrimary, background:'linear-gradient(135deg,#6C4FB0,#3A1F6E)'}}>⚡ {guide ? 'Regenerar set' : 'Generar set de práctica'}</button>
+          <span style={{fontSize:12, color:'#8a7f6a', fontWeight:700}}>Arma solo las actividades del módulo{themeGroup ? ' · ' + themeGroup : ''} con sus pasos. Luego afinas todo abajo.</span>
         </div>
       </div>
+
+      {!guide && (
+        <div className="scard" style={{marginTop:16, textAlign:'center', padding:'26px 20px'}}>
+          <div style={{fontSize:30, marginBottom:8}}>📝</div>
+          <div style={{fontWeight:800, fontSize:15, color:'#5B3FA0', marginBottom:5}}>Configura arriba y pulsa ⚡ Generar set de práctica</div>
+          <div style={{fontSize:12.5, color:'#8a7f6a', fontWeight:700, maxWidth:460, margin:'0 auto'}}>Elige solo las actividades del módulo (o del tema/foco) y arma los pasos automáticamente. Después puedes afinar las actividades, agregar repaso de otro módulo y elegir los días.</div>
+        </div>
+      )}
+
+      {guide && (<>
 
       {/* 1 · Actividades */}
       <div className="scard" style={{marginTop:16}}>
@@ -962,6 +995,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
           <button onClick={onCancel} style={btnGhost}>Cancelar</button>
         </div>
       </div>
+      </>)}
     </>
   );
 }
