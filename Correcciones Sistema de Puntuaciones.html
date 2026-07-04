@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Correcciones · Sistema de Puntuaciones · JUCUM English Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --pre:#F9A825; --a1:#2196F3; --a2:#2EA84B;
+    --ink:#2A2A2A; --soft:#6f6f6f; --mute:#B4B4B4;
+    --border:#E8E5DC; --border-soft:#F0EDE4;
+    --bg:#FAFAF6; --card:#FFFFFF;
+    --blue:#1F3A8A; --violet:#6C4BD8;
+    --ok:#2E7D32; --okbg:#E8F5E9; --okbd:#A5D6A7;
+    --warn:#BF360C; --warnbg:#FFF8E1; --warnbd:#FFD54F;
+    --info:#0D47A1; --infobg:#E3F2FD; --infobd:#90CAF9;
+    --shadow:0 3px 16px rgba(0,0,0,0.06);
+    --shadow-lg:0 8px 30px rgba(0,0,0,0.10);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--ink);line-height:1.65;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:900px;margin:0 auto;padding:48px 24px 90px;}
+
+  .cover{background:linear-gradient(135deg,#1F8A5B,#0C5C3B);border-radius:22px;padding:42px 40px;color:#fff;position:relative;overflow:hidden;box-shadow:var(--shadow-lg);}
+  .cover::before{content:'';position:absolute;top:-30%;right:-6%;width:280px;height:280px;background:rgba(255,255,255,0.07);border-radius:50%;}
+  .cover::after{content:'';position:absolute;bottom:-40%;left:-4%;width:220px;height:220px;background:rgba(255,255,255,0.05);border-radius:50%;}
+  .cover .eyebrow{font-size:12px;font-weight:800;letter-spacing:0.16em;text-transform:uppercase;opacity:0.9;display:flex;align-items:center;gap:9px;}
+  .cover .eyebrow::before{content:'';width:22px;height:3px;background:var(--pre);border-radius:2px;}
+  .cover h1{font-family:'Fredoka',sans-serif;font-weight:600;font-size:37px;line-height:1.1;margin:14px 0 10px;position:relative;}
+  .cover p{font-size:15px;opacity:0.94;max-width:610px;position:relative;}
+  .cover .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px;position:relative;}
+  .cover .chip{background:rgba(255,255,255,0.16);border:1.5px solid rgba(255,255,255,0.28);border-radius:20px;padding:5px 13px;font-size:11.5px;font-weight:800;letter-spacing:0.04em;}
+
+  section{margin-top:42px;}
+  .sec-eyebrow{font-size:12px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:var(--soft);display:flex;align-items:center;gap:9px;margin-bottom:6px;}
+  .sec-eyebrow::before{content:'';width:18px;height:3px;background:var(--pre);border-radius:2px;}
+  h2{font-family:'Fredoka',sans-serif;font-weight:600;font-size:27px;color:var(--ink);line-height:1.15;margin-bottom:8px;}
+  h2 .n{color:var(--mute);font-weight:500;margin-right:10px;}
+  .lead{font-size:15px;color:var(--soft);max-width:690px;margin-bottom:20px;}
+  h3{font-family:'Fredoka',sans-serif;font-weight:600;font-size:18px;margin:22px 0 10px;color:var(--ink);}
+
+  p{margin-bottom:10px;} p:last-child{margin-bottom:0;}
+  strong{font-weight:800;}
+  em{font-style:normal;background:#FFF3D6;padding:0 4px;border-radius:4px;}
+  code{font-family:ui-monospace,Menlo,monospace;background:#F3F1E9;border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-size:0.84em;color:var(--blue);}
+
+  ul{list-style:none;display:flex;flex-direction:column;gap:9px;margin:10px 0;}
+  ul li{position:relative;padding-left:24px;font-size:14.5px;}
+  ul li::before{content:'';position:absolute;left:4px;top:9px;width:7px;height:7px;border-radius:2px;background:var(--pre);}
+  ul.check li::before{content:'✓';background:none;left:0;top:1px;color:var(--ok);font-weight:800;font-size:14px;}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px;box-shadow:var(--shadow);margin-bottom:14px;border-top:3.5px solid var(--a2);}
+  .card.blue{border-top-color:var(--blue);} .card.violet{border-top-color:var(--violet);} .card.amber{border-top-color:var(--pre);}
+
+  .tag{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;padding:3px 10px;border-radius:20px;vertical-align:middle;}
+  .tag.done{background:var(--okbg);color:var(--ok);border:1.5px solid var(--okbd);}
+  .tag.defer{background:var(--infobg);color:var(--info);border:1.5px solid var(--infobd);}
+
+  .find{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);margin-bottom:16px;overflow:hidden;}
+  .find > .head{display:flex;align-items:flex-start;gap:12px;padding:17px 22px 13px;border-bottom:1px solid var(--border-soft);}
+  .find > .head .id{font-family:'Fredoka',sans-serif;font-weight:600;font-size:14px;color:#fff;background:var(--a2);min-width:40px;height:40px;padding:0 6px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .find .head .t{flex:1;}
+  .find .head .t h4{font-family:'Fredoka',sans-serif;font-weight:600;font-size:17.5px;line-height:1.25;margin-bottom:5px;}
+  .find .body{padding:15px 22px 19px;}
+  .find .body .row{margin-bottom:12px;} .find .body .row:last-child{margin-bottom:0;}
+  .find .body .k{font-size:11px;font-weight:800;letter-spacing:0.07em;text-transform:uppercase;color:var(--soft);margin-bottom:3px;display:flex;align-items:center;gap:6px;}
+  .find .body .k::before{content:'';width:12px;height:2.5px;border-radius:2px;background:var(--mute);}
+  .find .body .v{font-size:14.5px;}
+  .find .body .k.fix::before{background:var(--ok);}
+
+  .callout{border-radius:14px;padding:18px 22px;margin:16px 0;font-size:14.5px;}
+  .callout.ok{background:var(--okbg);border:1.5px solid var(--okbd);color:#1b5e20;}
+  .callout.info{background:var(--infobg);border:1.5px solid var(--infobd);color:#0b3a72;}
+  .callout.warn{background:var(--warnbg);border:1.5px solid var(--warnbd);color:#6a3b00;}
+
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);}
+  th{background:#F3F1E9;text-align:left;padding:11px 14px;font-size:11px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;color:var(--soft);}
+  td{padding:11px 14px;border-top:1px solid var(--border-soft);vertical-align:top;}
+  td.c{white-space:nowrap;}
+  .mono{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--soft);}
+
+  .files{display:flex;flex-direction:column;gap:8px;margin:14px 0;}
+  .file{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--border);border-radius:11px;padding:11px 15px;box-shadow:var(--shadow);}
+  .file .fn{font-family:ui-monospace,Menlo,monospace;font-size:13px;font-weight:700;color:var(--blue);}
+  .file .fd{font-size:12.5px;color:var(--soft);font-weight:600;}
+  .num{font-family:'Fredoka',sans-serif;background:var(--a2);color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;}
+
+  .foot{margin-top:50px;padding-top:22px;border-top:1px solid var(--border);font-size:12.5px;color:var(--mute);text-align:center;}
+  @media (max-width:640px){ .cover h1{font-size:29px;} }
+  @media print{ body{background:#fff;} .find,.card,.file,table{box-shadow:none;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="cover">
+    <div class="eyebrow">Correcciones aplicadas · listo para subir</div>
+    <h1>Sistema de Puntuaciones — Arreglado</h1>
+    <p>Todo lo que pediste y todo lo del diagnóstico, corregido en el código. Un solo lote de 5 archivos para subir al repo. Aquí está qué cambió, cómo funciona ahora y cómo probarlo.</p>
+    <div class="chips">
+      <span class="chip">4 October 2026</span>
+      <span class="chip">5 archivos · sin SQL</span>
+      <span class="chip">Versión ?v=20260706c</span>
+    </div>
+  </div>
+
+  <!-- 1 · TUS PEDIDOS -->
+  <section>
+    <div class="sec-eyebrow">Lo que pediste</div>
+    <h2><span class="n">01</span>Tus 6 pedidos, resueltos</h2>
+
+    <div class="find">
+      <div class="head"><div class="id">1</div><div class="t">
+        <h4>XP al practicar — y XP re-ganable cada semana</h4>
+        <span class="tag done">Hecho</span>
+      </div></div>
+      <div class="body">
+        <div class="row"><div class="k">Cómo funciona ahora</div><div class="v">Completar una actividad (incluida la <strong>práctica del día</strong> y los <strong>repasos no obligatorios</strong>) da XP. Y <strong>cada semana</strong> que vuelvan a practicar un material, <strong>vuelve a dar XP</strong>.</div></div>
+        <div class="row"><div class="k">Anti-farmeo</div><div class="v"><strong>Una sola vez por material por semana.</strong> Repetir el mismo material el mismo día <em>no</em> suma de nuevo — se agrupa por día. Practicarlo otra semana, sí. Así se evita el farmeo diario y se premia la constancia. El valor del bono es la mitad del XP del material (más para lecturas/listenings, menos para prácticas).</div></div>
+        <div class="row"><div class="k fix">Detalle técnico</div><div class="v">Se lee <code>daily_sessions</code> (la nube ya guardaba qué material se practicó cada día) y se agrupa por semana. No hizo falta ninguna tabla nueva.</div></div>
+      </div>
+    </div>
+
+    <div class="find">
+      <div class="head"><div class="id">2</div><div class="t">
+        <h4>Aviso de "Nueva semana" — sin tocar el estado de los materiales</h4>
+        <span class="tag done">Hecho</span>
+      </div></div>
+      <div class="body">
+        <div class="row"><div class="k">Cómo funciona ahora</div><div class="v">Al empezar una semana nueva aparece un <strong>cartel amarillo</strong> en el panel + una <strong>notificación</strong>: «¡Nueva semana! Vuelve a practicar tus materiales y gana XP extra». Se puede descartar con "¡Entendido!".</div></div>
+        <div class="row"><div class="k">Importante</div><div class="v">Los materiales <strong>quedan exactamente igual</strong>: los que estaban abiertos siguen abiertos, los bloqueados siguen bloqueados. El aviso <em>no desbloquea nada</em> — solo invita a repasar para ganar los puntos extra.</div></div>
+      </div>
+    </div>
+
+    <div class="find">
+      <div class="head"><div class="id">3</div><div class="t">
+        <h4>El podio de campeones ya no se mueve a cada rato</h4>
+        <span class="tag done">Hecho</span>
+      </div></div>
+      <div class="body">
+        <div class="row"><div class="k">A qué se debía</div><div class="v">El podio se <strong>recalculaba y re-publicaba</strong> cada vez que se cargaba con datos parciales (mientras la nube terminaba de traer el progreso de todo el grupo, el orden cambiaba y se re-guardaba varias veces). Además, en la versión vieja, hasta un alumno podía sobrescribirlo.</div></div>
+        <div class="row"><div class="k fix">Corrección</div><div class="v">Ahora el Top 3 de la semana cerrada <strong>se congela UNA sola vez</strong> y no se vuelve a recalcular hasta el lunes siguiente. Queda fijo.</div></div>
+        <div class="row"><div class="k">Ojo (no es error)</div><div class="v">El <strong>«Top del grupo · esta semana»</strong> (el ranking en vivo) <em>sí</em> se mueve a lo largo de la semana — es su función, muestra quién va ganando. Lo que queda FIJO son los <strong>«Campeones»</strong> de la semana ya cerrada. Son dos cosas distintas; el nuevo botón (pedido 5) se lo explica al alumno.</div></div>
+      </div>
+    </div>
+
+    <div class="find">
+      <div class="head"><div class="id">4</div><div class="t">
+        <h4>El "0%" que no se actualizaba aunque ya hicieran bien la práctica</h4>
+        <span class="tag done">Hecho</span>
+      </div></div>
+      <div class="body">
+        <div class="row"><div class="k">La causa real</div><div class="v">El conector tenía un <strong>candado de 7 días</strong>: si una práctica se registraba con nota baja (o 0%), la nota quedaba <strong>congelada una semana</strong> y rehacerla bien <em>no</em> la actualizaba — mientras la plataforma decía "Repítela para aprobar". Contradicción → el material atascado en 0%.</div></div>
+        <div class="row"><div class="k fix">Corrección</div><div class="v">Se quitó el candado. Ahora <strong>siempre se guarda la MEJOR nota</strong> y al volver a practicar y mejorar, <strong>el estado y los puntos se actualizan al instante</strong>. Encaja con tu idea de que puedan repasar libremente (el anti-farmeo lo maneja el XP, que es 1 vez por semana).</div></div>
+      </div>
+    </div>
+
+    <div class="find">
+      <div class="head"><div class="id">5</div><div class="t">
+        <h4>Puntos SIEMPRE visibles + botón «¿Cómo llego al Top?» con la mascota</h4>
+        <span class="tag done">Hecho</span>
+      </div></div>
+      <div class="body">
+        <div class="row"><div class="k">Puntos visibles</div><div class="v">Los alumnos no sabían dónde ver sus XP (estaban escondidos en "Mi perfil"). Ahora hay una <strong>franja «Tus puntos»</strong> arriba del panel, con sus XP y nivel, que <strong>sube sola al practicar</strong>.</div></div>
+        <div class="row"><div class="k">Botón guía (tu idea)</div><div class="v">Un botón que llama la atención — en la franja de puntos <em>y</em> en el «Top del grupo» — abre a <strong>Neuro</strong> (la mascota) explicando, en tono de juego y motivador: cómo ganar XP, cómo subir en el Top del grupo y cómo entrar a la Liga semanal. Resuelve la confusión de "hay varios marcadores".</div></div>
+      </div>
+    </div>
+
+    <div class="callout info">
+      <strong>Sobre los "3 marcadores".</strong> Recomendación aplicada: en lugar de esconderlos o fusionarlos (cada uno mide algo útil y distinto), agregamos <strong>el botón-guía de Neuro</strong> que le enseña al alumno, como en un juego, qué es cada tablero y cómo subir. Es la forma más motivadora de aclararlo sin perder información.
+    </div>
+  </section>
+
+  <!-- 2 · BUGS DEL DIAGNÓSTICO -->
+  <section>
+    <div class="sec-eyebrow">Del diagnóstico</div>
+    <h2><span class="n">02</span>Los bugs del reporte, corregidos</h2>
+    <p class="lead">Cada hallazgo del diagnóstico anterior, con su estado. La mayoría quedó resuelta dentro de estos mismos archivos.</p>
+    <table>
+      <tr><th>ID</th><th>Hallazgo</th><th>Estado</th><th>Qué se hizo</th></tr>
+      <tr><td class="mono">C1</td><td>Copias divergentes del motor</td><td class="c"><span class="tag done">Resuelto</span></td><td>Un solo lote como fuente; <code>publish/</code> y dev alineados a la versión viva + arreglos</td></tr>
+      <tr><td class="mono">A1</td><td>Asistencia (+120) / encuesta (+60) fantasma</td><td class="c"><span class="tag done">Resuelto</span></td><td>Ahora se guardan en la nube (<code>bonus_xp</code>) y cuentan en el Top y el XP total</td></tr>
+      <tr><td class="mono">A2</td><td>Repasos/retención nunca recibían datos</td><td class="c"><span class="tag done">Resuelto</span></td><td>Al refrescar el progreso se alimenta el motor de repaso con cada nota nueva</td></tr>
+      <tr><td class="mono">A3</td><td>Liga con otra fórmula (sin anti-farmeo)</td><td class="c"><span class="tag done">Resuelto</span></td><td>Liga y XP total usan la MISMA fórmula (anti-farmeo + lectura por tiempo)</td></tr>
+      <tr><td class="mono">M1</td><td>Minutos del día inflables</td><td class="c"><span class="tag done">Mejorado</span></td><td>Se toma <code>daily_sessions</code> (fuente precisa de la nube) para los minutos de hoy</td></tr>
+      <tr><td class="mono">M2</td><td>Campeones dependían del dispositivo</td><td class="c"><span class="tag done">Resuelto</span></td><td>Congelado una vez por semana; ya no se re-publica ni cambia (ver pedido 3)</td></tr>
+      <tr><td class="mono">B1</td><td>Cooldown de 7 días solo local</td><td class="c"><span class="tag done">Resuelto</span></td><td>Se eliminó el candado (era la causa del 0%); ahora se guarda siempre la mejor nota</td></tr>
+      <tr><td class="mono">B2</td><td>El XP bajaba al promover de nivel</td><td class="c"><span class="tag done">Resuelto</span></td><td>El XP busca la actividad en TODOS los niveles, no solo el vigente</td></tr>
+      <tr><td class="mono">M3</td><td>Nota ≤ 10 leída como 100%</td><td class="c"><span class="tag defer">A propósito</span></td><td>Se dejó como está: todos los materiales ya envían 0–100, y cambiarlo arriesga malinterpretar notas viejas. Sin efecto real hoy.</td></tr>
+      <tr><td class="mono">M4</td><td>Dos medidas de "días inactivos"</td><td class="c"><span class="tag defer">Menor</span></td><td>Se dejó para una limpieza futura (bajo impacto; no afecta puntos)</td></tr>
+    </table>
+    <div class="callout warn">
+      <strong>2 puntos menores quedaron a propósito</strong> (M3 y M4): son de bajo impacto y tocarlos ahora arriesgaba malinterpretar datos ya guardados. No afectan lo que ves ni los puntos. Se pueden pulir en una limpieza futura si quieres.
+    </div>
+  </section>
+
+  <!-- 3 · CÓMO SUBIR -->
+  <section>
+    <div class="sec-eyebrow">Cómo subir</div>
+    <h2><span class="n">03</span>Un solo lote · 5 archivos · sin SQL</h2>
+    <p class="lead">Están en la carpeta <code>actualizar-en-github/ENTREGA-PUNTUACIONES/</code>. Súbelos a la <strong>raíz</strong> del repo <code>plataforma</code> (reemplazan a los que ya están). Netlify redespliega solo.</p>
+    <div class="files">
+      <div class="file"><span class="num">1</span><div><div class="fn">data.js</div><div class="fd">El motor de puntos — el archivo principal</div></div></div>
+      <div class="file"><span class="num">2</span><div><div class="fn">jucum-connect.js</div><div class="fd">Conector de los materiales (arregla el 0% para TODOS los materiales)</div></div></div>
+      <div class="file"><span class="num">3</span><div><div class="fn">supabase-sync.js</div><div class="fd">Sincronización con la nube (alimenta los repasos)</div></div></div>
+      <div class="file"><span class="num">4</span><div><div class="fn">StudentDashboard.comp.js</div><div class="fd">Panel del alumno (puntos visibles + guía + aviso de semana)</div></div></div>
+      <div class="file"><span class="num">5</span><div><div class="fn">index.html</div><div class="fd">Trae la versión nueva ?v=20260706c (obligatorio: invalida el caché)</div></div></div>
+    </div>
+    <div class="callout ok">
+      <strong>No hay que ejecutar ningún SQL.</strong> Todo usa tablas que ya existen (<code>daily_sessions</code> y <code>app_settings</code>). Solo subes los 5 archivos.
+    </div>
+
+    <h3>Pruébalo en 3 pasos</h3>
+    <ul class="check">
+      <li>Entra como un alumno y practica una actividad → la franja <strong>«Tus puntos» debe subir</strong>.</li>
+      <li>Toca <strong>«¿Cómo llego al Top?»</strong> → debe abrir a Neuro con la explicación.</li>
+      <li>Una actividad atascada en <strong>0%</strong>: rehazla bien → debe pasar a tu nota real al instante.</li>
+    </ul>
+  </section>
+
+  <div class="foot">
+    Correcciones del sistema de puntuaciones · JUCUM English Center · 4 de octubre de 2026 · lote «ENTREGA-PUNTUACIONES»
+  </div>
+
+</div>
+</body>
+</html>

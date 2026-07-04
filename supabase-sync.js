@@ -329,7 +329,38 @@
         if (ld && (!merged[u].lastDay || ld > merged[u].lastDay)) merged[u].lastDay = ld;
         Object.keys(lc).forEach(k => { if (!merged[u].completed[k]) merged[u].completed[k] = lc[k]; });
       });
+      // ── A2 · Alimenta el motor de repaso espaciado desde la nube ──
+      // Cuando la nota de una actividad CON NOTA cambia (nueva o mejorada) respecto a
+      // lo que ya teníamos, la registramos en el motor de repaso. Antes solo Quizlet
+      // (sin nota) lo alimentaba → "Repasos de hoy" y "Retención" quedaban vacíos.
+      // Solo dispara ante cambios reales (no en cada refresco, no en la 1ª carga).
+      try {
+        const D = window.JUCUM_DATA;
+        if (D && D.recordReviewAttempt) {
+          Object.keys(cloud).forEach(uid => {
+            const stu = (D.STUDENTS || []).find(s => s.id === uid);
+            const prevC = (local && local[uid] && local[uid].completed) || {};
+            const nowC = cloud[uid].completed || {};
+            Object.keys(nowC).forEach(k => {
+              const nw = nowC[k], pv = prevC[k];
+              if (!nw || typeof nw.score !== 'number') return;   // sin nota → no entra a repaso
+              if (pv && pv.score === nw.score) return;            // sin cambio → no re-registrar
+              const [modId, actId] = k.split(':');
+              D.recordReviewAttempt(uid, modId, actId, nw.score, stu ? stu.group : null, stu ? stu.level : null);
+            });
+          });
+        }
+      } catch (e) {}
       write(KEYS.progress, merged);
+      // 📶 Refresca también la última conexión real (barato: 2 columnas).
+      // Si la columna last_seen_at no existe aún (falta script 22), se ignora.
+      try {
+        const { data: us } = await sb.from('users').select('id,last_seen_at');
+        if (us && window.JUCUM_DATA) {
+          const seen = {}; us.forEach(u => { seen[u.id] = u.last_seen_at; });
+          window.JUCUM_DATA.STUDENTS.forEach(s => { if (seen[s.id] !== undefined) s.lastSeenAt = seen[s.id]; });
+        }
+      } catch (e) {}
       try { computeStats(); } catch (e) {}
       return true;
     } catch (e) { console.warn('refreshProgress:', e && e.message); return false; }
@@ -447,6 +478,14 @@
       s.lastActiveDays = lastTs
         ? Math.max(0, Math.round((Date.parse(dayStr(Date.now())) - Date.parse(dayStr(lastTs))) / DAY))
         : null; // alumno sin práctica todavía → “Sin actividad aún” (nunca “Hoy” falso)
+      // 📶 Última conexión REAL = lo más reciente entre su último ingreso
+      // registrado (users.last_seen_at · script 22) y su última práctica
+      // (practicar implica estar conectado). null = sin dato todavía.
+      const seenTs = s.lastSeenAt ? Date.parse(s.lastSeenAt) : 0;
+      const connTs = Math.max(seenTs || 0, lastTs || 0);
+      s.lastSeenDays = connTs
+        ? Math.max(0, Math.round((Date.parse(dayStr(Date.now())) - Date.parse(dayStr(connTs))) / DAY))
+        : null;
       // Logros = las medallas REALMENTE conseguidas (las mismas que ve el alumno),
       // calculadas con las estadísticas recién asignadas arriba. Antes solo se
       // regeneraban 4 claves sueltas → el XP por logros no cuadraba con las medallas.

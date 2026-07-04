@@ -32,6 +32,99 @@ function VocabReminder({ student, settings, onGo }) {
   );
 }
 
+/* ════════ ¿Cómo llego al Top? · explicador con Neuro (estilo juego) ════════
+ * Responde la confusión de "hay varios tableros": en voz de la mascota explica
+ * cómo ganar XP, cómo subir en el Top del grupo y cómo entrar a la Liga semanal. */
+function HowToTopModal({ student, onClose }) {
+  const D = window.JUCUM_DATA;
+  const thr = D.passThreshold ? D.passThreshold(student.level, student.group) : 75;
+  const step = (ico, title, body) => (
+    <div style={{display:'flex', gap:11, alignItems:'flex-start', background:'#fff', border:'1px solid #ECE6F5', borderRadius:13, padding:'11px 13px'}}>
+      <span style={{fontSize:22, lineHeight:1}}>{ico}</span>
+      <div style={{flex:1}}>
+        <div style={{fontWeight:800, fontSize:13.5, color:'#3B2A5A'}}>{title}</div>
+        <div style={{fontSize:12.5, color:'#6B5B85', fontWeight:600, lineHeight:1.5}}>{body}</div>
+      </div>
+    </div>
+  );
+  return (
+    <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(24,16,40,.6)', zIndex:100000, display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
+      <div onClick={(e)=>e.stopPropagation()} style={{background:'linear-gradient(180deg,#F7F3FF,#fff)', borderRadius:22, maxWidth:460, width:'100%', maxHeight:'88vh', overflowY:'auto', boxShadow:'0 24px 60px rgba(0,0,0,.4)'}}>
+        <div style={{background:'linear-gradient(135deg,#6C4BD8,#8B5CF6)', padding:'20px 22px 18px', color:'#fff', position:'relative'}}>
+          <button onClick={onClose} style={{position:'absolute', top:12, right:14, background:'rgba(255,255,255,.2)', border:'none', color:'#fff', width:30, height:30, borderRadius:'50%', cursor:'pointer', fontSize:15, fontWeight:800}}>✕</button>
+          <div style={{display:'flex', gap:12, alignItems:'center'}}>
+            <div style={{fontSize:44, lineHeight:1}}>🧠</div>
+            <div>
+              <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:20}}>¡Sube al Top conmigo!</div>
+              <div style={{fontSize:12.5, fontWeight:700, opacity:.9}}>Soy Neuro y te cuento cómo ganar más puntos 🚀</div>
+            </div>
+          </div>
+        </div>
+        <div style={{padding:'16px 18px 20px', display:'flex', flexDirection:'column', gap:10}}>
+          <div style={{fontSize:12.5, color:'#6B5B85', fontWeight:700, background:'#F1EBFF', borderRadius:11, padding:'9px 12px', lineHeight:1.5}}>
+            Tus <b>XP</b> (puntos) están arriba, en <b>«Tus puntos»</b>, y suben solitos cada vez que practicas. ✨
+          </div>
+          <div style={{fontSize:11, fontWeight:800, letterSpacing:'.06em', textTransform:'uppercase', color:'#8B5CF6', marginTop:2}}>Cómo ganar XP</div>
+          {step('📚','Haz tus prácticas', 'Cada actividad nueva te da XP. Las historias suman por el tiempo que las lees.')}
+          {step('✅','Aprueba (no corras)', 'Con menos del '+thr+'% solo ganas puntos de participación. Apruébala y te llevas TODOS tus XP.')}
+          {step('🔁','Vuelve cada semana', '¡NUEVO! Cada semana puedes volver a practicar tus materiales y ganar XP extra (una vez por material por semana).')}
+          {step('🔥','Mantén tu racha', 'Practica todos los días: cada día seguido te da +30 XP.')}
+          <div style={{fontSize:11, fontWeight:800, letterSpacing:'.06em', textTransform:'uppercase', color:'#8B5CF6', marginTop:6}}>Los dos tableros</div>
+          {step('🏅','Top del grupo', 'Se ordena por tu constancia y dominio (cuánto practicas y apruebas). Practica seguido y aprueba para subir.')}
+          {step('🏆','Liga semanal', 'El Top 3 de XP de la semana se corona cada lunes. ¡El campeón #1 elige el fondo de todo el grupo!')}
+          <button onClick={onClose} style={{marginTop:8, border:'none', cursor:'pointer', background:'linear-gradient(135deg,#6C4BD8,#8B5CF6)', color:'#fff', fontWeight:800, fontSize:14.5, borderRadius:14, padding:'13px', fontFamily:"'Fredoka',sans-serif"}}>¡Vamos a por ello! 💪</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function HowToTopButton({ student, variant }) {
+  const [open, setOpen] = React.useState(false);
+  const isStrip = variant === 'strip';
+  return (
+    <>
+      <button type="button" onClick={()=>setOpen(true)}
+        style={isStrip
+          ? {border:'none', cursor:'pointer', background:'rgba(255,255,255,.22)', color:'#fff', fontWeight:800, fontSize:12.5, borderRadius:20, padding:'7px 13px', whiteSpace:'nowrap'}
+          : {border:'1.5px solid #C9B6F5', cursor:'pointer', background:'linear-gradient(120deg,#F3EEFF,#fff)', color:'#6C4BD8', fontWeight:800, fontSize:12.5, borderRadius:11, padding:'10px 12px', width:'100%', marginTop:10, display:'flex', alignItems:'center', justifyContent:'center', gap:7}}>
+        {isStrip ? '❓ ¿Cómo gano más?' : '🏆 ¿Cómo llego al Top?'}
+      </button>
+      {open && <HowToTopModal student={student} onClose={()=>setOpen(false)} />}
+    </>
+  );
+}
+/* Franja de puntos SIEMPRE visible: el alumno ve sus XP al instante (antes solo
+ * estaban escondidos en "Mi perfil") + aviso de semana nueva para volver a practicar. */
+function PointsStrip({ student, xp, xpInfo }) {
+  const D = window.JUCUM_DATA;
+  const [, force] = React.useReducer(x=>x+1,0);
+  const newWeek = D.isNewWeekFor ? D.isNewWeekFor(student.id) : false;
+  const dismiss = () => { if (D.markWeekSeen) D.markWeekSeen(student.id); force(); };
+  return (
+    <div style={{marginTop:18}}>
+      {newWeek && (
+        <div style={{display:'flex', gap:11, alignItems:'center', background:'linear-gradient(120deg,#FFF4D6,#FFFaf0)', border:'1.5px solid #F3C969', borderRadius:14, padding:'12px 15px', marginBottom:12}}>
+          <span style={{fontSize:24}}>🎉</span>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:800, fontSize:14, color:'#9c5d00'}}>¡Nueva semana!</div>
+            <div style={{fontSize:12.5, color:'#B26A00', fontWeight:600, lineHeight:1.45}}>Vuelve a practicar tus materiales y gana <b>XP extra</b> — una vez por material esta semana. Tus materiales siguen igual, ¡solo suma puntos! 🌱</div>
+          </div>
+          <button onClick={dismiss} style={{border:'none', background:'#F3C969', color:'#6b3f00', fontWeight:800, borderRadius:20, padding:'6px 12px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap'}}>¡Entendido!</button>
+        </div>
+      )}
+      <div style={{display:'flex', alignItems:'center', gap:14, background:`linear-gradient(135deg,${xpInfo.tier.color},${xpInfo.tier.color}d0)`, borderRadius:16, padding:'14px 18px', color:'#fff', boxShadow:'0 8px 22px '+xpInfo.tier.color+'44'}}>
+        <div style={{fontSize:30, lineHeight:1}}>{xpInfo.tier.emoji}</div>
+        <div style={{flex:1, minWidth:0}}>
+          <div style={{fontSize:11, fontWeight:800, letterSpacing:'.08em', textTransform:'uppercase', opacity:.9}}>Tus puntos · se actualizan al practicar</div>
+          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:26, lineHeight:1.1}}>{(xp||0).toLocaleString()} <span style={{fontSize:15, opacity:.85}}>XP</span></div>
+          <div style={{fontSize:11.5, fontWeight:700, opacity:.92}}>Nivel {xpInfo.level} · {xpInfo.tier.name} · {xpInfo.currentXP}/{xpInfo.nextNeeded} para el {xpInfo.level+1}</div>
+        </div>
+        <HowToTopButton student={student} variant="strip" />
+      </div>
+    </div>
+  );
+}
+
 function StudentDashboard({ user, onLogout }) {
   const { STUDENTS, GROUPS, LEVELS, MODULE_CATALOG, ACHIEVEMENT_DEFS, getGroupSettings, getStudentProgress, getStudentXP, getStudentLevel, MEDAL_RARITY, RARITY_STYLE, earnedMedals, entryPassed } = window.JUCUM_DATA;
   const student = STUDENTS.find(s => s.id === user.studentId) || STUDENTS[0];
@@ -131,6 +224,26 @@ function StudentDashboard({ user, onLogout }) {
   const acct = P ? P.getAccountStatus(student) : { state:'al_dia', blocked:false, daysLeft:null, payDay:5 };
   const [celebrate, setCelebrate] = React.useState(() => P ? P.pendingConfirmCelebration(student.id) : null);
   const closeCelebrate = () => { if (celebrate && P) P.markCelebrationSeen(celebrate.id); setCelebrate(null); };
+
+  // 🎉 Aviso de SEMANA NUEVA (una vez por semana). NO cambia el estado ni el
+  // bloqueo de ningún material: solo avisa que pueden volver a practicar y ganar XP.
+  React.useEffect(() => {
+    const D = window.JUCUM_DATA;
+    if (!window.JUCUM_NOTIF || !D || !D.isNewWeekFor) return;
+    if (!D.isNewWeekFor(student.id)) return;
+    const p = new Date(Date.now() - 5 * 3600000);              // lunes (hora Perú)
+    const wd = (p.getUTCDay() + 6) % 7; p.setUTCDate(p.getUTCDate() - wd);
+    const wk = p.toISOString().slice(0, 10);
+    const seenKey = `jucum_weeknotif_${student.id}`;
+    let last = null; try { last = localStorage.getItem(seenKey); } catch {}
+    if (last === wk) return;
+    try { localStorage.setItem(seenKey, wk); } catch {}
+    window.JUCUM_NOTIF.pushNotif(student.id, {
+      type: 'streak', link: 'practica',
+      title: '🎉 ¡Nueva semana! Gana XP extra',
+      body: 'Vuelve a practicar tus materiales: cada uno te da XP de nuevo (una vez por material esta semana). Tus materiales siguen igual.',
+    });
+  }, [student.id]);
 
   // Gamification stats
   const xp = getStudentXP(student);
@@ -318,6 +431,9 @@ function StudentDashboard({ user, onLogout }) {
             <div className="streak-lbl">días<br/>seguidos</div>
           </div>
         </div>
+
+        {/* — Puntos SIEMPRE visibles + aviso de semana nueva — */}
+        <PointsStrip student={student} xp={xp} xpInfo={xpInfo} />
 
         {/* — Neuro + (Racha fusionada con Meta de hoy) — */}
         <div className="two-col" style={{gridTemplateColumns:'1.4fr 1fr', marginTop:18}}>
@@ -1045,6 +1161,7 @@ function GroupTopSimple({ student, onSeeTop }) {
         <div style={{fontSize:11,color:'var(--text-mute,#A8A8A8)',fontWeight:700,textAlign:'center',marginTop:10}}>✨ El <b style={{color:'#C28A00'}}>Top 3</b> serán los próximos campeones si siguen así</div>
         {onSeeTop && <button onClick={onSeeTop} style={{marginTop:10,width:'100%',border:'none',background:'#F6F8FD',color:'#1F3A8A',fontFamily:'inherit',fontWeight:800,fontSize:12,padding:'9px',borderRadius:10,cursor:'pointer'}}>Ver mi práctica →</button>}
       </>)}
+      <HowToTopButton student={student} variant="top" />
     </div>
   );
 }

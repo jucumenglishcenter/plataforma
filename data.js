@@ -767,7 +767,19 @@ const PROGRESS_KEY = 'jucum_student_progress_v1';
 function getStudentProgress(studentId) {
   let all = {};
   try { all = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); } catch {}
-  return all[studentId] || { completed: {}, todayMinutes: 0, lastDay: null };
+  const base = all[studentId] || { completed: {}, todayMinutes: 0, lastDay: null };
+  /* Meta diaria multi-equipo: los minutos de HOY también viven en la nube
+   * (daily_sessions, escritos por jucum-connect desde los materiales). Se toma
+   * el MAYOR entre lo local y lo de la nube. */
+  try {
+    const cd = window.__JEC_DAILY && window.__JEC_DAILY[studentId];
+    if (cd && cd.day === peruDayStr()) {
+      const localMin = (base.lastDay === peruDayStr()) ? (base.todayMinutes || 0) : 0;
+      base.todayMinutes = Math.max(localMin, cd.minutes || 0);
+      base.lastDay = peruDayStr();
+    }
+  } catch (e) {}
+  return base;
 }
 function markActivityComplete(studentId, moduleId, activityId, score, minutes, meta) {
   let all = {};
@@ -823,35 +835,107 @@ function readingTimeXP(minutes) {
   return x;
 }
 
+/* Busca una actividad por su clave en TODOS los niveles (no solo el vigente).
+ * Así, al promover de nivel, el XP de lo ya practicado NO se pierde (bug B2). */
+function _findAct(modId, actId) {
+  for (const lvl of Object.keys(MODULE_CATALOG)) {
+    const mod = (MODULE_CATALOG[lvl] || []).find(m => m.id === modId);
+    if (mod) { const a = (mod.activities || []).find(x => x.id === actId); if (a) return a; }
+  }
+  return null;
+}
+/* ── FUENTE ÚNICA de "XP ganado por UNA actividad" ──────────────────
+ * La usan el XP total, la liga semanal y el bono semanal, para que los tres
+ * midan IGUAL (antes la liga ignoraba el anti-farmeo y el tiempo de lectura → un
+ * alumno podía liderar la liga con prácticas reprobadas). */
+function activityEarnedXP(entry, key, student) {
+  if (!entry) return 0;
+  // Anti-farmeo: con nota bajo el umbral → solo participación (+5). Aprobar da todo.
+  if (!entryPassed(entry, student.level, student.group)) return 5;
+  const [modId, actId] = key.split(':');
+  const act = _findAct(modId, actId);
+  if (!act) return 10;
+  if (act.type === 'story') return readingTimeXP(entry.minutes);   // lectura: XP por tiempo
+  const base = XP_BASE[act.type] || 10;
+  let bonusPct = 0.5;
+  if (typeof entry.score === 'number') bonusPct = entry.score > 10 ? Math.min(1, entry.score / 100) : Math.min(1, entry.score / 10);
+  return Math.round(base * (1 + bonusPct));
+}
+
+/* ── Bono semanal re-ganable · UNA vez por material por semana ───────
+ * daily_sessions (nube) registra qué material se practicó y qué día. Agrupado por
+ * semana ISO sabemos en cuántas SEMANAS DISTINTAS se practicó cada material. La 1.ª
+ * semana ya la cuenta el XP base; cada semana ADICIONAL vuelve a premiar (mitad del
+ * XP del material). Repetir el MISMO DÍA no suma (daily_sessions agrupa por día →
+ * una semana cuenta una sola vez): evita el farmeo diario y premia la constancia. */
+const WEEKLY_REEARN_CAP = 8;   // tope de semanas que suman por material (seguridad)
+function _weeksPracticed(studentId, key) {
+  try {
+    const w = window.__JEC_WEEKS && window.__JEC_WEEKS[studentId];
+    if (!w) return 0;
+    let n = 0;
+    for (const wk of Object.keys(w)) { if (w[wk] && w[wk][key]) n++; }
+    return n;
+  } catch { return 0; }
+}
+function weeklyReEarnXP(student) {
+  const progress = getStudentProgress(student.id);
+  let xp = 0;
+  for (const key of Object.keys(progress.completed || {})) {
+    const weeks = Math.min(WEEKLY_REEARN_CAP, _weeksPracticed(student.id, key));
+    if (weeks <= 1) continue;   // solo semanas ADICIONALES a la primera
+    const per = Math.max(3, Math.round(activityEarnedXP(progress.completed[key], key, student) * 0.5));
+    xp += (weeks - 1) * per;
+  }
+  return xp;
+}
+
+/* ── Bono de XP persistente (asistencia perfecta, encuesta, etc.) ────
+ * Antes vivían solo en localStorage (jucum_league_v1) y el ranking en la nube los
+ * IGNORABA → los +120/+60 no movían nada (bug A1). Ahora se guardan por semana en
+ * la nube (app_settings 'bonus_xp') y suman al XP total y al semanal. */
+const BONUS_KEY = 'jucum_bonus_xp_v1';
+function _getBonusState() { try { return JSON.parse(localStorage.getItem(BONUS_KEY) || '{}'); } catch { return {}; } }
+function addBonusXP(studentId, xp) {
+  if (!studentId || !xp) return;
+  const all = _getBonusState();
+  const wk = weekId();
+  all[wk] = all[wk] || {};
+  all[wk][studentId] = (all[wk][studentId] || 0) + xp;
+  const keys = Object.keys(all).sort(); while (keys.length > 8) delete all[keys.shift()];  // conserva ~8 semanas
+  localStorage.setItem(BONUS_KEY, JSON.stringify(all));
+  try { if (window.JUCUM_SB) window.JUCUM_SB.getClient().from('app_settings').upsert({ key: 'bonus_xp', value: all }, { onConflict: 'key' }).then(() => {}, () => {}); } catch {}
+}
+function getBonusXPTotal(studentId) { const all = _getBonusState(); let x = 0; for (const wk of Object.keys(all)) x += (all[wk] && all[wk][studentId]) || 0; return x; }
+function getBonusXPWeek(studentId) { const all = _getBonusState(); return (all[weekId()] && all[weekId()][studentId]) || 0; }
+async function loadBonusXPFromCloud() {
+  if (!window.JUCUM_SB) return;
+  try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key', 'bonus_xp').maybeSingle();
+    if (data && data.value && typeof data.value === 'object') localStorage.setItem(BONUS_KEY, JSON.stringify(data.value)); } catch {}
+}
+
+/* ¿Semana nueva para este alumno? (aviso "vuelve a practicar y gana XP extra").
+ * NO cambia el estado/bloqueo de ningún material — solo dispara el aviso. */
+function isNewWeekFor(studentId) {
+  try { return localStorage.getItem('jucum_week_seen_' + studentId) !== weekId(); } catch { return false; }
+}
+function markWeekSeen(studentId) { try { localStorage.setItem('jucum_week_seen_' + studentId, weekId()); } catch {} }
+
 /* Compute total XP for a student.
- *   = sum of base XP per completed activity
- *   + score bonus (score/maxScore * baseXP)
- *   + 30 XP per active streak day (capped at 14)
- *   + 50 XP per achievement
+ *   = XP por actividad completada (1 vez · fuente: activityEarnedXP)
+ *   + bono semanal re-ganable (repasar en semanas distintas)
+ *   + bonos persistentes (asistencia/encuesta)
+ *   + 30 XP por día de racha (tope 14) + 50 XP por logro
+ *   − penalización suave por inactividad
  */
 function getStudentXP(student) {
   const progress = getStudentProgress(student.id);
   let xp = 0;
   for (const key of Object.keys(progress.completed || {})) {
-    const [modId, actId] = key.split(':');
-    const mods = MODULE_CATALOG[student.level] || [];
-    const mod = mods.find(m => m.id === modId);
-    const act = mod?.activities.find(a => a.id === actId);
-    const entry = progress.completed[key];
-    /* PASO 2 · Anti-farmeo: si la actividad tiene nota y quedó BAJO el umbral,
-     * solo da puntos de PARTICIPACIÓN (+5). Para ganar de verdad hay que aprobar. */
-    if (!entryPassed(entry, student.level, student.group)) { xp += 5; continue; }
-    if (!act) { xp += 10; continue; }
-    // Lectura (story/diálogo): XP por TIEMPO invertido, no por nota.
-    if (act.type === 'story') { xp += readingTimeXP(entry.minutes); continue; }
-    const base = XP_BASE[act.type] || 10;
-    // score normalization: numbers >10 = percent (0-100); ≤10 = like /7 or /10 → assume max 10
-    let bonusPct = 0.5;
-    if (typeof entry.score === 'number') {
-      bonusPct = entry.score > 10 ? Math.min(1, entry.score / 100) : Math.min(1, entry.score / 10);
-    }
-    xp += Math.round(base * (1 + bonusPct));
+    xp += activityEarnedXP(progress.completed[key], key, student);   // 1ª vez por material
   }
+  xp += weeklyReEarnXP(student);        // cada semana que lo repasan vuelve a dar XP
+  xp += getBonusXPTotal(student.id);    // asistencia perfecta, encuesta, etc.
   xp += Math.min(student.streak || 0, 14) * 30;
   xp += (student.achievements?.length || 0) * 50;
   // PASO 2 · Bono por terminar la práctica dirigida a tiempo Y aprobada
@@ -990,6 +1074,9 @@ function addWeeklyXP(studentId, xp) {
   // keep only current + previous week
   for (const k of Object.keys(all)) { if (k !== id) delete all[k]; }
   localStorage.setItem(LEAGUE_KEY, JSON.stringify(all));
+  // Bug A1: además persiste en la nube (bonus_xp) para que SÍ cuente en el ranking
+  // real y en el XP total (asistencia perfecta +120, encuesta +60, etc.).
+  addBonusXP(studentId, xp);
 }
 /* Cloud mode: weekly XP derived from real progress entries since Monday
  * (same per-activity formula as getStudentXP, no streak/achievement bonus) */
@@ -999,14 +1086,9 @@ function getWeeklyXPFromProgress(student) {
   let xp = 0;
   for (const [key, entry] of Object.entries(progress.completed || {})) {
     if (!entry || !entry.date || peruDayStr(entry.date) < monday) continue;
-    const [modId, actId] = key.split(':');
-    const mods = MODULE_CATALOG[student.level] || [];
-    const act = mods.find(m => m.id === modId)?.activities.find(a => a.id === actId);
-    const base = act ? (XP_BASE[act.type] || 10) : 10;
-    let bonusPct = 0.5;
-    if (typeof entry.score === 'number') bonusPct = entry.score > 10 ? Math.min(1, entry.score / 100) : Math.min(1, entry.score / 10);
-    xp += Math.round(base * (1 + bonusPct));
+    xp += activityEarnedXP(entry, key, student);   // misma fórmula que el XP total (anti-farmeo + lectura por tiempo)
   }
+  xp += getBonusXPWeek(student.id);                // asistencia/encuesta de ESTA semana
   return xp;
 }
 function getWeeklyRanking(groupId) {
@@ -1049,13 +1131,7 @@ function getWeeklyXPForWeek(student, mondayStr) {
     if (!entry || !entry.date) continue;
     const day = peruDayStr(entry.date);
     if (day < mondayStr || day >= end) continue;
-    const [modId, actId] = key.split(':');
-    const mods = MODULE_CATALOG[student.level] || [];
-    const act = mods.find(m => m.id === modId)?.activities.find(a => a.id === actId);
-    const base = act ? (XP_BASE[act.type] || 10) : 10;
-    let bonusPct = 0.5;
-    if (typeof entry.score === 'number') bonusPct = entry.score > 10 ? Math.min(1, entry.score / 100) : Math.min(1, entry.score / 10);
-    xp += Math.round(base * (1 + bonusPct));
+    xp += activityEarnedXP(entry, key, student);   // misma fórmula que el XP total
   }
   return xp;
 }
@@ -1104,15 +1180,19 @@ function _leagueGroup(groupId, create) {
   const wk = lastWeekId(); const all = _getLeagueState();
   let g = all[groupId];
   if (_leagueIsStaff()) {
-    // Personal: ÚNICA fuente que calcula y publica los campeones (tiene el
-    // progreso de todo el grupo). Congela el Top 3 de la semana cerrada y, si la
-    // nube quedó con un valor parcial (de un alumno), lo corrige.
-    const list = _computeChampList(groupId, wk);
+    // Personal: ÚNICA fuente que congela los campeones (tiene el progreso de todo el
+    // grupo). Se congela UNA sola vez por semana: cuando ya hay Top 3 fijo para la
+    // semana cerrada, NO se recalcula ni se re-publica. Antes se re-publicaba cada
+    // vez que cambiaba el orden de hidratación → por eso "los campeones cambiaban a
+    // cada rato" (bug reportado). Ahora quedan intocables hasta el lunes siguiente.
     if (!g || g.champWeek !== wk) {
-      g = { champWeek: wk, scenario: 'theme-gold', emojis: {}, list };
+      const list = _computeChampList(groupId, wk);
+      g = { champWeek: wk, scenario: (g && g.scenario) || 'theme-gold', emojis: (g && g.emojis) || {}, list };
       all[groupId] = g; _saveLeagueState(all, create && list.length > 0);
-    } else if (list.length > 0 && !_sameChampList(g.list, list)) {
-      g = { ...g, list }; all[groupId] = g; _saveLeagueState(all, true);
+    } else if (!g.list || g.list.length === 0) {
+      // Aún sin congelar (la semana cerró antes de tener datos hidratados): un intento más.
+      const list = _computeChampList(groupId, wk);
+      if (list.length > 0) { g = { ...g, list }; all[groupId] = g; _saveLeagueState(all, true); }
     }
   } else {
     // Alumno: NUNCA calcula ni publica la lista. Usa lo que el personal dejó en
@@ -1980,61 +2060,80 @@ window.JUCUM_DATA.setLeagueScenario = setLeagueScenario;
 window.JUCUM_DATA.loadLeagueFromCloud = loadLeagueFromCloud;
 window.JUCUM_DATA.LEAGUE_SCENARIOS = LEAGUE_SCENARIOS;
 
-/* ════════════════════════════════════════════════════════════════════
- * 📚 Revisión de materiales (vista profesor · "Materiales")
- * ════════════════════════════════════════════════════════════════════
- * Tablero de QA: por cada material del catálogo el profesor guarda un
- * estado (pendiente / ok / fix), un checklist de calidad y notas.
- * Persistencia: localStorage (caché) + nube app_settings key
- * 'material_reviews' (multidispositivo). NO toca el progreso de alumnos.
- * "Enviar a soporte" inserta una fila en error_reports (reporter:'teacher')
- * que aparece en la bandeja 🐞 Reportes del panel de desarrollo. */
-const MAT_REVIEW_KEY = 'jucum_material_reviews_v1';
-function materialReviewKey(level, moduleId, activityId) { return `${level}:${moduleId}:${activityId}`; }
-function getMaterialReviews() {
-  try { const v = JSON.parse(localStorage.getItem(MAT_REVIEW_KEY) || '{}'); return (v && typeof v === 'object') ? v : {}; } catch { return {}; }
-}
-function getMaterialReview(key) { return getMaterialReviews()[key] || null; }
-function _saveMaterialReviews(all) {
-  localStorage.setItem(MAT_REVIEW_KEY, JSON.stringify(all));
-  try { if (window.JUCUM_SB) window.JUCUM_SB.getClient().from('app_settings').upsert({ key: 'material_reviews', value: all }, { onConflict: 'key' }).then(() => {}, () => {}); } catch {}
-}
-function setMaterialReview(key, patch) {
-  const all = getMaterialReviews();
-  all[key] = { ...(all[key] || {}), ...patch, updatedAt: new Date().toISOString() };
-  _saveMaterialReviews(all);
-  return all[key];
-}
-async function loadMaterialReviewsFromCloud() {
-  if (!window.JUCUM_SB) return getMaterialReviews();
-  try {
-    const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key', 'material_reviews').maybeSingle();
-    if (data && data.value && typeof data.value === 'object') localStorage.setItem(MAT_REVIEW_KEY, JSON.stringify(data.value));
-  } catch {}
-  return getMaterialReviews();
-}
-/* Envía una observación a la bandeja de soporte (error_reports · script 21). */
-async function sendMaterialReport({ level, module, activity, url, message }) {
-  if (!window.JUCUM_SB) return { ok: false, reason: 'sin conexión con la nube' };
-  try {
-    const row = {
-      id: 'er-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-      user_id: null, reporter: 'teacher', group_id: null,
-      module_id: module ? module.id : null,
-      activity_id: activity ? activity.id : null,
-      material_kind: activity ? activity.type : null,
-      material_name: activity ? activity.name : null,
-      part: null,
-      url: url || (activity ? activity.url : null) || null,
-      message: message, status: 'nuevo',
-    };
-    await window.JUCUM_SB.insert('error_reports', row);
-    return { ok: true, id: row.id };
-  } catch (e) { return { ok: false, reason: e.message }; }
-}
-window.JUCUM_DATA.materialReviewKey = materialReviewKey;
-window.JUCUM_DATA.getMaterialReviews = getMaterialReviews;
-window.JUCUM_DATA.getMaterialReview = getMaterialReview;
-window.JUCUM_DATA.setMaterialReview = setMaterialReview;
-window.JUCUM_DATA.loadMaterialReviewsFromCloud = loadMaterialReviewsFromCloud;
-window.JUCUM_DATA.sendMaterialReport = sendMaterialReport;
+/* ✨ Puntuaciones re-ganables + bonos persistentes + aviso de semana nueva */
+window.JUCUM_DATA.activityEarnedXP = activityEarnedXP;
+window.JUCUM_DATA.weeklyReEarnXP = weeklyReEarnXP;
+window.JUCUM_DATA.addBonusXP = addBonusXP;
+window.JUCUM_DATA.getBonusXPTotal = getBonusXPTotal;
+window.JUCUM_DATA.getBonusXPWeek = getBonusXPWeek;
+window.JUCUM_DATA.loadBonusXPFromCloud = loadBonusXPFromCloud;
+window.JUCUM_DATA.isNewWeekFor = isNewWeekFor;
+window.JUCUM_DATA.markWeekSeen = markWeekSeen;
+
+
+/* ── Meta diaria multi-equipo: hidratar minutos de HOY desde la nube ──
+ * Los materiales (jucum-connect) escriben daily_sessions; aquí se suman por
+ * alumno y getStudentProgress los mezcla con lo local. Refresco cada 3 min. */
+(function jecDailyLoader() {
+  function load() {
+    try {
+      if (!window.JUCUM_SB || !window.JUCUM_SB.getClient) return;
+      var day = peruDayStr();
+      window.JUCUM_SB.getClient().from('daily_sessions').select('user_id,minutes').eq('day', day)
+        .then(function (r) {
+          var rows = (r && r.data) || [];
+          var map = {};
+          rows.forEach(function (x) {
+            map[x.user_id] = map[x.user_id] || { day: day, minutes: 0 };
+            map[x.user_id].minutes += (x.minutes || 0);
+          });
+          window.__JEC_DAILY = map;
+        }, function () {});
+    } catch (e) {}
+  }
+  setTimeout(load, 2500);
+  setInterval(load, 3 * 60 * 1000);
+})();
+
+/* ── Bono semanal re-ganable: qué material practicó cada alumno y en qué SEMANA ──
+ * Lee daily_sessions (nube) de las últimas ~6 semanas y arma
+ *   window.__JEC_WEEKS[userId] = { 'YYYY-MM-DD(lunes)': { 'mod:act': true } }
+ * getStudentXP / weeklyReEarnXP lo usan para volver a premiar cada semana distinta
+ * en que repasan un material (una sola vez por material por semana). Refresco 5 min. */
+(function jecWeeklyLoader() {
+  function mondayOf(dayStr) {
+    var d = new Date(dayStr + 'T00:00:00Z');
+    var wd = (d.getUTCDay() + 6) % 7;            // 0 = lunes
+    d.setUTCDate(d.getUTCDate() - wd);
+    return d.toISOString().slice(0, 10);
+  }
+  function load() {
+    try {
+      if (!window.JUCUM_SB || !window.JUCUM_SB.getClient) return;
+      var since = new Date(Date.now() - 5 * 3600000 - 42 * 86400000).toISOString().slice(0, 10); // ~6 semanas (Perú)
+      window.JUCUM_SB.getClient().from('daily_sessions')
+        .select('user_id,day,module_id,activity_id').gte('day', since)
+        .then(function (r) {
+          var rows = (r && r.data) || [];
+          var map = {};
+          rows.forEach(function (x) {
+            var wk = mondayOf(x.day);
+            var key = x.module_id + ':' + x.activity_id;
+            map[x.user_id] = map[x.user_id] || {};
+            map[x.user_id][wk] = map[x.user_id][wk] || {};
+            map[x.user_id][wk][key] = true;
+          });
+          window.__JEC_WEEKS = map;
+        }, function () {});
+    } catch (e) {}
+  }
+  setTimeout(load, 3000);
+  setInterval(load, 5 * 60 * 1000);
+})();
+
+/* Trae los bonos persistentes (asistencia/encuesta) desde la nube al arrancar. */
+(function jecBonusLoader() {
+  function load() { try { if (window.JUCUM_DATA && window.JUCUM_DATA.loadBonusXPFromCloud) window.JUCUM_DATA.loadBonusXPFromCloud(); } catch (e) {} }
+  setTimeout(load, 3200);
+  setInterval(load, 5 * 60 * 1000);
+})();

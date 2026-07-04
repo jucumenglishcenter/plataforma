@@ -15,10 +15,10 @@
      (el tiempo inactivo nunca se registra como lectura).
    - Al terminar registra puntuación + minutos en Supabase y muestra una
      tarjeta con FRASE MOTIVACIONAL según el puntaje (motiva si va bien o mal).
-   - 1 intento que cuenta + mejora a la semana: la nota se registra al primer
-     intento; repetir esa MISMA práctica dentro de la semana NO cambia la nota
-     (el alumno puede practicar igual, libremente). Pasados 7 días, puede
-     reintentarla y nos quedamos con la MEJOR nota.
+   - Práctica libre, siempre la MEJOR nota: la nota se registra al terminar y, si
+     el alumno vuelve a practicar y mejora, se actualiza al instante (nunca baja).
+     El anti-farmeo lo maneja la plataforma (el XP de un material se re-gana una
+     vez por semana, no por cada intento del día).
    - Si el material se abre SIN ?jucum_uid (fuera de la plataforma), entra en
      MODO PRUEBA: el contador y el aviso de inactividad funcionan igual, pero
      NO se registra nada en la nube.
@@ -53,8 +53,8 @@
   // solo se registran como máximo estos minutos. Que lea de más es bienvenido,
   // simplemente no suma extra al reporte.
   var READING_CAP_MIN  = 30;
-  // Mejora de nota: la práctica se registra al primer intento; recién a la SEMANA
-  // puede reintentarla para mejorar (nos quedamos con la mejor nota).
+  // (Histórico) Antes había una ventana de 7 días para mejorar la nota; se quitó
+  // para que rehacer una práctica actualice el estado al instante. Constante sin uso.
   var RETRY_AFTER_MS   = 7 * 24 * 60 * 60 * 1000;
 
   // ── Leer identidad desde la URL ──
@@ -108,9 +108,8 @@
     }
 
     // ── Intentos: 1 registro por práctica, mejorable a la SEMANA ──
-    // Guardamos cuándo se hizo el primer intento. Dentro de la semana, repetir
-    // la práctica NO cambia la nota (igual puede practicar libremente). Pasada
-    // la semana, puede reintentar y nos quedamos con la MEJOR nota.
+    // Guardamos cuándo se hizo el PRIMER intento (solo informativo). La nota se
+    // puede mejorar en cualquier momento: siempre nos quedamos con la MEJOR.
     var ATTEMPT_KEY = 'jucum_attempt_' + (uid || 'demo') + '_' + modId + '_' + actId;
     var activeSec = 0;          // segundos de práctica real acumulados
     var idleSec = 0;            // segundos sin actividad
@@ -308,20 +307,20 @@
         return;
       }
 
+      // Bug reportado: una nota baja quedaba "congelada" 7 días → el material se
+      // atascaba en 0% aunque el alumno lo rehiciera bien. Ahora SIEMPRE registramos
+      // quedándonos con la MEJOR nota: si el alumno vuelve a practicar y mejora, su
+      // estado y sus puntos se actualizan al instante. Puede repasar cuando quiera.
+      // El anti-farmeo lo maneja la plataforma: el XP de un material se vuelve a ganar
+      // UNA vez por semana (no por cada intento del día).
       var firstTs = parseInt(localStorage.getItem(ATTEMPT_KEY) || '0', 10);
       var now = Date.now();
-      // Dentro de la semana del primer intento → practica libre, pero la nota NO cambia.
-      if (firstTs && (now - firstTs) < RETRY_AFTER_MS) {
-        var fecha = new Date(firstTs + RETRY_AFTER_MS).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' });
-        showResultCard(pct, '📌 Tu nota guardada se mantiene. Podrás intentar mejorarla a partir del ' + fecha + '. ¡Mientras tanto, sigue practicando!', score != null, lowStakes);
-        return;
-      }
-      // Primer intento, o ya pasó la semana → registra quedándonos con la MEJOR nota.
       improveProgress(pct, minutes, function (prev) {
-        localStorage.setItem(ATTEMPT_KEY, String(now)); // (re)inicia la ventana de una semana
+        if (!firstTs) localStorage.setItem(ATTEMPT_KEY, String(now));
         var msg;
         if (prev == null) msg = '✅ Práctica registrada · ' + minutes + ' min' + (score != null ? ' · ' + pct + '%' : '');
         else if (score != null && pct > prev) msg = '🎉 ¡Mejoraste tu nota! Antes ' + prev + '% → ahora ' + pct + '%.';
+        else if (score != null && pct === prev) msg = '👍 Practicaste de nuevo. Tu nota (' + prev + '%) se mantiene.';
         else if (score != null) msg = '👍 Lo intentaste de nuevo. Tu mejor nota (' + prev + '%) se mantiene.';
         else msg = '✅ Práctica registrada · ' + minutes + ' min';
         showResultCard(pct, msg, score != null, lowStakes);
