@@ -396,6 +396,16 @@
       // Nota por PARTE: el material envía story/audio/part; lo guardamos aparte.
       var part = (d.part != null) ? d.part : (d.story != null ? d.story : (d.audio != null ? d.audio : null));
       if (part != null) pushPart(part, (d.score != null) ? d.score : null, Math.max(1, Math.round(activeSec / 60)));
+      if (IS_STORY || d.type === 'story' || d.type === 'dialog') {
+        // Stories/diálogos = lectura sin nota: registra en silencio, SIN tarjeta emergente.
+        if (!done) {
+          done = true; updateChip(); pushDaily();
+          var minsSt = Math.max(1, Math.min(READING_CAP_MIN, Math.round(activeSec / 60)));
+          try { if (window.parent && window.parent !== window) window.parent.postMessage({ source: 'jucum-connect', type: 'done', uid: uid, mod: modId, act: actId, score: null, minutes: minsSt }, '*'); } catch (e2) {}
+          if (!demo) pushProgress(100, minsSt);
+        }
+        return;
+      }
       complete((d.score != null) ? d.score : 80, lowStakes);
     });
 
