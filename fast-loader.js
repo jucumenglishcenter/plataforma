@@ -79,8 +79,51 @@
       });
       try { window.Babel.transformScriptTags(); } catch (e) { console.error(e); }
       setTimeout(unmountSplash, 400);
+      scheduleHealCheck();
     }, function () { unmountSplash(); });
   }
+
+  /* ── Auto-reparación de pantalla en blanco ────────────────────────
+   * Si un despliegue dejó un script CACHEADO a medias, la app puede arrancar en
+   * blanco. Ctrl+Shift+R no arregla esto (no borra el caché en localStorage). Aquí
+   * lo detectamos: si a los 7 s no hay nada montado en #root, limpiamos el caché de
+   * compilado y recargamos UNA sola vez (guardia en sessionStorage evita bucles).
+   * Así ningún alumno queda atascado sin tocar la consola. */
+  var HEAL_KEY = 'jucum_selfheal_v2';
+  function clearCompiledCache() {
+    try {
+      for (var i = localStorage.length - 1; i >= 0; i--) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(PREFIX) === 0) localStorage.removeItem(k);
+      }
+    } catch (e) {}
+  }
+  function appMounted() {
+    var r = document.getElementById('root');
+    return !!(r && r.children.length > 0 && (r.textContent || '').replace(/\s/g, '').length > 0);
+  }
+  function selfHeal(reason) {
+    try { if (sessionStorage.getItem(HEAL_KEY) === '1') return false; } catch (e) {}  // ya se intentó → no repetir
+    try { sessionStorage.setItem(HEAL_KEY, '1'); } catch (e) {}
+    try { console.warn('fast-loader auto-reparación (' + reason + '): limpio caché y recargo'); } catch (e) {}
+    clearCompiledCache();
+    try { var u = new URL(location.href); u.searchParams.set('_heal', Date.now().toString()); location.replace(u.toString()); }
+    catch (e) { location.reload(); }
+    return true;
+  }
+  function scheduleHealCheck() {
+    setTimeout(function () {
+      if (appMounted()) { try { sessionStorage.removeItem(HEAL_KEY); } catch (e) {} return; }  // arrancó bien → permite reparar en el futuro
+      selfHeal('pantalla-en-blanco');
+    }, 7000);
+  }
+  // Un error JS ANTES de que monte la app suele ser un script cacheado roto:
+  // reparamos rápido (con un respiro por si la app monta justo después).
+  window.addEventListener('error', function (ev) {
+    if (ev && (ev.message || ev.error) && !appMounted()) {
+      setTimeout(function () { if (!appMounted()) selfHeal('error-arranque'); }, 600);
+    }
+  }, true);
 
   function boot() {
     prune();
@@ -92,6 +135,7 @@
       try { LIST.forEach(function (src, i) { exec(cached[i], src); }); }
       catch (e) { return fallback(e); }
       unmountSplash();
+      scheduleHealCheck();
       return;
     }
 
@@ -117,6 +161,7 @@
       });
       codes.forEach(function (code, i) { exec(code, LIST[i]); });
       unmountSplash();
+      scheduleHealCheck();
     }).catch(fallback);
   }
 

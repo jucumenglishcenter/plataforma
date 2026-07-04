@@ -864,10 +864,11 @@ function activityEarnedXP(entry, key, student) {
 
 /* ── Bono semanal re-ganable · UNA vez por material por semana ───────
  * daily_sessions (nube) registra qué material se practicó y qué día. Agrupado por
- * semana ISO sabemos en cuántas SEMANAS DISTINTAS se practicó cada material. La 1.ª
- * semana ya la cuenta el XP base; cada semana ADICIONAL vuelve a premiar (mitad del
- * XP del material). Repetir el MISMO DÍA no suma (daily_sessions agrupa por día →
- * una semana cuenta una sola vez): evita el farmeo diario y premia la constancia. */
+ * semana ISO sabemos en cuántas SEMANAS DISTINTAS se practicó cada material. Cada
+ * semana en que lo practican vuelve a premiar (mitad del XP del material), además
+ * del XP base por completarlo. Repetir el MISMO DÍA no suma (daily_sessions agrupa
+ * por día → una semana cuenta una sola vez): evita el farmeo diario y premia la
+ * constancia semanal, tanto en la práctica del día como en los repasos. */
 const WEEKLY_REEARN_CAP = 8;   // tope de semanas que suman por material (seguridad)
 function _weeksPracticed(studentId, key) {
   try {
@@ -883,9 +884,9 @@ function weeklyReEarnXP(student) {
   let xp = 0;
   for (const key of Object.keys(progress.completed || {})) {
     const weeks = Math.min(WEEKLY_REEARN_CAP, _weeksPracticed(student.id, key));
-    if (weeks <= 1) continue;   // solo semanas ADICIONALES a la primera
+    if (weeks < 1) continue;   // cada semana distinta en que lo practicaron paga
     const per = Math.max(3, Math.round(activityEarnedXP(progress.completed[key], key, student) * 0.5));
-    xp += (weeks - 1) * per;
+    xp += weeks * per;
   }
   return xp;
 }
