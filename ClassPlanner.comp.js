@@ -654,6 +654,10 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
   const setStepMeta = (i, patch) => setGuide(g => ({ ...g, steps: g.steps.map((s, k) => { if (k !== i) return s; const ns = { ...s, ...patch }; ns.focus = focusText(ns); return ns; }) }));
   const moveStep = (i, dir) => setGuide(g => { const arr = g.steps.slice(); const j = i + dir; if (j < 0 || j >= arr.length) return g; const t = arr[i]; arr[i] = arr[j]; arr[j] = t; return { ...g, steps: arr }; });
   const delStep = (i) => setGuide(g => ({ ...g, steps: g.steps.filter((_, k) => k !== i) }));
+  const updLine = (i, key, li, val) => setGuide(g => ({ ...g, steps: g.steps.map((s, k) => k === i ? { ...s, [key]: (s[key] || []).map((x, j) => j === li ? val : x) } : s) }));
+  const addLine = (i, key) => setGuide(g => ({ ...g, steps: g.steps.map((s, k) => k === i ? { ...s, [key]: [...(s[key] || []), ''] } : s) }));
+  const delLine = (i, key, li) => setGuide(g => ({ ...g, steps: g.steps.map((s, k) => k === i ? { ...s, [key]: (s[key] || []).filter((_, j) => j !== li) } : s) }));
+  const addGuideBlock = () => setGuide(g => ({ ...g, steps: [...g.steps, { emoji: '•', title: 'Nuevo bloque', type: 'custom', linesEs: [''], linesEn: [''] }] }));
   const loadFav = (favId) => { const f = (TT.getGuideFavs() || []).find(x => x.id === favId); if (!f) return; const g = JSON.parse(JSON.stringify(f.guide)); g.title = title; g.note = note; g.moduleName = mod ? mod.name : g.moduleName; setGuide(g); };
   const saveFav = () => { const g = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }); if (!guide) setGuide(g); const name = window.prompt('Ponle un nombre a este instructivo favorito (para reconocerlo después):', title || 'Mi instructivo'); if (!name) return; TT.addGuideFav(name.trim(), g); setFavTick(t => t + 1); alert('⭐ Guardado en favoritos como “' + name.trim() + '”'); };
   const delFav = (id) => { if (window.confirm('¿Borrar este instructivo favorito?')) { TT.deleteGuideFav(id); setFavTick(t => t + 1); } };
@@ -916,8 +920,10 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
               {guide.steps.map((s, i) => (
                 <div key={i} style={{border:'1px solid #E3DCC9', borderRadius:12, padding:'11px 13px', background:'#fff'}}>
                   <div style={{display:'flex', alignItems:'center', gap:9, marginBottom:7}}>
-                    <span style={{width:22, height:22, flexShrink:0, borderRadius:7, background:'#1F3A8A', color:'#fff', fontWeight:800, fontSize:12, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>{i + 1}</span>
-                    <div style={{flex:1, fontWeight:800, fontSize:13.5}}>{s.emoji} {s.title} {s.group ? <span style={{fontSize:11, color:'#6C4FB0', fontWeight:800}}>· {s.group}</span> : null} {s.review ? <span style={{fontSize:10, color:'#fff', background:'#E67E00', borderRadius:8, padding:'2px 7px', fontWeight:800}}>🔁 repaso {s.reviewModule || ''}</span> : null}</div>
+                    <span style={{width:22, height:22, flexShrink:0, borderRadius:7, background:'#6C4FB0', color:'#fff', fontWeight:800, fontSize:12, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>{i + 1}</span>
+                    <input value={s.emoji || ''} onChange={e => updateStep(i, { emoji: e.target.value })} style={{width:34, textAlign:'center', border:'1px solid #E3DCC9', borderRadius:8, padding:'5px 2px', fontSize:14}} />
+                    <input value={s.title || ''} onChange={e => updateStep(i, { title: e.target.value })} style={{flex:1, minWidth:100, border:'1px solid #E3DCC9', borderRadius:8, padding:'6px 9px', fontWeight:700, fontSize:13.5}} />
+                    {s.review ? <span style={{fontSize:10, color:'#fff', background:'#E67E00', borderRadius:8, padding:'2px 7px', fontWeight:800, whiteSpace:'nowrap'}}>🔁 repaso {s.reviewModule || ''}</span> : null}
                     <button title="Subir" onClick={() => moveStep(i, -1)} disabled={i === 0} style={{...iconBtn, opacity: i === 0 ? .4 : 1}}>↑</button>
                     <button title="Bajar" onClick={() => moveStep(i, 1)} disabled={i === guide.steps.length - 1} style={{...iconBtn, opacity: i === guide.steps.length - 1 ? .4 : 1}}>↓</button>
                     <button title="Quitar" onClick={() => delStep(i)} style={{...iconBtn, color:'#C0392B', borderColor:'#E2B6AE'}}>🗑️</button>
@@ -949,22 +955,33 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
                     </div>
                   )}
 
-                  {lang !== 'par' ? (<>
-                    <div style={{fontSize:10.5, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'.03em', marginBottom:3}}>Pasos · {lang === 'en' ? 'English' : 'Español'} (uno por línea)</div>
-                    <textarea value={((lang === 'en' ? s.linesEn : s.linesEs) || []).join('\n')} onChange={e => updateStep(i, lang === 'en' ? { linesEn: e.target.value.split('\n').filter(x => x.trim() !== '') } : { linesEs: e.target.value.split('\n').filter(x => x.trim() !== '') })} rows={Math.max(2, ((lang === 'en' ? s.linesEn : s.linesEs) || []).length)} style={{width:'100%', border:'1px solid #E3DCC9', borderRadius:9, padding:'8px 10px', fontSize:12.5, fontFamily:'inherit', fontWeight:600, lineHeight:1.5, resize:'vertical', color:'#444'}} />
-                    <div style={{display:'flex', alignItems:'center', gap:8, marginTop:7}}>
-                      <span style={{fontSize:12, fontWeight:800, color:'#9c6a00'}}>📌</span>
-                      <input value={(lang === 'en' ? s.noteEn : s.noteEs) || ''} onChange={e => updateStep(i, lang === 'en' ? { noteEn: e.target.value } : { noteEs: e.target.value })} placeholder="Nota del paso (opcional)" style={{flex:1, border:'1px solid #F2DFB0', background:'#FFFDF7', borderRadius:8, padding:'6px 9px', fontSize:12, fontFamily:'inherit', fontWeight:700, color:'#9c6a00'}} />
-                    </div>
-                  </>) : (<>
-                    <div style={{fontSize:10.5, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'.03em', marginBottom:3}}>Pasos · English (uno por línea)</div>
-                    <textarea value={(s.linesEn || []).join('\n')} onChange={e => updateStep(i, { linesEn: e.target.value.split('\n').filter(x => x.trim() !== '') })} rows={Math.max(2, (s.linesEn || []).length)} style={{width:'100%', border:'1px solid #E3DCC9', borderRadius:9, padding:'8px 10px', fontSize:12.5, fontFamily:'inherit', fontWeight:600, lineHeight:1.5, resize:'vertical', color:'#444'}} />
-                    <div style={{fontSize:10.5, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'.03em', margin:'8px 0 3px'}}>Traducción · Español</div>
-                    <textarea value={(s.linesEs || []).join('\n')} onChange={e => updateStep(i, { linesEs: e.target.value.split('\n').filter(x => x.trim() !== '') })} rows={Math.max(2, (s.linesEs || []).length)} style={{width:'100%', border:'1px solid #E3DCC9', borderRadius:9, padding:'8px 10px', fontSize:12.5, fontFamily:'inherit', fontWeight:600, lineHeight:1.5, resize:'vertical', color:'#777', fontStyle:'italic'}} />
-                  </>)}
+                  {(() => {
+                    const renderLines = (key, label, italic) => {
+                      const arr = s[key] || [];
+                      return (
+                        <div style={{marginTop:4}}>
+                          <div style={{fontSize:10.5, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'.03em', marginBottom:5}}>{label}</div>
+                          <div style={{display:'flex', flexDirection:'column', gap:5}}>
+                            {arr.map((ln, li) => (
+                              <div key={li} style={{display:'flex', alignItems:'center', gap:7}}>
+                                <span style={{color:'#B0A88F', fontSize:12}}>•</span>
+                                <input value={ln} onChange={e => updLine(i, key, li, e.target.value)} style={{flex:1, border:'1px solid #EFE8D6', borderRadius:7, padding:'6px 9px', fontSize:12.5, fontFamily:'inherit', fontWeight:600, color: italic ? '#777' : '#444', fontStyle: italic ? 'italic' : 'normal'}} />
+                                <button onClick={() => delLine(i, key, li)} style={{...iconBtn, width:24, height:24, color:'#C0392B'}}>×</button>
+                              </div>
+                            ))}
+                            <button onClick={() => addLine(i, key)} style={{alignSelf:'flex-start', border:'1px dashed #cdb86a', background:'none', color:'#8a7320', borderRadius:8, padding:'4px 10px', fontSize:11.5, fontWeight:700, cursor:'pointer', marginTop:2}}>+ paso</button>
+                          </div>
+                        </div>
+                      );
+                    };
+                    if (lang === 'en') return renderLines('linesEn', 'Pasos · English', false);
+                    if (lang === 'par') return (<>{renderLines('linesEn', 'Pasos · English', false)}{renderLines('linesEs', 'Traducción · Español', true)}</>);
+                    return renderLines('linesEs', 'Pasos · Español', false);
+                  })()}
                 </div>
               ))}
             </div>
+            <button onClick={addGuideBlock} style={{marginTop:12, border:'1.5px dashed #C9A8E8', background:'none', color:'#5B3FA0', borderRadius:10, padding:'9px 14px', fontWeight:800, fontSize:13, cursor:'pointer', width:'100%'}}>+ Agregar bloque</button>
             <div style={{display:'flex', gap:10, flexWrap:'wrap', marginTop:12}}>
               <button onClick={previewGuide} style={{...btnGhost, borderColor:'#9FB0DA', color:'#3F5BB8'}}>👁️ Ver como lo verá el alumno</button>
               <button onClick={saveFav} style={{...btnGhost, borderColor:'#C9A8E8', color:'#5B3FA0'}}>⭐ Guardar como favorito</button>

@@ -148,12 +148,16 @@
     var kind = KIND_OF[a.type] || 'reading';
     var data = defaultStepData(level, kind, a.group);
     var es = data.es || { lines: [] }, en = data.en || { lines: [] };
+    var fparts = [];
+    if (a.type === 'story') { if (a.storyNo) fparts.push('Historia #' + a.storyNo); if (a.dialogNo) fparts.push('Diálogo #' + a.dialogNo); }
+    else if (a.type === 'reading') { if (a.storyNo) fparts.push('Historia #' + a.storyNo); }
+    else if (a.type === 'listening') { if (a.storyNo) fparts.push('Audio #' + a.storyNo); }
     return {
       emoji: TYPE_ICON[a.type] || '•', title: label, group: a.group || null, type: a.type, kind: kind,
       min: MIN_OF[kind] || 10,
       linesEs: (es.lines || []).slice(), linesEn: (en.lines || []).slice(),
       noteEs: es.note || '', noteEn: en.note || '',
-      tema: a.group || null, storyNo: a.storyNo || null, dialogNo: a.dialogNo || null, focus: '',
+      tema: a.group || null, storyNo: a.storyNo || null, dialogNo: a.dialogNo || null, focus: fparts.join(' · '),
       review: !!a.review, reviewModule: a.moduleName || '',
       moduleId: a.moduleId || null, activityId: a.activityId || null
     };
