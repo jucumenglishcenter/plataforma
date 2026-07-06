@@ -766,6 +766,15 @@ function _actTypeOf(moduleId, activityId, level) {
 const PROGRESS_KEY = 'jucum_student_progress_v1';
 /* Días con práctica por alumno (solo se AGREGA, nunca se pisa) — fuente local de la racha. */
 const ACTIVE_DAYS_KEY = 'jucum_active_days_v1';
+/* Días activos desde fuentes que NO se sobreescriben: daily_sessions (nube,
+ * window.__JEC_DAYS) + registro local. entry.date se pisa en cada reintento,
+ * así que racha/constancia/días del mes deben unir estas fuentes. */
+function getExtraActiveDays(studentId) {
+  const out = new Set();
+  try { const m = window.__JEC_DAYS && window.__JEC_DAYS[studentId]; if (m) Object.keys(m).forEach(d => out.add(d)); } catch (e) {}
+  try { const ad = JSON.parse(localStorage.getItem(ACTIVE_DAYS_KEY) || '{}'); (ad[studentId] || []).forEach(d => out.add(d)); } catch (e) {}
+  return out;
+}
 function getStudentProgress(studentId) {
   let all = {};
   try { all = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); } catch {}
@@ -1311,6 +1320,7 @@ function getStudentMastery(student) {
   const peruDay = t => new Date((typeof t === 'number' ? t : Date.parse(t)) - 5 * 3600000).toISOString().slice(0, 10);
   const activeDays = new Set();
   Object.values(completed).forEach(e => { if (e && e.date) activeDays.add(peruDay(e.date)); });
+  getExtraActiveDays(student.id).forEach(d => activeDays.add(d));   // 🔥 días reales (no se pisan)
   let active7 = 0;
   for (let i = 0; i < 7; i++) {
     if (activeDays.has(peruDay(Date.now() - i * 86400000))) active7++;
@@ -1499,6 +1509,11 @@ function getStudentMonthlyPractice(student) {
     if (!e || !e.date) return;
     const d = new Date(e.date);
     if (d.getFullYear() === y && d.getMonth() === mo) { days.add(peruDayStr(e.date)); minutes += e.minutes || 0; }
+  });
+  // 🔥 días reales del mes (daily_sessions + registro local; entry.date se pisa al reintentar)
+  getExtraActiveDays(student.id).forEach(ds => {
+    const dt = new Date(ds + 'T12:00:00-05:00');
+    if (dt.getFullYear() === y && dt.getMonth() === mo) days.add(ds);
   });
   const targetDays = Math.max(1, Math.round(elapsedDays * 5 / 7));
   const daysStudied = days.size;
