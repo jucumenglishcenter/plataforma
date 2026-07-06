@@ -15,10 +15,10 @@
      (el tiempo inactivo nunca se registra como lectura).
    - Al terminar registra puntuación + minutos en Supabase y muestra una
      tarjeta con FRASE MOTIVACIONAL según el puntaje (motiva si va bien o mal).
-   - Práctica libre, siempre la MEJOR nota: la nota se registra al terminar y, si
-     el alumno vuelve a practicar y mejora, se actualiza al instante (nunca baja).
-     El anti-farmeo lo maneja la plataforma (el XP de un material se re-gana una
-     vez por semana, no por cada intento del día).
+   - 1 intento que cuenta + mejora a la semana: la nota se registra al primer
+     intento; repetir esa MISMA práctica dentro de la semana NO cambia la nota
+     (el alumno puede practicar igual, libremente). Pasados 7 días, puede
+     reintentarla y nos quedamos con la MEJOR nota.
    - Si el material se abre SIN ?jucum_uid (fuera de la plataforma), entra en
      MODO PRUEBA: el contador y el aviso de inactividad funcionan igual, pero
      NO se registra nada en la nube.
@@ -53,8 +53,8 @@
   // solo se registran como máximo estos minutos. Que lea de más es bienvenido,
   // simplemente no suma extra al reporte.
   var READING_CAP_MIN  = 30;
-  // (Histórico) Antes había una ventana de 7 días para mejorar la nota; se quitó
-  // para que rehacer una práctica actualice el estado al instante. Constante sin uso.
+  // Mejora de nota: la práctica se registra al primer intento; recién a la SEMANA
+  // puede reintentarla para mejorar (nos quedamos con la mejor nota).
   var RETRY_AFTER_MS   = 7 * 24 * 60 * 60 * 1000;
 
   // ── Leer identidad desde la URL ──
@@ -108,31 +108,14 @@
     }
 
     // ── Intentos: 1 registro por práctica, mejorable a la SEMANA ──
-    // Guardamos cuándo se hizo el PRIMER intento (solo informativo). La nota se
-    // puede mejorar en cualquier momento: siempre nos quedamos con la MEJOR.
+    // Guardamos cuándo se hizo el primer intento. Dentro de la semana, repetir
+    // la práctica NO cambia la nota (igual puede practicar libremente). Pasada
+    // la semana, puede reintentar y nos quedamos con la MEJOR nota.
     var ATTEMPT_KEY = 'jucum_attempt_' + (uid || 'demo') + '_' + modId + '_' + actId;
     var activeSec = 0;          // segundos de práctica real acumulados
     var idleSec = 0;            // segundos sin actividad
     var done = false;           // ya registrado en esta sesión
     var paused = false;         // conteo pausado por inactividad (sin cerrar nada)
-
-    // ── Sesiones diarias (meta diaria multi-equipo) ──
-    // Guarda los minutos de HOY por actividad en la tabla daily_sessions; la
-    // plataforma los suma para el anillo de meta diaria en CUALQUIER equipo.
-    function peruDay() { return new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10); }
-    var dayStart = peruDay();
-    var activeDaySec = 0;
-    function pushDaily() {
-      if (demo || !ensureSb()) return;
-      var d = peruDay();
-      if (d !== dayStart) { activeDaySec = 0; dayStart = d; return; }
-      var mins = Math.round(activeDaySec / 60);
-      if (mins < 1) return;
-      sb.from('daily_sessions').upsert({
-        user_id: uid, day: d, module_id: modId, activity_id: actId,
-        kind: KIND || '', minutes: mins, updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id,day,module_id,activity_id' }).then(function () {}, function () {});
-    }
 
     // ── Chip flotante con el tiempo activo ──
     var chip = document.createElement('div');
@@ -180,59 +163,6 @@
       el.addEventListener('pointercancel', end);
     })(chip);
 
-    // ── 🐞 Reporte de errores UNIVERSAL (todos los materiales) ──
-    // Botón flotante junto al cronómetro; guarda en error_reports (bandeja 🐞 del panel).
-    function jecSendReport(msg, kindSel) {
-      var row = {
-        status: 'nuevo', reporter: teacher ? 'profesor' : (uid ? 'alumno' : 'anonimo'),
-        user_id: uid || 'demo', group_id: groupId || null, material_kind: KIND || '',
-        material_name: matName || (modId + ' · ' + actId), module_id: modId, activity_id: actId,
-        part: (typeof activePart !== 'undefined' && activePart != null) ? Number(activePart) : null,
-        message: (kindSel ? '[' + kindSel + '] ' : '') + msg,
-        url: location.href.split('?')[0], created_at: new Date().toISOString()
-      };
-      if (ensureSb()) {
-        sb.from('error_reports').insert(row).then(function () { toast('✓ Reporte enviado. ¡Gracias por avisar!'); },
-          function () { toast('No se pudo enviar. Intenta de nuevo con internet.'); });
-      } else if (teacher && window.supabase) {
-        try { window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY).from('error_reports').insert(row).then(function(){ toast('✓ Reporte enviado'); }, function(){ toast('No se pudo enviar.'); }); } catch (e) { toast('Sin conexión con la nube.'); }
-      } else {
-        toast('Modo prueba: el reporte no se registra.');
-      }
-    }
-    var bugBtn = document.createElement('button');
-    bugBtn.id = 'jec-bug-btn'; bugBtn.textContent = '🐞';
-    bugBtn.title = 'Reportar un error de este material';
-    bugBtn.style.cssText = 'position:fixed;bottom:14px;left:14px;z-index:999997;width:40px;height:40px;border-radius:50%;border:none;background:#8D6E63;color:#fff;font-size:18px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.25);';
-    bugBtn.onclick = function () {
-      if (document.getElementById('jec-bug-ov')) return;
-      var ov = document.createElement('div'); ov.id = 'jec-bug-ov';
-      ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:1000000;display:flex;align-items:center;justify-content:center;padding:16px;font-family:system-ui,sans-serif;';
-      ov.innerHTML = '<div style="background:#fff;border-radius:18px;max-width:380px;width:100%;padding:18px 20px;">'
-        + '<div style="font-weight:800;font-size:16px;margin-bottom:2px;">🐞 Reportar un error</div>'
-        + '<div style="font-size:12px;color:#666;font-weight:600;margin-bottom:10px;">Cuéntanos qué viste en este material. Llega directo al equipo.</div>'
-        + '<select id="jec-bug-kind" style="width:100%;padding:9px;border:1.5px solid #ddd;border-radius:10px;font-weight:700;font-size:13px;margin-bottom:8px;">'
-        + '<option>Respuesta marcada parece equivocada</option><option>Error de escritura / traducción</option><option>Audio no se entiende</option><option>Algo no funciona (botón, pantalla)</option><option>Otro</option></select>'
-        + '<textarea id="jec-bug-msg" rows="3" placeholder="Describe el problema… (opcional pero ayuda)" style="width:100%;box-sizing:border-box;padding:9px;border:1.5px solid #ddd;border-radius:10px;font-size:13px;font-family:inherit;"></textarea>'
-        + '<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">'
-        + '<button id="jec-bug-cancel" style="padding:9px 16px;border:1.5px solid #ccc;background:#fff;border-radius:20px;font-weight:800;cursor:pointer;">Cancelar</button>'
-        + '<button id="jec-bug-send" style="padding:9px 18px;border:none;background:#8D6E63;color:#fff;border-radius:20px;font-weight:800;cursor:pointer;">Enviar reporte</button></div></div>';
-      document.body.appendChild(ov);
-      document.getElementById('jec-bug-cancel').onclick = function () { ov.remove(); };
-      document.getElementById('jec-bug-send').onclick = function () {
-        var k = document.getElementById('jec-bug-kind').value;
-        var m = document.getElementById('jec-bug-msg').value.trim();
-        ov.remove(); jecSendReport(m || '-', k);
-      };
-    };
-    document.body.appendChild(bugBtn);
-    window.JUCUM_CONNECT = window.JUCUM_CONNECT || {};
-    window.JUCUM_CONNECT.report = function (msg, kind, part) {
-      if (part != null) { try { activePart = Number(part); } catch (e) {} }
-      jecSendReport(String(msg || '-'), kind || null);
-    };
-
-
     function fmt(sec) {
       return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
     }
@@ -261,17 +191,15 @@
       // nunca bloquea. Solo registra el tiempo de lectura (lo que monitoreamos).
       if (IS_STORY) {
         if (document.visibilityState !== 'hidden') {
-          activeSec++; activeDaySec++;
-          if (!demo && activeSec % 120 === 0) pushDaily();
+          activeSec++;
           var capMin = Math.min(READING_CAP_MIN, Math.round(activeSec / 60)); // tope silencioso para el reporte
           if (!done && activeSec >= AUTO_DONE_SEC && !teacher && !exam) {
             done = true; // marcada como practicada (desbloquea la siguiente) — sin cooldown ni tarjeta
             try { if (window.parent && window.parent !== window) window.parent.postMessage({ source: 'jucum-connect', type: 'done', uid: uid, mod: modId, act: actId, score: null, minutes: Math.max(1, capMin) }, '*'); } catch (e) {}
-            if (!demo) pushProgress(100, Math.max(1, capMin));
-            if (!demo && activePart != null) pushPart(activePart, null, Math.max(1, capMin)); // qué historia leyó (nube)
+            if (!demo) pushProgress(null, Math.max(1, capMin)); // lectura = participación (sin nota): no infla dominio ni Speaking
           }
           // refresca el tiempo de lectura cada 2 min (hasta el tope) para que el profesor lo vea
-          if (!demo && done && activeSec % 120 === 0 && Math.round(activeSec / 60) <= READING_CAP_MIN) pushProgress(100, capMin);
+          if (!demo && done && activeSec % 120 === 0 && Math.round(activeSec / 60) <= READING_CAP_MIN) pushProgress(null, capMin);
           if (teacher && activeSec % 60 === 0) logClass();
         }
         updateChip();
@@ -283,8 +211,7 @@
       idleSec++;
       paused = idleSec >= WARN_AFTER_SEC;
       if (!done && !paused) {
-        activeSec++; activeDaySec++;
-        if (!demo && activeSec % 120 === 0) pushDaily();
+        activeSec++;
         if (teacher && activeSec % 60 === 0) logClass();
       }
       updateChip();
@@ -295,7 +222,6 @@
       done = true;
       updateChip();
       var minutes = Math.max(1, Math.round(activeSec / 60));
-      pushDaily(); // asegura los minutos del día antes de registrar la nota
       var pct = score == null ? 100 : score;
 
       // Puente con la plataforma: si el material está EMBEBIDO en una tarea,
@@ -307,20 +233,20 @@
         return;
       }
 
-      // Bug reportado: una nota baja quedaba "congelada" 7 días → el material se
-      // atascaba en 0% aunque el alumno lo rehiciera bien. Ahora SIEMPRE registramos
-      // quedándonos con la MEJOR nota: si el alumno vuelve a practicar y mejora, su
-      // estado y sus puntos se actualizan al instante. Puede repasar cuando quiera.
-      // El anti-farmeo lo maneja la plataforma: el XP de un material se vuelve a ganar
-      // UNA vez por semana (no por cada intento del día).
       var firstTs = parseInt(localStorage.getItem(ATTEMPT_KEY) || '0', 10);
       var now = Date.now();
+      // Dentro de la semana del primer intento → practica libre, pero la nota NO cambia.
+      if (firstTs && (now - firstTs) < RETRY_AFTER_MS) {
+        var fecha = new Date(firstTs + RETRY_AFTER_MS).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' });
+        showResultCard(pct, '📌 Tu nota guardada se mantiene. Podrás intentar mejorarla a partir del ' + fecha + '. ¡Mientras tanto, sigue practicando!', score != null, lowStakes);
+        return;
+      }
+      // Primer intento, o ya pasó la semana → registra quedándonos con la MEJOR nota.
       improveProgress(pct, minutes, function (prev) {
-        if (!firstTs) localStorage.setItem(ATTEMPT_KEY, String(now));
+        localStorage.setItem(ATTEMPT_KEY, String(now)); // (re)inicia la ventana de una semana
         var msg;
         if (prev == null) msg = '✅ Práctica registrada · ' + minutes + ' min' + (score != null ? ' · ' + pct + '%' : '');
         else if (score != null && pct > prev) msg = '🎉 ¡Mejoraste tu nota! Antes ' + prev + '% → ahora ' + pct + '%.';
-        else if (score != null && pct === prev) msg = '👍 Practicaste de nuevo. Tu nota (' + prev + '%) se mantiene.';
         else if (score != null) msg = '👍 Lo intentaste de nuevo. Tu mejor nota (' + prev + '%) se mantiene.';
         else msg = '✅ Práctica registrada · ' + minutes + ' min';
         showResultCard(pct, msg, score != null, lowStakes);
@@ -356,55 +282,10 @@
       });
     }
 
-    // ── Progreso POR PARTE (historia/audio/diálogo dentro del material) ──
-    // Se guarda en la tabla activity_parts SIN tocar la fila principal de
-    // 'progress' (que alimenta el dominio). Así el profesor ve exactamente qué
-    // historia/comprensión/audio hizo, y el material puede sembrar su desbloqueo
-    // secuencial desde la nube en CUALQUIER equipo.
-    var activePart = null;
-    function pushPart(part, score, minutes) {
-      if (demo || part == null || !ensureSb()) return;
-      sb.from('activity_parts').upsert({
-        user_id: uid, module_id: modId, activity_id: actId, part: Number(part),
-        score: (score == null ? null : score), minutes: minutes || 0,
-        completed_at: new Date().toISOString()
-      }, { onConflict: 'user_id,module_id,activity_id,part' }).then(function (r) {
-        if (r && r.error) console.warn('jucum-connect parts:', r.error.message);
-      }, function () {});
-    }
-    window.JUCUM_CONNECT = window.JUCUM_CONNECT || {};
-    // El material avisa qué parte está abierta (para stories sin quiz).
-    window.JUCUM_CONNECT.setActivePart = function (n) { activePart = (n == null ? null : Number(n)); };
-    // El material lee qué partes ya completó el alumno (desde la nube) para sembrar
-    // su desbloqueo secuencial en cualquier equipo. cb recibe [{part, score}, ...].
-    window.JUCUM_CONNECT.getCompletedParts = function (cb) {
-      if (typeof cb !== 'function') return;
-      if (demo || !ensureSb()) { cb([]); return; }
-      sb.from('activity_parts').select('part,score')
-        .eq('user_id', uid).eq('module_id', modId).eq('activity_id', actId)
-        .then(function (r) { cb(((r && r.data) || []).map(function (x) { return { part: x.part, score: x.score }; })); },
-              function () { cb([]); });
-    };
-    // Guardado explícito de una parte (por si el material lo prefiere directo).
-    window.JUCUM_CONNECT.savePart = function (part, score, minutes) { pushPart(part, score, minutes); };
-
     // Quizzes (readings, listenings, gramática, resúmenes MCQ) avisan así:
     window.addEventListener('jucum:done', function (e) {
       var d = e.detail || {};
       var lowStakes = d.type === 'summary' || d.type === 'quizlet';
-      // Nota por PARTE: el material envía story/audio/part; lo guardamos aparte.
-      var part = (d.part != null) ? d.part : (d.story != null ? d.story : (d.audio != null ? d.audio : null));
-      if (part != null) pushPart(part, (d.score != null) ? d.score : null, Math.max(1, Math.round(activeSec / 60)));
-      if (IS_STORY || d.type === 'story' || d.type === 'dialog') {
-        // Stories/diálogos = lectura sin nota: registra en silencio, SIN tarjeta emergente.
-        if (!done) {
-          done = true; updateChip(); pushDaily();
-          var minsSt = Math.max(1, Math.min(READING_CAP_MIN, Math.round(activeSec / 60)));
-          try { if (window.parent && window.parent !== window) window.parent.postMessage({ source: 'jucum-connect', type: 'done', uid: uid, mod: modId, act: actId, score: null, minutes: minsSt }, '*'); } catch (e2) {}
-          if (!demo) pushProgress(100, minsSt);
-        }
-        return;
-      }
       complete((d.score != null) ? d.score : 80, lowStakes);
     });
 
@@ -454,11 +335,9 @@
     // Guardar tiempo parcial al salir (si practicó al menos 1 min y no completó)
     window.addEventListener('beforeunload', function () {
       if (teacher) { logClass(); return; }
-      pushDaily(); // los minutos del día SIEMPRE se salvan
-      if (IS_STORY) { if (!demo && activeSec >= 60) pushProgress(100, Math.min(READING_CAP_MIN, Math.round(activeSec / 60))); return; }
-      // Salida temprana: ya NO se registra 0% (no pisa notas previas ni bloquea el
-      // reintento con "Repetir"). El tiempo quedó en daily_sessions; la nota solo
-      // existe cuando el alumno termina la actividad.
+      if (IS_STORY) { if (!demo && activeSec >= 60) pushProgress(null, Math.min(READING_CAP_MIN, Math.round(activeSec / 60))); return; }
+      if (done || activeSec < 60) return;
+      pushProgress(0, Math.round(activeSec / 60));
     });
   }
 

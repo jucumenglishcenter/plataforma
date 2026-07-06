@@ -461,6 +461,23 @@
         }
       });
 
+      /* 🔥 FIX racha: entry.date se sobreescribe en cada reintento (se guarda solo el
+       * último intento por material), así que repasar un material de un día anterior
+       * borraba ese día y la racha se caía. Se UNEN aquí las fuentes que sí conservan
+       * historia: daily_sessions (nube, una fila por alumno/día) + registro local. */
+      try {
+        const cloudDays = window.__JEC_DAYS && window.__JEC_DAYS[s.id];
+        if (cloudDays) Object.keys(cloudDays).forEach(d => {
+          days.add(d);
+          const ts = Date.parse(d + 'T12:00:00-05:00');   // mediodía Perú de ese día
+          if (ts > lastTs) lastTs = ts;
+        });
+      } catch (e) {}
+      try {
+        const ad = JSON.parse(localStorage.getItem('jucum_active_days_v1') || '{}');
+        (ad[s.id] || []).forEach(d => days.add(d));
+      } catch (e) {}
+
       // streak = consecutive active days ending today (or yesterday)
       let streak = 0, cur = Date.now();
       if (!days.has(dayStr(cur))) cur -= DAY;

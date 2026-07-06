@@ -764,6 +764,8 @@ function _actTypeOf(moduleId, activityId, level) {
 
 /* ── Student progress (which activities completed) ───────────────── */
 const PROGRESS_KEY = 'jucum_student_progress_v1';
+/* Días con práctica por alumno (solo se AGREGA, nunca se pisa) — fuente local de la racha. */
+const ACTIVE_DAYS_KEY = 'jucum_active_days_v1';
 function getStudentProgress(studentId) {
   let all = {};
   try { all = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); } catch {}
@@ -812,6 +814,19 @@ function markActivityComplete(studentId, moduleId, activityId, score, minutes, m
   prev.todayMinutes += (minutes || 0);
   all[studentId] = prev;
   localStorage.setItem(PROGRESS_KEY, JSON.stringify(all));
+  /* 🔥 FIX racha: entry.date se sobreescribe en cada reintento, así que repasar un
+   * material de un día anterior BORRABA la evidencia de ese día y la racha se caía.
+   * Guardamos cada día practicado en una clave propia (hydrate no la pisa);
+   * computeStats la une con daily_sessions (nube) para calcular la racha real. */
+  try {
+    const adAll = JSON.parse(localStorage.getItem(ACTIVE_DAYS_KEY) || '{}');
+    const adList = adAll[studentId] || [];
+    if (adList[adList.length - 1] !== today) {
+      adList.push(today);
+      adAll[studentId] = adList.slice(-120);
+      localStorage.setItem(ACTIVE_DAYS_KEY, JSON.stringify(adAll));
+    }
+  } catch (e) {}
   // PASO 3 · alimenta el motor de repaso espaciado con ESTE intento (no la mejor nota)
   try { recordReviewAttempt(studentId, moduleId, activityId, score, _stu.group, _stu.level, meta && meta.total); } catch {}
   if (window.JUCUM_SYNC) window.JUCUM_SYNC.pushProgress(studentId, moduleId, activityId, finalScore, finalMin);
@@ -2126,6 +2141,24 @@ window.JUCUM_DATA.markWeekSeen = markWeekSeen;
           });
           window.__JEC_WEEKS = map;
         }, function () {});
+      /* 🔥 Racha multi-equipo: días REALES con práctica según daily_sessions (una fila
+       * por alumno/día/material, nunca se sobreescribe — a diferencia de entry.date).
+       * Ventana de 90 días para rachas largas. computeStats une estos días con lo local. */
+      var sinceDays = new Date(Date.now() - 5 * 3600000 - 90 * 86400000).toISOString().slice(0, 10);
+      window.JUCUM_SB.getClient().from('daily_sessions')
+        .select('user_id,day').gte('day', sinceDays)
+        .then(function (r) {
+          var rows2 = (r && r.data) || [];
+          var dmap = {};
+          rows2.forEach(function (x) {
+            if (!x.day) return;
+            dmap[x.user_id] = dmap[x.user_id] || {};
+            dmap[x.user_id][x.day] = true;
+          });
+          window.__JEC_DAYS = dmap;
+          // Recalcula rachas ya con los días de la nube (la UI refresca sola cada 20 s).
+          try { if (window.JUCUM_SYNC && window.JUCUM_SYNC.computeStats) window.JUCUM_SYNC.computeStats(); } catch (e) {}
+        }, function () {});
     } catch (e) {}
   }
   setTimeout(load, 3000);
@@ -2138,3 +2171,62 @@ window.JUCUM_DATA.markWeekSeen = markWeekSeen;
   setTimeout(load, 3200);
   setInterval(load, 5 * 60 * 1000);
 })();
+
+/* ════════════════════════════════════════════════════════════════════
+ * 📚 Revisión de materiales (vista profesor · "Materiales")
+ * ════════════════════════════════════════════════════════════════════
+ * Tablero de QA: por cada material del catálogo el profesor guarda un
+ * estado (pendiente / ok / fix), un checklist de calidad y notas.
+ * Persistencia: localStorage (caché) + nube app_settings key
+ * 'material_reviews' (multidispositivo). NO toca el progreso de alumnos.
+ * "Enviar a soporte" inserta una fila en error_reports (reporter:'teacher')
+ * que aparece en la bandeja 🐞 Reportes del panel de desarrollo. */
+const MAT_REVIEW_KEY = 'jucum_material_reviews_v1';
+function materialReviewKey(level, moduleId, activityId) { return `${level}:${moduleId}:${activityId}`; }
+function getMaterialReviews() {
+  try { const v = JSON.parse(localStorage.getItem(MAT_REVIEW_KEY) || '{}'); return (v && typeof v === 'object') ? v : {}; } catch { return {}; }
+}
+function getMaterialReview(key) { return getMaterialReviews()[key] || null; }
+function _saveMaterialReviews(all) {
+  localStorage.setItem(MAT_REVIEW_KEY, JSON.stringify(all));
+  try { if (window.JUCUM_SB) window.JUCUM_SB.getClient().from('app_settings').upsert({ key: 'material_reviews', value: all }, { onConflict: 'key' }).then(() => {}, () => {}); } catch {}
+}
+function setMaterialReview(key, patch) {
+  const all = getMaterialReviews();
+  all[key] = { ...(all[key] || {}), ...patch, updatedAt: new Date().toISOString() };
+  _saveMaterialReviews(all);
+  return all[key];
+}
+async function loadMaterialReviewsFromCloud() {
+  if (!window.JUCUM_SB) return getMaterialReviews();
+  try {
+    const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key', 'material_reviews').maybeSingle();
+    if (data && data.value && typeof data.value === 'object') localStorage.setItem(MAT_REVIEW_KEY, JSON.stringify(data.value));
+  } catch {}
+  return getMaterialReviews();
+}
+/* Envía una observación a la bandeja de soporte (error_reports · script 21). */
+async function sendMaterialReport({ level, module, activity, url, message }) {
+  if (!window.JUCUM_SB) return { ok: false, reason: 'sin conexión con la nube' };
+  try {
+    const row = {
+      id: 'er-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      user_id: null, reporter: 'teacher', group_id: null,
+      module_id: module ? module.id : null,
+      activity_id: activity ? activity.id : null,
+      material_kind: activity ? activity.type : null,
+      material_name: activity ? activity.name : null,
+      part: null,
+      url: url || (activity ? activity.url : null) || null,
+      message: message, status: 'nuevo',
+    };
+    await window.JUCUM_SB.insert('error_reports', row);
+    return { ok: true, id: row.id };
+  } catch (e) { return { ok: false, reason: e.message }; }
+}
+window.JUCUM_DATA.materialReviewKey = materialReviewKey;
+window.JUCUM_DATA.getMaterialReviews = getMaterialReviews;
+window.JUCUM_DATA.getMaterialReview = getMaterialReview;
+window.JUCUM_DATA.setMaterialReview = setMaterialReview;
+window.JUCUM_DATA.loadMaterialReviewsFromCloud = loadMaterialReviewsFromCloud;
+window.JUCUM_DATA.sendMaterialReport = sendMaterialReport;
