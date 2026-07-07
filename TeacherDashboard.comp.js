@@ -23,7 +23,7 @@ function TeacherDashboard({ onLogout, user }) {
     const refresh = () => window.JUCUM_SYNC.refreshProgress().then(ok => { if (ok && alive) setLiveTick(t => t + 1); }).catch(() => {});
     refresh();
     const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
-    const iv = setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 30000);
+    const iv = setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 15000); // ⚡ en vivo: 15 s (prácticas en clase)
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', onVis);
     return () => { alive = false; clearInterval(iv); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
@@ -617,22 +617,30 @@ function GroupSettingsModal({ groupId, level, onClose }) {
                       onClick={() => setS({...s, unlockMode: 'free'})}>🔓 Libre</button>
             </div>
             {s.unlockMode === 'custom' && (() => {
-              const mod = modules.find(m => m.id === s.activeModuleId);
-              if (!mod) return <div className="settings-hint">Primero elige el módulo activo arriba.</div>;
+              // 🔧 Multi-módulo: antes solo listaba el primer módulo activo — no se
+              // podían habilitar actividades de los demás módulos activos del grupo.
+              const ids = (s.activeModuleIds && s.activeModuleIds.length) ? s.activeModuleIds : (s.activeModuleId ? [s.activeModuleId] : []);
+              const activeMods = modules.filter(m => ids.includes(m.id));
+              if (!activeMods.length) return <div className="settings-hint">Primero elige el módulo activo arriba.</div>;
               const list = s.unlockedActivities || [];
               const toggle = (key) => setS({...s, unlockedActivities: list.includes(key) ? list.filter(k => k !== key) : [...list, key]});
               return (
                 <div style={{marginTop: 10, display: 'grid', gap: 6}}>
-                  {mod.activities.map((a, i) => {
-                    const key = `${mod.id}:${a.id}`;
-                    return (
-                      <label key={key} className="check-row">
-                        <input type="checkbox" checked={i === 0 || list.includes(key)} disabled={i === 0}
-                               onChange={() => toggle(key)} />
-                        <span>{i + 1}. {a.name}{i === 0 ? ' (siempre abierta)' : ''}</span>
-                      </label>
-                    );
-                  })}
+                  {activeMods.map(mod => (
+                    <React.Fragment key={mod.id}>
+                      {activeMods.length > 1 && <div style={{fontWeight:800, fontSize:12.5, color:'#666', marginTop:6}}>{mod.emoji ? mod.emoji + ' ' : ''}{mod.name}</div>}
+                      {mod.activities.map((a, i) => {
+                        const key = `${mod.id}:${a.id}`;
+                        return (
+                          <label key={key} className="check-row">
+                            <input type="checkbox" checked={i === 0 || list.includes(key)} disabled={i === 0}
+                                   onChange={() => toggle(key)} />
+                            <span>{i + 1}. {a.name}{i === 0 ? ' (siempre abierta)' : ''}</span>
+                          </label>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
                   <div className="settings-hint">Además de lo marcado, cada actividad completada desbloquea la siguiente automáticamente.</div>
                 </div>
               );
@@ -665,33 +673,52 @@ function ModuleChecklist({ stu, group }) {
   const { MODULE_CATALOG, getGroupSettings, getStudentProgress } = window.JUCUM_DATA;
   const settings = getGroupSettings(group.id);
   const mods = MODULE_CATALOG[group.level] || [];
-  const mod = mods.find(m => m.id === settings.activeModuleId) || mods[0];
-  if (!mod) return null;
+  // 🔧 BUG (jul-2026): aquí solo se mostraba el PRIMER módulo activo
+  // (settings.activeModuleId) — si el grupo tenía varios módulos activos, lo que
+  // el alumno completaba en los demás NO aparecía en el panel del profesor
+  // (aunque sí estaba registrado y se veía en el perfil del alumno). Ahora se
+  // lista CADA módulo activo (igual que la vista del alumno) y además cualquier
+  // módulo no activo donde el alumno tenga avance — su trabajo nunca queda invisible.
+  const activeIds = (settings.activeModuleIds && settings.activeModuleIds.length)
+    ? settings.activeModuleIds
+    : (settings.activeModuleId ? [settings.activeModuleId] : []);
+  let activeMods = mods.filter(m => activeIds.includes(m.id));
+  if (!activeMods.length && mods.length) activeMods = [mods[0]];
   const progress = getStudentProgress(stu.id);
-  const doneCount = mod.activities.filter(a => progress.completed[`${mod.id}:${a.id}`]).length;
+  const doneKeys = Object.keys(progress.completed || {});
+  const extraMods = mods.filter(m => !activeMods.includes(m) && doneKeys.some(k => k.indexOf(m.id + ':') === 0));
+  const shown = [...activeMods.map(m => ({mod: m, extra: false})), ...extraMods.map(m => ({mod: m, extra: true}))];
+  if (!shown.length) return null;
   return (
-    <div className="scard" style={{marginTop:18}}>
-      <div className="sec-head">
-        <div className="sec-title">📦 Avance en “{mod.name}”</div>
-        <span className="sec-meta">{doneCount}/{mod.activities.length} actividades · {mod.activities.length ? Math.round((doneCount/mod.activities.length)*100) : 0}%</span>
-      </div>
-      <div style={{display:'grid', gap:8}}>
-        {mod.activities.map((a, i) => {
-          const e = progress.completed[`${mod.id}:${a.id}`];
-          const score = e && typeof e.score === 'number' ? (e.score > 10 ? Math.round(e.score) : Math.round(e.score * 10)) : null;
-          return (
-            <div key={a.id} style={{display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderRadius:12, background: e ? '#F0F9F1' : '#FAFAFA', border: '1px solid ' + (e ? '#CDEBD2' : '#EEEEEE')}}>
-              <span style={{fontSize:17}}>{e ? '✅' : '⬜'}</span>
-              <span style={{flex:1, fontWeight:700, color: e ? '#1B5E20' : '#9E9E9E'}}>{i + 1}. {a.name}</span>
-              {e && score !== null && <span style={{fontWeight:800, color: score >= 85 ? '#2E7D32' : score >= 70 ? '#B58500' : '#C62828'}}>{score}%</span>}
-              {e && e.minutes ? <span style={{color:'#888', fontSize:13}}>{Math.round(e.minutes)} min</span> : null}
-              {e && e.date ? <span style={{color:'#AAA', fontSize:12}}>{new Date(e.date).toLocaleDateString('es-PE', {day:'numeric', month:'short'})}</span> : null}
-              {!e && <span style={{color:'#BBB', fontSize:13}}>Pendiente</span>}
+    <>
+      {shown.map(({mod, extra}) => {
+        const doneCount = mod.activities.filter(a => progress.completed[`${mod.id}:${a.id}`]).length;
+        return (
+          <div key={mod.id} className="scard" style={{marginTop:18}}>
+            <div className="sec-head">
+              <div className="sec-title">📦 Avance en “{mod.name}”{extra && <span style={{marginLeft:8, fontSize:11, fontWeight:800, color:'#8A6D1A', background:'#FFF3D6', border:'1px solid #F0C66B', borderRadius:10, padding:'2px 8px'}}>módulo no activo · tiene avance</span>}</div>
+              <span className="sec-meta">{doneCount}/{mod.activities.length} actividades · {mod.activities.length ? Math.round((doneCount/mod.activities.length)*100) : 0}%</span>
             </div>
-          );
-        })}
-      </div>
-    </div>
+            <div style={{display:'grid', gap:8}}>
+              {mod.activities.map((a, i) => {
+                const e = progress.completed[`${mod.id}:${a.id}`];
+                const score = e && typeof e.score === 'number' ? (e.score > 10 ? Math.round(e.score) : Math.round(e.score * 10)) : null;
+                return (
+                  <div key={a.id} style={{display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderRadius:12, background: e ? '#F0F9F1' : '#FAFAFA', border: '1px solid ' + (e ? '#CDEBD2' : '#EEEEEE')}}>
+                    <span style={{fontSize:17}}>{e ? '✅' : '⬜'}</span>
+                    <span style={{flex:1, fontWeight:700, color: e ? '#1B5E20' : '#9E9E9E'}}>{i + 1}. {a.name}</span>
+                    {e && score !== null && <span style={{fontWeight:800, color: score >= 85 ? '#2E7D32' : score >= 70 ? '#B58500' : '#C62828'}}>{score}%</span>}
+                    {e && e.minutes ? <span style={{color:'#888', fontSize:13}}>{Math.round(e.minutes)} min</span> : null}
+                    {e && e.date ? <span style={{color:'#AAA', fontSize:12}}>{new Date(e.date).toLocaleDateString('es-PE', {day:'numeric', month:'short'})}</span> : null}
+                    {!e && <span style={{color:'#BBB', fontSize:13}}>Pendiente</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </>
   );
 }
 
@@ -1158,13 +1185,15 @@ function ActivityByDay({ events }) {
   }
   const days = Object.keys(groups).sort((a, b) => b.localeCompare(a));
   const fmtDay = (d) => {
-    const today = new Date();
+    // 🔧 Día en hora de PERÚ: antes comparaba contra la fecha local/UTC del navegador
+    // y podía salir "Hace -1 días" para actividades hechas hoy.
+    const todayP = new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
+    const diff = Math.round((Date.parse(todayP) - Date.parse(d)) / 86400000);
     const date = new Date(d + 'T12:00:00');
-    const diff = Math.floor((today - date) / 86400000);
     const dateLabel = date.toLocaleDateString('es-PE', { weekday:'long', day:'numeric', month:'long' });
     if (diff === 0) return `Hoy · ${dateLabel}`;
     if (diff === 1) return `Ayer · ${dateLabel}`;
-    if (diff < 7) return `Hace ${diff} días · ${dateLabel}`;
+    if (diff > 1 && diff < 7) return `Hace ${diff} días · ${dateLabel}`;
     return dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1);
   };
   return (

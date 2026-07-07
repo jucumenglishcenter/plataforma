@@ -1570,7 +1570,7 @@ function StudentPractice({ student, settings, onBack }) {
               <span style={{fontSize:24}}>🔒</span>
               <div style={{fontSize:13.5, fontWeight:700}}>{sel.placeholder
                 ? <>El módulo <b>{selMod.name}</b> aún no está disponible — llegará más adelante en tu ruta.</>
-                : <>El módulo <b>{selMod.name}</b> se desbloquea cuando termines el anterior. Sigue tu ruta paso a paso.</>}</div>
+                : <>El módulo <b>{selMod.name}</b> se abrirá cuando tu profesor lo active. Mientras tanto, sigue con tu módulo actual.</>}</div>
             </div>
           ) : (
             <div className="scard">

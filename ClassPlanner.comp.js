@@ -254,11 +254,11 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
             sub={`${(p.activities || []).length} actividad(es) · ${p.assignToStudents !== false ? '👥 asignado a alumnos' : '🙋 solo para mí'} · ${(p.dates || []).length} día(s)`}
             onOpen={() => onEditPractice(p)} onDelete={() => { TT.deletePracticePlan(p.id); onChange(); }} />
         ))}
-        {selLog.length > 0 && (
+        {selLog.length > 0 ? (
           <div style={{marginTop:10, borderTop:'1px dashed #E3DCC9', paddingTop:10}}>
             <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:7, flexWrap:'wrap'}}>
-              <div style={{fontSize:12, fontWeight:800, color:'#2E7D32', flex:1}}>✅ Realizado en clase (registro automático)</div>
-              <button onClick={() => setSummaryDate(selDate)} style={{...btnGhost, padding:'5px 11px', fontSize:12, borderColor:'#9FD3A4', color:'#2E7D32'}}>👁️ Ver resumen de la clase</button>
+              <div style={{fontSize:12, fontWeight:800, color:'#2E7D32', flex:1}}>✅ Clase realizada</div>
+              <button onClick={() => setSummaryDate(selDate)} style={{...btnGhost, padding:'5px 11px', fontSize:12, borderColor:'#9FD3A4', color:'#2E7D32'}}>✏️ Ver / editar resumen</button>
             </div>
             <button onClick={() => setSummaryDate(selDate)} style={{display:'block', width:'100%', textAlign:'left', cursor:'pointer', border:'1px solid #BFE3C4', background:'#F3FAF4', borderRadius:11, padding:'9px 11px', font:'inherit'}}>
               {selLog.map(e => (
@@ -268,8 +268,13 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
                   <span style={{fontSize:12, color:'#7a8a7c', fontWeight:800, whiteSpace:'nowrap'}}>{e.minutes} min</span>
                 </span>
               ))}
-              <span style={{display:'block', fontSize:11.5, color:'#5a8a5f', fontWeight:700, marginTop:5}}>👆 Toca para ver el plan dado, la asistencia y los comentarios — y duplicar la clase a otro grupo.</span>
+              <span style={{display:'block', fontSize:11.5, color:'#5a8a5f', fontWeight:700, marginTop:5}}>👆 Toca para ver y EDITAR: asistencia, temas vistos y comentarios — y duplicar la clase a otro grupo.</span>
             </button>
+          </div>
+        ) : (
+          <div style={{marginTop:10, borderTop:'1px dashed #E3DCC9', paddingTop:10, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
+            <div style={{fontSize:12, fontWeight:700, color:'#8a7f6a', flex:1, minWidth:180}}>¿Diste esta clase? Márcala tú mismo como realizada — podrás anotar asistencia, temas y comentarios.</div>
+            <button onClick={() => { TT.logClassMaterial({ date: selDate, groupId, materialName: '🏁 Clase realizada (marcada por el profesor)', minutes: (sel.classPlans[0] && sel.classPlans[0].lengthMin) || 0, source: 'manual-done' }); onChange(); setSummaryDate(selDate); }} style={{...btnGhost, padding:'7px 12px', fontSize:12.5, borderColor:'#9FD3A4', color:'#2E7D32'}}>🏁 Marcar clase realizada</button>
           </div>
         )}
       </div>
@@ -284,6 +289,13 @@ function ClassSummaryModal({ date, groupId, onClose, onDuplicate }) {
   const TT = window.JUCUM_TT; const A = window.JUCUM_ATT;
   const { STUDENTS, GROUPS } = window.JUCUM_DATA;
   const group = (GROUPS || []).find(g => g.id === groupId) || null;
+  // ✏️ Resumen EDITABLE: asistencia corregible, temas/materiales agregables y
+  // comentarios que se pueden anotar después de la clase (todo se sincroniza).
+  const [, setTick] = React.useState(0);
+  const rerender = () => setTick(t => t + 1);
+  const [matName, setMatName] = React.useState('');
+  const [matMin, setMatMin] = React.useState('');
+  const [cmt, setCmt] = React.useState('');
   const planned = TT.getPlannedForDay ? TT.getPlannedForDay(date) : { classPlans: [] };
   const classPlans = (planned.classPlans || []).filter(p => !groupId || p.groupId === groupId);
   const log = (TT.getClassLogForDay ? TT.getClassLogForDay(date) : []).filter(e => !groupId || e.groupId === groupId);
@@ -304,7 +316,7 @@ function ClassSummaryModal({ date, groupId, onClose, onDuplicate }) {
     <div onClick={onClose} style={{position:'fixed', inset:0, zIndex:1000, background:'rgba(15,23,42,0.5)', backdropFilter:'blur(3px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
       <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, width:'100%', maxWidth:620, maxHeight:'88vh', display:'flex', flexDirection:'column', boxShadow:'0 24px 60px rgba(0,0,0,0.35)'}}>
         <div style={{padding:'16px 20px 13px', borderBottom:'1.5px solid #E3DCC9', position:'relative'}}>
-          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, lineHeight:1.2, color:'#2E7D32', display:'flex', alignItems:'center', gap:9}}>✅ Resumen de la clase</div>
+          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, lineHeight:1.2, color:'#2E7D32', display:'flex', alignItems:'center', gap:9}}>✅ Resumen de la clase <span style={{fontSize:10.5, fontWeight:800, color:'#3F5BB8', background:'#EEF2FC', border:'1px solid #C9D6F5', borderRadius:9, padding:'2px 8px'}}>✏️ editable</span></div>
           <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginTop:3, textTransform:'capitalize'}}>{fmtDateLong(date)}{group ? ' · ' + group.name : ''}</div>
           <button onClick={onClose} style={{position:'absolute', top:14, right:14, width:32, height:32, borderRadius:'50%', border:'none', background:'#FAFAF6', color:'#8a7f6a', fontSize:14, fontWeight:800, cursor:'pointer'}}>✕</button>
         </div>
@@ -327,43 +339,58 @@ function ClassSummaryModal({ date, groupId, onClose, onDuplicate }) {
               </div>
             ))}
           </div>
-          {/* Materiales usados (bitácora) */}
+          {/* Materiales usados (bitácora) + temas agregados a mano */}
           <div>
-            <div style={lblStyle}>📎 Materiales usados (bitácora automática){totalMin ? ` · ${totalMin} min en total` : ''}</div>
-            {log.length === 0 ? <div style={mutedStyle}>No se registraron materiales abiertos en clase este día.</div>
+            <div style={lblStyle}>📎 Materiales y temas vistos{totalMin ? ` · ${totalMin} min en total` : ''}</div>
+            {log.length === 0 ? <div style={mutedStyle}>No se registraron materiales este día — agrega abajo lo que vieron.</div>
               : log.map(e => (
               <div key={e.id} style={{display:'flex', alignItems:'center', gap:9, fontSize:12.5, color:'#555', padding:'4px 0', borderBottom:'1px solid #F2ECDD'}}>
                 <span style={{fontWeight:800, color:'#2E7D32', whiteSpace:'nowrap', fontSize:11.5}}>⏰ {fmtLogClock(e.from)}</span>
                 <span style={{flex:1, fontWeight:700}}>{e.materialName}</span>
                 <span style={{color:'#999', fontWeight:700}}>{e.minutes}′</span>
+                <button title="Quitar este registro" onClick={() => { if (confirm('¿Quitar este registro de la bitácora?')) { TT.deleteClassEntry(e.id); rerender(); } }} style={{border:'none', background:'none', color:'#C0392B', fontWeight:800, cursor:'pointer', fontSize:13, padding:'0 2px'}}>✕</button>
               </div>
             ))}
+            <div style={{display:'flex', gap:7, marginTop:9, flexWrap:'wrap'}}>
+              <input value={matName} onChange={e => setMatName(e.target.value)} placeholder="Agregar tema o material visto…" style={{flex:'1 1 180px', padding:'8px 11px', border:'1.5px solid #E3DCC9', borderRadius:9, font:'inherit', fontSize:12.5, fontWeight:600}} />
+              <input value={matMin} onChange={e => setMatMin(e.target.value.replace(/[^0-9]/g,''))} placeholder="min" style={{width:56, padding:'8px 9px', border:'1.5px solid #E3DCC9', borderRadius:9, font:'inherit', fontSize:12.5, fontWeight:600, textAlign:'center'}} />
+              <button onClick={() => { const n = matName.trim(); if (!n) return; TT.logClassMaterial({ date, groupId, materialName: n, minutes: parseInt(matMin, 10) || 0, source: 'manual' }); setMatName(''); setMatMin(''); rerender(); }} style={{...btnGhost, padding:'7px 13px', fontSize:12.5, borderColor:'#9FD3A4', color:'#2E7D32'}}>＋ Agregar</button>
+            </div>
           </div>
-          {/* Asistencia */}
+          {/* Asistencia (editable: toca para cambiar) */}
           <div>
-            <div style={lblStyle}>📝 Asistencia · {present}/{students.length} presentes{marked < students.length ? ` · ${students.length - marked} sin marcar` : ''}</div>
+            <div style={lblStyle}>📝 Asistencia · {present}/{students.length} presentes{marked < students.length ? ` · ${students.length - marked} sin marcar` : ''} <span style={{fontWeight:700, color:'#8a7f6a', textTransform:'none', letterSpacing:0}}>· toca una fila para corregir (P → T → A)</span></div>
             {students.length === 0 ? <div style={mutedStyle}>Este grupo no tiene alumnos.</div>
               : <div style={{display:'flex', flexDirection:'column', gap:5}}>
               {att.map(({ s, st }) => {
                 const ini = (s.fullName || s.username || '?').split(' ').map(x => x[0]).slice(0,2).join('').toUpperCase();
                 const m = ATT_META[st];
+                const cycle = () => {
+                  const next = st === 'asistio' ? 'tarde' : st === 'tarde' ? 'falto' : 'asistio';
+                  const rec = (A && A.getStudentRecord(date, s.id)) || {};
+                  A.setAttendance(date, s.group || groupId, s.id, next, rec.participation || 0, rec.note || '');
+                  rerender();
+                };
                 return (
-                  <div key={s.id} style={{display:'flex', alignItems:'center', gap:9, padding:'3px 0'}}>
+                  <button key={s.id} type="button" onClick={cycle} title="Toca para cambiar: Presente → Tarde → Faltó" style={{display:'flex', alignItems:'center', gap:9, padding:'3px 4px', border:'none', background:'none', font:'inherit', cursor:'pointer', textAlign:'left', borderRadius:8}}>
                     <span style={{width:28, height:28, borderRadius:'50%', background:'#FCEFD8', color:'#C77B12', fontWeight:800, fontSize:11, display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>{ini}</span>
                     <span style={{flex:1, fontWeight:700, fontSize:12.5, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{s.fullName || s.username}</span>
                     {m ? <span style={{width:24, height:24, borderRadius:7, background:m.c, color:'#fff', fontWeight:900, fontSize:11.5, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>{m.l}</span>
-                       : <span style={{fontSize:10.5, color:'#b0a88f', fontWeight:800}}>sin marcar</span>}
-                  </div>
+                       : <span style={{fontSize:10.5, color:'#b0a88f', fontWeight:800}}>sin marcar · toca</span>}
+                  </button>
                 );
               })}
             </div>}
           </div>
-          {/* Comentarios */}
+          {/* Comentarios (se pueden agregar después de la clase) */}
           <div>
             <div style={lblStyle}>💬 Comentarios de la clase</div>
-            {generalNotes.length === 0 && studentNotes.length === 0 ? <div style={mutedStyle}>No anotaste comentarios este día. Puedes anotarlos desde 👥 en el modo clase.</div> : null}
+            {generalNotes.length === 0 && studentNotes.length === 0 ? <div style={mutedStyle}>No hay comentarios de este día todavía — agrega uno abajo.</div> : null}
             {generalNotes.map(n => (
-              <div key={n.id} style={{fontSize:13, color:'#7a5e1f', background:'#FFFDE7', border:'1px solid #FBC02D', borderRadius:9, padding:'9px 11px', fontWeight:600, marginBottom:7}}>{n.text}</div>
+              <div key={n.id} style={{display:'flex', gap:8, alignItems:'flex-start', fontSize:13, color:'#7a5e1f', background:'#FFFDE7', border:'1px solid #FBC02D', borderRadius:9, padding:'9px 11px', fontWeight:600, marginBottom:7}}>
+                <span style={{flex:1}}>{n.text}</span>
+                <button title="Borrar comentario" onClick={() => { if (confirm('¿Borrar este comentario?')) { TT.deleteNote(n.id); rerender(); } }} style={{border:'none', background:'none', color:'#C0392B', fontWeight:800, cursor:'pointer', fontSize:12, padding:0}}>✕</button>
+              </div>
             ))}
             {studentNotes.map(n => (
               <div key={n.id} style={{display:'flex', gap:8, fontSize:12.5, color:'#555', padding:'3px 0'}}>
@@ -371,6 +398,10 @@ function ClassSummaryModal({ date, groupId, onClose, onDuplicate }) {
                 <span style={{flex:1}}>{n.text}</span>
               </div>
             ))}
+            <div style={{display:'flex', gap:7, marginTop:8, flexWrap:'wrap'}}>
+              <input value={cmt} onChange={e => setCmt(e.target.value)} placeholder="Anotar un comentario de esta clase…" style={{flex:'1 1 200px', padding:'8px 11px', border:'1.5px solid #E3DCC9', borderRadius:9, font:'inherit', fontSize:12.5, fontWeight:600}} />
+              <button onClick={() => { const t = cmt.trim(); if (!t) return; TT.addNote({ groupId, text: t, date: date + 'T12:00:00.000Z', tag: 'clase' }); setCmt(''); rerender(); }} style={{...btnGhost, padding:'7px 13px', fontSize:12.5}}>＋ Agregar</button>
+            </div>
           </div>
         </div>
         <div style={{display:'flex', gap:10, justifyContent:'space-between', alignItems:'center', padding:'13px 20px', borderTop:'1.5px solid #E3DCC9', flexWrap:'wrap'}}>

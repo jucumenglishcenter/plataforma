@@ -51,20 +51,26 @@
 
   // Identify active module + the first incomplete activity of this page's type
   const settings  = getSettings(user.groupId);
-  const moduleId  = settings.activeModuleId || null;
-  if (!moduleId) return;
+  // 🔧 Multi-módulo: busca en TODOS los módulos activos del grupo (antes solo en
+  // el primero — practicar un kit de otro módulo activo se acreditaba al equivocado).
+  const activeIds = (Array.isArray(settings.activeModuleIds) && settings.activeModuleIds.length)
+    ? settings.activeModuleIds
+    : (settings.activeModuleId ? [settings.activeModuleId] : []);
+  if (!activeIds.length) return;
+  let moduleId = activeIds[0];
 
-  // Module catalogs are duplicated minimally here (kept in sync with data.js)
-  // We only need activity ids by type for the active module — read from a shared key
-  // that the platform writes on login, else fall back to scanning progress keys.
   let activityId = null;
   try {
     const catalog = JSON.parse(localStorage.getItem('jucum_module_catalog_cache') || 'null');
-    const mod = catalog?.[user.level]?.find(mm => mm.id === moduleId);
-    if (mod) {
-      const prog = getProgress(user.studentId);
+    const prog = getProgress(user.studentId);
+    for (const mid of activeIds) {
+      const mod = catalog?.[user.level]?.find(mm => mm.id === mid);
+      if (!mod) continue;
       const candidates = mod.activities.filter(a => a.type === pageType);
-      activityId = (candidates.find(a => !prog.completed[`${moduleId}:${a.id}`]) || candidates[0])?.id || null;
+      if (!candidates.length) continue;
+      const pending = candidates.find(a => !prog.completed[`${mid}:${a.id}`]);
+      if (pending) { moduleId = mid; activityId = pending.id; break; }
+      if (!activityId) { moduleId = mid; activityId = candidates[0].id; }
     }
   } catch {}
   if (!activityId) activityId = pageType + '-auto'; // fallback key

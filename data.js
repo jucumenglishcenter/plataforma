@@ -276,10 +276,13 @@ function getStudentLog(studentId) {
     (m.activities || []).forEach(a => idx[`${m.id}:${a.id}`] = { module: m.name, item: a.name, type: a.type })));
   const events = Object.entries(completed).map(([key, e]) => {
     const info = idx[key] || { module: '', item: key, type: 'story' };
+    // 🕒 e.date viene en UTC (ISO con Z): se muestra en HORA DE PERÚ (UTC−5).
+    // Antes se recortaba el string tal cual → salía la hora UTC (5 h adelantada).
+    const ts = Date.parse(e.date || '');
     const ev = {
       studentId, type: info.type || 'story', module: info.module,
       detail: info.item + (e.minutes ? ` · ${Math.round(e.minutes)} min` : ''),
-      date: String(e.date || '').replace('T', ' ').slice(0, 16),
+      date: isNaN(ts) ? '' : new Date(ts - 5 * 3600000).toISOString().replace('T', ' ').slice(0, 16),
     };
     if (typeof e.score === 'number') { ev.score = e.score > 10 ? Math.round(e.score) : Math.round(e.score * 10); ev.max = 100; }
     return ev;
@@ -1926,16 +1929,24 @@ function getModuleRoute(student) {
     }
     return { mod: { id: '__ph' + i, name: o.name, emoji: o.emoji || '📦', activities: [] }, idx: i, doneCount: 0, total: 0, allDone: false, active: false, hasReview: false, placeholder: true };
   });
-  let frontier = -1;
-  info.forEach(x => { if (!x.placeholder && (x.allDone || x.active)) frontier = Math.max(frontier, x.idx); });
-  if (frontier < 0) frontier = 0;
-  info.forEach(x => { x.state = (!x.placeholder && x.allDone) ? 'done' : ((!x.placeholder && x.idx <= frontier) ? 'cur' : 'lock'); });
+  // 🔧 BUG (jul-2026): antes existía una "frontera": TODO módulo anterior al
+  // último activo quedaba como 'cur' (abierto) aunque el profesor lo tuviera
+  // APAGADO — prender el último módulo "prendía" todos los anteriores y el
+  // profesor perdía el control. Ahora manda el toggle del profesor: un módulo
+  // está abierto SOLO si está activo (o ya fue completado → 'done').
+  info.forEach(x => {
+    x.state = (!x.placeholder && x.allDone) ? 'done'
+            : (!x.placeholder && x.active) ? 'cur'
+            : 'lock';
+  });
   return info;
 }
-/* Módulo donde el alumno debería estar trabajando ahora (primer 'cur' no terminado). */
+/* Módulo donde el alumno debería estar trabajando ahora: el primer módulo
+ * ACTIVO con pendientes (no el primero de la ruta). */
 function getFocusModuleId(student) {
   const route = getModuleRoute(student);
-  const cur = route.find(x => x.state === 'cur');
+  const cur = route.find(x => x.state === 'cur' && (x.doneCount || 0) < (x.total || 0))
+           || route.find(x => x.state === 'cur');
   return cur ? cur.mod.id : (route[0] ? route[0].mod.id : null);
 }
 
