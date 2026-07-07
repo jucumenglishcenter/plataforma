@@ -12,6 +12,35 @@ function App() {
   const DEMO = !!(window.JUCUM_DEMO && window.JUCUM_DEMO.isDemo());
   const [ready, setReady] = React.useState(!window.JUCUM_SB || DEMO); // local/demo = ready immediately
   const [bootErr, setBootErr] = React.useState('');
+  // Modo mantenimiento (lo activa el dev). Se consulta a la nube y se sondea.
+  const [maint, setMaint] = React.useState(() => (window.JUCUM_DATA.getMaintenance ? window.JUCUM_DATA.getMaintenance() : { active:false }));
+  const [staffAccess, setStaffAccess] = React.useState(false); // “acceso del equipo” desde la pantalla de mantenimiento
+  React.useEffect(() => {
+    let alive = true;
+    const D = window.JUCUM_DATA;
+    if (!D.loadMaintenanceFromCloud) return;
+    const pull = () => D.loadMaintenanceFromCloud().then(v => { if (alive && v) setMaint(v); }).catch(() => {});
+    pull();
+    const iv = setInterval(() => { if (document.visibilityState === 'visible') pull(); }, 20000);
+    const onVis = () => { if (document.visibilityState === 'visible') pull(); };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('focus', pull);
+    return () => { alive = false; clearInterval(iv); document.removeEventListener('visibilitychange', onVis); window.removeEventListener('focus', pull); };
+  }, []);
+
+  // 📶 Conexión real: mientras un ALUMNO tenga la app abierta, sella su
+  // last_seen_at (al entrar, al volver a la pestaña y cada 10 min). Así el
+  // profesor ve la última conexión de verdad, no la última práctica.
+  React.useEffect(() => {
+    if (!user || user.role !== 'student' || !user.studentId) return;
+    if (!window.JUCUM_SB || !window.JUCUM_SB.touchLastSeen || DEMO) return;
+    const touch = () => window.JUCUM_SB.touchLastSeen(user.studentId);
+    touch();
+    const iv = setInterval(() => { if (document.visibilityState === 'visible') touch(); }, 10 * 60000);
+    const onVis = () => { if (document.visibilityState === 'visible') touch(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVis); };
+  }, [user]);
 
   // Bootstrap real roster from Supabase (se omite en modo demostración)
   React.useEffect(() => {
@@ -42,8 +71,13 @@ function App() {
         const students = users.filter(u => u.role === 'student').map(u => ({
           id: u.id, username: u.username, fullName: u.full_name,
           level: u.level, group: u.group_id, starred: u.starred || false,
+          email: u.email || null, age: u.age ?? null, dni: u.dni || null,
+          guardianName: u.guardian_name || null, guardianDni: u.guardian_dni || null,
+          phone: u.phone || null, payMode: u.pay_mode || null,
+          source: u.source || null, createdAt: u.created_at || null, status: u.status || null,
           completedModules: 0, avgScore: 0, streak: 0,
           lastActiveDays: 0, totalMinutes: 0, achievements: [],
+          lastSeenAt: u.last_seen_at || null,   // 📶 último ingreso real (script 22)
         }));
         window.JUCUM_DATA.STUDENTS.length = 0;
         students.forEach(s => window.JUCUM_DATA.STUDENTS.push(s));
@@ -141,11 +175,37 @@ function App() {
     return <div style={{padding:40,fontFamily:'Nunito,sans-serif',color:'#C62828',textAlign:'center'}}>⚠ {bootErr}<br/><button onClick={()=>location.reload()} style={{marginTop:14,padding:'10px 20px',borderRadius:20,border:'none',background:'#1F3A8A',color:'#fff',fontWeight:800,cursor:'pointer'}}>Reintentar</button></div>;
   }
 
-  if (!user) return <Login onLogin={onLogin} />;
+  if (!user) {
+    // Durante el mantenimiento, los visitantes ven la pantalla de mantenimiento.
+    // El equipo entra por un acceso discreto que revela el login (para que el
+    // dev pueda iniciar sesión y desactivarlo).
+    if (maint.active && !staffAccess) return <MaintenanceScreen maint={maint} onStaff={() => setStaffAccess(true)} />;
+    return <Login onLogin={onLogin} />;
+  }
+  // Con sesión iniciada: el dev SIEMPRE pasa (puede trabajar y apagar el modo).
+  // Cualquier otro rol queda bloqueado mientras el mantenimiento esté activo.
+  if (maint.active && user.role !== 'dev') return <MaintenanceScreen maint={maint} user={user} onLogout={onLogout} />;
   if (user.role === 'admin') return <AdminDashboard user={user} onLogout={onLogout} />;
   if (user.role === 'dev') return <DevDashboard user={user} onLogout={onLogout} />;
   if (user.role === 'teacher') return <TeacherDashboard onLogout={onLogout} user={user} />;
   return <StudentDashboard user={user} onLogout={onLogout} />;
+}
+
+/* Pantalla que ve todo el mundo (menos el dev) mientras el mantenimiento está activo. */
+function MaintenanceScreen({ maint, user, onLogout, onStaff }) {
+  return (
+    <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:18,fontFamily:'Nunito,sans-serif',color:'#3A3340',background:'#F4EFE9',textAlign:'center',padding:'40px 22px'}}>
+      <img src={window.JUCUM_LOGO || 'logo-jucum.png'} alt="JUCUM EC" style={{height:78}} />
+      <div style={{fontSize:46,lineHeight:1}}>🛠️</div>
+      <div style={{fontFamily:"'Fredoka',sans-serif",fontWeight:700,fontSize:24,letterSpacing:'-.01em'}}>Página en mantenimiento</div>
+      <div style={{fontSize:15,fontWeight:600,color:'#6B6B6B',maxWidth:440,lineHeight:1.55}}>{maint.message || 'Estamos haciendo mejoras. Volvemos en un ratito 💛'}</div>
+      {user ? (
+        <button onClick={onLogout} style={{marginTop:8,padding:'11px 22px',borderRadius:22,border:'1px solid #E0D6CF',background:'#fff',color:'#6B6B6B',fontWeight:800,fontSize:13.5,cursor:'pointer'}}>⏋ Cerrar sesión</button>
+      ) : (
+        <button onClick={onStaff} style={{marginTop:8,padding:'9px 18px',borderRadius:22,border:'none',background:'transparent',color:'#B7AEB4',fontWeight:700,fontSize:12.5,cursor:'pointer',textDecoration:'underline'}}>Acceso del equipo</button>
+      )}
+    </div>
+  );
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);

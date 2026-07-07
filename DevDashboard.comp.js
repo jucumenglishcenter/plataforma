@@ -31,6 +31,7 @@ function DevDashboard({ user, onLogout }) {
     { k:'exams',    label:'📑 Exámenes' },
     { k:'students', label:'👥 Alumnos' },
     { k:'promote',  label:'🎓 Promoción' },
+    { k:'retencion',label:'📉 Retención' },
     { k:'materials',label:'📚 Materiales' },
     { k:'reports',  label:'🐞 Reportes' },
     { k:'maint',    label:'🛠️ Mantenimiento' },
@@ -59,6 +60,7 @@ function DevDashboard({ user, onLogout }) {
        : view === 'exams'    ? <TeacherExams canDefine onBack={() => setView('exams')} />
        : view === 'students' ? <ManageStudents onBack={() => setView('students')} />
        : view === 'promote'  ? <LevelPromotion onBack={() => setView('promote')} />
+       : view === 'retencion' ? <RetentionView />
        : view === 'materials' ? <MaterialsReview onBack={() => setView('materials')} who="Soporte" />
        : view === 'reports'  ? <ErrorReportsPanel onCountChange={setReportsNew} />
        : view === 'maint'    ? <MaintenancePanel />

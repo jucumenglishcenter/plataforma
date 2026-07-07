@@ -175,6 +175,75 @@
     );
   }
 
+  /* Tutorial del panel de ADMINISTRACIÓN — controlado por el botón
+   * «❓ Necesitas ayuda» del encabezado (prop open). Resalta las áreas reales
+   * con el mismo Spotlight que el de alumnos. */
+  const ADMIN_STEPS = [
+    { target: 'admin-pagos',   title: 'Gestión de pagos', body: 'Aquí defines montos y día de pago, confirmas los pagos que registran los alumnos, envías recordatorios de pago a los grupos que elijas y registras pagos de quienes no pueden hacerlo solos.' },
+    { target: 'admin-registro', title: 'Registro de alumnos', body: 'Todos tus alumnos, con una etiqueta que indica si los creaste tú o entraron por el enlace, ordenados por fecha o filtrados por grupo. Desde cada alumno ves su avance, restableces su contraseña o lo eliminas.' },
+    { target: 'admin-registro', title: 'Enlace de autoregistro', body: 'Dentro de «Registro de alumnos» encontrarás el enlace para que los alumnos se inscriban solos. Compártelo por WhatsApp y aparecerán en tu lista.' },
+    { target: 'admin-attendance', title: 'Asistencia', body: 'Marca la asistencia y participación de cada clase.' },
+    { target: 'admin-bell', title: 'Avisos', body: 'La campanita te avisa cuando un alumno registra un pago o se inscribe. Revísala al entrar.' },
+    { target: 'admin-help', title: '¿Necesitas ayuda?', body: 'Puedes volver a ver este recorrido cuando quieras desde este botón. ¡Listo!' },
+  ];
+
+  function AdminTutorial({ open, onClose }) {
+    const [phase, setPhase] = useState('idle');   // idle · running
+    const [idx, setIdx] = useState(0);
+    const [runSteps, setRunSteps] = useState(ADMIN_STEPS);
+    const [rects, setRects] = useState({});
+
+    const measure = useCallback(() => {
+      const r = {};
+      ADMIN_STEPS.forEach(s => {
+        const el = document.querySelector('[data-tut="' + s.target + '"]');
+        if (el) { const b = el.getBoundingClientRect(); if (b.width > 4 && b.height > 4) r[s.target] = { top: b.top, left: b.left, width: b.width, height: b.height }; }
+      });
+      setRects(r);
+      return r;
+    }, []);
+
+    // Arranca cuando el padre pone open=true
+    useEffect(() => {
+      if (!open) return;
+      window.scrollTo(0, 0);
+      setTimeout(() => {
+        const avail = ADMIN_STEPS.filter(s => document.querySelector('[data-tut="' + s.target + '"]'));
+        setRunSteps(avail.length ? avail : ADMIN_STEPS);
+        setIdx(0);
+        measure();
+        setPhase('running');
+      }, 200);
+    }, [open, measure]);
+
+    useEffect(() => {
+      if (phase !== 'running') return;
+      const st = runSteps[idx];
+      let t1, t2;
+      if (st) {
+        const el = document.querySelector('[data-tut="' + st.target + '"]');
+        if (el) {
+          const b = el.getBoundingClientRect();
+          const abs = b.top + window.scrollY;
+          const want = Math.max(0, abs - (window.innerHeight / 2) + (b.height / 2));
+          try { window.scrollTo({ top: want, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, want); }
+          t1 = setTimeout(measure, 320);
+          t2 = setTimeout(measure, 760);
+        } else measure();
+      }
+      const onR = () => measure();
+      window.addEventListener('resize', onR);
+      return () => { clearTimeout(t1); clearTimeout(t2); window.removeEventListener('resize', onR); };
+    }, [phase, idx, runSteps, measure]);
+
+    const finish = () => { setPhase('idle'); if (onClose) onClose(); };
+    if (phase !== 'running') return null;
+    return <Spotlight steps={runSteps} idx={Math.min(idx, runSteps.length - 1)} rects={rects}
+      onNext={() => setIdx(i => Math.min(i + 1, runSteps.length - 1))}
+      onPrev={() => setIdx(i => Math.max(i - 1, 0))}
+      onClose={finish} />;
+  }
+
   function TutorialAdminCard() {
     const [busy, setBusy] = useState(false);
     const [msg, setMsg] = useState('');
@@ -198,5 +267,5 @@
     );
   }
 
-  Object.assign(window, { StudentTutorial, TutorialAdminCard });
+  Object.assign(window, { StudentTutorial, AdminTutorial, TutorialAdminCard });
 })();

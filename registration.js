@@ -81,9 +81,12 @@
     const D = window.JUCUM_DATA;
     const username = data.username || usernameFrom(data.fullName);
     const password = data.password || '1234';
+    const source = data.source || 'admin';
+    const nowIso = new Date().toISOString();
     const rec = {
       id: 's' + Date.now(), username, fullName: data.fullName, level: data.level, group: data.group,
-      email: data.email, age: data.age, dni: data.dni, guardianName: data.guardianName, payMode: data.payMode,
+      email: data.email, age: data.age, dni: data.dni, guardianName: data.guardianName, guardianDni: data.guardianDni,
+      phone: data.phone, payMode: data.payMode, source, createdAt: nowIso,
       starred: false, completedModules: 0, avgScore: 0, streak: 0, lastActiveDays: 0, totalMinutes: 0, achievements: [],
     };
     if (window.JUCUM_SB) {
@@ -92,9 +95,10 @@
           username, full_name: data.fullName, role: 'student', level: data.level, group_id: data.group,
           starred: false, password, email: data.email || null, age: data.age || null, dni: data.dni || null,
           guardian_name: data.guardianName || null, guardian_dni: data.guardianDni || null,
-          phone: data.phone || null, pay_mode: data.payMode || null,
+          phone: data.phone || null, pay_mode: data.payMode || null, source,
         });
         if (row && row.id) rec.id = row.id;
+        if (row && row.created_at) rec.createdAt = row.created_at;
       } catch (e) { alert('Error al crear alumno: ' + e.message); return null; }
     }
     D.STUDENTS.push(rec);
@@ -112,7 +116,7 @@
     const stu = await createStudentDirect({
       fullName: r.fullName, email: r.email, age: r.age, dni: r.dni, guardianName: r.guardianName,
       guardianDni: r.guardianDni, phone: r.phone, payMode: r.payMode, voucher: r.voucher,
-      level, group, username, password,
+      level, group, username, password, source: 'self',
     });
     if (!stu) return null;
     r.status = 'aprobado'; r.group_id = group; save(arr);
@@ -166,7 +170,7 @@
       const row = await window.JUCUM_SB.insert('users', {
         username, full_name: data.fullName, role: 'student', level: data.level, group_id: data.group,
         starred: false, password, email: data.email || null, age: data.age || null, dni: data.dni || null,
-        guardian_name: data.guardianName || null, guardian_dni: data.guardianDni || null, phone: data.phone || null,
+        guardian_name: data.guardianName || null, guardian_dni: data.guardianDni || null, phone: data.phone || null, source: 'self',
       });
       // Deja constancia para la administración (inscripción ya aprobada)
       try {
@@ -182,6 +186,7 @@
         window.JUCUM_DATA.STUDENTS.push({
           id: row.id || ('s' + Date.now()), username, fullName: data.fullName, level: data.level, group: data.group,
           email: data.email, age: data.age, dni: data.dni, guardianName: data.guardianName, starred: false,
+          source: 'self', createdAt: (row && row.created_at) || new Date().toISOString(),
           completedModules: 0, avgScore: 0, streak: 0, lastActiveDays: 0, totalMinutes: 0, achievements: [],
         });
         if (window.JUCUM_DATA.saveStudents) window.JUCUM_DATA.saveStudents(window.JUCUM_DATA.STUDENTS);

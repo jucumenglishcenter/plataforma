@@ -221,6 +221,77 @@
 
   function labelMode(m) { return m === 'mensual' ? 'Mensual' : m === 'modulo' ? 'Por módulo' : m === 'total' ? 'Pago total' : m; }
 
+  /* ── Registro de pago hecho POR LA ADMINISTRACIÓN, en nombre del alumno ──
+   * Para alumnos que pagan pero tienen problemas para registrarlo solos.
+   * Se crea YA CONFIRMADO (la admin da fe del pago) y avisa al alumno. */
+  function registerManualPayment(studentId, data) {
+    const arr = loadPayments();
+    const now = new Date().toISOString();
+    const p = {
+      id: 'pay-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      studentId, dni: (data.dni || '').trim(), mode: data.mode, level: data.level || null,
+      moduleId: data.moduleId || null, amount: data.amount ?? null,
+      period: data.period || currentPeriod(), screenshot: data.screenshot || null,
+      status: 'confirmado', note: data.note || 'Registrado por administración',
+      registeredAt: now, confirmedAt: now, byAdmin: true,
+    };
+    arr.unshift(p);
+    savePayments(arr);
+    pushPaymentCloud(p);
+    if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(studentId, {
+      type: 'payment-ok',
+      title: '✅ Pago registrado',
+      body: `La administración registró y confirmó tu pago (${labelMode(p.mode)}, periodo ${p.period}). ¡Gracias! 🎉`,
+      link: 'payments',
+    });
+    return p.id;
+  }
+
+  /* ── Aviso de pago a uno o varios grupos ──
+   * Envía una notificación (con enlace a Pagos) a todos los alumnos de los
+   * grupos elegidos. Devuelve a cuántos alumnos se avisó. */
+  /* ── Aviso INDIVIDUAL a un alumno (misma semántica que el grupal) ── */
+  function notifyPaymentIndividual(studentId, opts) {
+    if (!window.JUCUM_NOTIF) return false;
+    const body = (opts && opts.body) ||
+      'Te recordamos que tu pago está pendiente. Por favor comunícate con nosotros o registra tu pago directamente en la plataforma (sección 💳 Pagos). ¡Gracias!';
+    const title = (opts && opts.title) || '💳 Recordatorio de pago';
+    window.JUCUM_NOTIF.pushNotif(studentId, { type: 'payment', title, body, link: 'payments' });
+    return true;
+  }
+
+  /* ── Reporte por grupo: cuántos están al día / por vencer / bloqueados ── */
+  function getGroupPaymentReport() {
+    const D = window.JUCUM_DATA;
+    const cfg = getConfig();
+    return (D.GROUPS || []).map(g => {
+      const students = (D.STUDENTS || []).filter(s => s.group === g.id);
+      const rows = students.map(s => ({ student: s, status: getAccountStatus(s) }));
+      const count = (st) => rows.filter(r => r.status.state === st).length;
+      return {
+        group: g,
+        total: students.length,
+        alDia: count('al_dia'),
+        enRevision: count('en_revision'),
+        porVencer: count('por_vencer'),
+        bloqueado: count('bloqueado'),
+        rows,
+      };
+    }).sort((a, b) => (b.bloqueado + b.porVencer) - (a.bloqueado + a.porVencer));
+  }
+
+  function notifyPaymentToGroups(groupIds, opts) {
+    if (!window.JUCUM_NOTIF) return 0;
+    const D = window.JUCUM_DATA;
+    const set = new Set(groupIds || []);
+    const targets = (D.STUDENTS || []).filter(s => set.has(s.group));
+    const body = (opts && opts.body) ||
+      'Te recordamos que tu pago está pendiente. Por favor comunícate con nosotros o registra tu pago directamente en la plataforma (sección 💳 Pagos). ¡Gracias!';
+    const title = (opts && opts.title) || '💳 Recordatorio de pago';
+    targets.forEach(s => window.JUCUM_NOTIF.pushNotif(s.id, { type: 'payment', title, body, link: 'payments' }));
+    return targets.length;
+  }
+
   /* Medios de pago (recreados con texto, sin imagen) */
   const PAYMENT_METHODS = {
     titular: 'Jucum English Center Eirl',
@@ -236,6 +307,7 @@
   window.JUCUM_PAY = {
     getConfig, setConfig, getStudentPayments, getAllPayments, registerPayment,
     confirmPayment, rejectPayment, getAccountStatus, payDayFor, labelMode,
+    registerManualPayment, notifyPaymentToGroups, notifyPaymentIndividual, getGroupPaymentReport,
     pendingConfirmCelebration, markCelebrationSeen, cloudLoad, currentPeriod,
     PAYMENT_METHODS, ATTN_PHONE,
   };
