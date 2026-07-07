@@ -51,9 +51,17 @@
   async function refresh() {
     var c = sb(); if (!c) return cache;
     try {
-      var res = await c.from('messages').select('*');
-      if (res.error) throw res.error;
-      cache = (res.data || []).map(norm);
+      /* Paginado: Supabase corta todo select en 1000 filas; el chat crece rápido
+       * y sin paginar los mensajes MÁS NUEVOS quedarían fuera. */
+      var PAGE = 1000, rows = [], from = 0;
+      while (true) {
+        var res = await c.from('messages').select('*').order('id', { ascending: true }).range(from, from + PAGE - 1);
+        if (res.error) throw res.error;
+        rows = rows.concat(res.data || []);
+        if (!res.data || res.data.length < PAGE) break;
+        from += PAGE;
+      }
+      cache = rows.map(norm);
       try {
         var rt = await c.from('chat_threads').select('*');
         if (!rt.error) threads = (rt.data || []).map(normT);

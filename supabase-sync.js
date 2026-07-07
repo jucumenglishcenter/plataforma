@@ -32,6 +32,28 @@
     }
   };
 
+  /* ── Lectura COMPLETA con paginación ──────────────────────────────
+   * BUG (jul-2026): Supabase corta TODO select en 1000 filas por defecto. La
+   * tabla progress superó ese tope y las filas que quedaban fuera eran las MÁS
+   * RECIENTES → el trabajo recién terminado de los alumnos (Pre-A1 primero, y
+   * ya también A1/A2) no aparecía como completado ni en su perfil ni en el
+   * panel del profesor. Este helper trae TODAS las filas en páginas de 1000,
+   * con orden estable (requisito de .range para no saltar ni duplicar filas). */
+  async function selectAll(table, cols, orderCols) {
+    const sb = SB();
+    const PAGE = 1000;
+    let all = [], from = 0;
+    while (true) {
+      let q = sb.from(table).select(cols || '*');
+      (orderCols && orderCols.length ? orderCols : ['id']).forEach(c => { q = q.order(c, { ascending: true }); });
+      const { data, error } = await q.range(from, from + PAGE - 1);
+      if (error) return { data: all.length ? all : null, error };
+      all = all.concat(data || []);
+      if (!data || data.length < PAGE) return { data: all, error: null };
+      from += PAGE;
+    }
+  }
+
   /* ── HYDRATE: pull all cloud data into localStorage ── */
   async function hydrate(groups, users) {
     const sb = SB();
@@ -48,8 +70,8 @@
     });
     write(KEYS.settings, settings);
 
-    // progress
-    const { data: prog } = await sb.from('progress').select('*');
+    // progress (paginado: >1000 filas reales)
+    const { data: prog } = await selectAll('progress', '*', ['user_id', 'module_id', 'activity_id']);
     const progByUser = {};
     (prog || []).forEach(p => {
       progByUser[p.user_id] = progByUser[p.user_id] || { completed:{}, todayMinutes:0, lastDay:null };
@@ -63,8 +85,8 @@
     });
     write(KEYS.progress, progByUser);
 
-    // notifications
-    const { data: notifs } = await sb.from('notifications').select('*');
+    // notifications (paginado: crece rápido)
+    const { data: notifs } = await selectAll('notifications', '*', ['id']);
     const nByUser = {};
     (notifs || []).forEach(n => {
       nByUser[n.user_id] = nByUser[n.user_id] || [];
@@ -88,9 +110,9 @@
 
     // forum (posts + replies + likes + mutes)
     const [{ data: posts }, { data: replies }, { data: likes }, { data: mutes }] = await Promise.all([
-      sb.from('forum_posts').select('*'),
-      sb.from('forum_replies').select('*'),
-      sb.from('forum_likes').select('*'),
+      selectAll('forum_posts', '*', ['id']),
+      selectAll('forum_replies', '*', ['id']),
+      selectAll('forum_likes', '*', ['post_id', 'user_id']),
       sb.from('forum_mutes').select('*'),
     ]);
     const forum = {};
@@ -160,7 +182,7 @@
 
     // asistencia
     try {
-      const { data: att } = await sb.from('attendance').select('*');
+      const { data: att } = await selectAll('attendance', '*', ['id']);
       const map = {};
       (att || []).forEach(r => {
         map[r.date] = map[r.date] || {};
@@ -304,7 +326,7 @@
   async function refreshProgress() {
     try {
       const sb = SB();
-      const { data: prog, error } = await sb.from('progress').select('*');
+      const { data: prog, error } = await selectAll('progress', '*', ['user_id', 'module_id', 'activity_id']);
       if (error) return false;
       const today = dayStr(Date.now());   // día en hora Perú
       const cloud = {};

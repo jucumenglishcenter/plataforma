@@ -2105,21 +2105,38 @@ window.JUCUM_DATA.markWeekSeen = markWeekSeen;
 /* ── Meta diaria multi-equipo: hidratar minutos de HOY desde la nube ──
  * Los materiales (jucum-connect) escriben daily_sessions; aquí se suman por
  * alumno y getStudentProgress los mezcla con lo local. Refresco cada 3 min. */
+/* Trae TODAS las filas de daily_sessions paginando de a 1000. Supabase corta
+ * cualquier select en 1000 filas; la ventana de 6–13 semanas ya roza ese tope
+ * y sin paginar se perderían los días/semanas MÁS RECIENTES (racha y bono
+ * semanal caídos aunque el alumno sí practicó). */
+function jecPagedDaily(cols, applyFilter, done) {
+  var sb = window.JUCUM_SB.getClient();
+  var PAGE = 1000, all = [];
+  (function page(from) {
+    var q = sb.from('daily_sessions').select(cols)
+      .order('user_id').order('day').order('module_id').order('activity_id');
+    q = applyFilter(q).range(from, from + PAGE - 1);
+    q.then(function (r) {
+      var rows = (r && r.data) || [];
+      all = all.concat(rows);
+      if (rows.length < PAGE) done(all);
+      else page(from + PAGE);
+    }, function () { done(all); });
+  })(0);
+}
 (function jecDailyLoader() {
   function load() {
     try {
       if (!window.JUCUM_SB || !window.JUCUM_SB.getClient) return;
       var day = peruDayStr();
-      window.JUCUM_SB.getClient().from('daily_sessions').select('user_id,minutes').eq('day', day)
-        .then(function (r) {
-          var rows = (r && r.data) || [];
-          var map = {};
-          rows.forEach(function (x) {
-            map[x.user_id] = map[x.user_id] || { day: day, minutes: 0 };
-            map[x.user_id].minutes += (x.minutes || 0);
-          });
-          window.__JEC_DAILY = map;
-        }, function () {});
+      jecPagedDaily('user_id,minutes', function (q) { return q.eq('day', day); }, function (rows) {
+        var map = {};
+        rows.forEach(function (x) {
+          map[x.user_id] = map[x.user_id] || { day: day, minutes: 0 };
+          map[x.user_id].minutes += (x.minutes || 0);
+        });
+        window.__JEC_DAILY = map;
+      });
     } catch (e) {}
   }
   setTimeout(load, 2500);
@@ -2142,38 +2159,32 @@ window.JUCUM_DATA.markWeekSeen = markWeekSeen;
     try {
       if (!window.JUCUM_SB || !window.JUCUM_SB.getClient) return;
       var since = new Date(Date.now() - 5 * 3600000 - 42 * 86400000).toISOString().slice(0, 10); // ~6 semanas (Perú)
-      window.JUCUM_SB.getClient().from('daily_sessions')
-        .select('user_id,day,module_id,activity_id').gte('day', since)
-        .then(function (r) {
-          var rows = (r && r.data) || [];
-          var map = {};
-          rows.forEach(function (x) {
-            var wk = mondayOf(x.day);
-            var key = x.module_id + ':' + x.activity_id;
-            map[x.user_id] = map[x.user_id] || {};
-            map[x.user_id][wk] = map[x.user_id][wk] || {};
-            map[x.user_id][wk][key] = true;
-          });
-          window.__JEC_WEEKS = map;
-        }, function () {});
+      jecPagedDaily('user_id,day,module_id,activity_id', function (q) { return q.gte('day', since); }, function (rows) {
+        var map = {};
+        rows.forEach(function (x) {
+          var wk = mondayOf(x.day);
+          var key = x.module_id + ':' + x.activity_id;
+          map[x.user_id] = map[x.user_id] || {};
+          map[x.user_id][wk] = map[x.user_id][wk] || {};
+          map[x.user_id][wk][key] = true;
+        });
+        window.__JEC_WEEKS = map;
+      });
       /* 🔥 Racha multi-equipo: días REALES con práctica según daily_sessions (una fila
        * por alumno/día/material, nunca se sobreescribe — a diferencia de entry.date).
        * Ventana de 90 días para rachas largas. computeStats une estos días con lo local. */
       var sinceDays = new Date(Date.now() - 5 * 3600000 - 90 * 86400000).toISOString().slice(0, 10);
-      window.JUCUM_SB.getClient().from('daily_sessions')
-        .select('user_id,day').gte('day', sinceDays)
-        .then(function (r) {
-          var rows2 = (r && r.data) || [];
-          var dmap = {};
-          rows2.forEach(function (x) {
-            if (!x.day) return;
-            dmap[x.user_id] = dmap[x.user_id] || {};
-            dmap[x.user_id][x.day] = true;
-          });
-          window.__JEC_DAYS = dmap;
-          // Recalcula rachas ya con los días de la nube (la UI refresca sola cada 20 s).
-          try { if (window.JUCUM_SYNC && window.JUCUM_SYNC.computeStats) window.JUCUM_SYNC.computeStats(); } catch (e) {}
-        }, function () {});
+      jecPagedDaily('user_id,day', function (q) { return q.gte('day', sinceDays); }, function (rows2) {
+        var dmap = {};
+        rows2.forEach(function (x) {
+          if (!x.day) return;
+          dmap[x.user_id] = dmap[x.user_id] || {};
+          dmap[x.user_id][x.day] = true;
+        });
+        window.__JEC_DAYS = dmap;
+        // Recalcula rachas ya con los días de la nube (la UI refresca sola cada 20 s).
+        try { if (window.JUCUM_SYNC && window.JUCUM_SYNC.computeStats) window.JUCUM_SYNC.computeStats(); } catch (e) {}
+      });
     } catch (e) {}
   }
   setTimeout(load, 3000);

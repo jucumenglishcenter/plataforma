@@ -44,13 +44,45 @@
       groupId: data2.group_id,
     };
     localStorage.setItem('jucum_user', JSON.stringify(session));
+    // 📶 Conexión REAL: sella users.last_seen_at al entrar (best-effort;
+    // requiere el script 22 — si la columna no existe, se ignora en silencio).
+    try {
+      localStorage.setItem('jucum_touch_' + data2.id, String(Date.now()));
+      sb.from('users').update({ last_seen_at: new Date().toISOString() }).eq('id', data2.id).then(() => {}, () => {});
+    } catch (e) {}
     return { ok: true, session };
   }
 
+  /* ── 📶 Última conexión real (columna users.last_seen_at · script 22) ──
+   * Sella "estuvo aquí" del usuario con sesión abierta. Con acelerador:
+   * máximo una escritura cada 10 min por usuario. Best-effort: si la
+   * columna aún no existe, no rompe nada. */
+  function touchLastSeen(userId) {
+    if (!userId) return;
+    try {
+      const k = 'jucum_touch_' + userId;
+      const last = Number(localStorage.getItem(k) || 0);
+      if (Date.now() - last < 10 * 60000) return;
+      localStorage.setItem(k, String(Date.now()));
+      getClient().from('users').update({ last_seen_at: new Date().toISOString() }).eq('id', userId).then(() => {}, () => {});
+    } catch (e) {}
+  }
+
   /* ── Generic table helpers ── */
+  /* Paginado: Supabase corta todo select en 1000 filas; tablas como
+   * teacher_class_log o payments crecen sin tope y sin paginar se perderían
+   * las filas más recientes (mismo bug que dejó de registrar el avance). */
   async function all(table) {
-    const { data, error } = await getClient().from(table).select('*');
-    if (error) throw error; return data || [];
+    const PAGE = 1000;
+    let rows = [], from = 0;
+    while (true) {
+      const { data, error } = await getClient().from(table).select('*')
+        .order('id', { ascending: true }).range(from, from + PAGE - 1);
+      if (error) throw error;
+      rows = rows.concat(data || []);
+      if (!data || data.length < PAGE) return rows;
+      from += PAGE;
+    }
   }
   async function insert(table, row) {
     const { data, error } = await getClient().from(table).insert(row).select().maybeSingle();
@@ -75,6 +107,22 @@
     } catch (e) { return false; }
   }
 
+  /* ── Verificar la contraseña de la ADMINISTRADORA (para acciones sensibles
+   *    del panel de administración: eliminar alumno, resetear contraseña). ── */
+  async function verifyAdminPassword(password) {
+    const pass = (password || '').trim();
+    if (!pass) return false;
+    try {
+      // admin marcado por is_admin, por role='admin' o por el usuario 'admi'
+      const { data, error } = await getClient().from('users')
+        .select('password, is_admin, role, username');
+      if (error) throw error;
+      return (data || []).some(u =>
+        (u.is_admin || u.role === 'admin' || u.username === 'admi') &&
+        (u.password || '').trim() === pass);
+    } catch (e) { return false; }
+  }
+
   /* ── Connection test ── */
   async function testConnection() {
     try {
@@ -86,5 +134,5 @@
     }
   }
 
-  window.JUCUM_SB = { getClient, login, all, insert, update, remove, testConnection, verifyTeacherPassword };
+  window.JUCUM_SB = { getClient, login, all, insert, update, remove, testConnection, verifyTeacherPassword, verifyAdminPassword, touchLastSeen };
 })();
