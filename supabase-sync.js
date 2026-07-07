@@ -71,19 +71,29 @@
     write(KEYS.settings, settings);
 
     // progress (paginado: >1000 filas reales)
-    const { data: prog } = await selectAll('progress', '*', ['user_id', 'module_id', 'activity_id']);
-    const progByUser = {};
-    (prog || []).forEach(p => {
-      progByUser[p.user_id] = progByUser[p.user_id] || { completed:{}, todayMinutes:0, lastDay:null };
-      progByUser[p.user_id].completed[`${p.module_id}:${p.activity_id}`] = {
-        score: p.score, minutes: p.minutes, date: p.completed_at,
-      };
-      const day = p.completed_at ? dayStr(Date.parse(p.completed_at)) : '';   // día en hora Perú
-      const today = dayStr(Date.now());
-      if (day === today) progByUser[p.user_id].todayMinutes += (p.minutes||0);
-      if (day && (!progByUser[p.user_id].lastDay || day > progByUser[p.user_id].lastDay)) progByUser[p.user_id].lastDay = day;
-    });
-    write(KEYS.progress, progByUser);
+    // ⚠️ BLINDAJE (jul-2026): NUNCA pisar el progreso local con un resultado
+    // fallido, parcial o vacío. Si la descarga falla (red/timeout/límite/RLS)
+    // selectAll devuelve error (y data parcial o null). Antes se escribía igual
+    // → la caché quedaba en {} y el alumno veía 0% con TODO re-bloqueado hasta
+    // la siguiente hidratación buena. Una tabla real nunca está vacía, así que
+    // ante error o 0 filas conservamos la copia local intacta.
+    const { data: prog, error: progErr } = await selectAll('progress', '*', ['user_id', 'module_id', 'activity_id']);
+    if (progErr || !prog || prog.length === 0) {
+      console.warn('hydrate progress: descarga incompleta o vacía; se conserva la caché local', progErr && progErr.message);
+    } else {
+      const progByUser = {};
+      prog.forEach(p => {
+        progByUser[p.user_id] = progByUser[p.user_id] || { completed:{}, todayMinutes:0, lastDay:null };
+        progByUser[p.user_id].completed[`${p.module_id}:${p.activity_id}`] = {
+          score: p.score, minutes: p.minutes, date: p.completed_at,
+        };
+        const day = p.completed_at ? dayStr(Date.parse(p.completed_at)) : '';   // día en hora Perú
+        const today = dayStr(Date.now());
+        if (day === today) progByUser[p.user_id].todayMinutes += (p.minutes||0);
+        if (day && (!progByUser[p.user_id].lastDay || day > progByUser[p.user_id].lastDay)) progByUser[p.user_id].lastDay = day;
+      });
+      write(KEYS.progress, progByUser);
+    }
 
     // notifications (paginado: crece rápido)
     const { data: notifs } = await selectAll('notifications', '*', ['id']);
