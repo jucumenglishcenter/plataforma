@@ -270,6 +270,7 @@ function AdminRoster({ onChange }) {
           const st = P.getAccountStatus(s);
           const sm = { al_dia:{l:'✅ Al día',c:'#2E7D32'}, en_revision:{l:'🕒 En revisión',c:'#E65100'}, por_vencer:{l:`⏳ ${st.daysLeft}d`,c:'#E65100'}, bloqueado:{l:'🔒 Bloqueado',c:'#C62828'} }[st.state] || {l:'—',c:'#999'};
           const active = (s.totalMinutes||0) > 0;
+          const mastery = D.getStudentMastery ? D.getStudentMastery(s).pct : (s.avgScore||0);
           return (
             <div key={s.id} className="scard roster-row" style={{padding:'12px 14px'}}>
               <div className="row-flex" style={{gap:12, flexWrap:'wrap', alignItems:'center'}}>
@@ -284,8 +285,8 @@ function AdminRoster({ onChange }) {
                   <div className="st-user">racha</div>
                 </div>
                 <div style={{textAlign:'center', minWidth:56}}>
-                  <div style={{fontSize:13, fontWeight:800, color: active ? (s.avgScore>=70?'#2E7D32':s.avgScore>=40?'#E65100':'#C62828') : '#9AA'}}>{active ? (s.avgScore||0)+'%' : '—'}</div>
-                  <div className="st-user">prom.</div>
+                  <div style={{fontSize:13, fontWeight:800, color: active ? (mastery>=70?'#2E7D32':mastery>=40?'#E65100':'#C62828') : '#9AA'}}>{active ? mastery+'%' : '—'}</div>
+                  <div className="st-user">dominio</div>
                 </div>
                 <span className="mm-chip" style={{background:'#F3F3EE', color:sm.c}}>{sm.l}</span>
               </div>
@@ -471,14 +472,15 @@ function ContactLogModal({ student, onClose }) {
  * ═════════════════════════════════════════════════ */
 function exportRosterCSV(list, D, regByKey) {
   const P = window.JUCUM_PAY;
-  const rows = [['Nombre','Usuario','DNI','Correo','Teléfono','Apoderado','DNI apoderado','Nivel','Grupo','Origen','Fecha de inscripción','Racha (días)','Promedio (%)','Estado de pago']];
+  const rows = [['Nombre','Usuario','DNI','Correo','Teléfono','Apoderado','DNI apoderado','Nivel','Grupo','Origen','Fecha de inscripción','Racha (días)','Dominio (%)','Estado de pago']];
   list.forEach(s => {
     const g = D.GROUPS.find(g => g.id === s.group);
     const lvl = (D.LEVELS[s.level] || {}).code || s.level || '';
     const o = originOf(s, regByKey).l.includes('enlace') ? 'Por enlace' : 'Creado por ti';
     const st = P.getAccountStatus(s).state || '';
     const fecha = s.createdAt ? new Date(s.createdAt).toISOString().slice(0,10) : '';
-    rows.push([s.fullName||'', s.username||'', s.dni||'', s.email||'', s.phone||'', s.guardianName||'', s.guardianDni||'', lvl, g?.name||'', o, fecha, s.streak||0, s.avgScore||0, st]);
+    const mastery = D.getStudentMastery ? D.getStudentMastery(s).pct : (s.avgScore||0);
+    rows.push([s.fullName||'', s.username||'', s.dni||'', s.email||'', s.phone||'', s.guardianName||'', s.guardianDni||'', lvl, g?.name||'', o, fecha, s.streak||0, mastery, st]);
   });
   const csv = rows.map(r => r.map(c => { const v = String(c==null?'':c); return /[,";\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }).join(',')).join('\n');
   const blob = new Blob(['\uFEFF'+csv], { type: 'text/csv;charset=utf-8;' });
