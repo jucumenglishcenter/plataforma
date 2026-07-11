@@ -4,6 +4,13 @@
  * Krashen/decisión del teacher: el vocabulario se asienta con repasos cortos y
  * frecuentes. NO es obligatorio ni bloquea nada — un empujón amable, descartable
  * por hoy, con acceso directo al Quizlet del módulo activo. */
+/* Hora de PERÚ (UTC−5) para los cortes de día y las horas de las alertas.
+ * El navegador/UTC adelantaba el día ~7 PM Perú y disparaba falsas alertas de
+ * "racha en peligro" / "días sin practicar". Todo lo que gatille avisos usa esto. */
+const PERU_MS = 5 * 3600000;
+const peruDayKey = () => new Date(Date.now() - PERU_MS).toISOString().slice(0, 10);
+const peruHour = () => new Date(Date.now() - PERU_MS).getUTCHours();
+
 function VocabReminder({ student, settings, onGo }) {
   const D = window.JUCUM_DATA;
   const today = new Date().toISOString().slice(0, 10);
@@ -274,9 +281,8 @@ function StudentDashboard({ user, onLogout }) {
       localStorage.setItem(todayKey, '1');
     }
     // Streak warning — practiced yesterday but not today, after 6pm
-    const now = new Date();
-    if (student.streak > 0 && todayMin === 0 && now.getHours() >= 18) {
-      const streakKey = `jucum_streak_warn_${student.id}_${now.toISOString().slice(0,10)}`;
+    if (student.streak > 0 && todayMin === 0 && peruHour() >= 18) {
+      const streakKey = `jucum_streak_warn_${student.id}_${peruDayKey()}`;
       if (!localStorage.getItem(streakKey)) {
         window.JUCUM_NOTIF.pushNotif(student.id, {
           type: 'streak',
@@ -293,7 +299,7 @@ function StudentDashboard({ user, onLogout }) {
   React.useEffect(() => {
     if (!window.JUCUM_NOTIF) return;
     const D = window.JUCUM_DATA;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = peruDayKey();
     const tMin = progress.todayMinutes || 0;
     const goal = settings.dailyTargetMin || 15;
     if (tMin >= goal) {
@@ -329,12 +335,12 @@ function StudentDashboard({ user, onLogout }) {
 
   // Alarma visual + sonora (1 vez al día): inactividad o racha en peligro
   React.useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = peruDayKey();
     const key = `jucum_alert_${student.id}_${today}`;
     if (localStorage.getItem(key)) return;
     let kind = null;
     if (student.lastActiveDays >= 3) kind = 'inactive';
-    else if (student.streak >= 1 && (progress.todayMinutes || 0) === 0 && new Date().getHours() >= 18) kind = 'streak';
+    else if (student.streak >= 1 && (progress.todayMinutes || 0) === 0 && peruHour() >= 18) kind = 'streak';
     if (!kind) return;
     setAlertKind(kind);
     localStorage.setItem(key, '1');

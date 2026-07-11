@@ -985,14 +985,20 @@ function getStudentXP(student) {
 function getRealInactiveDays(student) {
   try {
     const prog = getStudentProgress(student.id) || {};
-    if ((prog.todayMinutes || 0) > 0) return 0;
+    if ((prog.todayMinutes || 0) > 0) return 0;   // practicó hoy (local o nube-hoy)
+    // Fuente PRINCIPAL: el valor derivado de la NUBE por computeStats (hora Perú;
+    // une daily_sessions + progreso + días locales). Es el MISMO número que ve el
+    // resto de la plataforma, así que evita el falso "N días sin practicar" cuando
+    // el alumno practicó DENTRO del material (que escribe a la nube) o en otro
+    // equipo, y el localStorage de ESTE navegador quedó viejo.
+    if (typeof student.lastActiveDays === 'number') return Math.max(0, student.lastActiveDays);
+    // Fallback local (sin nube todavía): contar en día de PERÚ, no del navegador/UTC.
     if (prog.lastDay) {
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const last = new Date(prog.lastDay + 'T00:00:00');
-      return Math.max(0, Math.round((today - last) / 86400000));
+      const todayPeru = peruDayStr();
+      return Math.max(0, Math.round((Date.parse(todayPeru + 'T00:00:00Z') - Date.parse(prog.lastDay + 'T00:00:00Z')) / 86400000));
     }
   } catch (e) {}
-  return typeof student.lastActiveDays === 'number' ? student.lastActiveDays : 0;
+  return typeof student.lastActiveDays === 'number' ? Math.max(0, student.lastActiveDays) : 0;
 }
 
 /* Pérdida de XP por días sin practicar: día 2 → 2 · día 3 → 6 · día 4 → 12 · día 5 → 20… (tope 60) */
