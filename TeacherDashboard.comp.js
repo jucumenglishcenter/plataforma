@@ -381,7 +381,7 @@ function GroupModulesQuick({ groupId }) {
 }
 
 function GroupDetail({ groupId, onBack, onSelectStudent }) {
-  const { GROUPS, STUDENTS, LEVELS, getStudentMastery } = window.JUCUM_DATA;
+  const { GROUPS, STUDENTS, LEVELS, getStudentMastery, getStudentReadiness } = window.JUCUM_DATA;
   const group = GROUPS.find(g => g.id === groupId);
   const level = LEVELS[group.level];
   const members = STUDENTS.filter(s => s.group === groupId);
@@ -390,11 +390,13 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
   React.useEffect(() => { document.body.setAttribute('data-level', group.level); return () => document.body.removeAttribute('data-level'); }, [group.level]);
 
   const groupAvg = members.length ? Math.round(members.reduce((s,x)=>s+getStudentMastery(x).pct,0)/members.length) : 0;
+  const aptCount = members.filter(s => getStudentReadiness(s).apt).length;
   const [q, setQ] = React.useState('');
   const [sortKey, setSortKey] = React.useState('dominio');
   const [deleting, setDeleting] = React.useState(null);
   const SORTS = {
     dominio:        (a,b)=>getStudentMastery(b).pct - getStudentMastery(a).pct,
+    examen:         (a,b)=>getStudentReadiness(b).overall - getStudentReadiness(a).overall,
     practica_mas:   (a,b)=>(b.totalMinutes||0) - (a.totalMinutes||0),
     practica_menos: (a,b)=>(a.totalMinutes||0) - (b.totalMinutes||0),
     racha:          (a,b)=>(b.streak||0) - (a.streak||0),
@@ -416,7 +418,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
         <div className="welcome-text">
           <div className="eyebrow">{level.emoji} {level.code} · {group.schedule}</div>
           <h1>{group.name}</h1>
-          <p>{members.length} alumnos · dominio del grupo <b>{groupAvg}%</b> · iniciado el {group.startDate}</p>
+          <p>{members.length} alumnos · dominio del grupo <b>{groupAvg}%</b> · 🎓 <b>{aptCount}</b> apto{aptCount===1?'':'s'} para examen · iniciado el {group.startDate}</p>
         </div>
         <button className="btn-settings" onClick={() => setShowSettings(true)}>⚙️ Configurar grupo</button>
         <button className="btn-settings" onClick={() => setShowReport(true)} style={{marginLeft:8}}>📄 Reporte PDF</button>
@@ -440,6 +442,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
             <option value="practica_mas">🔥 Practica más</option>
             <option value="practica_menos">💤 Practica menos</option>
             <option value="dominio">Dominio ↓</option>
+            <option value="examen">🎓 Preparación examen ↓</option>
             <option value="racha">Racha ↓</option>
             <option value="az">A → Z</option>
           </select>
@@ -451,7 +454,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
         <div className="st-head">
           <div className="col-name">Alumno</div>
           <div className="col-mod">Módulos</div>
-          <div className="col-avg">Dominio</div>
+          <div className="col-avg" title="Dominio = qué tan bien hizo lo que hizo (cobertura × aciertos × constancia). El número 🎓 es la Preparación para el examen: castiga más la inactividad y exige ≥60% del módulo.">Dominio · 🎓</div>
           <div className="col-streak">Racha</div>
           <div className="col-time">Tiempo</div>
           <div className="col-last">🏆 Logros</div>
@@ -725,6 +728,9 @@ function ModuleChecklist({ stu, group }) {
 function StudentRow({ stu, rank, level, onClick, onDelete }) {
   const m = window.JUCUM_DATA.getStudentMastery(stu);
   const mastery = m.pct;
+  // 🎓 Preparación para el examen (métrica distinta al dominio: castiga más la
+  // inactividad y exige cubrir ≥60% del módulo). Visible por alumno, sin abrir su ficha.
+  const r = window.JUCUM_DATA.getStudentReadiness(stu);
   // ✅ "Al día" = terminó TODO lo asignado: que no practique no es una alerta
   // (era la causa de "primeros lugares con 9 días sin conectarse": los mejores
   // terminan todo y ya no tienen nada nuevo que completar).
@@ -751,8 +757,10 @@ function StudentRow({ stu, rank, level, onClick, onDelete }) {
         </div>
       </div>
       <div className="col-mod">{stu.completedModules}</div>
-      <div className={`col-avg ${mastery >= 85 ? 'high' : mastery >= 70 ? 'mid' : mastery > 0 ? 'low' : 'na'}`}>
-        {mastery > 0 ? `${mastery}%` : '—'}
+      <div className={`col-avg ${mastery >= 85 ? 'high' : mastery >= 70 ? 'mid' : mastery > 0 ? 'low' : 'na'}`}
+           title={`Dominio = lo hecho (${m.done}/${m.total}) × aciertos (${m.quality}%) × constancia (${m.active7}/7 días activos)` + (m.active7 === 0 && mastery > 0 ? ' · incluye −15% por no practicar esta semana' : '') + ` · 🎓 Preparación examen: ${r.overall}% (${r.apt ? 'apto' : 'aún no apto'})`}>
+        <div>{mastery > 0 ? `${mastery}%` : '—'}</div>
+        <div style={{fontSize:10, fontWeight:800, marginTop:2, color: r.apt ? '#2E7D32' : r.overall >= 50 ? '#B26A00' : '#C62828'}}>{r.apt ? '🎓 listo' : `🎓 ${r.overall}%`}</div>
       </div>
       <div className="col-streak">{stu.streak > 0 ? `🔥 ${stu.streak}` : '—'}</div>
       <div className="col-time">{Math.floor(stu.totalMinutes/60) > 0 ? `${Math.floor(stu.totalMinutes/60)}h ${stu.totalMinutes%60}m` : `${stu.totalMinutes}m`}</div>

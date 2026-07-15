@@ -280,7 +280,7 @@
   window.JUCUM_SYNC = {
     hydrate, pushSettings, pushProgress, pushNotif, markNotifRead, markAllNotifRead,
     pushEvaluation, pushPost, pushReply, pushPin, deletePostDb, deleteReplyDb, pushLike, pushMute,
-    pushModule, deleteModuleDb, fetchModules, fetchActivityParts, computeStats,    pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb, uploadAttachments, refreshTasks, refreshProgress,
+    pushModule, deleteModuleDb, fetchModules, fetchActivityParts, fetchModuleProgress, fetchModuleParts, computeStats,    pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb, uploadAttachments, refreshTasks, refreshProgress,
     pushExam, deleteExamDb, pushWindow, deleteWindowDb,
     pushAttendance, pushSurvey,
   };
@@ -561,6 +561,19 @@
   async function fetchActivityParts(studentId) {
     const { data, error } = await SB().from('activity_parts').select('*').eq('user_id', studentId);
     if (error) { console.warn('fetchActivityParts:', error.message); return []; }
+    return data || [];
+  }
+  /* 🎓 EXAMEN · avance en vivo: filas de progress/activity_parts de UN módulo
+   * (module_id = 'exam-<id>'). Las llena jucum-connect en modo examen; el panel
+   * del profesor las lee para ver notas por parte + salidas de pestaña (part 99). */
+  async function fetchModuleProgress(moduleId) {
+    const { data, error } = await SB().from('progress').select('*').eq('module_id', moduleId);
+    if (error) { console.warn('fetchModuleProgress:', error.message); return []; }
+    return data || [];
+  }
+  async function fetchModuleParts(moduleId) {
+    const { data, error } = await SB().from('activity_parts').select('*').eq('module_id', moduleId);
+    if (error) { console.warn('fetchModuleParts:', error.message); return []; }
     return data || [];
   }
 })();

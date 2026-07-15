@@ -40,6 +40,7 @@ function TeacherExams({ onBack, canDefine, hideBack }) {
   const [tab, setTab] = exUseState('modules');
   const [editing, setEditing] = exUseState(null); // 'new' | exam
   const [opening, setOpening] = exUseState(false);
+  const [demoOpen, setDemoOpen] = exUseState(false);
   const [tick, setTick] = exUseState(0);
   const refresh = () => setTick(t => t + 1);
 
@@ -58,6 +59,7 @@ function TeacherExams({ onBack, canDefine, hideBack }) {
         <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
           {canDefine && <button className="btn-settings" onClick={() => setEditing('new')}>+ Definir examen</button>}
           <button className="btn-settings" onClick={() => setOpening(true)} disabled={exams.length===0}>📅 Abrir examen</button>
+          <button className="btn-settings" onClick={() => setDemoOpen(true)}>🧪 Examen de prueba</button>
         </div>
       </div>
 
@@ -99,6 +101,7 @@ function TeacherExams({ onBack, canDefine, hideBack }) {
 
       {editing && <ExamForm exam={editing==='new'?null:editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />}
       {opening && <WindowForm onClose={() => setOpening(false)} onSaved={() => { setOpening(false); setTab('windows'); refresh(); }} />}
+      {demoOpen && <DemoExamModal onClose={() => setDemoOpen(false)} onDone={() => { setDemoOpen(false); setTab('windows'); refresh(); }} />}
     </main>
   );
 }
@@ -133,6 +136,30 @@ function WindowCard({ w, onChange }) {
   const [grading, setGrading] = exUseState(null);
   const closed = w.closesAt && new Date(w.closesAt) < new Date();
 
+  /* 🔎 Avance EN VIVO desde la nube: notas por parte + salidas de pestaña (part 99) */
+  const [live, setLive] = exUseState(null);
+  const [liveBusy, setLiveBusy] = exUseState(false);
+  const loadLive = async () => {
+    const S = window.JUCUM_SYNC;
+    if (!S || !S.fetchModuleProgress) { alert('Sin conexión con la nube.'); return; }
+    setLiveBusy(true);
+    try {
+      const rows = await S.fetchModuleProgress('exam-' + w.examId);
+      const parts = await S.fetchModuleParts('exam-' + w.examId);
+      const by = {};
+      rows.forEach(r0 => { by[r0.user_id] = by[r0.user_id] || { parts:{}, focus:null }; by[r0.user_id].parts[r0.activity_id] = { score: r0.score, minutes: r0.minutes }; });
+      parts.forEach(p => { by[p.user_id] = by[p.user_id] || { parts:{}, focus:null }; if (Number(p.part) === 99) by[p.user_id].focus = p.score; });
+      setLive(by);
+    } catch (e) { alert('No se pudo leer el avance del examen.'); }
+    setLiveBusy(false);
+  };
+  const liveSug = (sid) => {
+    if (!live || !live[sid] || !exam) return null;
+    const map = {};
+    Object.entries(live[sid].parts).forEach(([k, v]) => { if (typeof v.score === 'number') map[k] = v.score; });
+    return X.suggestedGrade(exam, map);
+  };
+
   return (
     <div className="scard">
       <div className="sec-head">
@@ -157,6 +184,11 @@ function WindowCard({ w, onChange }) {
         <span className="settings-hint" style={{margin:0}}>{w.published ? 'Los alumnos ya ven su nota.' : 'Calificas en privado; comparte cuando decidas.'}</span>
       </div>
 
+      <div className="row-flex" style={{marginBottom:12}}>
+        <button className="att-btn" onClick={loadLive} disabled={liveBusy}>🔎 {liveBusy ? 'Consultando…' : live ? 'Actualizar avance en vivo' : 'Ver avance en vivo'}</button>
+        <span className="settings-hint" style={{margin:0}}>{live ? 'Notas por parte + salidas de pestaña (⚠), leídas de la nube.' : 'Lee de la nube qué partes rindió cada alumno y si salió de la pestaña.'}</span>
+      </div>
+
       <div className="sm-list">
         {[...recips].sort((a,b) => {
           const ga = (w.results||{})[a.id], gb = (w.results||{})[b.id];
@@ -178,6 +210,18 @@ function WindowCard({ w, onChange }) {
               <div className="sm-info">
                 <div className="sm-name">{s.fullName}</div>
                 <div className="sm-meta">Preparación {r.overall}% · {r.apt ? '✅ apto' : '⚠ no apto'}{sub ? ' · entregó material' : ''}</div>
+                {live && (() => {
+                  const lv = live[s.id];
+                  if (!lv) return <div className="sm-meta" style={{color:'#A8A8A8'}}>🕒 examen sin iniciar</div>;
+                  const sug = liveSug(s.id);
+                  return (
+                    <div className="sm-meta" style={{color:'#1B5E20', fontWeight:700}}>
+                      {(exam?.parts||[]).map((p,i) => { const e2 = lv.parts[p.competency]; const ic = (compLabel(p.competency)||'📑').split(' ')[0]; return <span key={i} style={{marginRight:8}}>{ic} {e2 && typeof e2.score==='number' ? e2.score+'%' : '—'}</span>; })}
+                      {sug != null && <span style={{color:'#1565C0'}}>→ sugerida {sug}/100</span>}
+                      <span style={{marginLeft:8, color: lv.focus>0 ? '#C62828' : '#2E7D32'}}>{lv.focus>0 ? `⚠ salió ${lv.focus}× de la pestaña` : '✓ sin salidas'}</span>
+                    </div>
+                  );
+                })()}
                 {res && <div className="sm-meta" style={{color:'#1565C0'}}>🧩 {diag}</div>}
               </div>
               {res
@@ -194,14 +238,14 @@ function WindowCard({ w, onChange }) {
         })}
       </div>
 
-      {grading && <ExamGradeModal w={w} student={grading} onClose={() => { setGrading(null); onChange(); }} />}
+      {grading && <ExamGradeModal w={w} student={grading} suggested={liveSug(grading.id)} onClose={() => { setGrading(null); onChange(); }} />}
     </div>
   );
 }
 
-function ExamGradeModal({ w, student, onClose }) {
+function ExamGradeModal({ w, student, suggested, onClose }) {
   const res = (w.results||{})[student.id] || {};
-  const [grade, setGrade] = exUseState(typeof res.grade==='number'?res.grade:75);
+  const [grade, setGrade] = exUseState(typeof res.grade==='number' ? res.grade : (typeof suggested==='number' ? suggested : 75));
   const [withGrade, setWithGrade] = exUseState(typeof res.grade==='number' || true);
   const [passed, setPassed] = exUseState(res.passed ?? true);
   const [feedback, setFeedback] = exUseState(res.feedback || '');
@@ -220,6 +264,7 @@ function ExamGradeModal({ w, student, onClose }) {
           <div className="settings-block">
             <label className="check-row"><input type="checkbox" checked={withGrade} onChange={e=>setWithGrade(e.target.checked)} /><span>Ponerle nota</span></label>
             {withGrade && <div className="row-flex" style={{marginTop:8}}><input type="range" min="0" max="100" value={grade} onChange={e=>setGrade(parseInt(e.target.value))} className="slider-input" /><div className="target-val">{grade}<span>/100</span></div></div>}
+            {typeof suggested === 'number' && <div className="settings-hint" style={{marginTop:6}}>🔎 Nota sugerida por sus partes rendidas: <b>{suggested}/100</b> (usa “Ver avance en vivo” para actualizarla).</div>}
           </div>
           <div className="settings-block">
             <div className="settings-label">Retroalimentación</div>
@@ -430,6 +475,12 @@ function StudentExamCard({ w, student, onChange }) {
 
       {res && res.feedback && <div className="eval-feedback" style={{marginBottom:10}}><div className="eval-fb-lbl">📝 Del profesor</div><div className="eval-fb-text">{res.feedback}</div></div>}
 
+      {!res && (
+        <div style={{background:'#FFF5F5', border:'1.5px solid #F2B8B5', borderRadius:12, padding:'11px 14px', marginBottom:12, fontSize:12.5, lineHeight:1.6, color:'#8C1D18', fontWeight:700}}>
+          📵 <b>Al rendir:</b> quédate SOLO en la pestaña del examen — cada salida queda <b>registrada</b> y tu profesor la verá. 💾 Tus respuestas escritas se guardan solas: si se corta el internet, vuelve a abrir desde aquí (mismo equipo) y continúas. 1️⃣ Vale tu <b>primer intento</b>. ¡Éxito! 💪
+        </div>
+      )}
+
       <div className="al-items">
         {(exam.parts||[]).map((p,i) => {
           const href = X.examPartLink(p, exam.id, student.id);
@@ -530,7 +581,39 @@ function ModuleResultsBlock({ student }) {
   );
 }
 
-Object.assign(window, { TeacherExams, StudentExams, WindowCard, ExamGradeModal, ExamForm, WindowForm, StudentExamCard, ModuleWeightPanel, ModuleResultsBlock, ModuleExamPanel, ModuleExamRow });
+Object.assign(window, { TeacherExams, StudentExams, WindowCard, ExamGradeModal, ExamForm, WindowForm, DemoExamModal, StudentExamCard, ModuleWeightPanel, ModuleResultsBlock, ModuleExamPanel, ModuleExamRow });
+
+/* 🧪 Modal: crea el examen de prueba para un grupo (ideal: tu grupo de prueba) */
+function DemoExamModal({ onClose, onDone }) {
+  const { GROUPS, LEVELS } = window.JUCUM_DATA;
+  const X = window.JUCUM_EXAMS;
+  const [groupId, setGroupId] = exUseState(GROUPS[0]?.id || '');
+  const [err, setErr] = exUseState('');
+  const go = () => {
+    const r = X.createDemoExam(groupId);
+    if (!r) { setErr('Ese grupo no tiene un módulo con materiales para armar la prueba.'); return; }
+    alert(`🧪 Examen de prueba creado y ABIERTO para ${r.students} alumno(s) — todos habilitados, sin exigir el 75%.\n📣 Anunciado para el ${new Date(r.date + 'T12:00:00Z').toLocaleDateString('es-PE', {weekday:'long', day:'numeric', month:'long'})}: verán la cuenta regresiva en su panel.\n\nCuando termines la prueba, elimina la apertura (🗑 en Aperturas) y el examen 🧪.`);
+    onDone();
+  };
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal settings-modal" style={{maxWidth:520}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-head"><div className="modal-title">🧪 Examen de prueba</div><button className="modal-close" onClick={onClose}>✕</button></div>
+        <div className="modal-body">
+          {err && <div className="err" style={{marginBottom:12}}>⚠ {err}</div>}
+          <div className="settings-hint" style={{marginBottom:12}}>Arma un examen con <b>materiales reales del primer módulo</b> del nivel del grupo (listening + reading + gramática), lo <b>abre de inmediato para todos</b> (sin exigir el 75%) y lo <b>anuncia para dentro de 3 días</b> — así pruebas completo: cuenta regresiva, reglas, guardado automático, registro de salidas de pestaña y avance en vivo. No toca el dominio ni el avance normal de los alumnos.</div>
+          <div className="settings-block">
+            <div className="settings-label">Grupo (usa tu grupo de prueba)</div>
+            <select className="input-text" style={{width:'100%'}} value={groupId} onChange={e=>setGroupId(e.target.value)}>
+              {GROUPS.map(g => <option key={g.id} value={g.id}>{LEVELS[g.level]?.emoji} {g.name}</option>)}
+            </select>
+          </div>
+          <div className="modal-actions"><button className="btn-cancel" onClick={onClose}>Cancelar</button><button className="btn-save" onClick={go}>🧪 Crear y abrir</button></div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ═══ Panel del profesor: exámenes por módulo (anunciar + publicar) ═══ */
 function ModuleExamPanel({ onChange }) {

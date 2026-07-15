@@ -70,7 +70,8 @@
   if (teacher) WARN_AFTER_SEC = 60 * 60; // el profesor da su clase libremente, sin avisos de inactividad
 
   function load(cb) {
-    if (demo && !teacher) return cb(); // prueba/examen sin profesor: sin Supabase
+    // Examen con alumno identificado: SÍ carga Supabase (registra nota + salidas).
+    if (demo && !teacher && !(exam && uid)) return cb(); // prueba pura: sin Supabase
     if (window.supabase) return cb();
     // El cronómetro + el conteo de tiempo NO deben depender de que la CDN de
     // Supabase cargue: si la red falla o tarda, igual arrancamos (el chip SIEMPRE
@@ -90,6 +91,9 @@
     // Reintento perezoso: si Supabase cargó tarde (después de mostrar el chip),
     // creamos el cliente la primera vez que haga falta guardar.
     function ensureSb() { if (!sb && !demo && window.supabase) { try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch (e) {} } return sb; }
+    // 🎓 Cliente propio del MODO EXAMEN (demo=true bloquea sb, pero el examen sí registra)
+    var exSb = null;
+    function ensureExSb() { if (!exSb && exam && uid && window.supabase) { try { exSb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch (e) {} } return exSb; }
     // Cliente para registrar el USO DE CLASE del profesor (bitácora)
     var classSb = (teacher && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
     var CLASS_MIN_SEC = 5 * 60;
@@ -232,6 +236,135 @@
       jecSendReport(String(msg || '-'), kind || null);
     };
 
+    /* ═══ 🎓 MODO EXAMEN SEGURO ═══
+     * 1) Reglas antes de comenzar (acepta para iniciar).
+     * 2) Salidas de pestaña/ventana REGISTRADAS (activity_parts part=99, en vivo).
+     * 3) Respuestas escritas se auto-guardan en este equipo y se restauran al volver.
+     * 4) Al terminar: nota del PRIMER intento a la nube (module exam-…). */
+    var examFocusLoss = 0;
+    var EXDRAFT_KEY = 'jucum_examdraft_' + (uid || 'demo') + '_' + modId + '_' + actId;
+    if (exam) (function examSecure() {
+      function draft() { try { return JSON.parse(localStorage.getItem(EXDRAFT_KEY) || '{}'); } catch (e) { return {}; } }
+      function saveDraft(patch) { try { var d = draft(); for (var k in patch) d[k] = patch[k]; localStorage.setItem(EXDRAFT_KEY, JSON.stringify(d)); } catch (e) {} }
+      var d0 = draft();
+      examFocusLoss = d0.focus || 0;
+
+      // — franja fija: recuerda las reglas durante TODO el examen —
+      var strip = document.createElement('div');
+      strip.id = 'jec-exam-strip';
+      strip.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#B71C1C;color:#fff;padding:7px 14px;font:800 12px system-ui,sans-serif;text-align:center;z-index:999998;';
+      function stripMsg() {
+        strip.textContent = '🎓 EXAMEN EN CURSO — no abras otras pestañas ni salgas de esta ventana: cada salida queda registrada' + (examFocusLoss > 0 ? ' · ⚠ salidas: ' + examFocusLoss : '');
+      }
+      stripMsg();
+      document.body.appendChild(strip);
+
+      // — registro de salidas (pestaña oculta / ventana pierde el foco) —
+      var lastLoss = 0;
+      function integrityPush() {
+        var s = ensureExSb(); if (!s) return;
+        s.from('activity_parts').upsert({
+          user_id: uid, module_id: modId, activity_id: actId, part: 99,
+          score: examFocusLoss, minutes: Math.round(activeSec / 60), completed_at: new Date().toISOString()
+        }, { onConflict: 'user_id,module_id,activity_id,part' }).then(function () {}, function () {});
+      }
+      function countLoss() {
+        var now = Date.now();
+        if (now - lastLoss < 1500) return; // blur+hidden juntos = 1 sola salida
+        lastLoss = now;
+        examFocusLoss++;
+        saveDraft({ focus: examFocusLoss });
+        stripMsg();
+        integrityPush();
+      }
+      document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') countLoss(); });
+      window.addEventListener('blur', countLoss);
+
+      // — auto-guardado de respuestas escritas (inputs/selects/textareas) —
+      var restoreLock = false;
+      function fieldKey(el, i) {
+        if (el.type === 'radio' || el.type === 'checkbox') return el.tagName + ':' + (el.name || '#') + ':' + el.value;
+        return el.tagName + ':' + (el.name || '#') + ':' + i;
+      }
+      function fire(el) { try { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {} }
+      function collect() {
+        var out = {}, els = document.querySelectorAll('input, textarea, select');
+        for (var i = 0; i < els.length; i++) {
+          var el = els[i];
+          if (el.type === 'password' || el.type === 'file' || el.type === 'hidden') continue;
+          out[fieldKey(el, i)] = (el.type === 'radio' || el.type === 'checkbox') ? !!el.checked : el.value;
+        }
+        return out;
+      }
+      function restore() {
+        var ans = draft().answers; if (!ans) return;
+        restoreLock = true;
+        var els = document.querySelectorAll('input, textarea, select');
+        for (var i = 0; i < els.length; i++) {
+          var el = els[i], k = fieldKey(el, i);
+          if (!(k in ans)) continue;
+          var v = ans[k];
+          if (el.type === 'radio' || el.type === 'checkbox') { if (el.checked !== v) { el.checked = v; fire(el); } }
+          else if (v && el.value !== v) { el.value = v; fire(el); }
+        }
+        restoreLock = false;
+      }
+      var saveT = null;
+      function scheduleSave() { if (restoreLock) return; clearTimeout(saveT); saveT = setTimeout(function () { saveDraft({ answers: collect(), at: Date.now() }); }, 400); }
+      document.addEventListener('input', scheduleSave, true);
+      document.addEventListener('change', scheduleSave, true);
+
+      // — reglas + inicio —
+      var resumed = d0.answers && Object.keys(d0.answers).length > 0;
+      var ov = document.createElement('div');
+      ov.id = 'jec-exam-rules';
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.78);z-index:1000001;display:flex;align-items:center;justify-content:center;padding:16px;font-family:system-ui,sans-serif;';
+      ov.innerHTML = '<div style="background:#fff;border-radius:20px;max-width:440px;width:100%;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,0.4);">'
+        + '<div style="background:#B71C1C;color:#fff;padding:18px 22px;"><div style="font-size:30px;line-height:1;">🎓</div><div style="font-weight:800;font-size:19px;margin-top:4px;">Estás por rendir tu examen</div><div style="font-size:12.5px;opacity:.9;font-weight:700;">Léelo con calma antes de comenzar</div></div>'
+        + '<div style="padding:16px 22px 20px;font-size:13.5px;line-height:1.6;color:#333;">'
+        + '<div style="margin-bottom:8px;">📵 <b>No abras otras pestañas</b> ni salgas de esta ventana: <b>cada salida queda registrada</b> y tu profesor la verá.</div>'
+        + '<div style="margin-bottom:8px;">💾 Tus <b>respuestas escritas se guardan solas</b>: si se corta la luz o el internet, vuelve a abrir el examen desde la plataforma <b>en este mismo equipo</b> y continúas donde quedaste.</div>'
+        + '<div style="margin-bottom:8px;">1️⃣ Vale tu <b>primer intento</b>: al terminar, tu nota queda registrada y enviada a tu profesor.</div>'
+        + '<div style="margin-bottom:14px;">🙏 Hazlo solo y con honestidad — este examen muestra <b>tu</b> avance real.</div>'
+        + (resumed ? '<div style="background:#FFF8E1;border:1.5px solid #FFD54F;border-radius:10px;padding:9px 12px;font-weight:800;color:#7A4E00;margin-bottom:12px;">🔄 Encontramos tu avance guardado: continuarás donde quedaste.</div>' : '')
+        + '<button id="jec-exam-start" style="width:100%;padding:13px;border:none;border-radius:24px;background:#B71C1C;color:#fff;font-weight:800;font-size:15px;cursor:pointer;">Acepto, comenzar mi examen ✍️</button>'
+        + '</div></div>';
+      document.body.appendChild(ov);
+      document.getElementById('jec-exam-start').onclick = function () {
+        ov.remove();
+        saveDraft({ acceptedAt: new Date().toISOString() });
+        if (resumed) setTimeout(restore, 150);
+      };
+    })();
+
+    // 🎓 EXAMEN: registra el PRIMER intento en la nube (module exam-…) + integridad
+    function finishExam(pct, minutes, hasScore) {
+      try { localStorage.removeItem(EXDRAFT_KEY); } catch (e) {}
+      var s = ensureExSb();
+      if (!s) { showResultCard(pct, '🎓 Examen terminado · ' + minutes + ' min' + (hasScore ? ' · ' + pct + '%' : '') + ' · ⚠ sin conexión: avísale tu resultado a tu profesor', hasScore, true); return; }
+      s.from('activity_parts').upsert({
+        user_id: uid, module_id: modId, activity_id: actId, part: 99,
+        score: examFocusLoss, minutes: minutes, completed_at: new Date().toISOString()
+      }, { onConflict: 'user_id,module_id,activity_id,part' }).then(function () {}, function () {});
+      s.from('progress').select('score').eq('user_id', uid).eq('module_id', modId).eq('activity_id', actId).maybeSingle().then(function (r) {
+        var prev = (r && r.data && r.data.score != null) ? r.data.score : null;
+        if (prev != null) { showResultCard(prev, '🎓 Esta parte ya estaba registrada con ' + prev + '%. En el examen vale tu PRIMER intento.', true, true); return; }
+        s.from('progress').upsert({
+          user_id: uid, module_id: modId, activity_id: actId,
+          score: pct, minutes: minutes, completed_at: new Date().toISOString()
+        }, { onConflict: 'user_id,module_id,activity_id' }).then(function (r2) {
+          if (r2 && r2.error) { showResultCard(pct, '🎓 Terminaste (' + (hasScore ? pct + '%' : minutes + ' min') + ') pero no se pudo registrar. Avísale a tu profesor.', hasScore, true); return; }
+          showResultCard(pct, '🎓 ¡Registrado y enviado a tu profesor! · ' + minutes + ' min' + (hasScore ? ' · ' + pct + '%' : '') + (examFocusLoss > 0 ? ' · ⚠ ' + examFocusLoss + ' salida(s) registrada(s)' : ''), hasScore, true);
+        }, function () { showResultCard(pct, '🎓 Terminaste pero no se pudo registrar (¿sin internet?). Avísale a tu profesor.', hasScore, true); });
+      }, function () {
+        s.from('progress').upsert({
+          user_id: uid, module_id: modId, activity_id: actId,
+          score: pct, minutes: minutes, completed_at: new Date().toISOString()
+        }, { onConflict: 'user_id,module_id,activity_id' }).then(function () {}, function () {});
+        showResultCard(pct, '🎓 Examen terminado · ' + minutes + ' min' + (hasScore ? ' · ' + pct + '%' : ''), hasScore, true);
+      });
+    }
+
 
     function fmt(sec) {
       return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
@@ -303,6 +436,7 @@
       try { if (window.parent && window.parent !== window) window.parent.postMessage({ source: 'jucum-connect', type: 'done', uid: uid, mod: modId, act: actId, score: (score == null ? null : pct), minutes: minutes }, '*'); } catch (e) {}
 
       if (demo) {
+        if (exam && uid) { finishExam(pct, minutes, score != null); return; }
         showResultCard(pct, '🧪 Modo prueba · ' + minutes + ' min' + (score != null ? ' · ' + pct + '%' : '') + ' (no se registró)', score != null, lowStakes);
         return;
       }

@@ -265,11 +265,54 @@ function cancelAnnouncement(groupId, moduleId) {
   const a = loadAnn(); delete a[groupId + ':' + moduleId]; saveAnn(a);
 }
 
+/* 🔎 Nota sugerida a partir de las partes rendidas en la nube (promedio ponderado).
+ * partScores = { listening: 85, reading: 90, ... } (por competencia/actId). */
+function suggestedGrade(exam, partScores) {
+  var parts = (exam && exam.parts) || [];
+  var acc = 0, wSum = 0, n = 0;
+  parts.forEach(function (p, i) {
+    var sc = partScores[p.competency];
+    if (typeof sc !== 'number') return;
+    var w = partWeight(exam, i) || 0;
+    acc += sc * w; wSum += w; n++;
+  });
+  if (!n || !wSum) return null;
+  return Math.round(acc / wSum);
+}
+
+/* 🧪 Examen de PRUEBA de 1 clic: arma un examen con materiales VIVOS del primer
+ * módulo del nivel del grupo, lo abre para TODO el grupo (todos habilitados,
+ * sin exigir 75%) y lo anuncia para dentro de 3 días (prueba la cuenta regresiva). */
+function createDemoExam(groupId) {
+  var D = window.JUCUM_DATA; if (!D) return null;
+  var group = D.GROUPS.find(function (g) { return g.id === groupId; }); if (!group) return null;
+  var mods = D.MODULE_CATALOG[group.level] || [];
+  var mod = mods.find(function (m) { return (m.activities || []).some(function (a) { return a.url; }); });
+  if (!mod) return null;
+  var acts = mod.activities || [];
+  function pick(pred) { return acts.find(pred); }
+  var parts = [];
+  var li = pick(function (a) { return a.type === 'listening' && a.url; });
+  if (li) parts.push({ competency: 'listening', name: '🧪 ' + (li.name || 'Listening'), url: li.url });
+  var re = pick(function (a) { return a.type === 'reading' && a.url; });
+  if (re) parts.push({ competency: 'reading', name: '🧪 ' + (re.name || 'Reading'), url: re.url });
+  var gr = pick(function (a) { return a.type === 'grammar' && a.url; }) || pick(function (a) { return a.type === 'summary' && a.url; });
+  if (gr) parts.push({ competency: 'grammar', name: '🧪 ' + (gr.name || 'Grammar'), url: gr.url });
+  if (!parts.length) return null;
+  var examId = createExam({ level: group.level, title: '🧪 Examen de PRUEBA · ' + (mod.name || 'Módulo'), moduleIds: [mod.id], parts: parts });
+  var members = D.STUDENTS.filter(function (s) { return s.group === groupId; }).map(function (s) { return s.id; });
+  createWindow({ examId: examId, groupId: groupId, isOpen: true, allowOverrides: members });
+  // Anuncio con fecha (hoy+3 en día de Perú) → activa la cuenta regresiva del panel del alumno
+  var dateStr = new Date(Date.now() - 5 * 3600000 + 3 * 86400000).toISOString().slice(0, 10);
+  announceExam(groupId, mod.id, examId, dateStr);
+  return { examId: examId, module: mod.name, parts: parts.length, students: members.length, date: dateStr };
+}
+
 window.JUCUM_EXAMS = {
   getExams, getExam, createExam, updateExam, deleteExam,
   getWindows, createWindow, saveWindow, deleteWindow, recipientsOfWindow,
   openWindowsForStudent, canTakeWindow, toggleOverride, setWindowOpen,
-  submitExam, gradeExam, publishResults, unpublishResults, partWeight,
+  submitExam, gradeExam, publishResults, unpublishResults, partWeight, suggestedGrade, createDemoExam,
   groupsReadyForExam, notifyExamSoon, examPartLink,
   examForModule, windowForExamGroup, getAnnouncement, announceExam, cancelAnnouncement,
 };

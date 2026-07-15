@@ -132,6 +132,69 @@ function PointsStrip({ student, xp, xpInfo }) {
   );
 }
 
+/* 🎓 Cuenta regresiva del examen anunciado (con Neuro): días restantes en HORA DE
+ * PERÚ, preparación actual y consejos personalizados. Solo aparece si el profesor
+ * anunció un examen con fecha (≥ hoy) para el grupo del alumno. */
+function ExamCountdownCard({ student, onGo }) {
+  const D = window.JUCUM_DATA;
+  const X = window.JUCUM_EXAMS;
+  if (!X || !X.getAnnouncement) return null;
+  const mods = D.MODULE_CATALOG[student.level] || [];
+  const today = peruDayKey();
+  let best = null;
+  mods.forEach(m => {
+    const a = X.getAnnouncement(student.group, m.id);
+    if (a && a.date && a.date >= today && (!best || a.date < best.date)) best = { ...a, mod: m };
+  });
+  if (!best) return null;
+  const days = Math.round((Date.parse(best.date + 'T00:00:00Z') - Date.parse(today + 'T00:00:00Z')) / 86400000);
+  if (days > 30) return null;
+  const r = D.getStudentReadiness(student);
+  const m = D.getStudentMastery(student);
+  const fecha = new Date(best.date + 'T12:00:00Z').toLocaleDateString('es-PE', { weekday:'long', day:'numeric', month:'long' });
+
+  // Consejos personalizados: lo pendiente > la competencia más débil > la constancia
+  const tips = [];
+  const pend = Math.max(0, (m.total || 0) - (m.done || 0));
+  if (pend > 0) tips.push(<span>Completa tus <b>{pend} actividad{pend===1?'':'es'} pendiente{pend===1?'':'s'}</b> del módulo — es lo que más sube tu preparación.</span>);
+  const compsW = (D.COMPETENCIES || []).map(c => ({ c, v: r.competencies?.[c.key] })).filter(x => typeof x.v === 'number').sort((a,b) => a.v - b.v);
+  if (compsW.length && compsW[0].v < 75) tips.push(<span>Refuerza <b>{compsW[0].c.icon} {compsW[0].c.label}</b> (vas en {compsW[0].v}%): repite esas prácticas hasta pasar el 75%.</span>);
+  if ((m.active7 || 0) < 5) tips.push(<span>Practica un poco <b>cada día</b> ({m.active7 || 0}/7 esta semana): tu preparación refleja tu <b>repetición constante</b>, no una sola sesión larga.</span>);
+  if (!tips.length) tips.push(<span>¡Vas muy bien! Mantén tu ritmo diario hasta el examen para llegar en tu mejor momento.</span>);
+
+  const color = r.apt ? '#2EA84B' : r.overall >= 50 ? '#F9A825' : '#E53935';
+  return (
+    <div className="scard" style={{marginTop:18, padding:0, overflow:'hidden', borderColor:'#F4C7C3'}}>
+      <div style={{display:'flex', alignItems:'center', gap:14, padding:'14px 16px', background:'linear-gradient(135deg,#8C1D18,#B3261E)', color:'#fff'}}>
+        <div style={{fontSize:34, flexShrink:0}}>🧠</div>
+        <div style={{flex:1, minWidth:0}}>
+          <div style={{fontSize:11, fontWeight:800, letterSpacing:'.07em', textTransform:'uppercase', opacity:.85}}>🎓 Tu examen se acerca</div>
+          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:16}}>{best.mod.name}</div>
+          <div style={{fontSize:12.5, fontWeight:700, opacity:.9}}>{fecha}</div>
+        </div>
+        <div style={{textAlign:'center', background:'rgba(255,255,255,.14)', borderRadius:14, padding:'8px 14px', flexShrink:0}}>
+          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:30, lineHeight:1}}>{days === 0 ? 'HOY' : days}</div>
+          <div style={{fontSize:10.5, fontWeight:800, letterSpacing:'.05em', textTransform:'uppercase'}}>{days === 0 ? '¡éxito!' : days === 1 ? 'día' : 'días'}</div>
+        </div>
+      </div>
+      <div style={{padding:'13px 16px'}}>
+        <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:8}}>
+          <div style={{flex:1, height:10, background:'#EEE9E2', borderRadius:6, overflow:'hidden'}}><div style={{width:Math.min(100, r.overall)+'%', height:'100%', background:color, borderRadius:6}}></div></div>
+          <b style={{color, fontSize:13}}>{r.overall}%</b>
+          <span className="mm-chip" style={{background: r.apt ? '#E8F5E9' : '#FFF8E1', color: r.apt ? '#2E7D32' : '#E65100'}}>{r.apt ? '✓ Apto' : `Falta ${Math.max(0, 75 - r.overall)}%`}</span>
+        </div>
+        <div style={{fontSize:12.5, lineHeight:1.6, color:'#4A4A44', fontWeight:600}}>
+          <b>🧠 Neuro te aconseja</b> — tu preparación no es la nota de un día: refleja tu <b>proceso de repetición</b> a lo largo del módulo.
+          <ul style={{margin:'6px 0 0', paddingLeft:18}}>
+            {tips.slice(0,3).map((t,i) => <li key={i} style={{marginBottom:3}}>{t}</li>)}
+          </ul>
+        </div>
+        <button type="button" onClick={onGo} style={{marginTop:10, width:'100%', border:'none', borderRadius:22, padding:'10px', background:'#1F3A8A', color:'#fff', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13.5, cursor:'pointer'}}>Ver mi preparación completa 🎓</button>
+      </div>
+    </div>
+  );
+}
+
 function StudentDashboard({ user, onLogout }) {
   const { STUDENTS, GROUPS, LEVELS, MODULE_CATALOG, ACHIEVEMENT_DEFS, getGroupSettings, getStudentProgress, getStudentXP, getStudentLevel, MEDAL_RARITY, RARITY_STYLE, earnedMedals, entryPassed } = window.JUCUM_DATA;
   const student = STUDENTS.find(s => s.id === user.studentId) || STUDENTS[0];
@@ -440,6 +503,9 @@ function StudentDashboard({ user, onLogout }) {
 
         {/* — Puntos SIEMPRE visibles + aviso de semana nueva — */}
         <PointsStrip student={student} xp={xp} xpInfo={xpInfo} />
+
+        {/* — 🎓 Cuenta regresiva del examen anunciado — */}
+        <ExamCountdownCard student={student} onGo={() => setView('exam')} />
 
         {/* — Neuro + (Racha fusionada con Meta de hoy) — */}
         <div className="two-col" style={{gridTemplateColumns:'1.4fr 1fr', marginTop:18}}>
