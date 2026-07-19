@@ -20,13 +20,13 @@
     likes:    'jucum_likes_v1',
   };
   const read  = k => { try { return JSON.parse(localStorage.getItem(k) || '{}'); } catch { return {}; } };
-  const _stripHeavy = (node) => { if (Array.isArray(node)) { node.forEach(_stripHeavy); return; } if (node && typeof node === 'object') { if (typeof node.dataUrl === 'string') { delete node.dataUrl; if (!node.url) node.pending = true; } Object.keys(node).forEach(k => _stripHeavy(node[k])); } };
+  const _stripHeavy = (node) => { if (Array.isArray(node)) { node.forEach(_stripHeavy); return; } if (node && typeof node === 'object') { if (typeof node.dataUrl === 'string') { delete node.dataUrl; if (!node.url) node.pending = true; } if (typeof node.voucher === 'string' && node.voucher.slice(0, 5) === 'data:') { node.voucher = null; node.voucherRef = true; } if (typeof node.screenshot === 'string' && node.screenshot.slice(0, 5) === 'data:' && node.screenshot.length > 400000) { node.screenshot = null; } Object.keys(node).forEach(k => _stripHeavy(node[k])); } };
   const _purgeKey = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); if (v) { _stripHeavy(v); localStorage.setItem(k, JSON.stringify(v)); } } catch (e) {} };
   const write = (k, v) => {
     try { localStorage.setItem(k, JSON.stringify(v)); }
     catch (e) {
       // Cupo lleno (base64 viejo): purga adjuntos pesados y reintenta.
-      try { _purgeKey('jucum_submissions_v1'); _purgeKey('jucum_assignments_v1'); } catch (e2) {}
+      try { _purgeKey('jucum_submissions_v1'); _purgeKey('jucum_assignments_v1'); _purgeKey('jucum_registrations_v1'); _purgeKey('jucum_payments_v1'); } catch (e2) {}
       try { const light = JSON.parse(JSON.stringify(v)); _stripHeavy(light); localStorage.setItem(k, JSON.stringify(light)); }
       catch (e3) { console.warn('write quota:', k); }
     }

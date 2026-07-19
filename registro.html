@@ -168,7 +168,7 @@
 
     <label>🧾 Voucher de pago (foto o PDF)</label>
     <input id="voucher" type="file" accept="image/*,application/pdf" />
-    <div class="file-note">Sube la captura de tu pago. Máx 50 MB. (Opcional si aún no has pagado.)</div>
+    <div class="file-note">Sube la captura de tu pago — la foto se comprime sola (PDF máx 2 MB). Opcional si aún no has pagado.</div>
     <div id="voucherPrev"></div>
 
     <div id="err" class="err" style="display:none;"></div>
@@ -313,13 +313,14 @@
   var voucherData = null;
   document.getElementById('voucher').addEventListener('change', function(e){
     var f = e.target.files[0]; if (!f) return;
-    if (f.size > 50*1024*1024) { showErr('err','El archivo supera los 50 MB.'); e.target.value=''; return; }
-    var fr = new FileReader();
-    fr.onload = function(){ voucherData = fr.result;
+    // 📸 Comprime la foto antes de guardarla (las fotos de cámara pesaban MB y
+    // llenaban el almacenamiento local del panel de administración).
+    window.JUCUM_REG.compressVoucherFile(f, function(dataUrl, err){
+      if (err) { showErr('err', err); e.target.value=''; return; }
+      voucherData = dataUrl;
       var prev = document.getElementById('voucherPrev');
-      prev.innerHTML = (f.type.indexOf('image')===0) ? '<img class="voucher-prev" src="'+fr.result+'" />' : '<div class="hint">📄 '+f.name+' adjuntado</div>';
-    };
-    fr.readAsDataURL(f);
+      prev.innerHTML = (dataUrl.indexOf('data:image')===0) ? '<img class="voucher-prev" src="'+dataUrl+'" />' : '<div class="hint">📄 '+f.name+' adjuntado</div>';
+    });
   });
 
   document.getElementById('submitBtn').addEventListener('click', async function(){

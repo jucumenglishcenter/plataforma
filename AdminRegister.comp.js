@@ -5,12 +5,40 @@
  */
 const { useState: rgUseState } = React;
 
-function readFileDataUrl(file, cb) {
-  if (!file) return;
-  if (file.size > 50 * 1024 * 1024) { alert('El archivo supera los 50 MB.'); return; }
-  const fr = new FileReader();
-  fr.onload = () => cb(fr.result);
-  fr.readAsDataURL(file);
+/* 🧾 El voucher ya NO viaja en el caché local (los base64 pesaban megas y
+ * llenaban el cupo de localStorage → se congelaba el seguimiento). Se trae de
+ * la nube recién al hacer clic y se muestra en un modal. */
+function VoucherLink({ reg }) {
+  const [busy, setBusy] = rgUseState(false);
+  const [data, setData] = rgUseState(reg.voucher || null);
+  const [open, setOpen] = rgUseState(false);
+  const view = async () => {
+    if (!data) {
+      setBusy(true);
+      const v = await window.JUCUM_REG.fetchVoucher(reg.id);
+      setBusy(false);
+      if (!v) { alert('No se pudo cargar el voucher desde la nube.'); return; }
+      setData(v);
+      setOpen(true);
+    } else setOpen(true);
+  };
+  return (
+    <>
+      <button className="att-btn" onClick={view} disabled={busy}>🧾 {busy ? 'Cargando…' : 'Ver voucher'}</button>
+      {open && data && (
+        <div className="modal-backdrop" onClick={()=>setOpen(false)}>
+          <div className="modal settings-modal" style={{maxWidth:520}} onClick={e=>e.stopPropagation()}>
+            <div className="modal-head"><div className="modal-title">🧾 Voucher · {reg.fullName}</div><button className="modal-close" onClick={()=>setOpen(false)}>✕</button></div>
+            <div className="modal-body" style={{textAlign:'center'}}>
+              {data.indexOf('data:image') === 0
+                ? <img src={data} alt="voucher" style={{maxWidth:'100%', maxHeight:'70vh', borderRadius:10, border:'1px solid #E4DFD3'}} />
+                : <a className="btn-save" href={data} download={`voucher-${(reg.fullName||'alumno').replace(/\s+/g,'-')}.pdf`}>⬇ Descargar PDF</a>}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 const PAY_MODES = [
@@ -87,7 +115,7 @@ function RegisterStudentForm({ onClose, onDone, prefill }) {
             <div className="settings-label">🧾 Voucher de pago (opcional)</div>
             {f.voucher
               ? <div className="row-flex"><img src={f.voucher} alt="voucher" style={{height:48, borderRadius:6}} /><button className="att-btn" onClick={()=>set('voucher', null)}>Quitar</button></div>
-              : <input type="file" accept="image/*,application/pdf" onChange={e=>readFileDataUrl(e.target.files[0], v=>set('voucher', v))} />}
+              : <input type="file" accept="image/*,application/pdf" onChange={e=>window.JUCUM_REG.compressVoucherFile(e.target.files[0], (v,err)=>{ if(err){alert(err);return;} set('voucher', v); })} />}
           </div>
           <div className="modal-actions"><button className="btn-cancel" onClick={onClose}>Cancelar</button><button className="btn-save" onClick={submit} disabled={busy}>{busy?'Creando…':'➕ Crear alumno'}</button></div>
         </div>
@@ -136,7 +164,7 @@ function InscripcionesView() {
                   <div className="sm-name">{r.fullName} · {r.age?`${r.age} años`:''}</div>
                   <div className="sm-meta">DNI {r.dni||'—'} · {r.email||'sin correo'} · pago {window.JUCUM_PAY?.labelMode(r.payMode)||r.payMode||'—'}{r.guardianName?` · apoderado: ${r.guardianName}`:''}</div>
                 </div>
-                {r.voucher && <a href={r.voucher} target="_blank" rel="noreferrer" className="att-btn">🧾 Ver voucher</a>}
+                {(r.voucher || r.voucherRef) && <VoucherLink reg={r} />}
                 <button className="att-btn" style={{borderColor:'#EF9A9A',color:'#C62828'}} onClick={()=>{ if(confirm('¿Rechazar esta inscripción?')){ R.rejectRegistration(r.id); refresh(); } }}>Rechazar</button>
                 <button className="btn-save" onClick={()=>setApproving(r)}>✓ Aprobar y asignar grupo</button>
               </div>

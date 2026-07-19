@@ -10,7 +10,34 @@
   const REG_KEY = 'jucum_registrations_v1';
 
   function load() { try { const a = JSON.parse(localStorage.getItem(REG_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } }
-  function save(a) { localStorage.setItem(REG_KEY, JSON.stringify(a)); }
+  const _isDataUrl = v => typeof v === 'string' && v.slice(0, 5) === 'data:';
+  function save(a) {
+    try { localStorage.setItem(REG_KEY, JSON.stringify(a)); }
+    catch (e) { // cupo de localStorage lleno: guarda sin los base64 (la nube los conserva)
+      try {
+        const light = a.map(r => (r && _isDataUrl(r.voucher)) ? { ...r, voucher: null, voucherRef: true } : r);
+        localStorage.setItem(REG_KEY, JSON.stringify(light));
+      } catch (e2) { console.warn('write quota:', REG_KEY); }
+    }
+  }
+
+  /* 🧹 Auto-reparación (jul-2026): los vouchers en base64 llegaron a ocupar ~7 MB
+   * en este caché → el cupo de localStorage se llenaba y TODAS las escrituras
+   * posteriores fallaban en silencio (progreso/seguimiento de prácticas congelado,
+   * notificaciones y exámenes sin guardar). El voucher ya NO se cachea: vive solo
+   * en la nube y se trae de a uno al verlo. Esto libera lo que dejaron versiones
+   * anteriores la primera vez que el equipo carga esta versión. */
+  try {
+    const _raw = localStorage.getItem(REG_KEY);
+    if (_raw && _raw.indexOf('data:') !== -1) {
+      const _arr = JSON.parse(_raw);
+      if (Array.isArray(_arr)) {
+        let _n = 0;
+        _arr.forEach(r => { if (r && _isDataUrl(r.voucher)) { r.voucher = null; r.voucherRef = true; _n++; } });
+        if (_n) { localStorage.setItem(REG_KEY, JSON.stringify(_arr)); console.info('registro: ' + _n + ' voucher(s) pesados liberados del caché local'); }
+      }
+    }
+  } catch (e) {}
 
   function listRegistrations(status) {
     const a = load().sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt)));
@@ -47,26 +74,83 @@
     catch (e) { console.warn('reg upd:', e.message); }
   }
 
-  /* Trae las inscripciones de la nube al caché local (para la administradora) */
+  /* Trae las inscripciones de la nube al caché local (para la administradora).
+   * ⚠ SIN la columna voucher: esos base64 pesaban megas, llenaban el cupo de
+   * localStorage y congelaban el seguimiento. Solo se marca si EXISTE voucher
+   * (voucherRef) y se descarga de a uno con fetchVoucher() al verlo/usarlo. */
   async function cloudLoadRegistrations() {
     if (!window.JUCUM_SB) return;
     try {
-      const { data } = await window.JUCUM_SB.getClient().from('registrations').select('*').order('created_at', { ascending: false });
+      const sb = window.JUCUM_SB.getClient();
+      const { data } = await sb.from('registrations')
+        .select('id,full_name,email,age,dni,guardian_name,guardian_dni,phone,pay_mode,level,note,status,group_id,created_at')
+        .order('created_at', { ascending: false });
       if (!data) return;
+      const withV = new Set();
+      try {
+        const { data: v } = await sb.from('registrations').select('id').not('voucher', 'is', null);
+        (v || []).forEach(x => withV.add(x.id));
+      } catch (e) {}
       const mapped = data.map(r => ({
         id: r.id, fullName: r.full_name, email: r.email, age: r.age, dni: r.dni,
         guardianName: r.guardian_name, guardianDni: r.guardian_dni, phone: r.phone,
-        payMode: r.pay_mode, voucher: r.voucher, level: r.level, note: r.note,
+        payMode: r.pay_mode, voucher: null, voucherRef: withV.has(r.id), level: r.level, note: r.note,
         status: r.status, group_id: r.group_id, createdAt: r.created_at,
       }));
       save(mapped);
     } catch (e) { console.warn('reg load:', e.message); }
   }
 
-  /* Usado por la página pública: guarda la inscripción como 'pendiente' */
+  /* Trae UN voucher (base64) directo de la nube, solo cuando se necesita */
+  async function fetchVoucher(id) {
+    if (!window.JUCUM_SB) return null;
+    try {
+      const { data } = await window.JUCUM_SB.getClient().from('registrations').select('voucher').eq('id', id);
+      return (data && data[0] && data[0].voucher) || null;
+    } catch (e) { return null; }
+  }
+
+  /* 📸 Comprime la imagen de un voucher (máx ~1280px · JPEG): una foto de cámara
+   * de 3-8 MB queda en ~100-250 KB. PDF: pasa tal cual hasta 2 MB. cb(dataUrl, err) */
+  function _compressDataUrlImage(dataUrl, cb) {
+    try {
+      const img = new Image();
+      img.onload = function () {
+        try {
+          const MAX = 1280;
+          const sc = Math.min(1, MAX / Math.max(img.width, img.height));
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(img.width * sc));
+          c.height = Math.max(1, Math.round(img.height * sc));
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          cb(c.toDataURL('image/jpeg', 0.72));
+        } catch (e) { cb(dataUrl); }
+      };
+      img.onerror = function () { cb(dataUrl); };
+      img.src = dataUrl;
+    } catch (e) { cb(dataUrl); }
+  }
+  function compressVoucherFile(file, cb) {
+    if (!file) { cb(null, 'Sin archivo.'); return; }
+    const fr = new FileReader();
+    fr.onerror = function () { cb(null, 'No se pudo leer el archivo.'); };
+    if (file.type.indexOf('image') !== 0) {
+      if (file.size > 2 * 1024 * 1024) { cb(null, 'El PDF supera los 2 MB. Sube mejor una foto o captura del voucher.'); return; }
+      fr.onload = function () { cb(fr.result, null); };
+      fr.readAsDataURL(file);
+      return;
+    }
+    fr.onload = function () { _compressDataUrlImage(fr.result, function (v) { cb(v, null); }); };
+    fr.readAsDataURL(file);
+  }
+
+  /* Usado por la página pública: guarda la inscripción como 'pendiente'.
+   * En el caché local NO se guarda el base64 del voucher (solo va a la nube). */
   async function submitRegistration(data) {
     const r = { id: 'reg-' + Date.now(), createdAt: new Date().toISOString(), status: 'pendiente', ...data };
-    const arr = load(); arr.unshift(r); save(arr);
+    const lite = { ...r };
+    if (_isDataUrl(lite.voucher)) { lite.voucher = null; lite.voucherRef = true; }
+    const arr = load(); arr.unshift(lite); save(arr);
     await cloudInsertRegistration(r);
     return r;
   }
@@ -110,12 +194,20 @@
     return rec;
   }
 
-  /* Aprueba una inscripción → crea el alumno y la marca aprobada */
+  /* Aprueba una inscripción → crea el alumno y la marca aprobada.
+   * El voucher ya no vive en el caché: se trae de la nube y, si es una foto
+   * pesada (inscripciones viejas sin comprimir), se comprime antes de pasarla
+   * al primer pago. */
   async function approveRegistration(id, { group, level, username, password }) {
     const arr = load(); const r = arr.find(x => x.id === id); if (!r) return null;
+    let voucher = r.voucher;
+    if (!voucher && r.voucherRef) voucher = await fetchVoucher(id);
+    if (voucher && voucher.slice(0, 10) === 'data:image' && voucher.length > 400000) {
+      voucher = await new Promise(res => _compressDataUrlImage(voucher, v => res(v || voucher)));
+    }
     const stu = await createStudentDirect({
       fullName: r.fullName, email: r.email, age: r.age, dni: r.dni, guardianName: r.guardianName,
-      guardianDni: r.guardianDni, phone: r.phone, payMode: r.payMode, voucher: r.voucher,
+      guardianDni: r.guardianDni, phone: r.phone, payMode: r.payMode, voucher,
       level, group, username, password, source: 'self',
     });
     if (!stu) return null;
@@ -198,6 +290,7 @@
   window.JUCUM_REG = {
     listRegistrations, pendingCount, submitRegistration, rejectRegistration,
     createStudentDirect, approveRegistration, usernameFrom, cloudLoadRegistrations,
+    fetchVoucher, compressVoucherFile,
     listGroupsPublic, usernameFromCloud, findStudentByDni, selfEnrollExistingStudent,
   };
 })();
