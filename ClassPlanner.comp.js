@@ -100,7 +100,7 @@ function monthMatrix(year, month) {        // month 0-11 → array of {date, inM
 const todayYMD = () => ymd(new Date());
 
 /* ════════ HUB principal (export ClassPlanner — el nombre que usa el menú) ════════ */
-function ClassPlanner({ onBack }) {
+function ClassPlanner({ onBack, onGoExams }) {
   const { MODULE_CATALOG, GROUPS } = window.JUCUM_DATA;
   const TT = window.JUCUM_TT;
   const [screen, setScreen] = React.useState('calendar');   // calendar | class | practice | saved
@@ -138,7 +138,7 @@ function ClassPlanner({ onBack }) {
       </div>
 
       {screen === 'calendar' && (
-        <CalendarHub cursor={cursor} setCursor={setCursor} selDate={selDate} setSelDate={setSelDate}
+        <CalendarHub cursor={cursor} setCursor={setCursor} selDate={selDate} setSelDate={setSelDate} onGoExams={onGoExams}
           onNewClass={goNewClass} onNewPractice={goNewPractice} onEditClass={(p) => { setEditPlan(p); setScreen('class'); }}
           onEditPractice={(p) => { setEditPractice(p); setScreen('practice'); }} onClassMode={goClassMode} onOpenTasks={() => setScreen('tareas')} refreshKey={tick} onChange={refresh} />
       )}
@@ -162,7 +162,7 @@ function ClassPlanner({ onBack }) {
 }
 
 /* ════════ Calendario mensual ════════ */
-function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNewPractice, onEditClass, onEditPractice, onClassMode, onOpenTasks, refreshKey, onChange }) {
+function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNewPractice, onEditClass, onEditPractice, onClassMode, onOpenTasks, refreshKey, onChange, onGoExams }) {
   const TT = window.JUCUM_TT;
   const { GROUPS } = window.JUCUM_DATA;
   const [groupId, setGroupId] = React.useState(GROUPS[0] ? GROUPS[0].id : null);
@@ -209,6 +209,7 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
                   {nClass > 0 && <span title="Plan de clase" style={dot('#3F5BB8')}>📘</span>}
                   {nPrac > 0 && <span title="Set de práctica" style={dot('#6C4FB0')}>📝</span>}
                   {tasksFor(dstr).length > 0 && <span title="Tarea (cierre)" style={dot('#E65100')}>📋</span>}
+                  {(window.JUCUM_EXAMFLOW ? window.JUCUM_EXAMFLOW.eventsForDay(groupId, dstr) : []).map((ev, k) => <span key={'x' + k} title={ev.title} style={dot(ev.kind === 'exam' ? '#1F3A8A' : '#7B1FA2')}>{ev.icon}</span>)}
                   {nLog > 0 && <span title="Realizado en clase" style={dot('#2E7D32')}>✅</span>}
                 </span>
               </button>
@@ -216,7 +217,7 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
           })}
         </div>
         <div style={{display:'flex', gap:14, flexWrap:'wrap', marginTop:11, fontSize:11.5, fontWeight:700, color:'#8a7f6a'}}>
-          <span>📘 Plan de clase</span><span>📝 Set de práctica</span><span>📋 Tarea (cierre)</span><span>✅ Realizado (bitácora)</span>
+          <span>📘 Plan de clase</span><span>📝 Set de práctica</span><span>📋 Tarea (cierre)</span><span>🎓 Examen</span><span>🧭 Pre-examen</span><span>✅ Realizado (bitácora)</span>
         </div>
       </div>
 
@@ -229,9 +230,16 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
           {onOpenTasks && <button onClick={() => onOpenTasks()} style={{...btnGhost, padding:'7px 12px', borderColor:'#F0C28A', color:'#E65100'}}>＋ Tarea</button>}
         </div>
 
-        {sel.classPlans.length === 0 && sel.practicePlans.length === 0 && selLog.length === 0 && selTasks.length === 0 && (
+        {sel.classPlans.length === 0 && sel.practicePlans.length === 0 && selLog.length === 0 && selTasks.length === 0 && (window.JUCUM_EXAMFLOW ? window.JUCUM_EXAMFLOW.eventsForDay(groupId, selDate) : []).length === 0 && (
           <div className="empty-state" style={{padding:'22px 0'}}><div className="icon">🗓️</div>Nada planeado para este día. Agrega un plan de clase, un set de práctica o una tarea.</div>
         )}
+
+        {/* 🎓 Exámenes y pre-exámenes agendados este día → clic abre la carpeta del grupo */}
+        {(window.JUCUM_EXAMFLOW ? window.JUCUM_EXAMFLOW.eventsForDay(groupId, selDate) : []).map((ev, k) => (
+          <DayRow key={'ex' + k} icon={ev.icon} tint={ev.kind === 'exam' ? '#E8EDFB' : '#F7EFFB'} border={ev.kind === 'exam' ? '#B4C1E0' : '#DDC7F0'}
+            title={ev.title} sub={(ev.sub || '') + ' · toca → para ver la carpeta de evaluación del grupo'}
+            onOpen={() => onGoExams && onGoExams(groupId)} />
+        ))}
 
         {selTasks.map(t => {
           const dd = new Date(t.dueAt);

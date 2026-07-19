@@ -68,7 +68,7 @@ function TeacherDashboard({ onLogout, user }) {
       ) : view.kind === 'messages' ? (
         <TeacherMessages onBack={() => setView({kind:'groups'})} initialOpen={view.open} />
       ) : view.kind === 'planner' ? (
-        <ClassPlanner onBack={() => setView({kind:'groups'})} />
+        <ClassPlanner onBack={() => setView({kind:'groups'})} onGoExams={(gid) => setView({kind:'exams', group: gid})} />
       ) : view.kind === 'evaluate' ? (
         <TeacherEvaluate onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'tasks' ? (
@@ -90,7 +90,9 @@ function TeacherDashboard({ onLogout, user }) {
       ) : view.kind === 'promote' ? (
         <LevelPromotion onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'exams' ? (
-        <TeacherExams onBack={() => setView({kind:'groups'})} />
+        window.TeacherExamsFolders
+          ? <TeacherExamsFolders onBack={() => setView({kind:'groups'})} initialGroup={view.group} />
+          : <TeacherExams onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'forum' ? (
         <>
           <button className="back-btn" onClick={() => setView({kind:'groups'})} style={{padding:'10px 28px 0'}}>← Volver al panel</button>
@@ -165,22 +167,38 @@ function TeacherAssessment({ onBack, canDefine, initialTab }) {
         </div>
       </div>
       {tab === 'eval' ? <TeacherEvaluate onBack={onBack} hideBack />
-        : tab === 'exams' ? <TeacherExams onBack={onBack} canDefine={canDefine} hideBack />
+        : tab === 'exams' ? ((window.TeacherExamsFolders && !canDefine) ? <TeacherExamsFolders onBack={onBack} hideBack /> : <TeacherExams onBack={onBack} canDefine={canDefine} hideBack />)
         : tab === 'tareas' ? (window.TeacherPractice ? <TeacherPractice onBack={onBack} only="tasks" /> : <main><div className="empty-state">Falta el módulo de tareas.</div></main>)
         : <PrepNotas />}
     </div>
   );
 }
 
-/* Preparación y notas — funcional DENTRO de Evaluación: elige grupo y abre a
- * cada alumno su preparación (≥75%) y su boletín de notas, sin salir de aquí. */
+/* Preparación y notas — EL desglose completo del examen en un solo lugar:
+ * resumen de aptos, examen anunciado, ventana(s) de examen del grupo con su
+ * avance en vivo (auto-cargado), y cada alumno con su 🎓 preparación a la vista
+ * (ordenados: los más listos primero) + su boletín al expandir. */
 function PrepNotas() {
-  const { GROUPS, STUDENTS, LEVELS } = window.JUCUM_DATA;
+  const { GROUPS, STUDENTS, LEVELS, MODULE_CATALOG, getStudentReadiness } = window.JUCUM_DATA;
+  const X = window.JUCUM_EXAMS;
   const [gid, setGid] = React.useState(GROUPS[0] ? GROUPS[0].id : null);
   const [openId, setOpenId] = React.useState(null);
+  const [, setTick] = React.useState(0);
+  const refresh = () => setTick(t => t + 1);
   const g = GROUPS.find(x => x.id === gid);
   const level = g ? LEVELS[g.level] : null;
   const members = STUDENTS.filter(s => s.group === gid);
+  // 🎓 preparación por alumno, ordenados: los más listos primero
+  const rows = members.map(s => ({ s, r: getStudentReadiness(s) })).sort((a, b) => b.r.overall - a.r.overall);
+  const aptos = rows.filter(x => x.r.apt).length;
+  // 📣 examen anunciado más próximo del grupo
+  let ann = null;
+  if (g && X && X.getAnnouncement) (MODULE_CATALOG[g.level] || []).forEach(m => {
+    const a = X.getAnnouncement(g.id, m.id);
+    if (a && a.date && (!ann || a.date < ann.date)) ann = { ...a, mod: m };
+  });
+  // 📅 ventanas de examen del grupo (avance en vivo auto-cargado aquí mismo)
+  const wins = (X && X.getWindows ? X.getWindows() : []).filter(w => w.groupId === gid && !((w.targetStudentIds || []).length));
   return (
     <main>
       <div className="tt-toolbar" style={{marginTop:14}}>
@@ -190,13 +208,26 @@ function PrepNotas() {
         </select>
         <span className="tt-sort-lab" style={{marginLeft:'auto'}}>{members.length} alumno{members.length === 1 ? '' : 's'}</span>
       </div>
+
+      <div className="scard" style={{marginTop:12, display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', padding:'12px 16px'}}>
+        <span style={{fontWeight:800, fontSize:13.5, color: aptos > 0 ? '#2E7D32' : '#B26A00'}}>🎓 <b>{aptos}</b>/{members.length} aptos para examen (≥75%)</span>
+        <span style={{fontSize:12.5, fontWeight:700, color:'var(--text-soft)'}}>
+          {ann
+            ? <>📣 Examen anunciado: <b>{ann.mod.name}</b> · {ann.date ? new Date(ann.date + 'T12:00:00Z').toLocaleDateString('es-PE', { weekday:'long', day:'numeric', month:'long' }) : 'sin fecha'}</>
+            : <>📣 Sin examen anunciado — anúncialo en “Exámenes de avance → Por módulo”.</>}
+        </span>
+      </div>
+
+      {wins.map(w => <div key={w.id} style={{marginTop:12}}>{window.WindowCard ? <WindowCard w={w} onChange={refresh} /> : null}</div>)}
+
       <div style={{display:'flex', flexDirection:'column', gap:8, marginTop:12}}>
-        {members.map(s => (
+        {rows.map(({ s, r }) => (
           <div key={s.id} style={{border:'1px solid var(--border)', borderRadius:12, background:'#fff', overflow:'hidden'}}>
             <button onClick={() => setOpenId(openId === s.id ? null : s.id)} style={{display:'flex', alignItems:'center', gap:10, width:'100%', textAlign:'left', cursor:'pointer', border:'none', background:'none', padding:'11px 14px', fontFamily:'inherit'}}>
               <div className="st-ava" style={{background:`linear-gradient(135deg,${level ? level.color : '#999'}80,${level ? level.dark : '#666'})`}}>{s.fullName.split(' ').map(n => n[0]).slice(0, 2).join('')}</div>
               <div style={{flex:1, minWidth:0}}><div style={{fontWeight:800, fontSize:13.5}}>{s.fullName}</div><div style={{fontSize:11.5, color:'var(--text-soft)', fontWeight:600}}>@{s.username}</div></div>
-              <span style={{fontSize:12, color:'#1F3A8A', fontWeight:800}}>{openId === s.id ? '▲ Cerrar' : '▼ Preparación y notas'}</span>
+              <span className="mm-chip" style={{background: r.apt ? '#E8F5E9' : '#FFF8E1', color: r.apt ? '#2E7D32' : '#E65100', flexShrink:0}}>{r.apt ? `✓ apto · ${r.overall}%` : `🎓 ${r.overall}%`}</span>
+              <span style={{fontSize:12, color:'#1F3A8A', fontWeight:800}}>{openId === s.id ? '▲ Cerrar' : '▼ Detalle'}</span>
             </button>
             {openId === s.id && (
               <div style={{padding:'0 14px 14px'}}>

@@ -12,7 +12,7 @@
    aquí a propósito: así no depende de subir ningún archivo extra. */
 (function(){if(window.JUCUM_NAV)return;function uid(){try{var u=JSON.parse(localStorage.getItem('jucum_user')||'null');return u?String(u.id||u.username||u.role||''):'';}catch(e){return'';}}function key(s){return'jucum_nav_'+s+'_'+uid();}window.JUCUM_NAV={load:function(s,f){try{var r=sessionStorage.getItem(key(s));return r==null?f:JSON.parse(r);}catch(e){return f;}},save:function(s,v){try{sessionStorage.setItem(key(s),JSON.stringify(v));}catch(e){}},clearAll:function(){try{var d=[];for(var i=0;i<sessionStorage.length;i++){var k=sessionStorage.key(i);if(k&&k.indexOf('jucum_nav_')===0)d.push(k);}d.forEach(function(k){sessionStorage.removeItem(k);});}catch(e){}}};})();
 </script>
-<link rel="stylesheet" href="colors_and_type.css?v=20260715a">
+<link rel="stylesheet" href="colors_and_type.css?v=20260719a">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Nunito',sans-serif;background:var(--bg-tint);color:var(--text);min-height:100vh;}
@@ -990,34 +990,36 @@ main{max-width:1100px;margin:0 auto;padding:28px 24px 80px;}
 <div id="root"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=20260715a"></script>
-<script src="logo.js?v=20260715a"></script>
-<script src="supabase-client.js?v=20260715a"></script>
+<script src="config.js?v=20260719a"></script>
+<script src="logo.js?v=20260719a"></script>
+<script src="supabase-client.js?v=20260719a"></script>
 <script>/* La demostración ya NO desconecta Supabase: el ingreso real SIEMPRE funciona. Limpiamos cualquier marca de demo atascada para que el dispositivo se auto-repare. */try{localStorage.removeItem('jucum_demo_mode');}catch(e){}</script>
-<script src="supabase-sync.js?v=20260715a"></script>
-<script src="evaluations.js?v=20260715a"></script>
-<script src="forum.js?v=20260715a"></script>
-<script src="sounds.js?v=20260715a"></script>
-<script src="notifications.js?v=20260715a"></script>
-<script src="messages.js?v=20260715a"></script>
-<script src="mascot.js?v=20260715a"></script>
-<script src="payments.js?v=20260715a"></script>
-<script src="teacher-tools.js?v=20260715a"></script>
-<script src="practice-guide.js?v=20260715a"></script>
-<script src="assignments.js?v=20260715a"></script>
-<script src="exams.js?v=20260715a"></script>
-<script src="attendance.js?v=20260715a"></script>
-<script src="survey.js?v=20260715a"></script>
-<script src="evolution.js?v=20260715a"></script>
-<script src="demo-seed.js?v=20260715a"></script>
-<script src="registration.js?v=20260715a"></script>
-<script src="retention.js?v=20260715a"></script>
-<script src="student-preview.js?v=20260715a"></script>
-<script src="inactivity.js?v=20260715a"></script>
-<script src="app-update.js?v=20260715a"></script>
+<script src="supabase-sync.js?v=20260719a"></script>
+<script src="evaluations.js?v=20260719a"></script>
+<script src="forum.js?v=20260719a"></script>
+<script src="sounds.js?v=20260719a"></script>
+<script src="notifications.js?v=20260719a"></script>
+<script src="messages.js?v=20260719a"></script>
+<script src="mascot.js?v=20260719a"></script>
+<script src="payments.js?v=20260719a"></script>
+<script src="teacher-tools.js?v=20260719a"></script>
+<script src="practice-guide.js?v=20260719a"></script>
+<script src="assignments.js?v=20260719a"></script>
+<script src="exams.js?v=20260719a"></script>
+<script src="exam-m1-forms.js?v=20260719a"></script>
+<script src="exam-flow.js?v=20260719a"></script>
+<script src="attendance.js?v=20260719a"></script>
+<script src="survey.js?v=20260719a"></script>
+<script src="evolution.js?v=20260719a"></script>
+<script src="demo-seed.js?v=20260719a"></script>
+<script src="registration.js?v=20260719a"></script>
+<script src="retention.js?v=20260719a"></script>
+<script src="student-preview.js?v=20260719a"></script>
+<script src="inactivity.js?v=20260719a"></script>
+<script src="app-update.js?v=20260719a"></script>
 
 <!-- ⚡ Carga rápida: compila 1 vez y cachea; luego entra directo (ver fast-loader.js) -->
-<script>window.__JUCUM_APP_SCRIPTS=["data.js?v=20260715a","Evaluations.comp.js?v=20260715a","Assignments.comp.js?v=20260715a","Readiness.comp.js?v=20260715a","Exams.comp.js?v=20260715a","Attendance.comp.js?v=20260715a","Survey.comp.js?v=20260715a","MyEvolution.comp.js?v=20260715a","WeeklyPlan.comp.js?v=20260715a","AdminRegister.comp.js?v=20260715a","Retention.comp.js?v=20260715a","Grades.comp.js?v=20260715a","StudentReport.comp.js?v=20260715a","ManageGroups.comp.js?v=20260715a","ManageModules.comp.js?v=20260715a","TeacherMaterials.comp.js?v=20260715a","MaterialsReview.comp.js?v=20260715a","ManageStudents.comp.js?v=20260715a","LevelPromotion.comp.js?v=20260715a","Forum.comp.js?v=20260715a","Onboarding.comp.js?v=20260715a","Profile.comp.js?v=20260715a","GroupReport.comp.js?v=20260715a","Notifications.comp.js?v=20260715a","Mascot.comp.js?v=20260715a","Login.comp.js?v=20260715a","StudentDiagnosis.comp.js?v=20260715a","StudentPayments.comp.js?v=20260715a","AdminDashboard.comp.js?v=20260715a","TeacherClass.comp.js?v=20260715a","ClassPlanner.comp.js?v=20260715a","messages-ui.comp.js?v=20260715a","tutorial.comp.js?v=20260715a","StudentDashboard.comp.js?v=20260715a","TeacherDashboard.comp.js?v=20260715a","DevDashboard.comp.js?v=20260715a","App.comp.js?v=20260715a"];</script>
-<script src="fast-loader.js?v=20260715a"></script>
+<script>window.__JUCUM_APP_SCRIPTS=["data.js?v=20260719a","Evaluations.comp.js?v=20260719a","Assignments.comp.js?v=20260719a","Readiness.comp.js?v=20260719a","Exams.comp.js?v=20260719a","ExamsFolders.comp.js?v=20260719a","Attendance.comp.js?v=20260719a","Survey.comp.js?v=20260719a","MyEvolution.comp.js?v=20260719a","WeeklyPlan.comp.js?v=20260719a","AdminRegister.comp.js?v=20260719a","Retention.comp.js?v=20260719a","Grades.comp.js?v=20260719a","StudentReport.comp.js?v=20260719a","ManageGroups.comp.js?v=20260719a","ManageModules.comp.js?v=20260719a","TeacherMaterials.comp.js?v=20260719a","MaterialsReview.comp.js?v=20260719a","ManageStudents.comp.js?v=20260719a","LevelPromotion.comp.js?v=20260719a","Forum.comp.js?v=20260719a","Onboarding.comp.js?v=20260719a","Profile.comp.js?v=20260719a","GroupReport.comp.js?v=20260719a","Notifications.comp.js?v=20260719a","Mascot.comp.js?v=20260719a","Login.comp.js?v=20260719a","StudentDiagnosis.comp.js?v=20260719a","StudentPayments.comp.js?v=20260719a","AdminDashboard.comp.js?v=20260719a","TeacherClass.comp.js?v=20260719a","ClassPlanner.comp.js?v=20260719a","messages-ui.comp.js?v=20260719a","tutorial.comp.js?v=20260719a","StudentDashboard.comp.js?v=20260719a","TeacherDashboard.comp.js?v=20260719a","DevDashboard.comp.js?v=20260719a","App.comp.js?v=20260719a"];</script>
+<script src="fast-loader.js?v=20260719a"></script>
 </body>
 </html>

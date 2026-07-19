@@ -88,11 +88,15 @@ function notifyWindowOpened(w) {
   });
 }
 
-/* Ventanas abiertas y vigentes que le tocan a un alumno */
+/* Ventanas abiertas y vigentes que le tocan a un alumno.
+ * Con exam-flow.js: una ventana también cuenta como abierta si su anuncio tiene
+ * apertura AUTOMÁTICA y estamos dentro de la fecha y hora (hora de Perú). */
 function openWindowsForStudent(student) {
   return loadWindows().filter(w => {
-    if (!w.isOpen) return false;
-    if (w.closesAt && new Date(w.closesAt) < new Date()) return false;
+    const F = window.JUCUM_EXAMFLOW;
+    const open = (F && F.winEffectiveOpen) ? F.winEffectiveOpen(w)
+      : (w.isOpen && !(w.closesAt && new Date(w.closesAt) < new Date()));
+    if (!open) return false;
     const targeted = (w.targetStudentIds || []).length > 0;
     return targeted ? w.targetStudentIds.includes(student.id) : (w.groupId === student.group);
   });

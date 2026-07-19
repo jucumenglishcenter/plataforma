@@ -1,0 +1,58 @@
+/* Notas del Examen M1 rendido por GOOGLE FORMS (12-13 jun 2026, fuera de la plataforma).
+ * Fuente: hojas de respuestas del Forms. Regla de la coordinadora: si un alumno
+ * envio 2 veces, vale la PRIMERA nota enviada. Notas convertidas a /100
+ * (ninos: /25 · adultos: /45). Se registran con "Registrar notas M1" en la
+ * carpeta del grupo (panel del profesor); el match es por nombre normalizado. */
+window.JUCUM_M1FORMS = {
+  examTitle: "Examen M1 \u00b7 Google Forms",
+  dates: "12\u201313 de junio de 2026",
+  rows: [
+    {n:"Fabiana Belén Díaz Gutiérrez", p:100, d:"2026-06-12", v:"kids"},
+    {n:"Jérico Stefano Montes Vásquez", p:96, d:"2026-06-12", v:"kids"},
+    {n:"caleb paredes", p:100, d:"2026-06-12", v:"kids"},
+    {n:"Priscila Jimena", p:96, d:"2026-06-12", v:"kids"},
+    {n:"Francesca Ethel Razeto Salinas", p:84, d:"2026-06-12", v:"kids"},
+    {n:"Mariana Arellys Saenz Beltran", p:100, d:"2026-06-12", v:"kids"},
+    {n:"Maria Gracia Curipaco Llacza", p:84, d:"2026-06-12", v:"kids"},
+    {n:"Aracely Espinoza Villodas", p:100, d:"2026-06-12", v:"kids"},
+    {n:"Mari Gracia Curipaco Llacza", p:92, d:"2026-06-12", v:"kids"},
+    {n:"Valeria Nur López Flórez", p:100, d:"2026-06-12", v:"kids"},
+    {n:"Esteban Aste Balabarca", p:96, d:"2026-06-12", v:"kids"},
+    {n:"Arely Hasabna Martínez Gonzales", p:96, d:"2026-06-12", v:"kids"},
+    {n:"Sofia Alejandra Vargas Paz", p:100, d:"2026-06-12", v:"kids"},
+    {n:"Valeria Sofía Curipaco Lllacza", p:92, d:"2026-06-12", v:"kids"},
+    {n:"Esteban Aste Balabaarca", p:100, d:"2026-06-12", v:"kids"},
+    {n:"gracia carolina arenas garcia", p:100, d:"2026-06-12", v:"kids"},
+    {n:"emir uzziel vargas guevara", p:100, d:"2026-06-12", v:"kids"},
+    {n:"Josué doria", p:92, d:"2026-06-12", v:"kids"},
+    {n:"Trujillo Moreno Frank $", p:100, d:"2026-06-12", v:"kids"},
+    {n:"DAVID THIAGO QUIROZ ROJAS", p:100, d:"2026-06-12", v:"kids"},
+    {n:"Leonisa Ashley Candia Ramirez", p:100, d:"2026-06-13", v:"kids"},
+    {n:"Chelsea Nataly Candia Ramírez", p:100, d:"2026-06-13", v:"kids"},
+    {n:"Mijhael Josue Liberato Pachas", p:100, d:"2026-06-13", v:"kids"},
+    {n:"Sofia Eunice Lescano Peralta", p:100, d:"2026-06-13", v:"kids"},
+    {n:"Eliel alvaro quispe reaño", p:96, d:"2026-06-13", v:"kids"},
+    {n:"Paula Verónica Campos Rodríguez", p:96, d:"2026-06-13", v:"kids"},
+    {n:"Yusei Alessandro Silva Pancorbo", p:100, d:"2026-06-13", v:"kids"},
+    {n:"Isabella Coral Cassiopeia Martinez Lavado", p:88, d:"2026-06-13", v:"kids"},
+    {n:"Noemi Hefzibá Chumacero Astudillo", p:100, d:"2026-06-13", v:"kids"},
+    {n:"Elienai Naomi Gallegos Abril", p:96, d:"2026-06-13", v:"kids"},
+    {n:"Abraham Guevara Silva", p:96, d:"2026-06-13", v:"kids"},
+    {n:"Rafaela Lozada Montoya", p:80, d:"2026-06-13", v:"kids"},
+    {n:"shania emily guevara silva", p:100, d:"2026-06-13", v:"kids"},
+    {n:"misael guevara silva", p:96, d:"2026-06-13", v:"kids"},
+    {n:"Fernanda Gracia Lozada Montoya", p:96, d:"2026-06-13", v:"kids"},
+    {n:"misael guevara", p:100, d:"2026-06-13", v:"kids"},
+    {n:"THIAGO ALDAIR", p:80, d:"2026-06-13", v:"kids"},
+    {n:"Santiago Haniel", p:96, d:"2026-06-13", v:"kids"},
+    {n:"Ariana Judith Doria Moreno", p:96, d:"2026-06-13", v:"kids"},
+    {n:"Ariana Esther Liberato Pachas", p:100, d:"2026-06-13", v:"kids"},
+    {n:"Varinia Elizabeth Vásquez Becerra", p:93, d:"2026-06-13", v:"adults"},
+    {n:"Melissa De La Vega", p:100, d:"2026-06-13", v:"adults"},
+    {n:"Betania Atoche Macedo", p:100, d:"2026-06-13", v:"adults"},
+    {n:"Jakelinne Victoria Abril Villena", p:98, d:"2026-06-13", v:"adults"},
+    {n:"Luis Manuel Guevara Hurtado", p:93, d:"2026-06-13", v:"adults"},
+    {n:"Elizabeth Diana Quijano Obispo", p:69, d:"2026-06-13", v:"adults"},
+    {n:"LIZZETH ALLISSON VILCHEZ TACZA", p:98, d:"2026-06-13", v:"adults"}
+  ]
+};

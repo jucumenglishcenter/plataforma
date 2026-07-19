@@ -143,7 +143,8 @@ function ExamCountdownCard({ student, onGo }) {
   const today = peruDayKey();
   let best = null;
   mods.forEach(m => {
-    const a = X.getAnnouncement(student.group, m.id);
+    const F0 = window.JUCUM_EXAMFLOW;
+    const a = (F0 && F0.getAnn && F0.getAnn(student.group, m.id)) || X.getAnnouncement(student.group, m.id);
     if (a && a.date && a.date >= today && (!best || a.date < best.date)) best = { ...a, mod: m };
   });
   if (!best) return null;
@@ -170,7 +171,7 @@ function ExamCountdownCard({ student, onGo }) {
         <div style={{flex:1, minWidth:0}}>
           <div style={{fontSize:11, fontWeight:800, letterSpacing:'.07em', textTransform:'uppercase', opacity:.85}}>🎓 Tu examen se acerca</div>
           <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:16}}>{best.mod.name}</div>
-          <div style={{fontSize:12.5, fontWeight:700, opacity:.9}}>{fecha}</div>
+          <div style={{fontSize:12.5, fontWeight:700, opacity:.9}}>{fecha}{best.from && window.JUCUM_EXAMFLOW ? ' · ' + window.JUCUM_EXAMFLOW.fmtHora(best.from) : ''}</div>
         </div>
         <div style={{textAlign:'center', background:'rgba(255,255,255,.14)', borderRadius:14, padding:'8px 14px', flexShrink:0}}>
           <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:30, lineHeight:1}}>{days === 0 ? 'HOY' : days}</div>
@@ -505,7 +506,7 @@ function StudentDashboard({ user, onLogout }) {
         <PointsStrip student={student} xp={xp} xpInfo={xpInfo} />
 
         {/* — 🎓 Cuenta regresiva del examen anunciado — */}
-        <ExamCountdownCard student={student} onGo={() => setView('exam')} />
+        <ExamCountdownCard student={student} onGo={() => setView('practica')} />
 
         {/* — Neuro + (Racha fusionada con Meta de hoy) — */}
         <div className="two-col" style={{gridTemplateColumns:'1.4fr 1fr', marginTop:18}}>
@@ -582,6 +583,8 @@ function ModuleProgress({ mod, progress, pct, doneCount, studentId, freeUnlock, 
           </div>
         </div>
       </div>
+      {/* 🎓 El examen vive EN el módulo: aviso con cuenta regresiva, Apto/candado y nota */}
+      {window.ModuleExamBanner && <ModuleExamBanner mod={mod} studentId={studentId} />}
       <div className="activity-list">
         <div className="al-head">
           <span>Actividades del módulo</span>
@@ -596,12 +599,19 @@ function ModuleProgress({ mod, progress, pct, doneCount, studentId, freeUnlock, 
             const stu = D.STUDENTS.find(s => s.id === studentId);
             const lvl = stu ? stu.level : 'pre-a1';
             const grp = stu ? stu.group : null;
-            const items = mod.activities.map((a, i) => {
+            // 🧭 Pre-examen: solo se muestra si la profesora lo abrió para el grupo (o si ya lo hizo)
+            const FX = window.JUCUM_EXAMFLOW;
+            const visActs = mod.activities.filter(a => {
+              if (!FX || !FX.isPreexamActivity || !FX.isPreexamActivity(a)) return true;
+              if (progress.completed[`${mod.id}:${a.id}`]) return true;
+              return stu ? FX.preexamVisibleFor(stu, mod) : false;
+            });
+            const items = visActs.map((a, i) => {
               const done = progress.completed[`${mod.id}:${a.id}`];
               // Resúmenes/Quizlet = baja exigencia: hechos cuentan como ✓ (no se exige umbral)
               const lowStakes = a.type === 'summary' || a.type === 'quizlet';
               const passed = done ? (D.entryPassed(done, lvl, grp) || lowStakes) : false;
-              const prevDone = i === 0 || progress.completed[`${mod.id}:${mod.activities[i-1].id}`];
+              const prevDone = i === 0 || progress.completed[`${mod.id}:${visActs[i-1].id}`];
               const teacherOpen = freeUnlock || unlockMode === 'free' ||
                 (unlockMode === 'custom' && enabledSet.has(`${mod.id}:${a.id}`));
               const alwaysOpen = a.open === true; // marcado en el catálogo ("open": true)
@@ -623,11 +633,15 @@ function ModuleProgress({ mod, progress, pct, doneCount, studentId, freeUnlock, 
             });
             let topicNum = 0;
             return segments.map((seg, si) => {
-              if (!seg.group) return seg.items.map(it => <ChecklistRow key={it.a.id} it={it} mod={mod} studentId={studentId} />);
+              if (!seg.group) return seg.items.map(it => (window.JUCUM_EXAMFLOW && window.JUCUM_EXAMFLOW.isPreexamActivity(it.a))
+                ? <PreexamChecklistRow key={it.a.id} it={it} mod={mod} studentId={studentId} />
+                : <ChecklistRow key={it.a.id} it={it} mod={mod} studentId={studentId} />);
               topicNum++;
               return <TopicGroup key={'g'+si} num={topicNum} name={seg.group} items={seg.items} mod={mod} studentId={studentId} />;
             });
           })()}
+          {/* 🎓 Fila del examen del módulo (candado → hoy → nota) */}
+          {window.ExamChecklistRow && <ExamChecklistRow mod={mod} studentId={studentId} />}
         </div>
       </div>
     </>
@@ -874,6 +888,50 @@ function PhaseTags({ a }) {
       {meta.phase && <span style={{fontSize:10.5,fontWeight:800,letterSpacing:'.02em',padding:'2px 7px',borderRadius:9,background:'#EDEAF7',color:'#5B3FA0'}}>{meta.phase}</span>}
       {loc && <span title={loc.txt} style={{fontSize:10.5,fontWeight:800,letterSpacing:'.02em',padding:'2px 7px',borderRadius:9,background:loc.bg,color:loc.fg,whiteSpace:'nowrap'}}>{loc.ico} {loc.txt}</span>}
     </span>
+  );
+}
+/* 🧭 Pre-examen: fila especial — ventana abierta por la profesora + botón "¿por qué?" */
+function PreexamChecklistRow({ it, mod, studentId }) {
+  const { a, done } = it;
+  const F = window.JUCUM_EXAMFLOW;
+  const D = window.JUCUM_DATA;
+  const [why, setWhy] = React.useState(false);
+  const stu = D.STUDENTS.find(s => s.id === studentId);
+  const pre = (F && stu) ? F.getPre(stu.group, mod.id) : null;
+  const href = linkFor(a, mod, studentId);
+  const sub = pre && pre.open
+    ? 'No es una nota · abierto por tu profesora' + (pre.toDate ? ' hasta el ' + new Date(pre.toDate + 'T12:00:00Z').toLocaleDateString('es-PE', { weekday:'short', day:'numeric', month:'short' }) + (pre.to ? ', ' + F.fmtHora(pre.to) : '') : '')
+    : 'No es una nota · diagnóstico para reconocer qué dominas';
+  return (
+    <>
+      <a className={`al-item ${done ? 'done' : 'open'}`} href={href || undefined} style={{borderColor:'#CE93D8', background: done ? undefined : '#FDFBFF'}}>
+        <span className="al-num" style={done ? undefined : {background:'#F3E5F5', color:'#7B1FA2', borderColor:'#CE93D8'}}>{done ? '✓' : '🧭'}</span>
+        <span className="al-ico">🧭</span>
+        <span className="al-name">{a.name.replace(/^🧭\s*/, '')}<span style={{display:'block', fontSize:10.5, color:'#7B1FA2', fontWeight:800}}>{sub}</span></span>
+        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setWhy(true); }}
+          style={{border:'1.5px solid #CE93D8', background:'#F3E5F5', color:'#7B1FA2', fontSize:10.5, fontWeight:800, borderRadius:14, padding:'3px 10px', cursor:'pointer', fontFamily:"'Nunito',sans-serif"}}>ⓘ ¿Por qué?</button>
+        <span className="al-arr">→</span>
+      </a>
+      {why && (
+        <div className="modal-backdrop" onClick={() => setWhy(false)}>
+          <div className="modal settings-modal" style={{maxWidth:500}} onClick={e => e.stopPropagation()}>
+            <div className="modal-head"><div className="modal-title">🧭 ¿Por qué doy este pre-examen?</div><button className="modal-close" onClick={() => setWhy(false)}>✕</button></div>
+            <div className="modal-body" style={{fontSize:13, lineHeight:1.6}}>
+              <p style={{margin:'0 0 10px'}}>Este pre-examen <b>no es una nota</b> y no decide si apruebas. Tu profesora lo abre para tu grupo como preparación. Es tu <b>brújula</b>: 🧭</p>
+              {[['1', 'Descubres cuánto entiendes de verdad.', 'No lo que crees que sabes — lo que realmente dominas del tema.'], ['2', 'Reconoces las áreas que aún no dominas.', 'Cada pregunta que falles te señala exactamente qué practicar antes del examen real.'], ['3', 'Repasas y recuerdas todo lo visto en clase.', 'Responderlo ya es una forma de práctica que refuerza tu memoria.']].map(s => (
+                <div key={s[0]} style={{display:'flex', gap:10, marginBottom:11}}>
+                  <span style={{width:24, height:24, borderRadius:'50%', background:'#FFF3E0', border:'1.5px solid #FFB74D', color:'#8A5100', fontWeight:800, fontSize:11, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>{s[0]}</span>
+                  <div><b>{s[1]}</b> {s[2]}</div>
+                </div>
+              ))}
+              <div style={{display:'flex', gap:10, background:'linear-gradient(135deg,#E3F2FD,#BBDEFB)', borderRadius:12, padding:'11px 13px', fontSize:12, lineHeight:1.55, color:'#0D47A1', fontWeight:600}}>
+                <span style={{fontSize:22}}>🧠</span><div><b>Consejo de Neuro:</b> hazlo sin ayuda y sin miedo. Equivocarte aquí es <b>información, no castigo</b> — al terminar sabrás exactamente qué repasar. 💪</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 function linkFor(a, mod, studentId) {
