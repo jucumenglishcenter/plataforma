@@ -34,10 +34,10 @@ function examDiagnosis(student, r) {
   return `Reforzar ${weak.map(x => `${x.c.label} (${x.v}%)`).join(' y ')}. Sugerir práctica enfocada antes del próximo examen.`;
 }
 
-function TeacherExams({ onBack, canDefine, hideBack }) {
+function TeacherExams({ onBack, canDefine, hideBack, initialTab }) {
   const { LEVELS } = window.JUCUM_DATA;
   const X = window.JUCUM_EXAMS;
-  const [tab, setTab] = exUseState('modules');
+  const [tab, setTab] = exUseState(initialTab || (canDefine ? 'define' : 'windows'));
   const [editing, setEditing] = exUseState(null); // 'new' | exam
   const [opening, setOpening] = exUseState(false);
   const [demoOpen, setDemoOpen] = exUseState(false);
@@ -54,7 +54,7 @@ function TeacherExams({ onBack, canDefine, hideBack }) {
         <div className="welcome-text">
           <div className="eyebrow">🎓 Exámenes</div>
           <h1>Exámenes de avance</h1>
-          <p>{canDefine ? 'Define tus exámenes (un HTML por competencia). La plataforma marca apto al 75%.' : 'Abre el examen para tu grupo cuando toque, califica y comparte resultados. Solo Desarrollo define el contenido.'}</p>
+          <p>{canDefine ? 'Vista avanzada: define el contenido de los exámenes y sus pesos. La programación del día a día vive en las Carpetas de evaluación.' : 'Vista avanzada: ventanas puntuales por alumno y aperturas manuales. La programación del día a día vive en las Carpetas de evaluación.'}</p>
         </div>
         <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
           {canDefine && <button className="btn-settings" onClick={() => setEditing('new')}>+ Definir examen</button>}
@@ -64,7 +64,6 @@ function TeacherExams({ onBack, canDefine, hideBack }) {
       </div>
 
       <div className="mm-tabs">
-        <button className={`mm-tab ${tab==='modules'?'on':''}`} onClick={() => setTab('modules')}>📚 Por módulo</button>
         <button className={`mm-tab ${tab==='windows'?'on':''}`} onClick={() => setTab('windows')}>📅 Aperturas <span className="mm-count">{windows.length}</span></button>
         {canDefine && <button className={`mm-tab ${tab==='define'?'on':''}`} onClick={() => setTab('define')}>📑 Definidos <span className="mm-count">{exams.length}</span></button>}
         {canDefine && <button className={`mm-tab ${tab==='weights'?'on':''}`} onClick={() => setTab('weights')}>⚖️ Peso examen</button>}
@@ -72,7 +71,7 @@ function TeacherExams({ onBack, canDefine, hideBack }) {
 
       <ExamReadyBanner />
 
-      {tab === 'modules' ? <ModuleExamPanel onChange={refresh} /> : tab === 'weights' && canDefine ? <ModuleWeightPanel /> : tab === 'define' && canDefine ? (
+      {tab === 'weights' && canDefine ? <ModuleWeightPanel /> : tab === 'define' && canDefine ? (
         exams.length === 0
           ? <div className="scard"><div className="empty-state"><div className="icon">📑</div>Aún no defines exámenes. Crea el primero.</div></div>
           : <div className="mm-list">

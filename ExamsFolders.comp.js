@@ -28,7 +28,7 @@ function M1FormsButton({ group, onChange }) {
 }
 
 /* ═══════════════ PROFESOR · Carpetas por grupo ═══════════════ */
-function TeacherExamsFolders({ onBack, hideBack, initialGroup }) {
+function TeacherExamsFolders({ onBack, hideBack, initialGroup, canDefine }) {
   const { GROUPS, LEVELS } = window.JUCUM_DATA;
   const [groupId, setGroupId] = exfUS(initialGroup || (GROUPS[0] ? GROUPS[0].id : null));
   const [demoOpen, setDemoOpen] = exfUS(false);
@@ -41,7 +41,7 @@ function TeacherExamsFolders({ onBack, hideBack, initialGroup }) {
   if (classic) return (
     <>
       <div style={{padding:'12px 28px 0'}}><button className="att-btn" onClick={() => setClassic(false)}>← Volver a las carpetas</button></div>
-      <TeacherExams onBack={onBack} hideBack />
+      <TeacherExams onBack={onBack} hideBack canDefine={canDefine} initialTab={typeof classic === 'string' ? classic : undefined} />
     </>
   );
   if (!group) return <main>{!hideBack && <button className="back-btn" onClick={onBack}>← Volver al panel</button>}<div className="scard"><div className="empty-state"><div className="icon">👥</div>No hay grupos todavía.</div></div></main>;
@@ -53,11 +53,13 @@ function TeacherExamsFolders({ onBack, hideBack, initialGroup }) {
         <div className="welcome-text">
           <div className="eyebrow">🎓 Exámenes</div>
           <h1>Carpetas de evaluación</h1>
-          <p>Una carpeta por grupo: anuncias con fecha y hora, el examen <b>se abre solo</b> (hora de Perú), calificas y compartes — todo en una sola hoja. El pre-examen solo lo ven los grupos donde tú lo abras.</p>
+          <p>Una carpeta por grupo: <b>programas</b> el aviso y el examen (fecha y hora de Perú) y todo <b>se envía y se abre solo</b>; luego calificas y compartes — en una sola hoja. El pre-examen solo lo ven los grupos donde tú lo abras.</p>
         </div>
         <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+          {canDefine && <button className="btn-settings" onClick={() => setClassic('define')}>📑 Definir exámenes</button>}
+          {canDefine && <button className="btn-settings" onClick={() => setClassic('weights')}>⚖️ Peso examen</button>}
           <button className="btn-settings" onClick={() => setDemoOpen(true)}>🧪 Examen de prueba</button>
-          <button className="btn-settings" onClick={() => setClassic(true)} title="Aperturas avanzadas (vista anterior)">⚙ Vista clásica</button>
+          <button className="btn-settings" onClick={() => setClassic(true)} title="Ventanas puntuales por alumno y aperturas manuales">⚙ Aperturas avanzadas</button>
         </div>
       </div>
 
@@ -97,6 +99,7 @@ function TeacherExamsFolders({ onBack, hideBack, initialGroup }) {
 function GroupExamFolder({ group, onChange }) {
   const { STUDENTS, LEVELS, MODULE_CATALOG, getStudentReadiness } = window.JUCUM_DATA;
   const F = window.JUCUM_EXAMFLOW;
+  const [showApt, setShowApt] = exfUS(false);
   const lv = LEVELS[group.level] || {};
   const mods = MODULE_CATALOG[group.level] || [];
   const members = STUDENTS.filter(s => s.group === group.id);
@@ -111,17 +114,46 @@ function GroupExamFolder({ group, onChange }) {
           <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18}}>{group.name}</div>
           <div style={{fontSize:11.5, color:'var(--text-soft)', fontWeight:700}}>{lv.code} · {members.length} alumno(s)</div>
         </div>
-        <div style={{display:'flex', gap:8, flexWrap:'wrap', marginLeft:'auto'}}>
-          {exfPill('#E8F5E9', '#2E7D32', <>🎓 {apts}/{members.length} aptos (≥75%)</>, 'a')}
+        <div style={{display:'flex', gap:8, flexWrap:'wrap', marginLeft:'auto', alignItems:'center'}}>
           {next && exfPill('#E3E9F8', '#1F3A8A', <>📣 Próximo: {next.mod.name} · {F.fmtFecha(next.date)}{next.from ? ', ' + F.fmtHora(next.from) : ''}</>, 'n')}
+          <button className="att-btn" onClick={() => setShowApt(v => !v)} title="Ver la preparación de cada alumno (aptos y no aptos)">🎓 {apts}/{members.length} aptos {showApt ? '▴' : '▾'}</button>
         </div>
       </div>
+      {showApt && <AptRoster members={members} />}
       {mods.length === 0 && <div className="settings-hint">Este nivel no tiene módulos.</div>}
       {mods.map(m => <ModuleFolderRow key={m.id} group={group} module={m} members={members} onChange={onChange} />)}
       {mods.map(m => {
         const act = (m.activities || []).find(a => F.isPreexamActivity(a));
         return act ? <PreexamFolderRow key={'pre-' + m.id} group={group} module={m} act={act} onChange={onChange} /> : null;
       })}
+    </div>
+  );
+}
+
+/* ── Roster de preparación del grupo: aptos y no aptos de un vistazo ── */
+function AptRoster({ members }) {
+  const { getStudentReadiness } = window.JUCUM_DATA;
+  const rows = [...members].map(s => ({ s, r: getStudentReadiness(s) })).sort((a, b) => b.r.overall - a.r.overall);
+  const apts = rows.filter(x => x.r.apt).length;
+  return (
+    <div style={{border:'1.5px solid #D9E2F4', background:'#F8FAFF', borderRadius:12, padding:'11px 14px', marginBottom:13}}>
+      <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginBottom:8}}>
+        <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13.5}}>Preparación del grupo (hoy)</b>
+        {exfPill('#E8F5E9', '#2E7D32', <>✅ {apts} apto{apts === 1 ? '' : 's'}</>, 'a')}
+        {exfPill('#FFF8E1', '#E65100', <>⚠ {rows.length - apts} aún no</>, 'b')}
+        <span className="settings-hint" style={{margin:0}}>Es una foto viva: sube y baja con la práctica diaria. Habilitas caso por caso en el paso 3 de cada examen.</span>
+      </div>
+      {rows.map(({ s, r }) => (
+        <div key={s.id} style={{display:'flex', alignItems:'center', gap:9, padding:'5px 0', borderBottom:'1px solid #ECEFF7', fontSize:12.5, flexWrap:'wrap'}}>
+          <span style={{fontWeight:800, flex:'1 1 150px', minWidth:150}}>{s.fullName}</span>
+          <span style={{flex:'0 0 110px', height:8, background:'#E8E4DA', borderRadius:5, overflow:'hidden', position:'relative'}}>
+            <i style={{position:'absolute', inset:0, width:Math.min(100, r.overall) + '%', background: r.apt ? '#2EA84B' : r.overall >= 50 ? '#F9A825' : '#E53935', borderRadius:5, display:'block'}}></i>
+            <i style={{position:'absolute', top:-1, bottom:-1, left:'75%', width:2, background:'#1F3A8A', display:'block'}}></i>
+          </span>
+          <b style={{width:44, textAlign:'right', color: r.apt ? '#2E7D32' : '#8A5100'}}>{r.overall}%</b>
+          {r.apt ? exfPill('#E8F5E9', '#2E7D32', '✅ apto', 'p') : exfPill('#FFF8E1', '#E65100', 'falta ' + Math.max(0, (r.threshold || 75) - r.overall) + '%', 'p')}
+        </div>
+      ))}
     </div>
   );
 }
@@ -249,30 +281,43 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
     return X.suggestedGrade(exam, map);
   };
   const announced = !!(ann && ann.date);
+  const [aviso, setAviso] = exfUS(ann && ann.notifyDate && !ann.notified ? 'fecha' : 'ahora');
+  const [avisoDate, setAvisoDate] = exfUS((ann && ann.notifyDate && !ann.notified ? ann.notifyDate : '') || '');
   const ensureWin = () => {
     if (win) return win;
     X.createWindow({ examId: exam.id, groupId: group.id, isOpen: false });
     onChange();
     return X.windowForExamGroup(exam.id, group.id);
   };
-  const doAnnounce = () => {
+  const doProgram = () => {
     if (!date) { alert('Elige la fecha del examen.'); return; }
-    F.setAnn(group.id, module.id, { date, from: from || null, to: to || null, variant, auto: true, forceClosed: false, examId: exam.id, announcedAt: new Date().toISOString() });
-    const n = X.announceExam(group.id, module.id, exam.id, date);
+    const schedNotif = aviso === 'fecha' && avisoDate && avisoDate > F.pDay();
+    F.setAnn(group.id, module.id, {
+      date, from: from || null, to: to || null, variant, auto: true, forceClosed: false, examId: exam.id,
+      programmedAt: new Date().toISOString(),
+      notifyDate: schedNotif ? avisoDate : F.pDay(), notified: !schedNotif,
+    });
     if (!win) X.createWindow({ examId: exam.id, groupId: group.id, isOpen: false });
-    alert('📣 Anunciado a ' + n + ' alumno(s) de ' + group.name + ' · ' + F.fmtFecha(date) + (from ? ', ' + F.fmtHora(from) : '') + '.\n🗓️ Quedó agendado en tu calendario de Planificar y el examen se abrirá SOLO ese día para aptos y habilitados.');
+    const horarioTxt = (from ? ', ' + F.fmtHora(from) : '') + (to ? ' – ' + F.fmtHora(to) : '');
+    if (schedNotif) {
+      alert('🗓️ Todo programado para ' + group.name + ':\n📣 El aviso se enviará SOLO el ' + F.fmtFecha(avisoDate) + '.\n🎓 Examen: ' + F.fmtFecha(date) + horarioTxt + ' — se abre y se cierra solo (hora de Perú).\nLos alumnos ya ven la cuenta regresiva en su módulo; sale en tu calendario de Planificar.');
+    } else {
+      const n = X.announceExam(group.id, module.id, exam.id, date);
+      alert('📣 Aviso enviado AHORA a ' + n + ' alumno(s) de ' + group.name + '.\n🎓 Examen: ' + F.fmtFecha(date) + horarioTxt + ' — se abre y se cierra solo (hora de Perú). Sale en tu calendario de Planificar.');
+    }
     onChange();
   };
   const auto = ann ? ann.auto !== false : true;
 
   return (
     <div style={{borderTop:'1px dashed var(--border)', background:'#FBFAF5', padding:'14px 16px', display:'grid', gap:13}}>
-      {/* 1 · Anunciar */}
+      {/* 1 · Programar (examen + aviso) */}
       <div style={{display:'flex', gap:10, alignItems:'flex-start', flexWrap:'wrap'}}>
         <StepNum n="1" done={announced} />
         <div style={{flex:1, minWidth:250, fontSize:12.5, lineHeight:1.55}}>
-          <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13.5}}>Anunciar fecha y hora (hora de Perú)</b>
-          <div className="row-flex" style={{gap:7, marginTop:7, flexWrap:'wrap'}}>
+          <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13.5}}>Programar examen y aviso (hora de Perú) — todo queda agendado</b>
+          <div className="row-flex" style={{gap:7, marginTop:7, flexWrap:'wrap', alignItems:'center'}}>
+            <span style={{fontSize:11.5, fontWeight:800, color:'#1F3A8A', width:72}}>🎓 Examen</span>
             <input type="date" className="input-text" style={{width:150}} value={date} onChange={e => setDate(e.target.value)} />
             <span style={{fontSize:11.5, fontWeight:800, color:'#777'}}>abre</span>
             <input type="time" className="input-text" style={{width:110}} value={from} onChange={e => setFrom(e.target.value)} />
@@ -282,10 +327,20 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
               <option value="kids">🧒 Versión niños</option>
               <option value="adults">🧑 Versión adultos</option>
             </select>
-            <button className="btn-save" onClick={doAnnounce}>📣 {announced ? 'Re-anunciar' : 'Anunciar al grupo'}</button>
-            {announced && <button className="att-btn" onClick={() => { if (confirm('¿Quitar el anuncio? El aviso del módulo desaparecerá para los alumnos.')) { F.setAnn(group.id, module.id, null); X.cancelAnnouncement(group.id, module.id); onChange(); } }}>✕ Quitar anuncio</button>}
           </div>
-          {announced && <div className="settings-hint" style={{margin:'6px 0 0'}}>✓ Anunciado — los alumnos ven la cuenta regresiva en su módulo, con recordatorios de práctica diaria que desaparecen cuando el examen termina.</div>}
+          <div className="row-flex" style={{gap:7, marginTop:7, flexWrap:'wrap', alignItems:'center'}}>
+            <span style={{fontSize:11.5, fontWeight:800, color:'#1F3A8A', width:72}}>📣 Aviso</span>
+            <label className="check-row" style={{margin:0}}><input type="radio" name={'aviso-' + group.id + '-' + module.id} checked={aviso === 'ahora'} onChange={() => setAviso('ahora')} /><span style={{fontSize:12}}>enviarlo ahora</span></label>
+            <label className="check-row" style={{margin:0}}><input type="radio" name={'aviso-' + group.id + '-' + module.id} checked={aviso === 'fecha'} onChange={() => setAviso('fecha')} /><span style={{fontSize:12}}>se envía solo el</span></label>
+            <input type="date" className="input-text" style={{width:150}} value={avisoDate} onChange={e => { setAvisoDate(e.target.value); setAviso('fecha'); }} disabled={aviso !== 'fecha'} />
+            <button className="btn-save" onClick={doProgram}>💾 {announced ? 'Re-programar' : 'Programar todo'}</button>
+            {announced && <button className="att-btn" onClick={() => { if (confirm('¿Quitar la programación? El aviso y la cuenta regresiva desaparecen para los alumnos.')) { F.setAnn(group.id, module.id, null); X.cancelAnnouncement(group.id, module.id); onChange(); } }}>✕ Quitar</button>}
+          </div>
+          {announced && (
+            <div className="settings-hint" style={{margin:'6px 0 0'}}>
+              ✓ Programado: 📣 aviso {ann.notified ? 'ya enviado' : 'se enviará solo el ' + F.fmtFecha(ann.notifyDate)} · 🎓 examen {F.fmtFecha(ann.date)}{ann.from ? ', ' + F.fmtHora(ann.from) : ''}{ann.to ? ' – ' + F.fmtHora(ann.to) : ''} · se abre y se cierra solo · los alumnos ven su cuenta regresiva en el módulo.
+            </div>
+          )}
         </div>
       </div>
       {/* 2 · Apertura automática */}
@@ -311,7 +366,11 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
             <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13.5}}>¿Quién puede rendirlo? · calificar</b>
             {win && <button className="att-btn" onClick={() => loadLive(false)} disabled={liveBusy}>🔎 {liveBusy ? 'Consultando…' : 'Actualizar avance en vivo'}</button>}
           </div>
-          <div className="settings-hint" style={{margin:'3px 0 8px'}}>Aptos (≥75%) entran solos el día del examen; a los demás tú puedes <b>habilitarlos</b> — tienes la última palabra. La nota sugerida sale de su examen rendido.</div>
+          <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap', margin:'5px 0 3px'}}>
+            {exfPill('#E8F5E9', '#2E7D32', <>✅ {members.filter(s => getStudentReadiness(s).apt).length} apto(s)</>, 'ca')}
+            {exfPill('#FFF8E1', '#E65100', <>⚠ {members.filter(s => !getStudentReadiness(s).apt).length} aún no — habilítalos aquí abajo</>, 'cb')}
+          </div>
+          <div className="settings-hint" style={{margin:'0 0 8px'}}>Aptos (≥75%) entran solos el día del examen; a los demás tú puedes <b>habilitarlos</b> — tienes la última palabra. La nota sugerida sale de su examen rendido.</div>
           <div className="sm-list">
             {[...members].sort((a, b) => getStudentReadiness(b).overall - getStudentReadiness(a).overall).map(s => {
               const r = getStudentReadiness(s);
@@ -617,4 +676,4 @@ function ExamChecklistRow({ mod, studentId }) {
   );
 }
 
-Object.assign(window, { TeacherExamsFolders, GroupExamFolder, ModuleFolderRow, ModuleFolderDetail, PreexamFolderRow, ModuleExamBanner, ExamChecklistRow, ExamPlanModal, NotesList });
+Object.assign(window, { TeacherExamsFolders, GroupExamFolder, AptRoster, ModuleFolderRow, ModuleFolderDetail, PreexamFolderRow, ModuleExamBanner, ExamChecklistRow, ExamPlanModal, NotesList });

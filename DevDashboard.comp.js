@@ -57,7 +57,7 @@ function DevDashboard({ user, onLogout }) {
 
       {view === 'modules'  ? <ManageModules onBack={() => setView('modules')} />
        : view === 'manage'   ? <ManageGroups onBack={() => setView('manage')} />
-       : view === 'exams'    ? <TeacherExams canDefine onBack={() => setView('exams')} />
+       : view === 'exams'    ? (window.TeacherExamsFolders ? <TeacherExamsFolders canDefine onBack={() => setView('exams')} /> : <TeacherExams canDefine onBack={() => setView('exams')} />)
        : view === 'students' ? <ManageStudents onBack={() => setView('students')} />
        : view === 'promote'  ? <LevelPromotion onBack={() => setView('promote')} />
        : view === 'retencion' ? <RetentionView />

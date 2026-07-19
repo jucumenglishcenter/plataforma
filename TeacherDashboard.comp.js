@@ -167,7 +167,7 @@ function TeacherAssessment({ onBack, canDefine, initialTab }) {
         </div>
       </div>
       {tab === 'eval' ? <TeacherEvaluate onBack={onBack} hideBack />
-        : tab === 'exams' ? ((window.TeacherExamsFolders && !canDefine) ? <TeacherExamsFolders onBack={onBack} hideBack /> : <TeacherExams onBack={onBack} canDefine={canDefine} hideBack />)
+        : tab === 'exams' ? (window.TeacherExamsFolders ? <TeacherExamsFolders onBack={onBack} hideBack canDefine={canDefine} /> : <TeacherExams onBack={onBack} canDefine={canDefine} hideBack />)
         : tab === 'tareas' ? (window.TeacherPractice ? <TeacherPractice onBack={onBack} only="tasks" /> : <main><div className="empty-state">Falta el módulo de tareas.</div></main>)
         : <PrepNotas />}
     </div>

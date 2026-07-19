@@ -37,9 +37,13 @@
       }
     } catch (e) {}
   }
-  // Hidratar al arrancar (cuando el cliente de Supabase ya existe)
+  // Hidratar al arrancar (cuando el cliente de Supabase ya existe) y despachar lo programado
   let tries = 0;
-  (function boot() { if (window.JUCUM_SB) { hydrate(); return; } if (tries++ < 40) setTimeout(boot, 500); })();
+  (function boot() {
+    if (window.JUCUM_SB) { hydrate().then(function () { runDue(); }); return; }
+    if (tries++ < 40) setTimeout(boot, 500); else runDue();
+  })();
+  setInterval(function () { runDue(); }, 60000);
 
   /* ── Anuncio del examen de módulo (fecha + horas + versión + auto) ── */
   function getAnn(groupId, moduleId) { return load().ann[groupId + ':' + moduleId] || null; }
@@ -189,8 +193,29 @@
     return out;
   }
 
+  /* ── Despachador de avisos PROGRAMADOS ──
+   * El profesor deja el aviso agendado (notifyDate, día de Perú); la primera sesión
+   * abierta ese día (profesor, alumno o soporte) lo envía una sola vez (notified). */
+  function runDue() {
+    try {
+      const X = window.JUCUM_EXAMS, D = window.JUCUM_DATA;
+      if (!X || !D || !(D.STUDENTS || []).length) return;
+      const flow = load(); let dirty = false;
+      Object.keys(flow.ann).forEach(function (k) {
+        const a = flow.ann[k];
+        if (!a || a.notified || !a.notifyDate || !a.date) return;
+        if (pDay() < a.notifyDate) return;                    // aún no toca
+        a.notified = true; a.notifiedAt = new Date().toISOString(); dirty = true;
+        if (a.date < pDay()) return;                          // el examen ya pasó: no avisar
+        const gi = k.indexOf(':');
+        try { X.announceExam(k.slice(0, gi), k.slice(gi + 1), a.examId || null, a.date); } catch (e) {}
+      });
+      if (dirty) save(flow);
+    } catch (e) {}
+  }
+
   window.JUCUM_EXAMFLOW = {
-    pDay: pDay, pMin: pMin, fmtHora: fmtHora, fmtFecha: fmtFecha, daysTo: daysTo,
+    pDay: pDay, pMin: pMin, fmtHora: fmtHora, fmtFecha: fmtFecha, daysTo: daysTo, runDue: runDue,
     getAnn: getAnn, setAnn: setAnn, getPre: getPre, setPre: setPre,
     isPreexamActivity: isPreexamActivity, preOpenNow: preOpenNow, preexamVisibleFor: preexamVisibleFor,
     annForWindow: annForWindow, winEffectiveOpen: winEffectiveOpen, infoForModule: infoForModule,
