@@ -81,7 +81,8 @@ function TeacherExams({ onBack, canDefine, hideBack, initialTab }) {
                   <div className="mm-info">
                     <div className="mm-name">{e.title}</div>
                     <div className="mm-meta">{LEVELS[e.level]?.code || e.level} · {(e.parts||[]).length} parte{(e.parts||[]).length===1?'':'s'} · {(e.moduleIds||[]).length} módulo(s)</div>
-                    <div className="mm-topics">{(e.parts||[]).map((p,i) => <span key={i} className="mm-chip">{compLabel(p.competency)}</span>)}</div>
+                    <div className="mm-topics">{(e.parts||[]).map((p,i) => <span key={i} className="mm-chip">{compLabel(p.competency)} <a href={p.url} target="_blank" rel="noopener" style={{textDecoration:'none', fontWeight:800}} title="Abrir esta parte en modo prueba: la resuelves completa SIN registrar nota (para detectar errores)">▶ Resolver</a></span>)}</div>
+                    <div className="settings-hint" style={{margin:'4px 0 0'}}>▶ Resolver = abre la parte en <b>modo prueba</b> (pestaña nueva): la haces completa como alumno y <b>no registra nota</b> — ideal para revisar errores antes de programarla.</div>
                   </div>
                   <div className="mm-actions">
                     <button className="att-btn" onClick={() => setEditing(e)}>✏️ Editar</button>
