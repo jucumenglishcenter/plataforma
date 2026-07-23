@@ -283,6 +283,7 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
   const announced = !!(ann && ann.date);
   const [aviso, setAviso] = exfUS(ann && ann.notifyDate && !ann.notified ? 'fecha' : 'ahora');
   const [avisoDate, setAvisoDate] = exfUS((ann && ann.notifyDate && !ann.notified ? ann.notifyDate : '') || '');
+  const [retakeDays, setRetakeDays] = exfUS((ann && ann.retakeDays) || '');
   const ensureWin = () => {
     if (win) return win;
     X.createWindow({ examId: exam.id, groupId: group.id, isOpen: false });
@@ -294,6 +295,7 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
     const schedNotif = aviso === 'fecha' && avisoDate && avisoDate > F.pDay();
     F.setAnn(group.id, module.id, {
       date, from: from || null, to: to || null, variant, auto: true, forceClosed: false, examId: exam.id,
+      retakeDays: retakeDays ? Math.max(1, parseInt(retakeDays, 10) || 1) : null,
       programmedAt: new Date().toISOString(),
       notifyDate: schedNotif ? avisoDate : F.pDay(), notified: !schedNotif,
     });
@@ -329,6 +331,12 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
             </select>
           </div>
           <div className="row-flex" style={{gap:7, marginTop:7, flexWrap:'wrap', alignItems:'center'}}>
+            <span style={{fontSize:11.5, fontWeight:800, color:'#1F3A8A', width:72}}>🔁 Repetir</span>
+            <span style={{fontSize:12}}>todos pueden volver a intentarlo (mejorar nota · no aprobados) a los</span>
+            <input type="number" min="1" max="60" className="input-text" style={{width:70}} value={retakeDays} onChange={e => setRetakeDays(e.target.value)} placeholder="—" />
+            <span style={{fontSize:12}}>día(s) · vacío = sin repetición automática</span>
+          </div>
+          <div className="row-flex" style={{gap:7, marginTop:7, flexWrap:'wrap', alignItems:'center'}}>
             <span style={{fontSize:11.5, fontWeight:800, color:'#1F3A8A', width:72}}>📣 Aviso</span>
             <label className="check-row" style={{margin:0}}><input type="radio" name={'aviso-' + group.id + '-' + module.id} checked={aviso === 'ahora'} onChange={() => setAviso('ahora')} /><span style={{fontSize:12}}>enviarlo ahora</span></label>
             <label className="check-row" style={{margin:0}}><input type="radio" name={'aviso-' + group.id + '-' + module.id} checked={aviso === 'fecha'} onChange={() => setAviso('fecha')} /><span style={{fontSize:12}}>se envía solo el</span></label>
@@ -338,7 +346,7 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
           </div>
           {announced && (
             <div className="settings-hint" style={{margin:'6px 0 0'}}>
-              ✓ Programado: 📣 aviso {ann.notified ? 'ya enviado' : 'se enviará solo el ' + F.fmtFecha(ann.notifyDate)} · 🎓 examen {F.fmtFecha(ann.date)}{ann.from ? ', ' + F.fmtHora(ann.from) : ''}{ann.to ? ' – ' + F.fmtHora(ann.to) : ''} · se abre y se cierra solo · los alumnos ven su cuenta regresiva en el módulo.
+              ✓ Programado: 📣 aviso {ann.notified ? 'ya enviado' : 'se enviará solo el ' + F.fmtFecha(ann.notifyDate)} · 🎓 examen {F.fmtFecha(ann.date)}{ann.from ? ', ' + F.fmtHora(ann.from) : ''}{ann.to ? ' – ' + F.fmtHora(ann.to) : ''}{ann.retakeDays ? ' · 🔁 no aprobados repiten a los ' + ann.retakeDays + ' día(s)' : ''} · se abre y se cierra solo · los alumnos ven su cuenta regresiva en el módulo.
             </div>
           )}
         </div>
@@ -494,12 +502,40 @@ function ModuleExamBanner({ mod, studentId }) {
   const D = window.JUCUM_DATA, F = window.JUCUM_EXAMFLOW;
   const [tick, setTick] = React.useState(0);
   const [plan, setPlan] = React.useState(false);
+  const [att, setAtt] = React.useState(null);
   React.useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 30000);   // atrapa la apertura automática
     const f = () => setTick(t => t + 1);
     window.addEventListener('jucum:examflow', f);
-    return () => { clearInterval(id); window.removeEventListener('jucum:examflow', f); };
+    window.addEventListener('focus', f);                        // volvió de la pestaña del examen
+    return () => { clearInterval(id); window.removeEventListener('jucum:examflow', f); window.removeEventListener('focus', f); };
   }, []);
+  /* Nota automática del examen (diagnostic_attempts) — vale el primer intento */
+  React.useEffect(() => {
+    let dead = false;
+    (async () => {
+      try {
+        const D0 = window.JUCUM_DATA, F0 = window.JUCUM_EXAMFLOW, SBW = window.JUCUM_SB;
+        if (!D0 || !F0 || !SBW) return;
+        const st = (D0.STUDENTS || []).find(s => s.id === studentId); if (!st) return;
+        const inf = F0.infoForModule(st, mod);
+        if (!inf.exam || inf.isForms || inf.phase === 'none') return;
+        const slugs = (inf.exam.parts || []).map(p => (((p.url || '').match(/\/(m\d+)\/examen/) || [])[1])).filter(Boolean);
+        const sb = SBW.getClient();
+        const res = await sb.from('diagnostic_attempts').select('score,correct,total,sections,created_at,activity_id,module_id,attempt_no')
+          .eq('user_id', studentId).like('activity_id', 'examen%').order('created_at', { ascending: true }).limit(20);
+        const data = res && res.data;
+        if (dead || !data || !data.length) return;
+        const rows = data.filter(r => r.module_id === 'exam-' + inf.exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl));
+        if (rows.length) {
+          const best = rows.reduce((a, b) => ((b.score || 0) > (a.score || 0) ? b : a), rows[0]);
+          best._last = rows[rows.length - 1].created_at; best._n = rows.length;
+          setAtt(prev => (prev && prev.created_at === best.created_at && prev._n === best._n) ? prev : best);
+        }
+      } catch (e) {}
+    })();
+    return () => { dead = true; };
+  }, [studentId, mod.id, tick]);
   if (!F || !D) return null;
   const student = (D.STUDENTS || []).find(s => s.id === studentId);
   if (!student) return null;
@@ -526,6 +562,38 @@ function ModuleExamBanner({ mod, studentId }) {
   );
   const box = (borderColor, children) => <div style={{borderRadius:13, marginTop:12, overflow:'hidden', width:'100%', border:'1.5px solid ' + borderColor}}>{children}</div>;
   const horario = info.ann ? (info.ann.from ? F.fmtHora(info.ann.from) + (info.ann.to ? ' – ' + F.fmtHora(info.ann.to) : '') : 'todo el día') : '';
+
+  /* Ya rindió (nota automática instantánea): resultado + retroalimentación por parte */
+  if (att && info.phase !== 'done') {
+    const passed = (att.score || 0) >= 75;
+    const rd = (info.ann && info.ann.retakeDays) ? Number(info.ann.retakeDays) : null;
+    const availT = rd ? Date.parse(att._last || att.created_at) + rd * 86400000 : null;
+    const canRetry = availT != null && Date.now() >= availT;
+    const part0 = ((info.exam && info.exam.parts) || []).find(p => p.url);
+    const retryLink = part0 ? part0.url + (part0.url.includes('?') ? '&' : '?') + 'jucum_exam=1&jucum_retry=1&jucum_uid=' + encodeURIComponent(studentId) + '&jucum_mod=' + encodeURIComponent('exam-' + info.exam.id) + '&jucum_act=' + encodeURIComponent(part0.competency || '') + (info.ann && info.ann.variant ? '&jucum_variant=' + encodeURIComponent(info.ann.variant) : '') : null;
+    const PL = { L: '🎧 Listening', R: '📖 Comprensión lectora', X: '🧩 ¿Qué regla uso?', G: '📝 Gramática', V: '🔤 Vocabulario' };
+    const weak = Object.keys(PL).filter(k => { const s = (att.sections || {})[k]; return s && s.t && (s.h / s.t) < 0.75; }).map(k => PL[k]);
+    return box(passed ? '#A5D6A7' : '#F0C46C', (
+      <>
+        {head(passed ? 'linear-gradient(135deg,#1B5E20,#2E7D32)' : 'linear-gradient(135deg,#8A5100,#B26A00)', passed ? '🎉' : '🌱',
+          'Examen rendido · nota automática', mod.name + ' · ' + (passed ? '¡Módulo completado!' : 'Módulo terminado — sigue repasando'),
+          '✔ ' + (att.correct != null ? att.correct : '–') + '/' + (att.total != null ? att.total : '–') + ' aciertos · intento ' + (att.attempt_no || 1) + ' · rendido el ' + new Date(att.created_at).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' }),
+          cd(att.score, '/100'))}
+        <div style={{background:'#fff', padding:'12px 15px', fontSize:12.5, lineHeight:1.65, color:'#4A4A44', fontWeight:600}}>
+          {passed
+            ? <>🏁 <b>¡Felicitaciones!</b> Terminaste <b>{mod.name}</b> con éxito — tu constancia se nota.{(att.attempt_no || 1) === 1 ? <> ¡Y a tu <b>primer intento</b>! 🏅</> : <> Aprobado en tu intento <b>{att.attempt_no}</b> — la perseverancia paga. 🙌</>}{weak.length ? <> Para dominarlo del todo, dale un repaso extra a: <b>{weak.join(' · ')}</b>.</> : <> Dominaste todas las partes del examen. 🌟</>}</>
+            : <>Terminaste el examen de <b>{mod.name}</b> y tu nota quedó registrada automáticamente. Aún hay temas que necesitas seguir repasando: <b>{weak.length ? weak.join(' · ') : 'las prácticas del módulo'}</b>. Cada minuto de práctica cuenta — síguele con tus repasos diarios. 💪</>}
+          <br/>Tu profesora ya ve tu resultado con el detalle pregunta por pregunta. La <b>nota final del módulo</b> combina examen + práctica diaria — mírala en <b>Mi avance</b>.
+          {att._n > 1 ? <><br/>🔁 Llevas <b>{att._n}</b> intentos — se muestra tu <b>mejor nota</b>.</> : null}
+          {rd != null && (canRetry && retryLink
+            ? <a href={retryLink} target="_blank" rel="noreferrer" style={{display:'block', textAlign:'center', marginTop:10, borderRadius:24, padding:'12px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15, color:'#fff', textDecoration:'none', background:'linear-gradient(135deg,#F4A02C,#E07A12)'}}>{passed ? '💪 Mejorar mi nota (opcional)' : '🔁 Volver a intentar el examen y mejorar mi nota'}</a>
+            : !canRetry ? <div style={{marginTop:9, background:'#FFF3E0', border:'1.5px solid #FFB74D', borderRadius:10, padding:'8px 11px', fontSize:12, color:'#8A5100', fontWeight:700}}>{passed
+                ? <>💪 <b>¿Quieres mejorar tu nota?</b> Podrás repetir el examen desde el <b>{new Date(availT).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })}</b> — es opcional: tu nota ya está registrada y siempre vale la mejor.</>
+                : <>🔁 Podrás volver a intentarlo el <b>{new Date(availT).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })}</b>. Tu plan hasta ese día: repite las prácticas de los temas marcados arriba y entrena con el 🧭 <b>pre-examen</b> de tu módulo — cada intento te deja más listo. 💪</>}</div> : null)}
+        </div>
+      </>
+    ));
+  }
 
   if (info.phase === 'done') {
     const res = info.result;
