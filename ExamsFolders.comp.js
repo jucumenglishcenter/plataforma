@@ -379,6 +379,7 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
             {exfPill('#FFF8E1', '#E65100', <>⚠ {members.filter(s => !getStudentReadiness(s).apt).length} aún no — habilítalos aquí abajo</>, 'cb')}
           </div>
           <div className="settings-hint" style={{margin:'0 0 8px'}}>Aptos (≥75%) entran solos el día del examen; a los demás tú puedes <b>habilitarlos</b> — tienes la última palabra. La nota sugerida sale de su examen rendido.</div>
+          <ExamResultsPanel exam={exam} members={members} />
           <div className="sm-list">
             {[...members].sort((a, b) => getStudentReadiness(b).overall - getStudentReadiness(a).overall).map(s => {
               const r = getStudentReadiness(s);
@@ -446,6 +447,63 @@ function NotesList({ members, results }) {
         );
       })}
       {rows.length === 0 && <div className="settings-hint">Sin notas registradas.</div>}
+    </div>
+  );
+}
+
+/* ── 📊 Resultados del examen leídos de la nube (diagnostic_attempts): notas, intentos y temas débiles ── */
+function ExamResultsPanel({ exam, members }) {
+  const [rows, setRows] = exfUS(null);
+  const [busy, setBusy] = exfUS(false);
+  const PL = { L: '🎧 Listening', R: '📖 Lectura', X: '🧩 ¿Qué regla uso?', G: '📝 Gramática', V: '🔤 Vocabulario' };
+  const load = async () => {
+    const SBW = window.JUCUM_SB; if (!SBW) return;
+    setBusy(true);
+    try {
+      const slugs = ((exam && exam.parts) || []).map(p => (((p.url || '').match(/\/(m\d+)\/examen/) || [])[1])).filter(Boolean);
+      const sb = SBW.getClient();
+      const res = await sb.from('diagnostic_attempts').select('user_id,score,correct,total,sections,attempt_no,created_at,module_id,activity_id')
+        .like('activity_id', 'examen%').in('user_id', members.map(s => s.id)).order('created_at', { ascending: true }).limit(400);
+      setRows(((res && res.data) || []).filter(r => r.module_id === 'exam-' + exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl)));
+    } catch (e) {}
+    setBusy(false);
+  };
+  exfUE(() => { load(); }, [exam.id]);
+  const by = {}; (rows || []).forEach(r => { (by[r.user_id] = by[r.user_id] || []).push(r); });
+  const failCount = {}; let did = 0;
+  const list = members.map(s => {
+    const rs = by[s.id] || []; if (!rs.length) return { s };
+    did++;
+    const best = rs.reduce((a, b) => ((b.score || 0) > (a.score || 0) ? b : a), rs[0]);
+    const weak = Object.keys(PL).filter(k => { const x = (best.sections || {})[k]; return x && x.t && (x.h / x.t) < 0.75; });
+    weak.forEach(k => { failCount[k] = (failCount[k] || 0) + 1; });
+    return { s, rs, best, weak };
+  }).sort((a, b) => (b.best ? b.best.score || 0 : -1) - (a.best ? a.best.score || 0 : -1));
+  const groupWeak = Object.entries(failCount).sort((a, b) => b[1] - a[1]);
+  return (
+    <div style={{border:'1.5px solid #C5CAE9', background:'#F5F7FF', borderRadius:12, padding:'11px 14px', marginBottom:11}}>
+      <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginBottom:7}}>
+        <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13.5}}>📊 Resultados del examen (nota automática, en vivo)</b>
+        {exfPill('#E8EAF6', '#283593', <>{did}/{members.length} ya rindieron</>, 'd')}
+        <button className="att-btn" onClick={load} disabled={busy}>{busy ? '⏳…' : '↻ Actualizar'}</button>
+      </div>
+      {rows === null ? <div className="settings-hint">Cargando resultados…</div> : <>
+      {list.map(({ s, rs, best, weak }) => (
+        <div key={s.id} style={{display:'flex', alignItems:'center', gap:8, padding:'5px 0', borderBottom:'1px solid #E5E9F8', fontSize:12.5, flexWrap:'wrap'}}>
+          <span style={{fontWeight:800, flex:'1 1 150px', minWidth:150}}>{s.fullName}</span>
+          {!best ? exfPill('#F0F0EA', '#888', '— aún no rinde', 'x') : <>
+            {exfPill(best.score >= 75 ? '#E8F5E9' : '#FFEBEE', best.score >= 75 ? '#2E7D32' : '#C62828', <><b>{best.score}</b>/100</>, 'n')}
+            <span style={{fontSize:11, color:'#666', fontWeight:700}}>{rs.length} intento{rs.length === 1 ? '' : 's'}{rs.length > 1 ? ' · mejor: int. ' + (best.attempt_no || '?') : ''} · {new Date(best.created_at).toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })}</span>
+            {weak.length
+              ? <span style={{display:'flex', gap:4, flexWrap:'wrap'}}>{weak.map(k => <span key={k} style={{background:'#FFF3E0', border:'1px solid #FFB74D', color:'#8A5100', borderRadius:14, padding:'2px 8px', fontSize:10.5, fontWeight:800}}>{PL[k]}</span>)}</span>
+              : exfPill('#E8F5E9', '#2E7D32', '✓ dominó todas las partes', 'w')}
+          </>}
+        </div>
+      ))}
+      {did > 0 && <div style={{marginTop:9, background:'#FFF7E8', border:'1.5px solid #F0C66B', borderRadius:10, padding:'8px 11px', fontSize:12, color:'#7a5410', fontWeight:700, lineHeight:1.6}}>
+        📌 <b>Para tus prácticas de refuerzo:</b> {groupWeak.length ? groupWeak.map(([k, n]) => PL[k] + ' (' + n + ' alumno' + (n === 1 ? '' : 's') + ')').join(' · ') : 'ningún tema flojo en común — ¡el grupo va muy bien! 🎉'}{groupWeak.length ? ' — arma el repaso del grupo empezando por los primeros.' : ''}
+      </div>}
+      </>}
     </div>
   );
 }
@@ -744,4 +802,4 @@ function ExamChecklistRow({ mod, studentId }) {
   );
 }
 
-Object.assign(window, { TeacherExamsFolders, GroupExamFolder, AptRoster, ModuleFolderRow, ModuleFolderDetail, PreexamFolderRow, ModuleExamBanner, ExamChecklistRow, ExamPlanModal, NotesList });
+Object.assign(window, { TeacherExamsFolders, GroupExamFolder, AptRoster, ExamResultsPanel, ModuleFolderRow, ModuleFolderDetail, PreexamFolderRow, ModuleExamBanner, ExamChecklistRow, ExamPlanModal, NotesList });
