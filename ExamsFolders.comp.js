@@ -463,7 +463,7 @@ function ExamResultsPanel({ exam, members }) {
       const slugs = ((exam && exam.parts) || []).map(p => (((p.url || '').match(/\/(m\d+)\/examen/) || [])[1])).filter(Boolean);
       const sb = SBW.getClient();
       const res = await sb.from('diagnostic_attempts').select('user_id,score,correct,total,sections,attempt_no,created_at,module_id,activity_id')
-        .like('activity_id', 'examen%').in('user_id', members.map(s => s.id)).order('created_at', { ascending: true }).limit(400);
+        .in('user_id', members.map(s => s.id)).order('created_at', { ascending: true }).limit(1000);
       setRows(((res && res.data) || []).filter(r => r.module_id === 'exam-' + exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl)));
     } catch (e) {}
     setBusy(false);
@@ -581,7 +581,7 @@ function ModuleExamBanner({ mod, studentId }) {
         const slugs = (inf.exam.parts || []).map(p => (((p.url || '').match(/\/(m\d+)\/examen/) || [])[1])).filter(Boolean);
         const sb = SBW.getClient();
         const res = await sb.from('diagnostic_attempts').select('score,correct,total,sections,created_at,activity_id,module_id,attempt_no')
-          .eq('user_id', studentId).like('activity_id', 'examen%').order('created_at', { ascending: true }).limit(20);
+          .eq('user_id', studentId).order('created_at', { ascending: true }).limit(100);
         const data = res && res.data;
         if (dead || !data || !data.length) return;
         const rows = data.filter(r => r.module_id === 'exam-' + inf.exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl));
@@ -670,7 +670,7 @@ function ModuleExamBanner({ mod, studentId }) {
   if (info.phase === 'waitgrade') {
     return box('var(--border)', (
       <div style={{background:'#F7F5EF', padding:'11px 15px', fontSize:12.5, fontWeight:700, color:'#777', display:'flex', gap:9, alignItems:'center'}}>
-        🎓 El examen de {mod.name} ya cerró. Tu profesora está revisando — tu nota aparecerá aquí mismo. 🕐
+        🎓 El examen de {mod.name} ya cerró. Si lo rendiste, tu nota se registró <b>automáticamente</b> y aparecerá aquí en un momento. ✓
       </div>
     ));
   }
@@ -772,7 +772,7 @@ function ExamChecklistRow({ mod, studentId }) {
     return (
       <div className="al-item locked" style={{cursor:'default'}}>
         <span className="al-num">🕐</span><span className="al-ico">🎓</span>
-        <span className="al-name">Examen del módulo · {mod.name}<span style={{display:'block', fontSize:10.5, color:'#999', fontWeight:800}}>Rendido/cerrado · tu profesora está calificando</span></span>
+        <span className="al-name">Examen del módulo · {mod.name}<span style={{display:'block', fontSize:10.5, color:'#999', fontWeight:800}}>Rendido/cerrado · nota automática registrada</span></span>
       </div>
     );
   }
