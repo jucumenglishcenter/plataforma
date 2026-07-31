@@ -1096,11 +1096,15 @@ function DetailModal({ category, ico, items, date, onClose }) {
     </div>
   );
 }
-/* Detalle POR PARTE: qué historia/audio (1-4) hizo el alumno dentro de cada
- * material (Stories, Comprensión lectora, Comprensión auditiva). Lee la tabla
- * activity_parts de la nube (la llena el conector jucum-connect.js). */
+/* 📍 Detalle POR PARTE — COMPACTO (jul-2026)
+ * Qué historia/audio (1-4) hizo el alumno dentro de cada material. Una línea
+ * por material con sus partes en fila; antes era una tarjeta enorme por material
+ * y las filas del EXAMEN (part 99 = salidas de pestaña) creaban un bloque
+ * fantasma "other" con 99 casillas.
+ * Lee activity_parts de la nube (la llena jucum-connect.js). */
 function StudentPartsCard({ studentId }) {
   const [parts, setParts] = React.useState(null);
+  const [open, setOpen] = React.useState(true);
   React.useEffect(() => {
     let alive = true;
     if (window.JUCUM_SYNC && window.JUCUM_SYNC.fetchActivityParts) {
@@ -1109,73 +1113,108 @@ function StudentPartsCard({ studentId }) {
     return () => { alive = false; };
   }, [studentId]);
   if (!parts) return null; // cargando
-  if (!parts.length) return (
+
+  const D = window.JUCUM_DATA;
+  const modName = (id) => {
+    for (const lv of Object.keys(D.MODULE_CATALOG || {})) {
+      const m = (D.MODULE_CATALOG[lv] || []).find(x => x.id === id);
+      if (m) return `${m.emoji || '📦'} ${m.name}`;
+    }
+    return id;
+  };
+  const META = {
+    reading:   { ico:'📖', label:'Comprensión lectora' },
+    listening: { ico:'🎧', label:'Comprensión auditiva' },
+    story:     { ico:'📗', label:'Stories y diálogos' },
+  };
+  // Fuera: exámenes y filas de integridad (part ≥ 90) — no son historias.
+  const rows = parts.filter(p => p.part < 90 && !String(p.module_id || '').startsWith('exam-'));
+  const exits = parts.filter(p => p.part === 99).reduce((s, p) => s + (p.score || 0), 0);
+
+  if (!rows.length) return (
     <div className="scard" style={{marginTop:18}}>
       <div className="sec-head">
         <div className="sec-title">📍 Detalle por historia / audio</div>
         <span className="sec-meta">qué parte exacta hizo</span>
       </div>
       <div style={{fontSize:12.5, color:'var(--text-soft)', fontWeight:600, lineHeight:1.5, background:'#FAFAF6', border:'1px dashed var(--border)', borderRadius:10, padding:'12px 14px'}}>
-        Aún no hay registro por historia para este alumno. Aparecerá automáticamente cuando practique una <b>Comprensión lectora</b>, <b>auditiva</b> o <b>Story</b> con los materiales actualizados (indica Historia/Audio #1–4 y su nota).
+        Aún no hay registro por historia para este alumno. Aparecerá automáticamente cuando practique una <b>Comprensión lectora</b>, <b>auditiva</b> o <b>Story</b> con los materiales actualizados.
       </div>
     </div>
   );
-  const META = {
-    reading:   { ico:'📚', label:'Comprensión lectora', unit:'Historia' },
-    listening: { ico:'🎧', label:'Comprensión auditiva', unit:'Audio' },
-    story:     { ico:'📖', label:'Stories y Diálogos', unit:'Historia' },
-  };
+
   const groups = {};
-  parts.forEach(p => { const k = p.module_id + '|' + p.activity_id; (groups[k] = groups[k] || []).push(p); });
+  rows.forEach(p => { const k = p.module_id + '|' + p.activity_id; (groups[k] = groups[k] || []).push(p); });
+  const keys = Object.keys(groups).sort();
+  const totalDone = rows.length;
+
   return (
     <div className="scard" style={{marginTop:18}}>
       <div className="sec-head">
         <div className="sec-title">📍 Detalle por historia / audio</div>
-        <span className="sec-meta">qué parte exacta hizo</span>
+        <span className="sec-meta">{totalDone} parte(s) en {keys.length} material(es)</span>
       </div>
-      {Object.keys(groups).map(k => {
-        const rows = groups[k];
-        const actId = k.split('|')[1];
-        const m = META[actId] || { ico:'📄', label: actId, unit:'Parte' };
-        const maxPart = Math.max(4, ...rows.map(r => r.part));
-        const byPart = {}; rows.forEach(r => { byPart[r.part] = r; });
-        return (
-          <div key={k} style={{border:'1px solid var(--border)', borderRadius:12, padding:'11px 13px', marginBottom:10}}>
-            <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:9}}>
-              <span style={{fontSize:18}}>{m.ico}</span>
-              <b style={{flex:1, fontSize:13.5}}>{m.label}</b>
-              <span style={{fontSize:11, fontWeight:800, color:'#1F3A8A', background:'#E3E9F8', borderRadius:11, padding:'2px 9px'}}>{rows.length}/{maxPart} {m.unit.toLowerCase()}s</span>
+      <button onClick={() => setOpen(v => !v)} style={{cursor:'pointer', border:'1.5px solid var(--border)', background:'#fff', borderRadius:20,
+        padding:'6px 12px', fontFamily:'inherit', fontWeight:800, fontSize:11.5, color:'#666', marginBottom:9}}>
+        {open ? 'Ocultar detalle' : 'Ver detalle'}
+      </button>
+      {open && (
+        <div style={{display:'grid', gap:6}}>
+          {keys.map(k => {
+            const list = groups[k];
+            const [mid, actId] = k.split('|');
+            const m = META[actId] || { ico:'📄', label: actId === 'other' ? 'Otro material' : actId };
+            const maxPart = Math.max(4, ...list.map(r => r.part));
+            const byPart = {}; list.forEach(r => { byPart[r.part] = r; });
+            return (
+              <div key={k} style={{display:'flex', alignItems:'center', gap:9, flexWrap:'wrap', padding:'8px 11px', borderRadius:11, border:'1px solid var(--border)', background:'#FCFCFA'}}>
+                <span style={{fontSize:15}}>{m.ico}</span>
+                <div style={{minWidth:150, flex:'1 1 190px'}}>
+                  <div style={{fontWeight:800, fontSize:12.5}}>{m.label}</div>
+                  <div style={{fontSize:10.5, fontWeight:700, color:'var(--text-soft)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{modName(mid)}</div>
+                </div>
+                <div style={{display:'flex', gap:4}}>
+                  {Array.from({length: maxPart}, (_, i) => i + 1).map(n => {
+                    const r = byPart[n];
+                    return (
+                      <span key={n} title={r ? `Parte ${n} · ${r.score != null ? r.score + '%' : 'completada'}` : `Parte ${n} · sin hacer`}
+                        style={{minWidth:34, textAlign:'center', borderRadius:9, padding:'3px 6px', fontSize:10.5, fontWeight:800,
+                          background: r ? '#E8F5E9' : '#F5F5F0', color: r ? '#2E7D32' : '#BDBDBD',
+                          border:'1px solid ' + (r ? '#A5D6A7' : '#E8E5DC')}}>
+                        {r ? (r.score != null ? r.score + '%' : '✓') : n}
+                      </span>
+                    );
+                  })}
+                </div>
+                <span style={{fontSize:11, fontWeight:800, color:'#1F3A8A', background:'#E3E9F8', borderRadius:11, padding:'2px 9px', whiteSpace:'nowrap'}}>{list.length}/{maxPart}</span>
+              </div>
+            );
+          })}
+          {exits > 0 && (
+            <div style={{fontSize:11.5, fontWeight:800, color:'#B71C1C', background:'#FFEBEE', border:'1px solid #FFCDD2', borderRadius:10, padding:'7px 11px'}}>
+              🎓 Examen · {exits} salida(s) de pantalla registradas
             </div>
-            <div style={{display:'grid', gridTemplateColumns:`repeat(${maxPart},1fr)`, gap:8}}>
-              {Array.from({length: maxPart}, (_, i) => i + 1).map(n => {
-                const r = byPart[n];
-                return (
-                  <div key={n} style={{border:'1.5px solid ' + (r ? '#A5D6A7' : 'var(--border)'), borderRadius:10, padding:'9px 6px', textAlign:'center', background: r ? '#F0FAF1' : '#FAFAF6', opacity: r ? 1 : .5}}>
-                    <div style={{fontSize:10.5, fontWeight:800, color: r ? '#2E7D32' : 'var(--text-soft)'}}>{m.unit} {n}</div>
-                    <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13, marginTop:3}}>{r ? (r.score != null ? r.score + '%' : '✓') : '🔒'}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-/* Group activity events by calendar day, newest first */
+/* Historial ordenado: días de más reciente a más antiguo, eventos del día por
+ * hora (lo último primero) y solo los 5 días recientes hasta pedir más. */
 function ActivityByDay({ events }) {
+  const [all, setAll] = React.useState(false);
   const groups = {};
   for (const ev of events) {
-    const day = ev.date.split(' ')[0]; // "2026-05-13"
+    const day = String(ev.date || '').split(' ')[0] || 'sin-fecha';
     if (!groups[day]) groups[day] = [];
     groups[day].push(ev);
   }
   const days = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+  Object.keys(groups).forEach(d => groups[d].sort((x, y) => String(y.date).localeCompare(String(x.date))));
+  const shown = all ? days : days.slice(0, 5);
   const fmtDay = (d) => {
-    // 🔧 Día en hora de PERÚ: antes comparaba contra la fecha local/UTC del navegador
-    // y podía salir "Hace -1 días" para actividades hechas hoy.
     const todayP = new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
     const diff = Math.round((Date.parse(todayP) - Date.parse(d)) / 86400000);
     const date = new Date(d + 'T12:00:00');
@@ -1187,7 +1226,7 @@ function ActivityByDay({ events }) {
   };
   return (
     <div className="day-list">
-      {days.map(day => (
+      {shown.map(day => (
         <div className="day-block" key={day}>
           <div className="day-head">{fmtDay(day)} <span className="day-count">{groups[day].length} {groups[day].length === 1 ? 'evento' : 'eventos'}</span></div>
           <div className="act-list">
@@ -1195,6 +1234,18 @@ function ActivityByDay({ events }) {
           </div>
         </div>
       ))}
+      {days.length > shown.length && (
+        <button onClick={() => setAll(true)} style={{marginTop:10, cursor:'pointer', border:'1.5px solid var(--border)', background:'#fff', borderRadius:20,
+          padding:'8px 14px', fontFamily:'inherit', fontWeight:800, fontSize:12, color:'#666'}}>
+          Ver los {days.length - shown.length} días anteriores
+        </button>
+      )}
+      {all && days.length > 5 && (
+        <button onClick={() => setAll(false)} style={{marginTop:10, marginLeft:8, cursor:'pointer', border:'1.5px solid var(--border)', background:'#fff', borderRadius:20,
+          padding:'8px 14px', fontFamily:'inherit', fontWeight:800, fontSize:12, color:'#666'}}>
+          Mostrar solo los últimos 5 días
+        </button>
+      )}
     </div>
   );
 }

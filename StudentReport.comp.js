@@ -75,7 +75,7 @@ function SRStoriesCloud({ student }) {
       window.JUCUM_SB.getClient().from('activity_parts')
         .select('module_id,activity_id,part,score,completed_at')
         .eq('user_id', student.id)
-        .then(r => { if (alive) setRows((r && r.data) || []); }, () => { if (alive) setRows([]); });
+        .then(r => { if (alive) setRows(((r && r.data) || []).filter(x => x.part < 90 && !String(x.module_id || '').startsWith('exam-'))); }, () => { if (alive) setRows([]); });
     } catch (e) { setRows([]); }
     return () => { alive = false; };
   }, [student.id]);
@@ -86,7 +86,7 @@ function SRStoriesCloud({ student }) {
     (groups[k] = groups[k] || { mod: x.module_id, act: x.activity_id, parts: {} }).parts[x.part] =
       { score: x.score, date: (x.completed_at || '').slice(0, 10) };
   });
-  const label = a => /read/i.test(a) ? '📖 Comprensión lectora' : /listen/i.test(a) ? '🎧 Comprensión auditiva' : /story/i.test(a) ? '📚 Stories y diálogos' : '📘 ' + a;
+  const label = a => /read/i.test(a) ? '📖 Comprensión lectora' : /listen/i.test(a) ? '🎧 Comprensión auditiva' : /story/i.test(a) ? '📗 Stories y diálogos' : '📘 ' + a;
   return (
     <div className="scard" style={{marginTop:8}}>
       <div className="sec-head"><div className="sec-title">📚 Historias practicadas · por material</div></div>

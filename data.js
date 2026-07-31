@@ -547,6 +547,7 @@ const MODULE_CATALOG = {
 
 /* ── Group settings persisted in localStorage ─────────────────────── */
 const SETTINGS_KEY = 'jucum_group_settings_v1';
+const MODULE_OPENED_KEY = 'jucum_module_opened_v1';   // { "<grupo>:<modulo>": "yyyy-mm-dd" }
 const DEFAULT_SETTINGS = {
   // per groupId: { activeModuleId, deadline (yyyy-mm-dd), dailyTargetMin, isPaused }
 };
@@ -580,6 +581,19 @@ function setGroupSettings(groupId, partial) {
   all[groupId] = next;
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(all));
   if (window.JUCUM_SYNC) window.JUCUM_SYNC.pushSettings(groupId, next);
+
+  // 📅 Fecha de APERTURA de cada módulo por grupo: desde ese día se mide la
+  // constancia diaria del alumno (criterio 2 de "Preparación para el examen").
+  if (partial.activeModuleIds) {
+    const prevSet0 = new Set(prev.activeModuleIds || []);
+    const nuevos = (partial.activeModuleIds || []).filter(id => !prevSet0.has(id));
+    if (nuevos.length) {
+      let opened = {};
+      try { opened = JSON.parse(localStorage.getItem(MODULE_OPENED_KEY) || '{}'); } catch {}
+      nuevos.forEach(mid => { const k = groupId + ':' + mid; if (!opened[k]) opened[k] = _todayStr(); });
+      try { localStorage.setItem(MODULE_OPENED_KEY, JSON.stringify(opened)); } catch {}
+    }
+  }
 
   // Auto-notify all group members when a module is newly turned ON
   if (window.JUCUM_NOTIF && partial.activeModuleIds) {
@@ -1368,6 +1382,44 @@ const COMPETENCIES = [
   { key:'speaking',  label:'Speaking',             icon:'🗣️', types:[], byTeacher:true, optionalLevels:['pre-a1'] },
 ];
 
+/* 📅 Día en que se abrió el módulo activo para el grupo del alumno.
+ * Si el módulo ya estaba abierto antes de esta versión, se usa su primera
+ * práctica en ese módulo como referencia. */
+function getModuleOpenedAt(groupId, moduleId) {
+  try {
+    const all = JSON.parse(localStorage.getItem(MODULE_OPENED_KEY) || '{}');
+    return all[groupId + ':' + moduleId] || null;
+  } catch { return null; }
+}
+
+/* ⏱️ Constancia diaria desde la apertura del módulo (criterio 2). */
+function getDailyConstancy(student) {
+  const settings = getGroupSettings(student.group) || {};
+  const target = settings.dailyTargetMin || 15;
+  const activeIds = (settings.activeModuleIds && settings.activeModuleIds.length)
+    ? settings.activeModuleIds : (settings.activeModuleId ? [settings.activeModuleId] : []);
+  const modId = activeIds[0] || null;
+  let since = modId ? getModuleOpenedAt(student.group, modId) : null;
+  if (!since && modId) {   // módulo abierto antes de registrar la fecha: su 1.ª práctica
+    const completed = (getStudentProgress(student.id) || {}).completed || {};
+    Object.keys(completed).forEach(k => {
+      if (k.indexOf(modId + ':') !== 0) return;
+      const d = completed[k].date ? peruDayStr(completed[k].date) : null;
+      if (d && (!since || d < since)) since = d;
+    });
+  }
+  const days = dailyData(student) || [];              // últimos 14 días
+  const scope0 = since ? days.filter(d => d.date >= since) : days;
+  const scope = scope0.length ? scope0 : days.slice(-7);
+  const daysOpen = scope.length || 1;
+  const met = scope.filter(d => (d.total || 0) >= target).length;
+  const some = scope.filter(d => (d.total || 0) > 0).length;
+  const expected = Math.max(1, Math.round(daysOpen * 5 / 7));   // ~5 de cada 7 días
+  const pct = Math.max(0, Math.min(100, Math.round(((met + (some - met) * 0.5) / expected) * 100)));
+  const minutes = scope.reduce((s, d) => s + (d.total || 0), 0);
+  return { pct, target, daysOpen, metDays: met, activeDays: some, expected, since, minutes };
+}
+
 function getStudentReadiness(student) {
   if (!student) return { competencies:{}, practiceAvg:0, taskCompliance:null, overall:0, apt:false, threshold:75 };
   const prog = getStudentProgress(student.id);
@@ -1412,7 +1464,7 @@ function getStudentReadiness(student) {
   const practiceAvg = compVals.length ? Math.round(compVals.reduce((a, b) => a + b, 0) / compVals.length) : 0;
 
   // cumplimiento de tareas asignadas
-  let taskCompliance = null;
+  let taskCompliance = null, taskDone = 0, taskTotal = 0;
   try {
     const assigns = JSON.parse(localStorage.getItem('jucum_assignments_v1') || '[]');
     const subs = JSON.parse(localStorage.getItem('jucum_submissions_v1') || '{}');
@@ -1422,40 +1474,48 @@ function getStudentReadiness(student) {
     });
     if (mine.length) {
       const sub = mine.filter(a => (subs[a.id] || {})[student.id]).length;
+      taskDone = sub; taskTotal = mine.length;
       taskCompliance = Math.round(sub / mine.length * 100);
     }
   } catch {}
 
-  /* ── Cumplimiento general (REESTRUCTURADO) ──────────────────────────
-   * El antiguo "overall" promediaba solo las competencias tocadas, así que
-   * 2 actividades sueltas daban ~30%. Ahora se basa en el AVANCE REAL sobre
-   * TODO el módulo activo (cobertura de temas), la calidad de lo hecho, la
-   * constancia, y penaliza la inactividad. Las tareas suman de forma acotada.
-   *   No se puede estar "75% listo" sin haber cubierto buena parte de los temas. */
-  const coverageAll = m.coverage / 100;   // actividades hechas ÷ total del módulo (todas las competencias)
-  const quality = (m.quality || 0) / 100;  // promedio de aciertos de lo hecho
-  // base = avance × dominio (si solo vio el 5% del módulo, la base ronda 5%)
-  let base = coverageAll * (0.6 + 0.4 * quality) * 100; // la calidad modula, no infla
-  base = base * constancyFactor;                          // constancia (0.8–1.05)
-
-  // penalización por inactividad: días sin practicar restan
+  /* ── Preparación para el examen · 4 CRITERIOS (jul-2026) ─────────────
+   * Antes se listaban las competencias (auditiva/lectora/gramática), que no
+   * son lo que realmente exigimos. Ahora la preparación se mide por:
+   *   1) 📚 Prácticas realizadas — cuánto del material del módulo activo hizo
+   *   2) ⏱️ Práctica diaria      — constancia desde que se ABRIÓ el módulo
+   *   3) 🎯 Nivel de acierto     — calidad (notas) de lo que ya practicó
+   *   4) 📝 Tareas cumplidas     — si no se dejaron tareas, cuenta 100%
+   * Las competencias se siguen calculando (diagnóstico, reportes, evolución). */
+  const daily = getDailyConstancy(student);
+  const pPractices = Math.round(m.coverage || 0);
+  const pQuality = (m.done > 0) ? Math.round(m.quality || 0) : 0;
+  const pTasks = (taskCompliance == null) ? 100 : taskCompliance;
+  const pillars = [
+    { key:'practices', icon:'📚', label:'Prácticas realizadas', value:pPractices, weight:0.40,
+      detail:`${m.done} de ${m.total} actividades del módulo activo` },
+    { key:'daily', icon:'⏱️', label:'Práctica diaria', value:daily.pct, weight:0.25,
+      detail:`practicó ${daily.activeDays} de ~${daily.expected} días esperados${daily.since ? ' desde que se abrió el módulo' : ''} · meta ${daily.target} min/día` },
+    { key:'quality', icon:'🎯', label:'Nivel de acierto', value:pQuality, weight:0.20,
+      detail: m.done ? `promedio de ${pQuality}% en lo que ya practicó` : 'aún no hay notas registradas' },
+    { key:'tasks', icon:'📝', label:'Tareas cumplidas', value:pTasks, weight:0.15,
+      detail: taskCompliance == null ? 'no se dejaron tareas — cuenta como 100%' : `${taskDone} de ${taskTotal} entregadas` },
+  ];
+  const coverageAll = (m.coverage || 0) / 100;
+  let overall = Math.round(pillars.reduce((s, p) => s + p.value * p.weight, 0));
+  // Inactividad prolongada: aviso duro (la práctica diaria ya la refleja en parte)
   const inactive = typeof student.lastActiveDays === 'number' ? student.lastActiveDays : 0;
-  let inactivityFactor = 1;
-  if (inactive >= 14) inactivityFactor = 0.55;
-  else if (inactive >= 7) inactivityFactor = 0.7;
-  else if (inactive >= 4) inactivityFactor = 0.85;
-  // Semana de adaptación: no se penaliza la inactividad al inicio.
-  if (inGraceWeek(student)) inactivityFactor = 1;
-  base = base * inactivityFactor;
+  const upToDate = m.total > 0 && m.done >= m.total;   // terminó todo: no se castiga
+  if (!upToDate && !inGraceWeek(student)) {
+    if (inactive >= 14) overall = Math.round(overall * 0.75);
+    else if (inactive >= 7) overall = Math.round(overall * 0.88);
+  }
 
-  // las tareas suman de forma acotada y proporcional (máx 15 puntos de empuje)
-  let overall = base;
-  if (taskCompliance != null) overall = base * 0.85 + Math.min(taskCompliance, base + 25) * 0.15;
-
-  overall = Math.max(0, Math.min(100, Math.round(overall)));
+  overall = Math.max(0, Math.min(100, overall));
   // tope de seguridad: sin cubrir la mayoría del módulo no se puede ser "apto"
   const apt = overall >= 75 && coverageAll >= 0.6;
-  return { competencies: comp, practiceAvg, taskCompliance, overall, apt, threshold: 75,
+  return { competencies: comp, practiceAvg, taskCompliance, taskDone, taskTotal, pillars, daily,
+           overall, apt, threshold: 75,
            coverage: m.coverage, quality: m.quality, daysInactive: inactive };
 }
 
@@ -2023,7 +2083,7 @@ function latentGate(mod, a, i, progress, level) {
   return { latent: true, ready: now >= avail, daysLeft: Math.max(0, daysLeft), availableOn: avail.toISOString().slice(0, 10) };
 }
 
-window.JUCUM_DATA = { LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getAchievementAlert, achievementDecayFactor, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness, getStudentGrades, getStudentMonthlyPractice, getStudentTrends,
+window.JUCUM_DATA = { getDailyConstancy, getModuleOpenedAt, LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getAchievementAlert, achievementDecayFactor, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness, getStudentGrades, getStudentMonthlyPractice, getStudentTrends,
   /* PASO 2 · umbral + anti-farmeo */
   passThreshold, getPassThresholds, setPassThreshold, setGroupThreshold, getGroupThreshold, loadPassThresholdsFromCloud, scorePct, entryPassed, getDirectedBonusXP, getFarmingFlag, getActivitiesToImprove,
   /* Modo mantenimiento (rol dev) */
