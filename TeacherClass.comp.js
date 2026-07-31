@@ -1,4 +1,5 @@
 /* Área "Clase" del profesor:
+ *  · Clase en vivo     — tablero visual: quién está practicando AHORA y en qué
  *  · Práctica del día  — deja por grupo y día qué deben practicar los alumnos
  *  · Materiales        — abre cualquier material sin restricción (registra uso)
  *  · Bitácora          — calendario de lo que trabajó en clase (auto + manual)
@@ -24,7 +25,7 @@ function MethodTags({ a }) {
 
 function TeacherClass({ onBack }) {
   const { GROUPS, LEVELS } = window.JUCUM_DATA;
-  const [tab, setTab] = React.useState('attendance');
+  const [tab, setTab] = React.useState('live');
   const [, setTick] = React.useState(0);
   const refresh = () => setTick(t => t + 1);
   React.useEffect(() => { if (window.JUCUM_TT) window.JUCUM_TT.cloudLoadAll().then(refresh); }, []);
@@ -36,18 +37,20 @@ function TeacherClass({ onBack }) {
         <div className="welcome-text">
           <div className="eyebrow t">🏫 Clase</div>
           <h1>Mi clase del día a día</h1>
-          <p>Toma asistencia, abre materiales para enseñar y anota cómo va cada alumno. Tu secuencia y tu bitácora ahora viven en 🗓️ Planificar.</p>
+          <p>Mira en vivo quién está practicando, toma asistencia, abre materiales para enseñar y anota cómo va cada alumno. Tu secuencia y tu bitácora ahora viven en 🗓️ Planificar.</p>
         </div>
       </div>
 
       <div className="mm-tabs" style={{flexWrap:'wrap'}}>
+        <button className={`mm-tab ${tab==='live'?'on':''}`} onClick={()=>setTab('live')}>🟢 Clase en vivo</button>
         <button className={`mm-tab ${tab==='attendance'?'on':''}`} onClick={()=>setTab('attendance')}>📋 Asistencia</button>
         <button className={`mm-tab ${tab==='materials'?'on':''}`} onClick={()=>setTab('materials')}>📚 Materiales</button>
         <button className={`mm-tab ${tab==='notes'?'on':''}`} onClick={()=>setTab('notes')}>📝 Notas</button>
         <button className={`mm-tab ${tab==='reminders'?'on':''}`} onClick={()=>setTab('reminders')}>🔔 Recordatorios</button>
       </div>
 
-      {tab==='attendance' ? <TeacherAttendance embedded />
+      {tab==='live' ? <LiveClassroom embedded />
+        : tab==='attendance' ? <TeacherAttendance embedded />
         : tab==='materials' ? <TeacherMaterialsBrowser />
         : tab==='notes' ? <TeacherNotesPanel onChange={refresh} />
         : <RemindersPanel onChange={refresh} />}

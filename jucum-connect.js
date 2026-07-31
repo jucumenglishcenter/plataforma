@@ -138,6 +138,36 @@
       }, { onConflict: 'user_id,day,module_id,activity_id' }).then(function () {}, function () {});
     }
 
+    // ── 🟢 Presencia EN VIVO (tablero "Clase en vivo" del profesor) ──
+    // UNA fila por alumno en live_presence (script 26): dónde está, desde
+    // cuándo y en qué estado. Se envía al entrar, cada 20 s, al terminar
+    // (una sola vez) y al salir. Va por fetch directo: no depende de que
+    // cargue la CDN de Supabase y nunca bloquea la práctica.
+    var LIVE_URL = SUPABASE_URL + '/rest/v1/live_presence?on_conflict=user_id';
+    var liveStartISO = new Date().toISOString();
+    var liveTick = 0;
+    function pushLive(state, extra, leaving) {
+      if (!uid || teacher) return;   // profesor y modo prueba no ocupan el salón
+      try {
+        fetch(LIVE_URL, {
+          method: 'POST', keepalive: !!leaving, mode: 'cors',
+          headers: {
+            'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
+            'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal'
+          },
+          body: JSON.stringify({
+            user_id: uid, group_id: groupId || '', module_id: modId, activity_id: actId,
+            kind: KIND || '', material_name: matName || '',
+            part: (typeof activePart !== 'undefined' && activePart != null) ? Number(activePart) : null,
+            state: state, minutes: Math.round(activeSec / 60),
+            score: (extra && extra.score != null) ? extra.score : null,
+            exam: !!exam, started_at: liveStartISO, updated_at: new Date().toISOString()
+          })
+        }).catch(function () {});
+      } catch (e) {}
+    }
+    pushLive('start');
+
     // ── Chip flotante con el tiempo activo ──
     var chip = document.createElement('div');
     chip.id = 'jec-conn-chip';
@@ -389,6 +419,9 @@
     });
 
     setInterval(function () {
+      // Latido de presencia (cada 20 s, solo mientras no haya terminado)
+      liveTick++;
+      if (!done && liveTick % 20 === 0) pushLive(paused ? 'paused' : 'active');
       // ── STORIES/diálogos: lectura SIN LÍMITE ──
       // Cuenta el tiempo mientras la pestaña esté visible; nunca interrumpe,
       // nunca bloquea. Solo registra el tiempo de lectura (lo que monitoreamos).
@@ -399,6 +432,7 @@
           var capMin = Math.min(READING_CAP_MIN, Math.round(activeSec / 60)); // tope silencioso para el reporte
           if (!done && activeSec >= AUTO_DONE_SEC && !teacher && !exam) {
             done = true; // marcada como practicada (desbloquea la siguiente) — sin cooldown ni tarjeta
+            pushLive('done', null);
             try { if (window.parent && window.parent !== window) window.parent.postMessage({ source: 'jucum-connect', type: 'done', uid: uid, mod: modId, act: actId, score: null, minutes: Math.max(1, capMin) }, '*'); } catch (e) {}
             if (!demo) pushProgress(100, Math.max(1, capMin));
             if (!demo && activePart != null) pushPart(activePart, null, Math.max(1, capMin)); // qué historia leyó (nube)
@@ -430,6 +464,7 @@
       var minutes = Math.max(1, Math.round(activeSec / 60));
       pushDaily(); // asegura los minutos del día antes de registrar la nota
       var pct = score == null ? 100 : score;
+      pushLive('done', { score: (score == null ? null : pct) });
 
       // Puente con la plataforma: si el material está EMBEBIDO en una tarea,
       // avisa al panel padre para registrar la nota en la entrega.
@@ -587,6 +622,7 @@
     }
     // Guardar tiempo parcial al salir (si practicó al menos 1 min y no completó)
     window.addEventListener('beforeunload', function () {
+      pushLive('left', null, true);   // el personaje sale del salón al instante
       if (teacher) { logClass(); return; }
       pushDaily(); // los minutos del día SIEMPRE se salvan
       if (IS_STORY) { if (!demo && activeSec >= 60) pushProgress(100, Math.min(READING_CAP_MIN, Math.round(activeSec / 60))); return; }

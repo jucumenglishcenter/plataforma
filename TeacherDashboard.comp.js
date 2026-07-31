@@ -702,59 +702,9 @@ function GroupSettingsModal({ groupId, level, onClose }) {
   );
 }
 
-/* Per-activity progress of the student's active module (teacher view) */
-function ModuleChecklist({ stu, group }) {
-  const { MODULE_CATALOG, getGroupSettings, getStudentProgress } = window.JUCUM_DATA;
-  const settings = getGroupSettings(group.id);
-  const mods = MODULE_CATALOG[group.level] || [];
-  // 🔧 BUG (jul-2026): aquí solo se mostraba el PRIMER módulo activo
-  // (settings.activeModuleId) — si el grupo tenía varios módulos activos, lo que
-  // el alumno completaba en los demás NO aparecía en el panel del profesor
-  // (aunque sí estaba registrado y se veía en el perfil del alumno). Ahora se
-  // lista CADA módulo activo (igual que la vista del alumno) y además cualquier
-  // módulo no activo donde el alumno tenga avance — su trabajo nunca queda invisible.
-  const activeIds = (settings.activeModuleIds && settings.activeModuleIds.length)
-    ? settings.activeModuleIds
-    : (settings.activeModuleId ? [settings.activeModuleId] : []);
-  let activeMods = mods.filter(m => activeIds.includes(m.id));
-  if (!activeMods.length && mods.length) activeMods = [mods[0]];
-  const progress = getStudentProgress(stu.id);
-  const doneKeys = Object.keys(progress.completed || {});
-  const extraMods = mods.filter(m => !activeMods.includes(m) && doneKeys.some(k => k.indexOf(m.id + ':') === 0));
-  const shown = [...activeMods.map(m => ({mod: m, extra: false})), ...extraMods.map(m => ({mod: m, extra: true}))];
-  if (!shown.length) return null;
-  return (
-    <>
-      {shown.map(({mod, extra}) => {
-        const doneCount = mod.activities.filter(a => progress.completed[`${mod.id}:${a.id}`]).length;
-        return (
-          <div key={mod.id} className="scard" style={{marginTop:18}}>
-            <div className="sec-head">
-              <div className="sec-title">📦 Avance en “{mod.name}”{extra && <span style={{marginLeft:8, fontSize:11, fontWeight:800, color:'#8A6D1A', background:'#FFF3D6', border:'1px solid #F0C66B', borderRadius:10, padding:'2px 8px'}}>módulo no activo · tiene avance</span>}</div>
-              <span className="sec-meta">{doneCount}/{mod.activities.length} actividades · {mod.activities.length ? Math.round((doneCount/mod.activities.length)*100) : 0}%</span>
-            </div>
-            <div style={{display:'grid', gap:8}}>
-              {mod.activities.map((a, i) => {
-                const e = progress.completed[`${mod.id}:${a.id}`];
-                const score = e && typeof e.score === 'number' ? (e.score > 10 ? Math.round(e.score) : Math.round(e.score * 10)) : null;
-                return (
-                  <div key={a.id} style={{display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderRadius:12, background: e ? '#F0F9F1' : '#FAFAFA', border: '1px solid ' + (e ? '#CDEBD2' : '#EEEEEE')}}>
-                    <span style={{fontSize:17}}>{e ? '✅' : '⬜'}</span>
-                    <span style={{flex:1, fontWeight:700, color: e ? '#1B5E20' : '#9E9E9E'}}>{i + 1}. {a.name}</span>
-                    {e && score !== null && <span style={{fontWeight:800, color: score >= 85 ? '#2E7D32' : score >= 70 ? '#B58500' : '#C62828'}}>{score}%</span>}
-                    {e && e.minutes ? <span style={{color:'#888', fontSize:13}}>{Math.round(e.minutes)} min</span> : null}
-                    {e && e.date ? <span style={{color:'#AAA', fontSize:12}}>{new Date(e.date).toLocaleDateString('es-PE', {day:'numeric', month:'short'})}</span> : null}
-                    {!e && <span style={{color:'#BBB', fontSize:13}}>Pendiente</span>}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-    </>
-  );
-}
+/* El avance por módulo vive ahora en ModuleTracker.comp.js: prioriza el módulo
+ * actual, agrupa por tema y marca en vivo la actividad que el alumno está
+ * haciendo en este momento. */
 
 function StudentRow({ stu, rank, level, onClick, onDelete }) {
   const m = window.JUCUM_DATA.getStudentMastery(stu);
@@ -857,7 +807,7 @@ function StudentDetail({ studentId, onBack, onContact }) {
         <div className="kpi" title="Última vez que entró a la plataforma. Se registra desde esta actualización (script 22); — = aún sin dato."><div className="kpi-ico">📶</div><div className="kpi-num">{stu.lastSeenDays == null ? '—' : stu.lastSeenDays === 0 ? 'Hoy' : `${stu.lastSeenDays}d`}</div><div className="kpi-lbl">Última conexión</div></div>
       </div>
 
-      <ModuleChecklist stu={stu} group={group} />
+      <ModuleTracker stu={stu} group={group} />
 
       <div style={{marginTop:18}}><ReadinessCard student={stu} forTeacher /></div>
 
