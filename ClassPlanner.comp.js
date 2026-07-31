@@ -1045,6 +1045,7 @@ function ClassMode({ plan, onBack }) {
   const resetTimer = () => { try { localStorage.removeItem(timerKey); } catch {} setTimer(null); };
   const cd = timer ? liveCountdown(timer, nowMs) : null;
   const askTimer = () => { if (!timer) { const go = window.confirm('⏱️ ¿Activar el cronómetro de la clase ahora?\n\nAceptar: inicia el cronómetro y abre el material.\nCancelar: abre el material sin iniciar el cronómetro.'); if (go) startTimer(); } };
+  const [liveOn, setLiveOn] = React.useState(false);
   const open = (m) => {
     if (m.type === 'quizlet') { setQuizPick(m); return; }
     askTimer();
@@ -1064,6 +1065,13 @@ function ClassMode({ plan, onBack }) {
           <div style={{fontSize:11, fontWeight:800, letterSpacing:'0.07em', textTransform:'uppercase', opacity:0.75}}>▶ Modo clase</div>
           <div style={{fontFamily:"'Fredoka',sans-serif", fontSize:22, fontWeight:600}}>{plan.moduleName} · {plan.sessionLabel}</div>
           <div style={{fontSize:13, opacity:0.9}}>{fmtDateLong(plan.date)} · {plan.lengthMin} min · los materiales abren en pestaña nueva</div>
+          <button onClick={() => setLiveOn(v => !v)} title="Ver en vivo quién está practicando ahora"
+            style={{marginTop:9, display:'inline-flex', alignItems:'center', gap:8, cursor:'pointer', fontFamily:'inherit', fontWeight:800, fontSize:13,
+              background: liveOn ? '#fff' : 'rgba(255,255,255,0.16)', color: liveOn ? '#B71C1C' : '#fff',
+              border:'1.5px solid ' + (liveOn ? '#fff' : 'rgba(255,255,255,0.35)'), borderRadius:22, padding:'8px 15px'}}>
+            <span style={{width:9, height:9, borderRadius:'50%', background: liveOn ? '#B71C1C' : '#FF8A80', animation:'cpPulse 1.3s infinite'}}></span>
+            {liveOn ? 'Ocultar la clase en vivo' : 'Ver la clase en vivo'}
+          </button>
         </div>
         {timer ? (
           <button onClick={() => { if (window.confirm('¿Reiniciar el cronómetro de la clase?')) resetTimer(); }} title="Clic para reiniciar" style={{background: cd.state === 'after' ? 'rgba(255,120,120,0.18)' : 'rgba(255,255,255,0.14)', border:'1px solid rgba(255,255,255,0.25)', borderRadius:14, padding:'12px 18px', textAlign:'center', minWidth:150, cursor:'pointer', color:'#fff', font:'inherit'}}>
@@ -1081,6 +1089,18 @@ function ClassMode({ plan, onBack }) {
           </button>
         )}
       </div>
+      {liveOn && (
+        <div className="scard" style={{marginBottom:16, borderColor:'#FFCDD2'}}>
+          <div className="sec-head">
+            <div className="sec-title">🟢 Clase en vivo · {group ? group.name : 'grupo'}</div>
+            <span className="sec-meta">quién está practicando ahora mismo</span>
+          </div>
+          {window.LiveClassroom
+            ? <LiveClassroom groupId={plan.groupId} embedded />
+            : <div className="empty-state"><div className="icon">📡</div>El seguimiento en vivo aún no está instalado en esta versión.</div>}
+        </div>
+      )}
+      <style>{`@keyframes cpPulse{0%,100%{opacity:1}50%{opacity:.25}}`}</style>
       <div style={{display:'grid', gridTemplateColumns:'1.3fr 1fr', gap:16, alignItems:'start'}}>
         <div className="scard">
           <div className="sec-title" style={{marginBottom:10}}>🕒 Secuencia de la sesión</div>

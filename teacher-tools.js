@@ -98,11 +98,50 @@
     return out.slice(0, 3);
   }
 
+  /* ── 🛡️ Sincronía SIN PÉRDIDAS (fix jul-2026: “los planes de clase desaparecen”) ──
+   * Antes `cloudLoadAll()` PISABA el localStorage con lo que hubiera en la nube.
+   * Si la escritura a la nube fallaba (sin internet un momento), si el profesor
+   * guardaba mientras la carga estaba en vuelo, o si otro equipo tenía una copia
+   * vieja del arreglo completo, el plan recién creado desaparecía.
+   * Ahora se FUSIONA por id (gana la versión con marca de tiempo más nueva) y los
+   * borrados viajan como lápida (_deleted) para que sí se propaguen. */
+  function nowISO() { return new Date().toISOString(); }
+  function stampOf(r) { return String((r && (r.savedAt || r.updatedAt || r.createdAt)) || ''); }
+  function mergeById(local, cloud) {
+    const out = new Map();
+    (Array.isArray(cloud) ? cloud : []).forEach(r => { if (r && r.id) out.set(r.id, r); });
+    (Array.isArray(local) ? local : []).forEach(r => {
+      if (!r || !r.id) return;
+      const prev = out.get(r.id);
+      if (!prev || stampOf(r) >= stampOf(prev)) out.set(r.id, r);
+    });
+    const cut = new Date(Date.now() - 60 * 86400000).toISOString();   // lápidas viejas fuera
+    return Array.from(out.values()).filter(r => !(r._deleted && String(r._deleted) < cut));
+  }
+  function alive(a) { return (Array.isArray(a) ? a : []).filter(r => r && !r._deleted); }
+  function tombstone(a, id) {
+    const t = nowISO();
+    return (Array.isArray(a) ? a : []).map(r => (r && r.id === id) ? { ...r, _deleted: t, savedAt: t } : r);
+  }
+  async function cloudMerge(key, lsKey) {
+    if (!window.JUCUM_SB) return;
+    let cloud = null;
+    try {
+      const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key', key).maybeSingle();
+      cloud = (data && Array.isArray(data.value)) ? data.value : null;
+    } catch (e) { return; }        // sin nube: JAMÁS se toca lo local
+    if (cloud == null) { const localOnly = j(lsKey, []); if (localOnly.length) cloudSetting(key, localOnly); return; }
+    const merged = mergeById(j(lsKey, []), cloud);
+    w(lsKey, merged);
+    if (JSON.stringify(merged) !== JSON.stringify(cloud)) cloudSetting(key, merged);   // la nube converge
+  }
+
   /* ── Planes de práctica por FECHAS explícitas (el profe elige los días) ── */
-  function getPracticePlans() { return j(PP_KEY, []); }
+  function rawPP() { return j(PP_KEY, []); }
+  function getPracticePlans() { return alive(rawPP()); }
   function savePracticePlans(a) { w(PP_KEY, a); cloudSetting('practice_plans', a); }
   function addPracticePlan(pp) {
-    const all = getPracticePlans();
+    const all = rawPP();
     const e = { id: 'pp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
       groupId: pp.groupId || null,
       title: pp.title || 'Práctica',
@@ -112,51 +151,54 @@
       bonusXp: pp.bonusXp != null ? pp.bonusXp : 0,
       note: pp.note || '',
       guide: pp.guide || null,                            // instructivo editado (cómo practicar) — antes se perdía al guardar
-      createdAt: new Date().toISOString() };
+      createdAt: nowISO(), savedAt: nowISO() };
     all.unshift(e); savePracticePlans(all); return e.id;
   }
-  function updatePracticePlan(id, partial) { const a = getPracticePlans(); const i = a.findIndex(x => x.id === id); if (i >= 0) { a[i] = { ...a[i], ...partial, dates: partial.dates ? Array.from(new Set(partial.dates)).sort() : a[i].dates }; savePracticePlans(a); } }
-  function deletePracticePlan(id) { savePracticePlans(getPracticePlans().filter(p => p.id !== id)); }
+  function updatePracticePlan(id, partial) { const a = rawPP(); const i = a.findIndex(x => x.id === id); if (i >= 0) { a[i] = { ...a[i], ...partial, dates: partial.dates ? Array.from(new Set(partial.dates)).sort() : a[i].dates, savedAt: nowISO() }; savePracticePlans(a); } }
+  function deletePracticePlan(id) { savePracticePlans(tombstone(rawPP(), id)); }
   function getPracticePlansForDay(date) { return getPracticePlans().filter(p => (p.dates || []).includes(date)); }
   function getPracticePlansForStudentOnDate(student, date) { return getPracticePlans().filter(p => p.groupId === student.group && (p.dates || []).includes(date)); }
 
   /* ── Instructivos de práctica FAVORITOS (plantillas con nombre) ── */
   const GFAV_KEY = 'jucum_practice_guide_favs_v1';
-  function getGuideFavs() { return j(GFAV_KEY, []); }
+  function getGuideFavs() { return alive(j(GFAV_KEY, [])); }
   function saveGuideFavs(a) { w(GFAV_KEY, a); cloudSetting('practice_guide_favs', a); }
   function addGuideFav(name, guide) {
-    const all = getGuideFavs();
-    const e = { id: 'gf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5), name: name || 'Instructivo', level: guide ? guide.level : '', guide: guide, createdAt: new Date().toISOString() };
+    const all = j(GFAV_KEY, []);
+    const e = { id: 'gf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5), name: name || 'Instructivo', level: guide ? guide.level : '', guide: guide, createdAt: nowISO(), savedAt: nowISO() };;
     all.unshift(e); saveGuideFavs(all); return e;
   }
-  function deleteGuideFav(id) { saveGuideFavs(getGuideFavs().filter(f => f.id !== id)); }
+  function deleteGuideFav(id) { saveGuideFavs(tombstone(j(GFAV_KEY, []), id)); }
 
   /* ── Planes de CLASE por fecha (sesión minuto a minuto) ── */
-  function getClassPlans() { return j(CP_KEY, []); }
+  function rawCP() { return j(CP_KEY, []); }
+  function getClassPlans() { return alive(rawCP()); }
   function saveClassPlans(a) { w(CP_KEY, a); cloudSetting('class_plans', a); }
   function upsertClassPlan(plan) {
-    const all = getClassPlans();
-    const rec = { ...plan, id: plan.id || 'cp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5), savedAt: new Date().toISOString() };
+    const all = rawCP();
+    const rec = { ...plan, id: plan.id || 'cp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5), savedAt: nowISO() };
+    delete rec._deleted;
     const i = all.findIndex(x => x.id === rec.id); if (i >= 0) all[i] = rec; else all.unshift(rec);
     saveClassPlans(all); return rec.id;
   }
-  function deleteClassPlan(id) { saveClassPlans(getClassPlans().filter(p => p.id !== id)); }
+  function deleteClassPlan(id) { saveClassPlans(tombstone(rawCP(), id)); }
   function getClassPlansForDay(date) { return getClassPlans().filter(p => p.date === date); }
 
   /* ── Plantillas reutilizables (clase / práctica) · con nombre + nivel ──
    * Sincronizadas a la nube (sobreviven cambio de equipo/redepliegue). */
   const TPL_KEY = 'jucum_planner_templates_v1';
-  function getTemplates() { return j(TPL_KEY, []); }
+  function rawTPL() { return j(TPL_KEY, []); }
+  function getTemplates() { return alive(rawTPL()); }
   function saveTemplates(a) { w(TPL_KEY, a); cloudSetting('planner_templates', a); }
   function addTemplate(t) {
-    const all = getTemplates();
+    const all = rawTPL();
     const rec = { id: 'tpl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
       kind: t.kind || 'class', name: t.name || 'Plantilla', level: t.level || null,
-      payload: t.payload || {}, createdAt: new Date().toISOString() };
+      payload: t.payload || {}, createdAt: nowISO(), savedAt: nowISO() };
     all.unshift(rec); saveTemplates(all); return rec.id;
   }
-  function updateTemplate(id, patch) { const a = getTemplates(); const i = a.findIndex(x => x.id === id); if (i >= 0) { a[i] = { ...a[i], ...patch }; saveTemplates(a); } }
-  function deleteTemplate(id) { saveTemplates(getTemplates().filter(t => t.id !== id)); }
+  function updateTemplate(id, patch) { const a = rawTPL(); const i = a.findIndex(x => x.id === id); if (i >= 0) { a[i] = { ...a[i], ...patch, savedAt: nowISO() }; saveTemplates(a); } }
+  function deleteTemplate(id) { saveTemplates(tombstone(rawTPL(), id)); }
 
   /* Lo planeado para un día (clase + práctica) — usado por el calendario del hub */
   function getPlannedForDay(date) {
@@ -169,10 +211,10 @@
   }
 
   /* ── Práctica dirigida (bloque con ventana de días + bono) ───────── */
-  function getDirectedAll() { return j(DPR_KEY, []); }
+  function getDirectedAll() { return alive(j(DPR_KEY, [])); }
   function saveDirected(a) { w(DPR_KEY, a); cloudSetting('directed_practice', a); }
   function addDirected(dp) {
-    const all = getDirectedAll();
+    const all = j(DPR_KEY, []);
     const e = { id: 'dp-' + Date.now() + '-' + Math.random().toString(36).slice(2,5),
       groupId: dp.groupId || null,
       openDate: dp.openDate || new Date().toISOString().slice(0,10),
@@ -180,11 +222,11 @@
       activities: dp.activities || [],          // [{moduleId, activityId, label, type}]
       bonusXp: dp.bonusXp != null ? dp.bonusXp : 30,
       title: dp.title || 'Práctica dirigida',
-      createdAt: new Date().toISOString() };
+      createdAt: nowISO(), savedAt: nowISO() };
     all.unshift(e); saveDirected(all); return e.id;
   }
-  function updateDirected(id, partial) { const a = getDirectedAll(); const i = a.findIndex(x => x.id === id); if (i >= 0) { a[i] = { ...a[i], ...partial }; saveDirected(a); } }
-  function deleteDirected(id) { saveDirected(getDirectedAll().filter(d => d.id !== id)); }
+  function updateDirected(id, partial) { const a = j(DPR_KEY, []); const i = a.findIndex(x => x.id === id); if (i >= 0) { a[i] = { ...a[i], ...partial, savedAt: nowISO() }; saveDirected(a); } }
+  function deleteDirected(id) { saveDirected(tombstone(j(DPR_KEY, []), id)); }
   function getDirectedForGroup(groupId) { return getDirectedAll().filter(d => d.groupId === groupId).sort((a,b)=>String(b.openDate).localeCompare(String(a.openDate))); }
   /* Estado de un bloque para un alumno, calculado desde su progreso real. */
   function directedStatusForStudent(dp, student) {
@@ -298,11 +340,12 @@
     await cloudLoadClassLog();
     if (!window.JUCUM_SB) return;
     try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','daily_practice').maybeSingle(); if (data && data.value) w(DP_KEY, data.value); } catch(e){}
-    try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','directed_practice').maybeSingle(); if (data && Array.isArray(data.value)) w(DPR_KEY, data.value); } catch(e){}
-    try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','practice_plans').maybeSingle(); if (data && Array.isArray(data.value)) w(PP_KEY, data.value); } catch(e){}
-    try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','practice_guide_favs').maybeSingle(); if (data && Array.isArray(data.value)) w(GFAV_KEY, data.value); } catch(e){}
-    try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','class_plans').maybeSingle(); if (data && Array.isArray(data.value)) w(CP_KEY, data.value); } catch(e){}
-    try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','planner_templates').maybeSingle(); if (data && Array.isArray(data.value)) w(TPL_KEY, data.value); } catch(e){}
+    // 🛡️ Estos cuatro se FUSIONAN (no se pisan): planes y plantillas nunca se pierden.
+    await cloudMerge('directed_practice', DPR_KEY);
+    await cloudMerge('practice_plans', PP_KEY);
+    await cloudMerge('practice_guide_favs', GFAV_KEY);
+    await cloudMerge('class_plans', CP_KEY);
+    await cloudMerge('planner_templates', TPL_KEY);
     try { const rows = await window.JUCUM_SB.all('teacher_notes'); if (Array.isArray(rows)) saveNotes(rows.map(r=>({ id:r.id, date:r.created_at, studentId:r.student_id, groupId:r.group_id, kind:r.kind, text:r.text, tag:r.tag })).sort((a,b)=>String(b.date).localeCompare(String(a.date)))); } catch(e){}
     try { const rows = await window.JUCUM_SB.all('teacher_reminders'); if (Array.isArray(rows)) w(REM_KEY, rows.map(r=>({ id:r.id, date:r.created_at, groupId:r.group_id, text:r.text, due:r.due, done:r.done }))); } catch(e){}
   }
