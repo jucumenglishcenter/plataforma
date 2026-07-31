@@ -622,7 +622,10 @@
     }
     // Guardar tiempo parcial al salir (si practicó al menos 1 min y no completó)
     window.addEventListener('beforeunload', function () {
-      pushLive('left', null, true);   // el personaje sale del salón al instante
+      // Si YA terminó no se avisa la salida: la fila queda en "done" y el
+      // profesor lo sigue viendo como ✅ terminado el resto de la clase
+      // (antes volvía a caer en "no entró a practicar" y preocupaba al alumno).
+      if (!done) pushLive('left', null, true);
       if (teacher) { logClass(); return; }
       pushDaily(); // los minutos del día SIEMPRE se salvan
       if (IS_STORY) { if (!demo && activeSec >= 60) pushProgress(100, Math.min(READING_CAP_MIN, Math.round(activeSec / 60))); return; }

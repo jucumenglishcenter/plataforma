@@ -1046,6 +1046,8 @@ function ClassMode({ plan, onBack }) {
   const cd = timer ? liveCountdown(timer, nowMs) : null;
   const askTimer = () => { if (!timer) { const go = window.confirm('⏱️ ¿Activar el cronómetro de la clase ahora?\n\nAceptar: inicia el cronómetro y abre el material.\nCancelar: abre el material sin iniciar el cronómetro.'); if (go) startTimer(); } };
   const [liveOn, setLiveOn] = React.useState(false);
+  const [evalOn, setEvalOn] = React.useState(false);
+  const focusKeys = (plan.materials || []).filter(m => m.moduleId && m.activityId).map(m => m.moduleId + ':' + m.activityId);
   const open = (m) => {
     if (m.type === 'quizlet') { setQuizPick(m); return; }
     askTimer();
@@ -1072,6 +1074,12 @@ function ClassMode({ plan, onBack }) {
             <span style={{width:9, height:9, borderRadius:'50%', background: liveOn ? '#B71C1C' : '#FF8A80', animation:'cpPulse 1.3s infinite'}}></span>
             {liveOn ? 'Ocultar la clase en vivo' : 'Ver la clase en vivo'}
           </button>
+          <button onClick={() => setEvalOn(v => !v)} title="Evaluar a los alumnos durante la clase"
+            style={{marginTop:9, marginLeft:8, display:'inline-flex', alignItems:'center', gap:7, cursor:'pointer', fontFamily:'inherit', fontWeight:800, fontSize:13,
+              background: evalOn ? '#fff' : 'rgba(255,255,255,0.16)', color: evalOn ? '#1F3A8A' : '#fff',
+              border:'1.5px solid ' + (evalOn ? '#fff' : 'rgba(255,255,255,0.35)'), borderRadius:22, padding:'8px 15px'}}>
+            📋 {evalOn ? 'Cerrar evaluación' : 'Evaluar la clase'}
+          </button>
         </div>
         {timer ? (
           <button onClick={() => { if (window.confirm('¿Reiniciar el cronómetro de la clase?')) resetTimer(); }} title="Clic para reiniciar" style={{background: cd.state === 'after' ? 'rgba(255,120,120,0.18)' : 'rgba(255,255,255,0.14)', border:'1px solid rgba(255,255,255,0.25)', borderRadius:14, padding:'12px 18px', textAlign:'center', minWidth:150, cursor:'pointer', color:'#fff', font:'inherit'}}>
@@ -1089,6 +1097,9 @@ function ClassMode({ plan, onBack }) {
           </button>
         )}
       </div>
+      {evalOn && window.ClassEvaluate && (
+        <ClassEvaluate groupId={plan.groupId} planLabel={`${plan.moduleName} · ${plan.sessionLabel}`} onClose={() => setEvalOn(false)} />
+      )}
       {liveOn && (
         <div className="scard" style={{marginBottom:16, borderColor:'#FFCDD2'}}>
           <div className="sec-head">
@@ -1096,7 +1107,7 @@ function ClassMode({ plan, onBack }) {
             <span className="sec-meta">quién está practicando ahora mismo</span>
           </div>
           {window.LiveClassroom
-            ? <LiveClassroom groupId={plan.groupId} embedded />
+            ? <LiveClassroom groupId={plan.groupId} lockGroup planId={plan.id || (plan.date + '_' + plan.startTime)} focusKeys={focusKeys} embedded />
             : <div className="empty-state"><div className="icon">📡</div>El seguimiento en vivo aún no está instalado en esta versión.</div>}
         </div>
       )}

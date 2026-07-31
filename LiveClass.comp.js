@@ -33,7 +33,8 @@ function LCChar({ student, phase, bubble, mins, score, scale }) {
   const k = scale || 1;
   const skin = lcSkin(student.id);
   const off = phase === 'off' || phase === 'gone';
-  const tone = phase === 'done' ? '#2E7D32' : phase === 'paused' ? '#B26A00' : off ? '#BDBDBD' : '#E53935';
+  const fin = phase === 'finished';   // ya practicó: se queda en su mesa, en calma
+  const tone = (phase === 'done' || fin) ? '#2E7D32' : phase === 'paused' ? '#B26A00' : off ? '#BDBDBD' : '#E53935';
   const anim = phase === 'working' || phase === 'start' ? 'lcBob 2.4s ease-in-out infinite'
              : phase === 'done' ? 'lcHop .9s ease-out 2' : 'none';
   return (
@@ -56,7 +57,7 @@ function LCChar({ student, phase, bubble, mins, score, scale }) {
             color:'#fff', fontWeight:800, fontSize:13*k, fontFamily:"'Fredoka',sans-serif", filter: off ? 'grayscale(1)' : 'none'}}>
             {lcInitials(student.fullName)}
           </div>
-          {phase === 'done' && <span style={{position:'absolute', right:-4*k, top:-4*k, fontSize:14*k}}>✅</span>}
+          {(phase === 'done' || fin) && <span style={{position:'absolute', right:-4*k, top:-4*k, fontSize:14*k}}>✅</span>}
           {phase === 'paused' && <span style={{position:'absolute', right:-4*k, top:-4*k, fontSize:13*k}}>⏸</span>}
         </div>
         <div style={{width:34*k, height:24*k, marginTop:-3*k, borderRadius:`${12*k}px ${12*k}px ${7*k}px ${7*k}px`,
@@ -67,7 +68,7 @@ function LCChar({ student, phase, bubble, mins, score, scale }) {
       </div>
       {!off && (
         <div style={{marginTop:2*k, fontSize:10*k, fontWeight:800, color:tone}}>
-          {phase === 'done' ? (score != null ? `${score}%` : 'terminó') : `${mins} min`}
+          {(phase === 'done' || fin) ? (score != null ? `${score}% · ${mins}m` : `terminó · ${mins}m`) : `${mins} min`}
         </div>
       )}
     </div>
@@ -78,6 +79,9 @@ function LCChar({ student, phase, bubble, mins, score, scale }) {
 function LCZone({ zone, scale, level }) {
   const k = scale || 1;
   const busy = zone.people.length > 0;
+  const nDone = zone.people.filter(p => p.phase === 'done' || p.phase === 'finished').length;
+  const nNow = zone.people.length - nDone;
+  const isStory = zone.icon === '📗';
   return (
     <div style={{borderRadius:16, border:'1.5px solid ' + (busy ? '#FFCDD2' : 'var(--border)'), background: busy ? '#FFFDFD' : '#FCFCFA',
       boxShadow: busy ? '0 4px 16px rgba(229,57,53,0.10)' : 'none', display:'flex', flexDirection:'column'}}>
@@ -88,23 +92,121 @@ function LCZone({ zone, scale, level }) {
           <div style={{fontWeight:800, fontSize:12.5*k, color:'#2A2A2A', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{zone.name}</div>
           {zone.sub && <div style={{fontSize:10.5*k, fontWeight:700, color:'var(--text-soft)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{zone.sub}</div>}
         </div>
-        <span style={{fontSize:10.5*k, fontWeight:800, borderRadius:11, padding:`${2*k}px ${8*k}px`, whiteSpace:'nowrap',
-          background: busy ? '#FFEBEE' : '#F1F0EB', color: busy ? '#B71C1C' : '#9A9A9A', border:'1px solid ' + (busy ? '#FFCDD2' : 'var(--border)')}}>
-          {zone.people.length ? `👤 ${zone.people.length}` : 'vacía'}
+        <span style={{display:'flex', gap:4*k, flexShrink:0}}>
+          {nNow > 0 && <span style={{fontSize:10.5*k, fontWeight:800, borderRadius:11, padding:`${2*k}px ${8*k}px`, whiteSpace:'nowrap', background:'#FFEBEE', color:'#B71C1C', border:'1px solid #FFCDD2'}}>{isStory ? '📗 leyendo' : '🔴 en curso'} {nNow}</span>}
+          {nDone > 0 && <span style={{fontSize:10.5*k, fontWeight:800, borderRadius:11, padding:`${2*k}px ${8*k}px`, whiteSpace:'nowrap', background:'#E8F5E9', color:'#2E7D32', border:'1px solid #A5D6A7'}}>✅ {nDone}</span>}
+          {!busy && <span style={{fontSize:10.5*k, fontWeight:800, borderRadius:11, padding:`${2*k}px ${8*k}px`, whiteSpace:'nowrap', background:'#F1F0EB', color:'#9A9A9A', border:'1px solid var(--border)'}}>vacía</span>}
         </span>
       </div>
       <div style={{minHeight:96*k, display:'flex', flexWrap:'wrap', gap:6*k, padding:`${8*k}px ${10*k}px ${12*k}px`, alignItems:'flex-end',
         background:'repeating-linear-gradient(135deg, rgba(0,0,0,0.014) 0 10px, transparent 10px 20px)'}}>
         {zone.people.length === 0
-          ? <div style={{width:'100%', textAlign:'center', fontSize:11.5*k, fontWeight:700, color:'#C4C4C4', alignSelf:'center'}}>nadie aquí ahora</div>
+          ? <div style={{width:'100%', textAlign:'center', fontSize:11.5*k, fontWeight:700, color:'#C4C4C4', alignSelf:'center'}}>nadie aquí aún</div>
           : zone.people.map(p => <LCChar key={p.student.id} student={p.student} phase={p.phase} bubble={p.bubble} mins={p.elapsedMin} score={p.score} scale={k} />)}
       </div>
     </div>
   );
 }
 
+/* ── 📋 Tablero de la clase ───────────────────────────────────────────
+ * Compacto: una línea por alumno con si ENTRÓ, si TERMINÓ, su tiempo y nota,
+ * y un registro de PARTICIPACIÓN de un toque (👍 12 XP · 😐 7 · 👎 3) que se
+ * guarda en su perfil como evaluación presencial. */
+const CB_STATES = [
+  { v:null, ico:'·',  bg:'#F7F6F2', fg:'#C4C4C4', bd:'#E8E5DC', stars:null, xp:0,  txt:'sin marcar' },
+  { v:2,    ico:'👍', bg:'#E8F5E9', fg:'#2E7D32', bd:'#A5D6A7', stars:5,    xp:12, txt:'participó bien' },
+  { v:1,    ico:'😐', bg:'#FFF8E1', fg:'#B26A00', bd:'#F0C66B', stars:3,    xp:7,  txt:'participó poco' },
+  { v:0,    ico:'👎', bg:'#FFEBEE', fg:'#C62828', bd:'#FFCDD2', stars:1,    xp:3,  txt:'no participó' },
+];
+const CB_PHASE = {
+  working:  { ico:'🔴', txt:'practicando',  c:'#B71C1C' },
+  start:    { ico:'🔴', txt:'recién entró', c:'#B71C1C' },
+  paused:   { ico:'⏸',  txt:'sin moverse',  c:'#B26A00' },
+  done:     { ico:'✅', txt:'terminó ahora', c:'#2E7D32' },
+  finished: { ico:'✅', txt:'ya terminó',   c:'#2E7D32' },
+  gone:     { ico:'↩️', txt:'se fue',       c:'#B26A00' },
+  off:      { ico:'💤', txt:'no ha entrado', c:'#9A9A9A' },
+};
+
+function ClassBoard({ roster, groupId }) {
+  const D = window.JUCUM_DATA;
+  const [open, setOpen] = React.useState(true);
+  const [marks, setMarks] = React.useState({});
+  const [saved, setSaved] = React.useState({});
+  const [msg, setMsg] = React.useState(null);
+  const bump = (sid) => setMarks(m => ({ ...m, [sid]: ((m[sid] || 0) + 1) % CB_STATES.length }));
+  const st = (sid) => CB_STATES[marks[sid] || 0];
+  const pend = roster.filter(e => st(e.student.id).stars != null);
+  const totalXP = pend.reduce((s, e) => s + st(e.student.id).xp, 0);
+  const order = { working:0, start:0, paused:1, done:2, finished:3, gone:4, off:5 };
+  const list = roster.slice().sort((a, b) => (order[a.phase] ?? 9) - (order[b.phase] ?? 9) || a.student.fullName.localeCompare(b.student.fullName));
+  const nIn = roster.filter(e => e.phase !== 'off').length;
+  const nFin = roster.filter(e => e.phase === 'done' || e.phase === 'finished').length;
+
+  const save = () => {
+    if (!pend.length) return;
+    pend.forEach(e => {
+      const s = st(e.student.id);
+      try {
+        window.JUCUM_EVAL.saveEvaluation(e.student.id, {
+          teacherName:'Profesor', ratings:{ participation: s.stars },
+          feedback:`🙋 Participación en clase: ${s.txt}` + (e.actName ? ` · practicó ${e.actName}` : ''),
+          attachments:[], kind:'clase',
+        });
+      } catch (err) {}
+      if (s.xp > 0 && D.addBonusXP) D.addBonusXP(e.student.id, s.xp);
+      if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(e.student.id, {
+        type:'teacher-feedback', title:`🙋 Tu profesor registró tu participación (+${s.xp} XP)`, body:`${s.txt.charAt(0).toUpperCase() + s.txt.slice(1)}. ¡Sigue así! 💪`,
+      });
+    });
+    const ok = {}; pend.forEach(e => ok[e.student.id] = true);
+    setSaved(p => ({ ...p, ...ok }));
+    setMsg(`✅ Participación guardada para ${pend.length} alumno(s) · +${totalXP} XP`);
+    setMarks({});
+    setTimeout(() => setMsg(null), 6000);
+  };
+
+  return (
+    <div style={{marginTop:14, borderRadius:16, border:'1.5px solid #C9D6F5', background:'#F9FBFF', padding:'11px 13px 13px'}}>
+      <div style={{display:'flex', alignItems:'center', gap:9, flexWrap:'wrap'}}>
+        <b style={{fontSize:13}}>📋 Tablero de la clase</b>
+        <span style={{fontSize:11.5, fontWeight:800, color:'#1F3A8A', whiteSpace:'nowrap'}}>{nIn} entraron · {nFin} terminaron · {roster.length - nIn} sin entrar</span>
+        <div style={{flex:1}}></div>
+        {pend.length > 0 && <span style={{fontSize:11.5, fontWeight:800, color:'#1F3A8A', background:'#E3E9F8', borderRadius:12, padding:'4px 10px'}}>{pend.length} · +{totalXP} XP</span>}
+        {pend.length > 0 && <button onClick={save} style={{cursor:'pointer', border:'none', background:'#1F3A8A', color:'#fff', borderRadius:20, padding:'7px 14px', fontFamily:'inherit', fontWeight:800, fontSize:12}}>💾 Guardar participación</button>}
+        <button onClick={() => setOpen(v => !v)} style={{cursor:'pointer', border:'1.5px solid var(--border)', background:'#fff', color:'#666', borderRadius:20, padding:'6px 12px', fontFamily:'inherit', fontWeight:800, fontSize:11.5}}>{open ? 'Ocultar' : 'Ver'}</button>
+      </div>
+      {msg && <div style={{fontSize:12, fontWeight:800, color:'#1B5E20', background:'#E8F5E9', border:'1px solid #A5D6A7', borderRadius:10, padding:'7px 11px', marginTop:8}}>{msg}</div>}
+      {open && (
+        <div style={{display:'grid', gap:3, marginTop:9, maxHeight:340, overflowY:'auto'}}>
+          {list.map(e => {
+            const ph = CB_PHASE[e.phase] || CB_PHASE.off;
+            const s = st(e.student.id);
+            return (
+              <div key={e.student.id} style={{display:'flex', alignItems:'center', gap:8, padding:'5px 9px', borderRadius:9, background:'#fff', border:'1px solid var(--border)'}}>
+                <span style={{fontSize:13, width:18, textAlign:'center'}}>{ph.ico}</span>
+                <span style={{flex:'1 1 120px', minWidth:90, fontWeight:800, fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{lcFirst(e.student.fullName)}</span>
+                <span style={{flex:'1 1 130px', minWidth:0, fontSize:11, fontWeight:700, color:'var(--text-soft)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                  {e.actName || '—'}{e.actName && !e.inPlan ? ' ⚠' : ''}{e.exam ? ' 🎓' : ''}
+                </span>
+                <span style={{width:96, flexShrink:0, fontSize:10.5, fontWeight:800, color:ph.c, textAlign:'right', whiteSpace:'nowrap'}} title={e.phase === 'gone' ? 'Entró y salió sin terminar' : e.phase === 'paused' ? 'Dentro de la actividad pero sin moverse' : ph.txt}>{ph.txt}</span>
+                <span style={{width:42, flexShrink:0, fontSize:11, fontWeight:800, color:'#666', textAlign:'right', whiteSpace:'nowrap'}}>{e.phase !== 'off' ? e.elapsedMin + 'm' : '—'}</span>
+                <span style={{width:38, flexShrink:0, fontSize:11, fontWeight:800, textAlign:'right', whiteSpace:'nowrap', color: e.score != null ? (e.score >= 75 ? '#2E7D32' : '#B26A00') : '#C4C4C4'}}>{e.score != null ? e.score + '%' : '—'}</span>
+                <button onClick={() => bump(e.student.id)} title={`Participación · ${s.txt} (toca para cambiar)`}
+                  style={{width:40, height:28, cursor:'pointer', fontFamily:'inherit', fontSize:14, lineHeight:1, background:s.bg, color:s.fg, border:'1.5px solid ' + s.bd, borderRadius:8}}>{s.ico}</button>
+                {saved[e.student.id] && <span title="Participación guardada" style={{fontSize:11, fontWeight:800, color:'#2E7D32'}}>✓</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {open && <div style={{fontSize:10.5, color:'var(--text-soft)', fontWeight:700, marginTop:7}}>Participación: 👍 12 XP · 😐 7 · 👎 3 — se guarda en el perfil del alumno. ⚠ = practicó algo fuera del plan.</div>}
+    </div>
+  );
+}
+
 /* ── Tablero ─────────────────────────────────────────────────────────── */
-function LiveClassroom({ groupId, embedded }) {
+function LiveClassroom({ groupId, embedded, lockGroup, focusKeys, planId }) {
   const D = window.JUCUM_DATA;
   const GROUPS = D.GROUPS || [];
   const [gid, setGid] = React.useState(groupId || (GROUPS[0] && GROUPS[0].id) || '');
@@ -112,7 +214,28 @@ function LiveClassroom({ groupId, embedded }) {
   const [meta, setMeta] = React.useState({ degraded:false, at:0 });
   const [big, setBig] = React.useState(false);
   const [showEmpty, setShowEmpty] = React.useState(false);
+  const [pickOpen, setPickOpen] = React.useState(false);
   const [, setTick] = React.useState(0);
+  React.useEffect(() => { if (groupId) setGid(groupId); }, [groupId]);
+
+  /* Actividades que SE TRABAJAN en esta clase (las elige el profesor).
+   * Vacío = todas. Se recuerdan por plan (o por grupo si no hay plan). */
+  const FOCUS_KEY = 'jucum_live_focus_v1';
+  const focusSlot = planId || ('g:' + (groupId || gid));
+  const [focus, setFocus] = React.useState(() => {
+    try {
+      const all = JSON.parse(localStorage.getItem(FOCUS_KEY) || '{}');
+      if (Array.isArray(all[focusSlot])) return all[focusSlot];
+    } catch (e) {}
+    return Array.isArray(focusKeys) ? focusKeys : [];
+  });
+  const saveFocus = (arr) => {
+    setFocus(arr);
+    try {
+      const all = JSON.parse(localStorage.getItem(FOCUS_KEY) || '{}');
+      all[focusSlot] = arr; localStorage.setItem(FOCUS_KEY, JSON.stringify(all));
+    } catch (e) {}
+  };
 
   React.useEffect(() => {
     if (!window.JUCUM_LIVE) { setRows([]); return; }
@@ -144,14 +267,22 @@ function LiveClassroom({ groupId, embedded }) {
   const examZone = { key:'__exam', icon:'🎓', name:'Rindiendo examen', sub:'no cuenta como práctica', people:[] };
 
   const byId = {}; (rows || []).forEach(r => { byId[r.user_id] = r; });
-  const waiting = [];
+  const roster = [];                  // 📋 tablero de la clase (todos los alumnos)
+  const waiting = [];                 // todavía no entran
+  const leftEarly = [];               // entraron y salieron sin terminar
   let nWorking = 0, nDone = 0;
   members.forEach(st => {
     const r = byId[st.id];
     const c = window.JUCUM_LIVE ? window.JUCUM_LIVE.classify(r, now) : { phase:'off', bubble:null, elapsedMin:0 };
-    if (!r || c.phase === 'off' || c.phase === 'gone') { waiting.push({ student: st, phase:'off' }); return; }
+    const act = r ? (zoneBy[r.module_id + ':' + r.activity_id] || null) : null;
+    const entry = { student: st, phase: r ? c.phase : 'off', elapsedMin: c.elapsedMin || 0,
+                    score: r ? r.score : null, actName: act ? act.name : (r ? (r.material_name || r.activity_id) : null),
+                    exam: r ? r.exam : false, inPlan: r ? (!focus.length || focus.includes(r.module_id + ':' + r.activity_id)) : true };
+    roster.push(entry);
+    if (!r || c.phase === 'off') { waiting.push({ student: st, phase:'off' }); return; }
+    if (c.phase === 'gone') { leftEarly.push(entry); return; }   // no ocupa mesa: se fue sin terminar
     const p = { student: st, phase: c.phase, bubble: c.bubble, elapsedMin: c.elapsedMin, score: r.score };
-    if (c.phase === 'done') nDone++; else nWorking++;
+    if (c.phase === 'done' || c.phase === 'finished') nDone++; else nWorking++;
     const z = r.exam ? examZone : (zoneBy[r.module_id + ':' + r.activity_id] || extra);
     if (z === extra) { z.people.push(p); if (!extra.sub2) extra.sub2 = r.material_name || r.activity_id; }
     else z.people.push(p);
@@ -159,9 +290,16 @@ function LiveClassroom({ groupId, embedded }) {
   if (extra.people.length) zones.push(extra);
   if (examZone.people.length) zones.unshift(examZone);
 
-  const busy = zones.filter(z => z.people.length).sort((a, b) => b.people.length - a.people.length);
-  const idle = zones.filter(z => !z.people.length);
+  const busyAll = zones.filter(z => z.people.length).sort((a, b) => b.people.length - a.people.length);
+  const isSpecial = (z) => z.key === '__extra' || z.key === '__exam';
+  const inFocus = (z) => !focus.length || focus.includes(z.key) || isSpecial(z);
+  const busy = busyAll.filter(inFocus);
+  const outside = busyAll.filter(z => !inFocus(z));               // practicando algo fuera del plan
+  const idle = zones.filter(z => !z.people.length && (!focus.length || focus.includes(z.key)));
+  const showIdleAlways = focus.length > 0;                        // si el profe eligió, sus mesas se ven siempre
   const ago = meta.at ? Math.max(0, Math.round((now - meta.at) / 1000)) : null;
+  const allActs = [];
+  mods.forEach(m => (m.activities || []).forEach(a => allActs.push({ key: `${m.id}:${a.id}`, mod: m, act: a })));
 
   return (
     <div style={{marginTop: embedded ? 0 : 12}}>
@@ -171,7 +309,12 @@ function LiveClassroom({ groupId, embedded }) {
           <span style={{width:9, height:9, borderRadius:'50%', background:'#fff', animation:'lcPulse 1.3s infinite'}}></span> EN VIVO
         </span>
         <div style={{display:'flex', gap:7, flexWrap:'wrap'}}>
-          {GROUPS.map(g => {
+          {lockGroup
+            ? <span style={{display:'inline-flex', alignItems:'center', gap:6, borderRadius:20, padding:'6px 12px', fontWeight:800, fontSize:12,
+                border:'1.5px solid ' + ((D.LEVELS[group.level] || {}).dark || '#333'), background:'#fff', color:(D.LEVELS[group.level] || {}).dark || '#333'}}>
+                {(D.LEVELS[group.level] || {}).emoji} {group.name} <span style={{fontSize:10, color:'#9A9A9A'}}>· grupo de la clase</span>
+              </span>
+            : GROUPS.map(g => {
             const on = g.id === group.id;
             const lv = D.LEVELS[g.level] || {};
             return (
@@ -184,13 +327,44 @@ function LiveClassroom({ groupId, embedded }) {
         </div>
         <div style={{flex:1}}></div>
         <span style={{fontSize:12, fontWeight:800, color:'#B71C1C'}}>🔴 {nWorking} practicando</span>
-        <span style={{fontSize:12, fontWeight:800, color:'#2E7D32'}}>✅ {nDone} terminaron</span>
+        <span style={{fontSize:12, fontWeight:800, color:'#2E7D32'}}>✅ {nDone} ya terminaron</span>
         <span style={{fontSize:12, fontWeight:800, color:'#9A9A9A'}}>💤 {waiting.length} sin entrar</span>
+        <button onClick={() => setPickOpen(v => !v)} style={{cursor:'pointer', borderRadius:20, padding:'6px 12px', fontWeight:800, fontSize:12, fontFamily:'inherit',
+          border:'1.5px solid ' + (focus.length ? '#1F3A8A' : 'var(--border)'), background: focus.length ? '#EEF2FF' : '#fff', color: focus.length ? '#1F3A8A' : '#777'}}>
+          ⚙️ Actividades de la clase{focus.length ? ` (${focus.length})` : ''}
+        </button>
         <button onClick={() => setBig(v => !v)} style={{cursor:'pointer', borderRadius:20, padding:'6px 12px', fontWeight:800, fontSize:12, fontFamily:'inherit',
           border:'1.5px solid ' + (big ? '#1F3A8A' : 'var(--border)'), background: big ? '#EEF2FF' : '#fff', color: big ? '#1F3A8A' : '#777'}}>
           {big ? '🔎 tamaño normal' : '📽 modo proyector'}
         </button>
       </div>
+
+      {pickOpen && (
+        <div style={{border:'1.5px solid #C9D6F5', background:'#F7FAFF', borderRadius:14, padding:'11px 13px', marginBottom:12}}>
+          <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:8}}>
+            <b style={{fontSize:12.5, flex:1}}>¿Qué actividades estamos trabajando en esta clase?</b>
+            {Array.isArray(focusKeys) && focusKeys.length > 0 &&
+              <button onClick={() => saveFocus(focusKeys)} style={{cursor:'pointer', border:'1.5px solid #C9D6F5', background:'#fff', color:'#1F3A8A', borderRadius:16, padding:'5px 11px', fontFamily:'inherit', fontWeight:800, fontSize:11}}>📘 las del plan ({focusKeys.length})</button>}
+            <button onClick={() => saveFocus(allActs.map(x => x.key))} style={{cursor:'pointer', border:'1.5px solid var(--border)', background:'#fff', color:'#666', borderRadius:16, padding:'5px 11px', fontFamily:'inherit', fontWeight:800, fontSize:11}}>Todas</button>
+            <button onClick={() => saveFocus([])} style={{cursor:'pointer', border:'1.5px solid var(--border)', background:'#fff', color:'#666', borderRadius:16, padding:'5px 11px', fontFamily:'inherit', fontWeight:800, fontSize:11}}>Quitar filtro</button>
+          </div>
+          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(230px,1fr))', gap:5, maxHeight:230, overflowY:'auto'}}>
+            {allActs.map(x => {
+              const on = focus.includes(x.key);
+              return (
+                <label key={x.key} style={{display:'flex', alignItems:'center', gap:7, cursor:'pointer', padding:'6px 9px', borderRadius:10,
+                  background: on ? '#E8F0FE' : '#fff', border:'1px solid ' + (on ? '#9FB0DA' : 'var(--border)')}}>
+                  <input type="checkbox" checked={on} onChange={() => saveFocus(on ? focus.filter(k => k !== x.key) : focus.concat(x.key))} />
+                  <span style={{fontSize:13}}>{LC_ICO[x.act.type] || '📄'}</span>
+                  <span style={{fontSize:11.5, fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{x.act.name}</span>
+                </label>
+              );
+            })}
+            {!allActs.length && <div style={{fontSize:12, fontWeight:700, color:'var(--text-soft)'}}>Este grupo no tiene módulos activos.</div>}
+          </div>
+          <div style={{fontSize:11, color:'var(--text-soft)', fontWeight:700, marginTop:7}}>Las elegidas se muestran siempre (aunque nadie esté dentro). Quien practique otra cosa aparece abajo, en “fuera del plan”.</div>
+        </div>
+      )}
 
       {meta.degraded && (
         <div style={{fontSize:12, fontWeight:700, color:'#8A6D1A', background:'#FFF8E1', border:'1.5px solid #F0C66B', borderRadius:12, padding:'9px 13px', marginBottom:11, lineHeight:1.5}}>
@@ -205,7 +379,7 @@ function LiveClassroom({ groupId, embedded }) {
         <div className="empty-state"><div className="icon">📦</div>Este grupo no tiene módulos activos. Actívalos en <b>Gestionar módulos</b> para ver sus mesas de trabajo.</div>
       ) : (
         <>
-          {busy.length === 0 && (
+          {busy.length === 0 && outside.length === 0 && (
             <div style={{textAlign:'center', padding:'22px 16px', borderRadius:16, border:'1.5px dashed var(--border)', background:'#FCFCFA', marginBottom:12}}>
               <div style={{fontSize:30}}>🪑</div>
               <div style={{fontWeight:800, fontSize:14, marginTop:5}}>Nadie está practicando en este momento</div>
@@ -215,24 +389,40 @@ function LiveClassroom({ groupId, embedded }) {
 
           <div style={{display:'grid', gap:12, gridTemplateColumns:`repeat(auto-fill, minmax(${big ? 380 : 290}px, 1fr))`}}>
             {busy.map(z => <LCZone key={z.key} zone={z} scale={k} level={level} />)}
-            {showEmpty && idle.map(z => <LCZone key={z.key} zone={z} scale={k} level={level} />)}
+            {(showIdleAlways || showEmpty) && idle.map(z => <LCZone key={z.key} zone={z} scale={k} level={level} />)}
           </div>
 
-          {idle.length > 0 && (
+          {outside.length > 0 && (
+            <>
+              <div style={{fontSize:11, fontWeight:800, letterSpacing:'.05em', textTransform:'uppercase', color:'#B26A00', margin:'14px 0 7px'}}>
+                ⚠ Practicando algo fuera del plan de clase
+              </div>
+              <div style={{display:'grid', gap:12, gridTemplateColumns:`repeat(auto-fill, minmax(${big ? 380 : 290}px, 1fr))`}}>
+                {outside.map(z => <LCZone key={z.key} zone={z} scale={k} level={level} />)}
+              </div>
+            </>
+          )}
+
+          {!showIdleAlways && idle.length > 0 && (
             <button onClick={() => setShowEmpty(v => !v)} style={{marginTop:11, cursor:'pointer', borderRadius:20, padding:'8px 14px', fontWeight:800, fontSize:12, fontFamily:'inherit',
               border:'1.5px solid var(--border)', background:'#fff', color:'#777'}}>
               {showEmpty ? `Ocultar las ${idle.length} actividades vacías` : `Ver las ${idle.length} actividades vacías`}
             </button>
           )}
 
-          {/* Sala de espera */}
+          {/* 📋 Tablero de la clase: quién entró, quién terminó y su participación */}
+          <ClassBoard roster={roster} groupId={group.id} />
+
+          {/* Sala de espera — solo quienes AÚN no entran (los que ya practicaron se quedan en su mesa) */}
           <div style={{marginTop:14, borderRadius:16, border:'1.5px solid var(--border)', background:'#FAFAF6', padding:'11px 13px 14px'}}>
-            <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:6}}>
+            <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:6, flexWrap:'wrap'}}>
               <b style={{fontSize:13}}>🛋️ Todavía no entran a practicar</b>
               <span style={{fontSize:11, fontWeight:800, color:'#9A9A9A'}}>{waiting.length} de {members.length}</span>
+              {leftEarly.length > 0 && <span style={{fontSize:11, fontWeight:800, color:'#B26A00', background:'#FFF8E1', border:'1px solid #F0C66B', borderRadius:11, padding:'2px 9px'}}>
+                ⚠ {leftEarly.length} entró y salió sin terminar: {leftEarly.map(e => lcFirst(e.student.fullName)).join(', ')}</span>}
             </div>
             {waiting.length === 0
-              ? <div style={{fontSize:12.5, fontWeight:800, color:'#2E7D32'}}>🎉 ¡Todo el grupo está trabajando!</div>
+              ? <div style={{fontSize:12.5, fontWeight:800, color:'#2E7D32'}}>🎉 ¡Todo el grupo entró a practicar!</div>
               : <div style={{display:'flex', flexWrap:'wrap', gap:4}}>
                   {waiting.map(w => <LCChar key={w.student.id} student={w.student} phase="off" bubble={null} mins={0} score={null} scale={k * 0.92} />)}
                 </div>}
@@ -241,11 +431,12 @@ function LiveClassroom({ groupId, embedded }) {
       )}
 
       <div style={{fontSize:11, color:'var(--text-soft)', fontWeight:700, marginTop:10}}>
-        Se actualiza solo cada 10 s{ago != null ? ` · última lectura hace ${ago}s` : ''} · 🔴 practicando · ⏸ dentro pero sin moverse · ✅ terminó (se queda 10 min)
+        Se actualiza solo cada 10 s{ago != null ? ` · última lectura hace ${ago}s` : ''} · 🔴 practicando · ⏸ dentro pero sin moverse · ✅ ya terminó (se queda en su mesa el resto de la clase)
+        <br/><b>📗 Stories:</b> no tienen nota — se miden por tiempo de lectura: a los <b>4 minutos</b> leyendo cuentan como terminadas (✅) y el tiempo sigue sumando hasta 30 min.
       </div>
       <style>{`@keyframes lcPulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes lcBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}@keyframes lcHop{0%{transform:translateY(0)}35%{transform:translateY(-9px)}100%{transform:translateY(0)}}@keyframes lcPop{0%{transform:translate(-50%,6px) scale(.8);opacity:0}100%{transform:translate(-50%,0) scale(1);opacity:1}}`}</style>
     </div>
   );
 }
 
-Object.assign(window, { LiveClassroom, LCChar, LCZone });
+Object.assign(window, { LiveClassroom, LCChar, LCZone, ClassBoard });

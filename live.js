@@ -18,7 +18,7 @@
   var DONE_MS   = 10 * 60 * 1000;   // "acaba de terminar" se muestra 10 min
   var BUB_START = 75 * 1000;        // burbuja "¡Ya inicié mi práctica!"
   var BUB_DONE  = 100 * 1000;       // burbuja "¡Ya finalicé mi práctica!"
-  var WINDOW_MS = 25 * 60 * 1000;   // ventana que se trae de la nube
+  var WINDOW_MS = 5 * 3600 * 1000;  // ventana que se trae de la nube: cubre toda la clase
 
   var degraded = false;             // true = sin tabla live_presence
   var lastRows = [];
@@ -46,7 +46,11 @@
   }
 
   /* Estado visible de un alumno a partir de su fila de presencia.
-   * phase: start | working | paused | done | gone   ·   bubble: texto o null */
+   * phase: start | working | paused | done | finished | gone · bubble: texto o null
+   *   done     = acaba de terminar (10 min, con burbuja y festejo)
+   *   finished = ya practicó y sigue contando como PRESENTE el resto de la clase
+   *              (antes caía en "no entran a practicar" y los alumnos se preocupaban)
+   *   gone     = entró pero se fue SIN terminar */
   function classify(row, now) {
     now = now || Date.now();
     if (!row) return { phase: 'off', bubble: null, elapsedMin: 0, fresh: false };
@@ -55,13 +59,13 @@
     var elapsedMin = Math.max(row.minutes || 0, Math.floor(since / 60000));
     if (row.state === 'done') {
       return {
-        phase: age <= DONE_MS ? 'done' : 'gone',
+        phase: age <= DONE_MS ? 'done' : 'finished',
         bubble: age <= BUB_DONE ? '¡Ya finalicé mi práctica!' : null,
-        elapsedMin: row.minutes || elapsedMin, fresh: age <= DONE_MS,
+        elapsedMin: row.minutes || elapsedMin, fresh: true, completed: true,
       };
     }
     if (row.state === 'left' || age > STALE_MS) {
-      return { phase: 'gone', bubble: null, elapsedMin: row.minutes || elapsedMin, fresh: false };
+      return { phase: 'gone', bubble: null, elapsedMin: row.minutes || elapsedMin, fresh: false, completed: false };
     }
     if (row.state === 'paused' || age > FRESH_MS) {
       return { phase: 'paused', bubble: null, elapsedMin: elapsedMin, fresh: true };

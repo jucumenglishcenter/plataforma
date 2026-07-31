@@ -13,6 +13,13 @@ const CRITERIA = [
   { key:'listening',    label:'🎧 Listening',      desc:'Comprensión auditiva en conversación' },
   { key:'comprehension',label:'📖 Comprehension',  desc:'Comprensión lectora y de contexto' },
 ];
+/* Criterios que TAMBÉN pueden venir del modo clase (📋 Evaluar la clase).
+ * Solo se usan para MOSTRAR: el formulario presencial sigue con los 3 de arriba. */
+const CRITERIA_ALL = CRITERIA.concat([
+  { key:'attention',    label:'👀 Atención en clase', desc:'Siguió la explicación sin repetirla' },
+  { key:'knowledge',    label:'🧠 Conocimiento del tema', desc:'Dominio del tema trabajado en clase' },
+  { key:'participation',label:'🙋 Participación',   desc:'Participa y pregunta en clase' },
+]);
 
 function StarRating({ value, onChange, color = '#F9A825' }) {
   return (
@@ -335,7 +342,7 @@ function StudentEvaluations({ studentId, isStudent = false }) {
 }
 
 function EvalCard({ ev, studentId, isStudent }) {
-  const present = CRITERIA.filter(c => typeof ev.ratings[c.key] === 'number');
+  const present = CRITERIA_ALL.filter(c => typeof ev.ratings[c.key] === 'number');
   const avg = present.length ? (present.reduce((s,c) => s + ev.ratings[c.key], 0) / present.length).toFixed(1) : '—';
   const date = new Date(ev.date);
   const dateStr = date.toLocaleDateString('es-PE', { weekday:'long', day:'numeric', month:'long' });
