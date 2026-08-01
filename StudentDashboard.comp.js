@@ -1526,9 +1526,33 @@ function MetaSmartMessage({ metaMet, hasPending, minsLeft, onReview }) {
  * no tiene pendientes obligatorios — así completa su meta repasando. */
 function RefuerzoSection({ student, highlight }) {
   const D = window.JUCUM_DATA;
-  const items = (D.getRefuerzo ? D.getRefuerzo(student, 3) : []);
-  if (!items.length) return null;
+  const pool = (D.getRefuerzo ? D.getRefuerzo(student, 6) : []);
+  if (!pool.length) return null;
   const mods = D.MODULE_CATALOG[student.level] || [];
+  const todayISO = peruDayKey();
+  /* UNA propuesta de refuerzo POR DÍA (pedido de la usuaria: antes salían 3 fijas
+   * y nunca "disminuían"). Se rota por día sobre el pool y se CONGELA por
+   * alumno+día en localStorage para que no cambie al completarla ni al recargar. */
+  const RKEY = 'jucum_refz_v1';
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(RKEY) || '{}'); } catch {}
+  const k = student.id + ':' + todayISO;
+  let pick = pool.find(it => saved[k] === it.moduleId + ':' + it.activityId);
+  if (!pick) {
+    const dayN = Math.floor((Date.parse(todayISO + 'T00:00:00Z')) / 86400000);
+    pick = pool[dayN % pool.length];
+    try { localStorage.setItem(RKEY, JSON.stringify({ [k]: pick.moduleId + ':' + pick.activityId })); } catch {}
+  }
+  const items = [pick];
+  // ✓ del DÍA (hora Perú): si repitió el refuerzo HOY, se le muestra — antes no
+  // había ningún indicativo y el alumno no sabía si ya lo había terminado.
+  const prog = D.getStudentProgress(student.id);
+  const doneToday = items.map(it => {
+    const e = prog.completed[`${it.moduleId}:${it.activityId}`];
+    return !!(e && e.date && new Date(Date.parse(e.date) - PERU_MS).toISOString().slice(0, 10) === todayISO);
+  });
+  const doneN = doneToday.filter(Boolean).length;
+  const allDone = doneN === items.length;
   const go = (it) => {
     const mod = mods.find(m => m.id === it.moduleId);
     const a = mod && (mod.activities || []).find(x => x.id === it.activityId);
@@ -1539,23 +1563,26 @@ function RefuerzoSection({ student, highlight }) {
     <div style={{marginTop:24}}>
       <div style={{display:'flex', alignItems:'center', gap:8, margin:'0 2px 10px'}}>
         <span style={{fontSize:17}}>💪</span>
-        <h2 style={{fontFamily:"'Fredoka',sans-serif", fontSize:17, margin:0}}>Refuerzo <span style={{fontSize:12.5, fontWeight:700, color:'var(--text-soft)'}}>· opcional</span></h2>
+        <h2 style={{fontFamily:"'Fredoka',sans-serif", fontSize:17, margin:0}}>Refuerzo <span style={{fontSize:12.5, fontWeight:700, color:'var(--text-soft)'}}>· tu propuesta de hoy</span></h2>
       </div>
-      <div className="scard" style={{padding:0, overflow:'hidden', borderColor: highlight ? '#9BC9F0' : '#E6DEC9', borderStyle:'dashed'}}>
-        <div style={{padding:'12px 15px', display:'flex', alignItems:'center', gap:11, background: highlight ? '#EDF3FC' : '#FBF8F0', borderBottom:'1px dashed ' + (highlight ? '#9BC9F0' : '#E6DEC9')}}>
-          <span style={{fontSize:20}}>{highlight ? '🎯' : '✨'}</span>
-          <div style={{fontSize:12.8, fontWeight:700, color: highlight ? '#1B3B6F' : 'var(--text-soft)', lineHeight:1.4}}>
-            {highlight
-              ? <>¿Te falta meta y ya no tienes pendientes? <b>Refuerza</b> lo que más te costó — cuenta para tu meta y fija lo aprendido.</>
-              : <>Practica de más, cuando quieras. Repetir lo aprendido lo asienta para siempre 🧠</>}
+      <div className="scard" style={{padding:0, overflow:'hidden', borderColor: allDone ? '#A5D6A7' : highlight ? '#9BC9F0' : '#E6DEC9', borderStyle: allDone ? 'solid' : 'dashed'}}>
+        <div style={{padding:'12px 15px', display:'flex', alignItems:'center', gap:11, background: allDone ? '#E9F7EA' : highlight ? '#EDF3FC' : '#FBF8F0', borderBottom: allDone ? '1px solid #BFE3C3' : '1px dashed ' + (highlight ? '#9BC9F0' : '#E6DEC9')}}>
+          <span style={{fontSize:20}}>{allDone ? '🎉' : highlight ? '🎯' : '✨'}</span>
+          <div style={{flex:1, fontSize:12.8, fontWeight:700, color: allDone ? '#1B5E20' : highlight ? '#1B3B6F' : 'var(--text-soft)', lineHeight:1.4}}>
+            {allDone
+              ? <>¡Terminaste tu refuerzo de hoy! Repetir lo aprendido lo fija para siempre 🧠 Mañana te propondré otro.</>
+              : highlight
+                ? <>¿Te falta meta y ya no tienes pendientes? <b>Refuerza</b> lo que más te costó — cuenta para tu meta y fija lo aprendido.</>
+                : <>Tu refuerzo de hoy: opcional, pero repetir lo aprendido lo asienta para siempre 🧠 Cada día te propongo uno distinto.</>}
           </div>
+          {doneN > 0 && <span style={{fontSize:11.5, fontWeight:800, color:'#fff', background:'#2EA84B', borderRadius:14, padding:'4px 10px', whiteSpace:'nowrap'}}>✓ hecho</span>}
         </div>
         <div style={{padding:'10px 13px', display:'flex', flexDirection:'column', gap:7}}>
           {items.map((it, i) => (
-            <button key={i} type="button" onClick={() => go(it)} className="al-item open" style={{width:'100%', textAlign:'left', font:'inherit', cursor:'pointer'}}>
-              <span className="al-num" style={{background:'#EFE7F7', color:'#6C4FB0', borderColor:'#D6C9EC'}}>↻</span>
+            <button key={i} type="button" onClick={() => go(it)} className="al-item open" style={{width:'100%', textAlign:'left', font:'inherit', cursor:'pointer', ...(doneToday[i] ? {background:'#F2FAF3', borderColor:'#BFE3C3'} : {})}}>
+              <span className="al-num" style={doneToday[i] ? {background:'#2EA84B', color:'#fff', borderColor:'#2EA84B'} : {background:'#EFE7F7', color:'#6C4FB0', borderColor:'#D6C9EC'}}>{doneToday[i] ? '✓' : '↻'}</span>
               <span className="al-ico">{typeIcon(it.type)}</span>
-              <span className="al-name">{it.name}<span style={{display:'block', fontSize:11, fontWeight:700, color:'var(--text-soft)', marginTop:1}}>{it.moduleName}{it.group ? ' · ' + it.group : ''}</span></span>
+              <span className="al-name">{it.name}<span style={{display:'block', fontSize:11, fontWeight:700, color: doneToday[i] ? '#2E7D32' : 'var(--text-soft)', marginTop:1}}>{doneToday[i] ? '✓ Refuerzo hecho hoy — ¡bien ahí!' : it.moduleName + (it.group ? ' · ' + it.group : '')}</span></span>
               <span className="al-score" style={{background:'#F0ECE0', color:'#8A7F6A'}}>{it.pct}%</span>
               <span className="al-arr">→</span>
             </button>
