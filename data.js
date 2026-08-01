@@ -2007,13 +2007,19 @@ function getModuleRoute(student) {
   });
   return info;
 }
-/* Módulo donde el alumno debería estar trabajando ahora: el primer módulo
- * ACTIVO con pendientes (no el primero de la ruta). */
+/* Módulo donde el alumno debería estar trabajando ahora: el ÚLTIMO módulo
+ * ACTIVO de la ruta — el mismo que lleva la marca "Aquí vas" (el módulo de la
+ * clase actual). Antes se tomaba el PRIMER activo con pendientes y "Mi práctica"
+ * abría seleccionando un módulo viejo en vez del que el profesor acaba de activar. */
 function getFocusModuleId(student) {
   const route = getModuleRoute(student);
-  const cur = route.find(x => x.state === 'cur' && (x.doneCount || 0) < (x.total || 0))
-           || route.find(x => x.state === 'cur');
-  return cur ? cur.mod.id : (route[0] ? route[0].mod.id : null);
+  const curs = route.filter(x => x.state === 'cur');
+  if (curs.length) return curs[curs.length - 1].mod.id;            // último activo con contenido
+  const actives = route.filter(x => !x.placeholder && x.active);   // activos ya completados ('done')
+  if (actives.length) return actives[actives.length - 1].mod.id;
+  const dones = route.filter(x => x.state === 'done');
+  if (dones.length) return dones[dones.length - 1].mod.id;
+  return route[0] ? route[0].mod.id : null;
 }
 
 /* Mejor racha histórica (récord personal). Se actualiza al leer. */

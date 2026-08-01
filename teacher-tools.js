@@ -36,7 +36,9 @@
    *      solo aparece en los días que el profe eligió.
    *   2) (Legado) práctica por día de la semana, si aún existe configurada.
    *   3) Recomendación automática SOLO si no hay nada definido para esa fecha. */
-  function todayStr() { return new Date().toISOString().slice(0, 10); }
+  /* Día en hora PERÚ (UTC−5), nunca UTC/local: UTC cambia de día ~7 PM de Perú
+   * y la "práctica de hoy" saltaba al plan de mañana por la tarde-noche. */
+  function todayStr() { return new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10); }
   function getTodayPracticeForStudent(student, dateStr) {
     if (!student) return { items: [], isGeneric: true, source: 'none' };
     const date = dateStr || todayStr();
@@ -54,8 +56,27 @@
     const wd = new Date(date + 'T12:00:00').getDay();
     const set = getDailyPractice(student.group, wd);
     if (set && set.length) return { items: set, isGeneric: false, source: 'weekday' };
-    // 3) recomendación automática (último recurso, nunca sobre un plan definido)
-    return { items: genericPractice(student), isGeneric: true, source: 'generic' };
+    // 3) recomendación automática (último recurso, nunca sobre un plan definido).
+    //    Se CONGELA por alumno+día: si se recalculara en cada visita, al completar
+    //    una actividad la lista cambiaría y el alumno nunca vería sus ✓ del día.
+    return { items: frozenGeneric(student, date), isGeneric: true, source: 'generic' };
+  }
+  /* Set genérico del día congelado en este equipo. Clave chica (solo texto):
+   * guarda únicamente el día actual, no acumula histórico. */
+  const TODAYSET_KEY = 'jucum_today_set_v1';
+  function frozenGeneric(student, date) {
+    let all = {};
+    try { all = JSON.parse(localStorage.getItem(TODAYSET_KEY) || '{}'); } catch {}
+    const k = student.id + ':' + date;
+    if (Array.isArray(all[k]) && all[k].length) return all[k];
+    const items = genericPractice(student);
+    try {
+      const fresh = {};
+      Object.keys(all).forEach(kk => { if (kk.slice(-10) === date) fresh[kk] = all[kk]; }); // conserva a otros alumnos del MISMO día (equipos compartidos)
+      fresh[k] = items;
+      localStorage.setItem(TODAYSET_KEY, JSON.stringify(fresh));
+    } catch {}
+    return items;
   }
   /* Recomendación automática: SOLO cuando el profe no definió plan para esa fecha.
    * Se basa en (a) lo último que se trabajó en clase (bitácora) para sugerir su

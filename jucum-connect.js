@@ -9,16 +9,21 @@
    - Lee la identidad del alumno desde la URL (?jucum_uid=...&jucum_mod=...&jucum_act=...)
      que la plataforma agrega al abrir el material.
    - Muestra un chip flotante con el TIEMPO ACTIVO de práctica.
-   - Cuenta SOLO el tiempo activo (mouse, teclado, scroll, touch).
-   - Anti-abandono: a los 3 min sin actividad muestra "¿Sigues ahí?" y DEJA de
-     contar tiempo. Si no responde en 5 min más, cierra la sesión de práctica
-     (el tiempo inactivo nunca se registra como lectura).
+   - Cuenta SOLO tiempo REAL: pestaña visible + interacción reciente (mouse,
+     teclado, scroll, touch, o audio/video reproduciéndose). Con la pestaña
+     oculta o sin interacción el conteo se PAUSA solo (chip ⏸) y se reanuda
+     al volver — el tiempo "de adorno" ya no se registra (fix tiempos repetidos).
    - Al terminar registra puntuación + minutos en Supabase y muestra una
      tarjeta con FRASE MOTIVACIONAL según el puntaje (motiva si va bien o mal).
-   - Práctica libre, siempre la MEJOR nota: la nota se registra al terminar y, si
-     el alumno vuelve a practicar y mejora, se actualiza al instante (nunca baja).
-     El anti-farmeo lo maneja la plataforma (el XP de un material se re-gana una
-     vez por semana, no por cada intento del día).
+   - Práctica libre, siempre la MEJOR nota (nunca baja). Regla de la ½ HORA:
+     tras un intento registrado, la nota recién puede CAMBIAR 30 minutos
+     después. El alumno puede repetir antes, pero se le recuerda que su nueva
+     nota contará pasada la media hora (tiempo para repasar el feedback).
+     No aplica a resúmenes/quizlet, stories ni exámenes. El anti-farmeo del
+     XP lo maneja la plataforma (se re-gana 1 vez por semana).
+   - Registro a prueba de fallas: si al terminar no hay internet, el resultado
+     queda en una bandeja local (jucum_outbox_v1, solo texto) y se reenvía
+     solo en la próxima práctica con conexión.
    - Si el material se abre SIN ?jucum_uid (fuera de la plataforma), entra en
      MODO PRUEBA: el contador y el aviso de inactividad funcionan igual, pero
      NO se registra nada en la nube.
@@ -45,7 +50,11 @@
   // Las STORIES y diálogos son lectura pura: NO tienen límite de uso (ni aviso de
   // inactividad ni bloqueo entre intentos). Solo monitoreamos el tiempo de lectura.
   var IS_STORY = /story|dialog/.test(KIND);
-  var WARN_AFTER_SEC   = IS_READING ? 30 * 60 : 10 * 60; // sin actividad → solo PAUSA el conteo (sin cartel, sin cerrar)
+  // Tiempo REAL: sin interacción reciente el conteo se PAUSA (sin cartel, sin
+  // cerrar nada; se reanuda solo). Lecturas con quiz toleran más quietud (leer
+  // no mueve el mouse); el resto interactúa seguido — y el audio/video
+  // reproduciéndose cuenta como actividad (eventos play/timeupdate).
+  var WARN_AFTER_SEC   = IS_READING ? 5 * 60 : 2 * 60;
   var CLOSE_AFTER_SEC  = 5 * 60;  // +5 min sin responder → fin de práctica
   var AUTO_DONE_SEC    = 4 * 60;  // stories: completar tras 4 min activos
   // Tope de lectura que cuenta para el reporte (en stories). El contador en
@@ -53,9 +62,11 @@
   // solo se registran como máximo estos minutos. Que lea de más es bienvenido,
   // simplemente no suma extra al reporte.
   var READING_CAP_MIN  = 30;
-  // (Histórico) Antes había una ventana de 7 días para mejorar la nota; se quitó
-  // para que rehacer una práctica actualice el estado al instante. Constante sin uso.
-  var RETRY_AFTER_MS   = 7 * 24 * 60 * 60 * 1000;
+  // Regla de la ½ HORA: una nota registrada recién puede cambiar 30 min después
+  // del intento anterior (repetir sí, pero con repaso de por medio — no al toque
+  // memorizando respuestas). No aplica a resúmenes/quizlet (participación),
+  // stories (sin nota) ni exámenes (vale el 1er intento).
+  var GRADE_WINDOW_MS  = 30 * 60 * 1000;
 
   // ── Leer identidad desde la URL ──
   var q = new URLSearchParams(location.search);
@@ -414,8 +425,12 @@
       }
     }
 
-    ['mousemove','mousedown','keydown','scroll','touchstart','click'].forEach(function (ev) {
+    ['mousemove','mousedown','keydown','scroll','touchstart','click','input','change'].forEach(function (ev) {
       document.addEventListener(ev, function () { idleSec = 0; }, { passive: true });
+    });
+    // Audio/video reproduciéndose = práctica real aunque no toque nada (listenings).
+    ['play','playing','timeupdate'].forEach(function (ev) {
+      document.addEventListener(ev, function () { idleSec = 0; }, { capture: true, passive: true });
     });
 
     setInterval(function () {
@@ -448,7 +463,11 @@
       // La inactividad solo PAUSA el conteo (sin cartel, sin cerrar la práctica).
       // Al volver a moverse/escribir, idleSec se reinicia y el conteo se reanuda solo.
       idleSec++;
-      paused = idleSec >= WARN_AFTER_SEC;
+      // PAUSA si no hay interacción reciente O la pestaña está oculta: solo cuenta
+      // tiempo REAL frente al material. (Fix "tiempos repetidos": antes una pestaña
+      // abierta en segundo plano sumaba hasta el tope de inactividad y muchos
+      // terminaban registrando los mismos minutos fantasma.)
+      paused = idleSec >= WARN_AFTER_SEC || document.visibilityState === 'hidden';
       if (!done && !paused) {
         activeSec++; activeDaySec++;
         if (!demo && activeSec % 120 === 0) pushDaily();
@@ -484,10 +503,12 @@
       // UNA vez por semana (no por cada intento del día).
       var firstTs = parseInt(localStorage.getItem(ATTEMPT_KEY) || '0', 10);
       var now = Date.now();
-      improveProgress(pct, minutes, function (prev) {
+      improveProgress(pct, minutes, lowStakes, function (res) {
         if (!firstTs) localStorage.setItem(ATTEMPT_KEY, String(now));
-        var msg;
-        if (prev == null) msg = '✅ Práctica registrada · ' + minutes + ' min' + (score != null ? ' · ' + pct + '%' : '');
+        var prev = res.prev, msg;
+        if (res.offline) msg = '📡 Sin internet en este momento. Tu resultado (' + (score != null ? pct + '% · ' : '') + minutes + ' min) quedó guardado en ESTE equipo y se registrará solo en tu próxima práctica con conexión.';
+        else if (res.gated) msg = '🕐 Sacaste ' + pct + '%, pero tu nota registrada sigue en ' + prev + '%: la nota puede cambiar recién MEDIA HORA después de tu intento anterior. Repasa el feedback y vuelve a intentarlo en ~' + res.waitMin + ' min para que sí cuente.';
+        else if (prev == null) msg = '✅ Práctica registrada · ' + minutes + ' min' + (score != null ? ' · ' + pct + '%' : '');
         else if (score != null && pct > prev) msg = '🎉 ¡Mejoraste tu nota! Antes ' + prev + '% → ahora ' + pct + '%.';
         else if (score != null && pct === prev) msg = '👍 Practicaste de nuevo. Tu nota (' + prev + '%) se mantiene.';
         else if (score != null) msg = '👍 Lo intentaste de nuevo. Tu mejor nota (' + prev + '%) se mantiene.';
@@ -497,21 +518,42 @@
     }
 
     // Registra el progreso quedándonos con la MEJOR nota (nunca baja una nota previa).
-    function improveProgress(score, minutes, cb) {
-      if (demo || !ensureSb()) { pushProgress(score, minutes); if (cb) cb(null); return; }
-      sb.from('progress').select('score,minutes').eq('user_id', uid).eq('module_id', modId).eq('activity_id', actId).maybeSingle()
+    // Regla de la ½ hora: si ya hay una nota registrada hace <30 min, la nota NO
+    // cambia todavía (res.gated; no se escribe nada para no correr el ancla de la
+    // ventana). Si la nube falla, el intento va a la bandeja local y se reenvía
+    // solo (res.offline). res = { prev, saved, improved, gated, waitMin, offline }.
+    function improveProgress(score, minutes, lowStakes, cb) {
+      function fail() { outboxAdd(score, minutes); cb({ prev: null, saved: false, offline: true }); }
+      if (demo) { cb({ prev: null, saved: false }); return; }
+      if (!ensureSb()) { fail(); return; }
+      sb.from('progress').select('score,minutes,completed_at').eq('user_id', uid).eq('module_id', modId).eq('activity_id', actId).maybeSingle()
         .then(function (r) {
           var row = r && r.data;
           var prev = (row && row.score != null) ? row.score : null;
-          var best = (prev == null) ? score : Math.max(prev, score);
-          var mins = Math.max(minutes, (row && row.minutes) ? row.minutes : 0);
-          sb.from('progress').upsert({
-            user_id: uid, module_id: modId, activity_id: actId,
-            score: best, minutes: mins, completed_at: new Date().toISOString()
-          }, { onConflict: 'user_id,module_id,activity_id' }).then(function () { cb(prev); }, function () { cb(prev); });
-        }, function () {
-          pushProgress(score, minutes); cb(null); // si falla la lectura, registra igual
-        });
+          function write(sc, mn, after) {
+            sb.from('progress').upsert({
+              user_id: uid, module_id: modId, activity_id: actId,
+              score: sc, minutes: mn, completed_at: new Date().toISOString()
+            }, { onConflict: 'user_id,module_id,activity_id' }).then(function (r2) {
+              if (r2 && r2.error) { fail(); return; }
+              after();
+            }, fail);
+          }
+          if (prev == null) { write(score, minutes, function () { cb({ prev: null, saved: true }); }); return; }
+          var last = row.completed_at ? Date.parse(row.completed_at) : 0;
+          var waitMs = last ? (last + GRADE_WINDOW_MS - Date.now()) : 0;
+          if (waitMs > 0 && !lowStakes) {
+            cb(score > prev
+              ? { prev: prev, saved: false, gated: true, waitMin: Math.max(1, Math.ceil(waitMs / 60000)) }
+              : { prev: prev, saved: true });
+            return;
+          }
+          // Fuera de la ventana (o participación): mejor nota + minutos mayores,
+          // con fecha nueva (deja evidencia de que practicó HOY para sus ✓ del día).
+          write(Math.max(prev, score), Math.max(minutes, row.minutes || 0), function () {
+            cb({ prev: prev, saved: true, improved: score > prev });
+          });
+        }, fail);
     }
 
     function pushProgress(score, minutes, ok) {
@@ -524,6 +566,62 @@
         if (ok) ok();
       });
     }
+
+    // ── 📥 Bandeja local de registros (a prueba de cortes de internet) ──
+    // Si el guardado de la nota falla, el intento queda aquí (solo texto, unos
+    // pocos KB) y se reenvía al abrir cualquier material con conexión. Al
+    // aplicarse se respeta la MEJOR nota y la fecha es la del intento real.
+    var OUTBOX_KEY = 'jucum_outbox_v1';
+    function outboxAdd(sc, mn) {
+      if (!uid) return;
+      try {
+        var q = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]');
+        q.push({ uid: uid, mod: modId, act: actId, score: sc, minutes: mn, ts: Date.now() });
+        localStorage.setItem(OUTBOX_KEY, JSON.stringify(q.slice(-20)));
+      } catch (e) {}
+    }
+    function outboxFlush() {
+      if (!ensureSb()) return;
+      var q; try { q = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); } catch (e) { q = []; }
+      if (!q.length) return;
+      var it = q[0];
+      sb.from('progress').select('score,minutes').eq('user_id', it.uid).eq('module_id', it.mod).eq('activity_id', it.act).maybeSingle().then(function (r) {
+        var row = r && r.data;
+        var best = (row && row.score != null) ? Math.max(row.score, it.score) : it.score;
+        var mins = Math.max(it.minutes || 0, (row && row.minutes) || 0);
+        sb.from('progress').upsert({
+          user_id: it.uid, module_id: it.mod, activity_id: it.act,
+          score: best, minutes: mins, completed_at: new Date(it.ts).toISOString()
+        }, { onConflict: 'user_id,module_id,activity_id' }).then(function (r2) {
+          if (r2 && r2.error) return;
+          try {
+            var q2 = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]');
+            q2 = q2.filter(function (x) { return !(x.ts === it.ts && x.uid === it.uid && x.mod === it.mod && x.act === it.act); });
+            localStorage.setItem(OUTBOX_KEY, JSON.stringify(q2));
+          } catch (e) {}
+          toast('✓ Se registró una práctica tuya que había quedado pendiente');
+          setTimeout(outboxFlush, 800);
+        }, function () {});
+      }, function () {});
+    }
+    if (!demo) {
+      setTimeout(outboxFlush, 4000);
+      window.addEventListener('online', function () { setTimeout(outboxFlush, 1500); });
+    }
+
+    // 🕐 Recordatorio al reabrir un material CON nota: si hay un intento registrado
+    // hace <30 min avisa desde el inicio cuándo podrá cambiar la nota; si ya pasó
+    // la ventana y estaba desaprobado, anima ("este intento SÍ cuenta").
+    if (!demo && !IS_STORY && !exam && !/summary|quizlet/.test(KIND)) setTimeout(function () {
+      if (!ensureSb()) return;
+      sb.from('progress').select('score,completed_at').eq('user_id', uid).eq('module_id', modId).eq('activity_id', actId).maybeSingle().then(function (r) {
+        var row = r && r.data; if (!row || row.score == null || !row.completed_at) return;
+        var p = row.score > 10 ? Math.round(row.score) : Math.round(row.score * 10);
+        var left = Date.parse(row.completed_at) + GRADE_WINDOW_MS - Date.now();
+        if (left > 0) banner('🕐 Ya tienes un intento registrado (' + p + '%). Tu nota podrá cambiar en ~' + Math.max(1, Math.ceil(left / 60000)) + ' min — mientras tanto repasa con calma: el feedback es tu mejor maestro.');
+        else if (p < 75) banner('💪 Tu nota anterior fue ' + p + '%. Ya pasó la media hora: este intento SÍ puede actualizarla. ¡Tú puedes!');
+      }, function () {});
+    }, 2500);
 
     // ── Progreso POR PARTE (historia/audio/diálogo dentro del material) ──
     // Se guarda en la tabla activity_parts SIN tocar la fila principal de
@@ -601,7 +699,7 @@
     function showResultCard(pct, statusMsg, hasScore, lowStakes) {
       var m = jecMotivation(pct);
       var needRetry = hasScore && pct < 75 && !lowStakes;
-      var retryHtml = needRetry ? '<div style="font-size:13px;font-weight:800;color:#92510F;background:#FFF3D6;border:1.5px solid #F0C66B;border-radius:12px;padding:11px 13px;margin-bottom:14px;line-height:1.5;">🔁 Necesitas <b>75% o más</b> de respuestas correctas para aprobar. Revisa el feedback y <b>vuelve a realizar la actividad</b> para completarla.</div>' : '';
+      var retryHtml = needRetry ? '<div style="font-size:13px;font-weight:800;color:#92510F;background:#FFF3D6;border:1.5px solid #F0C66B;border-radius:12px;padding:11px 13px;margin-bottom:14px;line-height:1.5;">🔁 Necesitas <b>75% o más</b> de respuestas correctas para aprobar. Revisa el feedback y <b>vuelve a realizar la actividad</b> para completarla. 🕐 Ojo: tu nota se actualiza recién <b>media hora después</b> de este intento — usa ese tiempo para repasar.</div>' : '';
       var ov = document.createElement('div');
       ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.6);z-index:1000000;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;padding:16px;';
       ov.innerHTML =

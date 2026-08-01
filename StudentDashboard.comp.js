@@ -1881,16 +1881,46 @@ function ExplainerBody() {
   );
 }
 
-/* Propuesta de práctica del día (genérica o la que dejó el profesor) */
+/* Propuesta de práctica del día (genérica o la que dejó el profesor).
+ * Cada actividad muestra su ✓ del DÍA (hora Perú): el alumno VE lo que avanzó.
+ * Al completar todo aparece "¡Terminaste tu práctica de hoy!" + recomendaciones
+ * (nota baja por mejorar · repaso pendiente · meta diaria / refuerzo). */
 function TodayPracticeCard({ student }) {
   const TT = window.JUCUM_TT; if (!TT) return null;
-  const { items, isGeneric } = TT.getTodayPracticeForStudent(student);
   const D = window.JUCUM_DATA;
+  const todayISO = peruDayKey();
+  const { items, isGeneric } = TT.getTodayPracticeForStudent(student, todayISO);
   const mods = D.MODULE_CATALOG[student.level] || [];
-  const dayName = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'][new Date().getDay()];
+  const dayName = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'][new Date(todayISO + 'T12:00:00').getDay()];
   if (!items || !items.length) return null;
+  const prog = D.getStudentProgress(student.id);
+  // Estado del DÍA por actividad: ok = hecha hoy y aprobada (o lectura/participación)
+  // · low = hecha hoy con nota baja (puede mejorarla) · todo = aún no la hace hoy.
+  const stats = items.map(it => {
+    if (!it.moduleId || !it.activityId) return { st: 'na' };
+    const e = prog.completed[`${it.moduleId}:${it.activityId}`];
+    if (!e || !e.date) return { st: 'todo' };
+    const day = new Date(Date.parse(e.date) - PERU_MS).toISOString().slice(0, 10);
+    if (day !== todayISO) return { st: 'todo' };
+    const noGrade = it.type === 'story' || it.type === 'dialog' || it.type === 'summary' || it.type === 'quizlet';
+    const ok = noGrade || D.entryPassed(e, student.level, student.group);
+    return { st: ok ? 'ok' : 'low', pct: noGrade ? null : (D.scorePct ? D.scorePct(e.score) : e.score) };
+  });
+  const ableN = stats.filter(s => s.st !== 'na').length;
+  const doneN = stats.filter(s => s.st === 'ok' || s.st === 'low').length;
+  const lowN = stats.filter(s => s.st === 'low').length;
+  const allDone = ableN > 0 && doneN === ableN;
+  const due = allDone ? (D.getDueReviews(student) || []) : [];
+  const refz = (allDone && D.getRefuerzo) ? D.getRefuerzo(student, 1) : [];
+  const gset = D.getGroupSettings(student.group) || {};
+  const metaLeft = Math.max(0, (gset.dailyTargetMin || 15) - (prog.todayMinutes || 0));
+  const badgeBase = {width:22, height:22, borderRadius:'50%', border:'2px solid', display:'inline-flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:13, flexShrink:0};
+  const badge = (s) => s.st === 'na' ? null
+    : s.st === 'ok' ? <span style={{...badgeBase, background:'#2EA84B', borderColor:'#2EA84B', color:'#fff'}}>✓</span>
+    : s.st === 'low' ? <span style={{...badgeBase, background:'#FFF3D6', borderColor:'#F0C66B', color:'#92510F', fontSize:12}}>↻</span>
+    : <span style={{...badgeBase, background:'#fff', borderColor:'#D8D2C0', color:'transparent'}}>·</span>;
   // Instructivo "Cómo practicar hoy" — del set asignado por el profe (si lo trae)
-  const plansToday = (TT.getPracticePlansForStudentOnDate ? TT.getPracticePlansForStudentOnDate(student, new Date().toISOString().slice(0,10)) : [])
+  const plansToday = (TT.getPracticePlansForStudentOnDate ? TT.getPracticePlansForStudentOnDate(student, todayISO) : [])
     .filter(p => p.assignToStudents !== false);
   const planWithGuide = plansToday.find(p => p.guide && p.guide.steps && p.guide.steps.length);
   const openGuide = () => {
@@ -1905,13 +1935,14 @@ function TodayPracticeCard({ student }) {
     window.JUCUM_GUIDE.openOverlay(g, { links, studentName: (student.fullName || '').split(' ')[0] });
   };
   return (
-    <div className="scard" style={{padding:0, overflow:'hidden', borderColor:'#90CAF9'}}>
-      <div style={{padding:'12px 15px', display:'flex', alignItems:'center', gap:11, background:'#EAF3FE', borderBottom:'1px solid #C5DEF7'}}>
-        <span style={{fontSize:20}}>🗓️</span>
-        <div style={{flex:1, fontSize:12.8, fontWeight:700, color:'#1B3B6F', lineHeight:1.4}}>
-          {isGeneric ? 'Tu plan recomendado para hoy' : 'Lo que tu profesor te dejó para hoy'}
+    <div className="scard" style={{padding:0, overflow:'hidden', borderColor: allDone ? '#A5D6A7' : '#90CAF9'}}>
+      <div style={{padding:'12px 15px', display:'flex', alignItems:'center', gap:11, background: allDone ? '#E9F7EA' : '#EAF3FE', borderBottom:'1px solid ' + (allDone ? '#BFE3C3' : '#C5DEF7')}}>
+        <span style={{fontSize:20}}>{allDone ? '🎉' : '🗓️'}</span>
+        <div style={{flex:1, fontSize:12.8, fontWeight:700, color: allDone ? '#1B5E20' : '#1B3B6F', lineHeight:1.4}}>
+          {allDone ? '¡Terminaste tu práctica de hoy!' : (isGeneric ? 'Tu plan recomendado para hoy' : 'Lo que tu profesor te dejó para hoy')}
         </div>
-        <span style={{fontSize:11, fontWeight:700, color:'#5B7BA8', whiteSpace:'nowrap', textTransform:'capitalize'}}>{dayName}</span>
+        {ableN > 0 && <span style={{fontSize:11.5, fontWeight:800, color: allDone ? '#fff' : '#1B5E20', background: allDone ? '#2EA84B' : '#DDF0DE', borderRadius:14, padding:'4px 10px', whiteSpace:'nowrap'}}>{doneN}/{ableN} ✓</span>}
+        <span style={{fontSize:11, fontWeight:700, color: allDone ? '#4C7A50' : '#5B7BA8', whiteSpace:'nowrap', textTransform:'capitalize'}}>{dayName}</span>
       </div>
       {window.JUCUM_GUIDE && (
         <button onClick={openGuide} style={{display:'flex', alignItems:'center', gap:11, width:'100%', textAlign:'left', cursor:'pointer', border:'none', borderBottom:'1px solid #E7DFF5', background:'linear-gradient(120deg,#F3EEFC,#FBFAFF)', padding:'12px 15px', font:'inherit'}}>
@@ -1925,19 +1956,38 @@ function TodayPracticeCard({ student }) {
       )}
       <div className="next-row" style={{padding:'12px 13px'}}>
         {items.map((it, i) => {
+          const st = stats[i];
           const mod = mods.find(m => m.id === it.moduleId);
           const a = mod && (mod.activities || []).find(x => x.id === it.activityId);
           const href = (mod && a) ? linkFor(a, mod, student.id) : null;
+          const tint = st.st === 'ok' ? {background:'#F2FAF3', borderColor:'#BFE3C3'} : st.st === 'low' ? {background:'#FFFBF0', borderColor:'#F0DDB0'} : null;
+          const sub = st.st === 'ok'
+            ? <span style={{color:'#2E7D32', fontWeight:800}}>✓ Hecha hoy{st.pct != null ? ` · ${st.pct}%` : ''} — ¡bien ahí!</span>
+            : st.st === 'low'
+              ? <span style={{color:'#92510F', fontWeight:800}}>Hecha hoy · {st.pct}% — vuelve a intentarla (la nota cambia tras ½ hora)</span>
+              : <span>{isGeneric ? 'Recomendado para ti' : 'Indicado por tu profesor'}</span>;
           const inner = (<>
+            {badge(st)}
             <span className="next-ico">{typeIcon(it.type)}</span>
-            <div className="next-info"><b>{it.label}</b><span>{isGeneric ? 'Recomendado para ti' : 'Indicado por tu profesor'}</span></div>
+            <div className="next-info"><b>{it.label}</b>{sub}</div>
             {href && <span className="next-arr">→</span>}
           </>);
           return href
-            ? <a key={i} className="next-card" href={href}>{inner}</a>
-            : <div key={i} className="next-card" style={{cursor:'default'}}>{inner}</div>;
+            ? <a key={i} className="next-card" href={href} style={tint}>{inner}</a>
+            : <div key={i} className="next-card" style={{cursor:'default', ...(tint || {})}}>{inner}</div>;
         })}
       </div>
+      {allDone && (
+        <div style={{margin:'0 13px 13px', border:'1.5px solid #A5D6A7', background:'#F0FAF1', borderRadius:14, padding:'12px 14px'}}>
+          <div style={{fontWeight:800, fontSize:13.5, color:'#1B5E20', marginBottom:7}}>🌟 Completaste lo de hoy{metaLeft === 0 ? ' y tu meta diaria ✓' : ''}. ¿Y ahora?</div>
+          <div style={{display:'flex', flexDirection:'column', gap:6, fontSize:12.5, fontWeight:700, color:'#2E5231', lineHeight:1.5}}>
+            {lowN > 0 && <div>📈 Te quedaron <b>{lowN}</b> con nota baja: repasa el feedback y vuelve a intentarlas — tu nota se actualiza pasada la <b>media hora</b> del intento anterior.</div>}
+            {due.length > 0 && <div>🔁 Tienes <b>{due.length}</b> repaso{due.length === 1 ? '' : 's'} pendiente{due.length === 1 ? '' : 's'} — más abajo en <b>“Tu repaso de hoy”</b>. Hacerlo hoy fija lo aprendido 🧠</div>}
+            {metaLeft > 0 && <div>⏱ Te faltan <b>{metaLeft} min</b> para tu meta diaria{refz.length ? <> — complétala con un <b>Refuerzo ✨</b> (al final de esta página)</> : <> — una story es perfecta para cerrarla</>}.</div>}
+            {lowN === 0 && due.length === 0 && metaLeft === 0 && <div>Día redondo: práctica completa, sin pendientes y meta cumplida. ¡Vuelve mañana y cuida tu racha! 🔥</div>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
