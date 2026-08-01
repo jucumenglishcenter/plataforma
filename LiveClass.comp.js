@@ -112,12 +112,13 @@ function LCZone({ zone, scale, level }) {
  * Compacto: una línea por alumno con si ENTRÓ, si TERMINÓ, su tiempo y nota,
  * y un registro de PARTICIPACIÓN de un toque (👍 12 XP · 😐 7 · 👎 3) que se
  * guarda en su perfil como evaluación presencial. */
-const CB_STATES = [
-  { v:null, ico:'·',  bg:'#F7F6F2', fg:'#C4C4C4', bd:'#E8E5DC', stars:null, xp:0,  txt:'sin marcar' },
-  { v:2,    ico:'👍', bg:'#E8F5E9', fg:'#2E7D32', bd:'#A5D6A7', stars:5,    xp:12, txt:'participó bien' },
-  { v:1,    ico:'😐', bg:'#FFF8E1', fg:'#B26A00', bd:'#F0C66B', stars:3,    xp:7,  txt:'participó poco' },
-  { v:0,    ico:'👎', bg:'#FFEBEE', fg:'#C62828', bd:'#FFCDD2', stars:1,    xp:3,  txt:'no participó' },
+const CB_LV = [
+  { v:'exc',  ico:'⭐', label:'Excelente',      stars:5, xp:15, bg:'#E8F5E9', fg:'#1B5E20', bd:'#81C784' },
+  { v:'good', ico:'👍', label:'Bien',           stars:4, xp:12, bg:'#F1F8E9', fg:'#33691E', bd:'#C5E1A5' },
+  { v:'proc', ico:'🙂', label:'En proceso',     stars:3, xp:8,  bg:'#FFF8E1', fg:'#8A6D1A', bd:'#F0C66B' },
+  { v:'help', ico:'🤝', label:'Necesita apoyo', stars:2, xp:5,  bg:'#EEF2FF', fg:'#283593', bd:'#B3BEE8' },
 ];
+const cbLv = (v) => CB_LV.find(l => l.v === v) || null;
 const CB_PHASE = {
   working:  { ico:'🔴', txt:'practicando',  c:'#B71C1C' },
   start:    { ico:'🔴', txt:'recién entró', c:'#B71C1C' },
@@ -134,9 +135,18 @@ function ClassBoard({ roster, groupId }) {
   const [marks, setMarks] = React.useState({});
   const [saved, setSaved] = React.useState({});
   const [msg, setMsg] = React.useState(null);
-  const bump = (sid) => setMarks(m => ({ ...m, [sid]: ((m[sid] || 0) + 1) % CB_STATES.length }));
-  const st = (sid) => CB_STATES[marks[sid] || 0];
-  const pend = roster.filter(e => st(e.student.id).stars != null);
+  const [last, setLast] = React.useState(null);
+  const setMark = (e, lv) => {
+    setMarks(m => {
+      const cur = m[e.student.id];
+      const next = { ...m };
+      if (cur === lv.v) delete next[e.student.id]; else next[e.student.id] = lv.v;
+      return next;
+    });
+    setLast({ name: lcFirst(e.student.fullName), lv, off: marks[e.student.id] === lv.v });
+  };
+  const st = (sid) => cbLv(marks[sid]);
+  const pend = roster.filter(e => st(e.student.id));
   const totalXP = pend.reduce((s, e) => s + st(e.student.id).xp, 0);
   const order = { working:0, start:0, paused:1, done:2, finished:3, gone:4, off:5 };
   const list = roster.slice().sort((a, b) => (order[a.phase] ?? 9) - (order[b.phase] ?? 9) || a.student.fullName.localeCompare(b.student.fullName));
@@ -150,19 +160,20 @@ function ClassBoard({ roster, groupId }) {
       try {
         window.JUCUM_EVAL.saveEvaluation(e.student.id, {
           teacherName:'Profesor', ratings:{ participation: s.stars },
-          feedback:`🙋 Participación en clase: ${s.txt}` + (e.actName ? ` · practicó ${e.actName}` : ''),
+          feedback:`🙋 Participación en clase: ${s.label}` + (e.actName ? ` · practicó ${e.actName}` : ''),
           attachments:[], kind:'clase',
         });
       } catch (err) {}
       if (s.xp > 0 && D.addBonusXP) D.addBonusXP(e.student.id, s.xp);
       if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(e.student.id, {
-        type:'teacher-feedback', title:`🙋 Tu profesor registró tu participación (+${s.xp} XP)`, body:`${s.txt.charAt(0).toUpperCase() + s.txt.slice(1)}. ¡Sigue así! 💪`,
+        type:'teacher-feedback', title:`🙋 Tu profesor registró tu participación (+${s.xp} XP)`,
+        body:`Participación de hoy: ${s.label}. ¡Sigue así! 💪`,
       });
     });
     const ok = {}; pend.forEach(e => ok[e.student.id] = true);
     setSaved(p => ({ ...p, ...ok }));
     setMsg(`✅ Participación guardada para ${pend.length} alumno(s) · +${totalXP} XP`);
-    setMarks({});
+    setMarks({}); setLast(null);
     setTimeout(() => setMsg(null), 6000);
   };
 
@@ -172,16 +183,24 @@ function ClassBoard({ roster, groupId }) {
         <b style={{fontSize:13}}>📋 Tablero de la clase</b>
         <span style={{fontSize:11.5, fontWeight:800, color:'#1F3A8A', whiteSpace:'nowrap'}}>{nIn} entraron · {nFin} terminaron · {roster.length - nIn} sin entrar</span>
         <div style={{flex:1}}></div>
-        {pend.length > 0 && <span style={{fontSize:11.5, fontWeight:800, color:'#1F3A8A', background:'#E3E9F8', borderRadius:12, padding:'4px 10px'}}>{pend.length} · +{totalXP} XP</span>}
+        {pend.length > 0 && <span style={{fontSize:11.5, fontWeight:800, color:'#1F3A8A', background:'#E3E9F8', borderRadius:12, padding:'4px 10px', whiteSpace:'nowrap'}}>{pend.length} · +{totalXP} XP</span>}
         {pend.length > 0 && <button onClick={save} style={{cursor:'pointer', border:'none', background:'#1F3A8A', color:'#fff', borderRadius:20, padding:'7px 14px', fontFamily:'inherit', fontWeight:800, fontSize:12}}>💾 Guardar participación</button>}
         <button onClick={() => setOpen(v => !v)} style={{cursor:'pointer', border:'1.5px solid var(--border)', background:'#fff', color:'#666', borderRadius:20, padding:'6px 12px', fontFamily:'inherit', fontWeight:800, fontSize:11.5}}>{open ? 'Ocultar' : 'Ver'}</button>
       </div>
       {msg && <div style={{fontSize:12, fontWeight:800, color:'#1B5E20', background:'#E8F5E9', border:'1px solid #A5D6A7', borderRadius:10, padding:'7px 11px', marginTop:8}}>{msg}</div>}
       {open && (
+        <div style={{fontSize:11.5, fontWeight:800, borderRadius:10, padding:'6px 11px', marginTop:8,
+          background: last ? (last.off ? '#F5F5F0' : last.lv.bg) : '#F1F5FD', border:'1px solid ' + (last ? (last.off ? 'var(--border)' : last.lv.bd) : '#D8E1F5'),
+          color: last ? (last.off ? '#8A8A8A' : last.lv.fg) : '#5B6B8C'}}>
+          {last
+            ? <>{last.off ? '↩ Quitado: ' : '✔ Marcado: '}<b>{last.name}</b> · 🙋 Participación → {last.lv.ico} {last.lv.label}{!last.off && ` (+${last.lv.xp} XP)`}</>
+            : <>🙋 Registro de <b>participación</b> de la clase: {CB_LV.map(l => `${l.ico} ${l.label}`).join(' · ')}</>}
+        </div>
+      )}
+      {open && (
         <div style={{display:'grid', gap:3, marginTop:9, maxHeight:340, overflowY:'auto'}}>
           {list.map(e => {
             const ph = CB_PHASE[e.phase] || CB_PHASE.off;
-            const s = st(e.student.id);
             return (
               <div key={e.student.id} style={{display:'flex', alignItems:'center', gap:8, padding:'5px 9px', borderRadius:9, background:'#fff', border:'1px solid var(--border)'}}>
                 <span style={{fontSize:13, width:18, textAlign:'center'}}>{ph.ico}</span>
@@ -192,15 +211,24 @@ function ClassBoard({ roster, groupId }) {
                 <span style={{width:96, flexShrink:0, fontSize:10.5, fontWeight:800, color:ph.c, textAlign:'right', whiteSpace:'nowrap'}} title={e.phase === 'gone' ? 'Entró y salió sin terminar' : e.phase === 'paused' ? 'Dentro de la actividad pero sin moverse' : ph.txt}>{ph.txt}</span>
                 <span style={{width:42, flexShrink:0, fontSize:11, fontWeight:800, color:'#666', textAlign:'right', whiteSpace:'nowrap'}}>{e.phase !== 'off' ? e.elapsedMin + 'm' : '—'}</span>
                 <span style={{width:38, flexShrink:0, fontSize:11, fontWeight:800, textAlign:'right', whiteSpace:'nowrap', color: e.score != null ? (e.score >= 75 ? '#2E7D32' : '#B26A00') : '#C4C4C4'}}>{e.score != null ? e.score + '%' : '—'}</span>
-                <button onClick={() => bump(e.student.id)} title={`Participación · ${s.txt} (toca para cambiar)`}
-                  style={{width:40, height:28, cursor:'pointer', fontFamily:'inherit', fontSize:14, lineHeight:1, background:s.bg, color:s.fg, border:'1.5px solid ' + s.bd, borderRadius:8}}>{s.ico}</button>
+                <span style={{display:'flex', gap:3, flexShrink:0}}>
+                  {CB_LV.map(lv => {
+                    const on = marks[e.student.id] === lv.v;
+                    return (
+                      <button key={lv.v} onClick={() => setMark(e, lv)} title={`${e.student.fullName} · 🙋 Participación → ${lv.ico} ${lv.label} (+${lv.xp} XP)`}
+                        style={{width:26, height:26, cursor:'pointer', fontFamily:'inherit', fontSize:on ? 14 : 12, lineHeight:1,
+                          background: on ? lv.bg : '#fff', color: on ? lv.fg : '#C4C4C4', opacity: on ? 1 : .5,
+                          border:'1.5px solid ' + (on ? lv.bd : 'var(--border)'), borderRadius:7}}>{lv.ico}</button>
+                    );
+                  })}
+                </span>
                 {saved[e.student.id] && <span title="Participación guardada" style={{fontSize:11, fontWeight:800, color:'#2E7D32'}}>✓</span>}
               </div>
             );
           })}
         </div>
       )}
-      {open && <div style={{fontSize:10.5, color:'var(--text-soft)', fontWeight:700, marginTop:7}}>Participación: 👍 12 XP · 😐 7 · 👎 3 — se guarda en el perfil del alumno. ⚠ = practicó algo fuera del plan.</div>}
+      {open && <div style={{fontSize:10.5, color:'var(--text-soft)', fontWeight:700, marginTop:7}}>Participación: {CB_LV.map(l => `${l.ico} +${l.xp} XP`).join(' · ')} — se guarda en el perfil del alumno. ⚠ = practicó algo fuera del plan.</div>}
     </div>
   );
 }
