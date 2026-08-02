@@ -484,16 +484,30 @@ function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDu
 }
 
 /* ── 📊 Avance de un set de práctica (ventana flotante) ───────────────
- * Quiénes ya hicieron las actividades asignadas: ✅ en una fecha asignada ·
- * 🕐 otro día · ⬜ pendiente. Lee el progreso ya sincronizado (no toca la red). */
+ * Quiénes ya hicieron las actividades asignadas. Diseño “1b” elegido por la
+ * usuaria: columnas alineadas por actividad y una BARRA horizontal por alumno
+ * que avanza tramo a tramo en el orden de la práctica del día. Marcas
+ * DIBUJADAS (nada de emoji: en algunos equipos salían como cuadritos). */
+function PSMark({ s, size }) {
+  const z = size || 16;
+  if (s === 'ok') return <span style={{width:z, height:z, borderRadius:'50%', background:'#2EA84B', color:'#fff', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:z*0.62, fontWeight:900, lineHeight:1, flexShrink:0}}>✓</span>;
+  if (s === 'other') return <span style={{width:z, height:z, borderRadius:'50%', background:'#FFF3D6', border:'2px solid #E0A62E', color:'#8A6D1A', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:z*0.55, fontWeight:900, lineHeight:1, flexShrink:0, boxSizing:'border-box'}}>✓</span>;
+  return <span style={{width:z, height:z, borderRadius:'50%', background:'#fff', border:'2px dashed #D8D4C8', display:'inline-block', flexShrink:0, boxSizing:'border-box'}}></span>;
+}
 function PracticeSetProgress({ plan, onClose }) {
   const D = window.JUCUM_DATA;
   const group = (D.GROUPS || []).find(g => g.id === plan.groupId);
   const students = (D.STUDENTS || []).filter(s => s.group === plan.groupId).sort((a, b) => a.fullName.localeCompare(b.fullName));
   const acts = plan.activities || [];
   const dates = plan.dates || [];
-  const ICO = { story:'📗', reading:'📖', listening:'🎧', grammar:'📝', summary:'📚', quizlet:'🃏' };
   const dayOf = (iso) => { const t = Date.parse(iso || ''); return t ? new Date(t - 5 * 3600000).toISOString().slice(0, 10) : null; };
+  const shortOf = (a, i) => {
+    const base = ({ story:'Story', reading:'Reading', listening:'Listening', quizlet:'Quizlet' })[a.type]
+      || String(a.label || a.activityId).split('·')[0].trim();
+    const s = base.length > 15 ? base.slice(0, 14) + '…' : base;
+    return acts.some((b, j) => j !== i && (({ story:'Story', reading:'Reading', listening:'Listening', quizlet:'Quizlet' })[b.type] || String(b.label || b.activityId).split('·')[0].trim()) === base)
+      ? `${i + 1}· ${s}` : s;
+  };
   const rows = students.map(st => {
     const completed = (D.getStudentProgress(st.id) || {}).completed || {};
     const cells = acts.map(a => {
@@ -507,45 +521,70 @@ function PracticeSetProgress({ plan, onClose }) {
   });
   const full = rows.filter(r => r.ok === acts.length).length;
   const fmtD = (d) => { try { return new Date(d + 'T12:00:00').toLocaleDateString('es-PE', { day:'numeric', month:'short' }); } catch (e) { return d; } };
+  const cols = `minmax(150px, 220px) repeat(${Math.max(acts.length, 1)}, minmax(78px, 1fr)) 58px`;
+  const colTotal = (i) => rows.filter(r => r.cells[i] && r.cells[i].s === 'ok').length;
+  const colOther = (i) => rows.filter(r => r.cells[i] && r.cells[i].s === 'other').length;
   return (
     <div onClick={onClose} style={{position:'fixed', inset:0, zIndex:1001, background:'rgba(15,23,42,0.55)', backdropFilter:'blur(3px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
-      <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, width:'100%', maxWidth:640, boxShadow:'0 24px 60px rgba(0,0,0,0.35)', display:'flex', flexDirection:'column', maxHeight:'86vh'}}>
+      <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, width:'100%', maxWidth: Math.min(860, 320 + acts.length * 120), boxShadow:'0 24px 60px rgba(0,0,0,0.35)', display:'flex', flexDirection:'column', maxHeight:'86vh'}}>
         <div style={{padding:'15px 20px 12px', borderBottom:'1.5px solid #E3DCC9', position:'relative'}}>
           <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, color:'#5B3FA0'}}>📊 Avance · {plan.title}</div>
           <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginTop:3}}>
             {group ? group.name : ''} · {acts.length} actividad(es) · {dates.length ? 'día(s): ' + dates.map(fmtD).join(' · ') : 'sin fecha fija'}
           </div>
-          <div style={{fontSize:12, fontWeight:800, color: full ? '#2E7D32' : '#8a7f6a', marginTop:4}}>✅ {full} de {students.length} completaron todo en la fecha</div>
+          <div style={{fontSize:12.5, fontWeight:800, color: full ? '#2E7D32' : '#8a7f6a', marginTop:4}}>{full} de {students.length} completaron todo en la fecha</div>
           <button onClick={onClose} style={{position:'absolute', top:14, right:14, width:32, height:32, borderRadius:'50%', border:'none', background:'#FAFAF6', color:'#8a7f6a', fontSize:14, fontWeight:800, cursor:'pointer'}}>✕</button>
         </div>
-        <div style={{padding:'12px 16px', overflowY:'auto'}}>
+        <div style={{padding:'12px 16px 6px', overflowY:'auto', overflowX:'auto'}}>
           {!students.length ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">👥</div>Este grupo no tiene alumnos.</div> : (
-            <div style={{display:'grid', gap:4}}>
-              {rows.map(({ st, cells, ok, other }) => (
-                <div key={st.id} style={{display:'flex', alignItems:'center', gap:8, padding:'6px 10px', borderRadius:10,
-                  background: ok === acts.length ? '#F4FAF5' : '#FCFCFA', border:'1px solid ' + (ok === acts.length ? '#CDEBD2' : '#EEE9DC')}}>
-                  <span style={{flex:'1 1 150px', minWidth:120, fontWeight:800, fontSize:12.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{st.fullName}</span>
-                  <span style={{display:'flex', gap:4, flexWrap:'wrap'}}>
-                    {cells.map((c, i) => (
-                      <span key={i} title={`${c.a.label || c.a.activityId} · ${c.s === 'ok' ? ('hecha' + (c.sc != null ? ' · ' + c.sc + '%' : '')) : c.s === 'other' ? `la hizo otro día (${fmtD(c.d)})` : 'pendiente'}`}
-                        style={{display:'inline-flex', alignItems:'center', gap:3, fontSize:11, fontWeight:800, borderRadius:9, padding:'3px 7px',
-                          background: c.s === 'ok' ? '#E8F5E9' : c.s === 'other' ? '#FFF8E1' : '#F5F5F0',
-                          color: c.s === 'ok' ? '#2E7D32' : c.s === 'other' ? '#8A6D1A' : '#B5B5B5',
-                          border:'1px solid ' + (c.s === 'ok' ? '#A5D6A7' : c.s === 'other' ? '#F0C66B' : '#E8E5DC')}}>
-                        {ICO[c.a.type] || '📄'} {c.s === 'ok' ? '✅' : c.s === 'other' ? '🕐' : '⬜'}
+            <div style={{minWidth: 240 + acts.length * 86 + 62}}>
+              {/* Cabecera: las actividades del día, en su orden, UNA sola vez */}
+              <div style={{display:'grid', gridTemplateColumns:cols, gap:6, alignItems:'end', padding:'0 11px 6px'}}>
+                <span style={{fontSize:10.5, fontWeight:900, letterSpacing:'.05em', textTransform:'uppercase', color:'#A8A8A8'}}>Alumno</span>
+                {acts.map((a, i) => <span key={i} title={a.label || a.activityId} style={{textAlign:'center', fontSize:11.5, fontWeight:900, color:'#5B3FA0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{shortOf(a, i)}</span>)}
+                <span style={{textAlign:'right', fontSize:10.5, fontWeight:900, letterSpacing:'.05em', textTransform:'uppercase', color:'#A8A8A8'}}>Hecho</span>
+              </div>
+              {/* Una BARRA horizontal por alumno: avanza tramo a tramo */}
+              <div style={{display:'grid', gap:4}}>
+                {rows.map(({ st, cells, ok, other }) => {
+                  const all = acts.length > 0 && ok === acts.length;
+                  return (
+                    <div key={st.id} style={{display:'grid', gridTemplateColumns:cols, gap:6, alignItems:'center', padding:'6px 11px', borderRadius:10,
+                      background: all ? '#F4FAF5' : '#FCFCFA', border:'1px solid ' + (all ? '#CDEBD2' : '#EEE9DC')}}>
+                      <span style={{fontWeight:800, fontSize:12.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{st.fullName}</span>
+                      {cells.map((c, i) => (
+                        <span key={i} title={`${c.a.label || c.a.activityId} · ${c.s === 'ok' ? 'hecha en la fecha' + (c.sc != null ? ' · ' + c.sc + '%' : '') : c.s === 'other' ? 'la hizo otro día (' + fmtD(c.d) + ')' : 'pendiente'}`}
+                          style={{height:24, display:'flex', alignItems:'center', justifyContent:'center', gap:4,
+                            borderRadius: i === 0 ? '8px 3px 3px 8px' : i === cells.length - 1 ? '3px 8px 8px 3px' : 3,
+                            background: c.s === 'ok' ? '#2EA84B' : c.s === 'other' ? '#F2C14E' : '#EFEDE6',
+                            border: c.s === 'pend' ? '1px dashed #DAD5C6' : 'none', boxSizing:'border-box',
+                            color: c.s === 'ok' ? '#fff' : c.s === 'other' ? '#6B4E00' : '#B8B2A2',
+                            fontSize:10.5, fontWeight:900, whiteSpace:'nowrap', overflow:'hidden'}}>
+                          {c.s === 'ok' ? <>✓{c.sc != null ? ' ' + c.sc + '%' : ''}</> : c.s === 'other' ? <>✓ {fmtD(c.d)}</> : ''}
+                        </span>
+                      ))}
+                      <span style={{textAlign:'right', fontSize:12.5, fontWeight:800, whiteSpace:'nowrap', color: all ? '#2E7D32' : (ok || other) ? '#8A6D1A' : '#B5B5B5'}}>
+                        {ok}/{acts.length}{other ? <span title="hechas otro día" style={{color:'#B08A2E', fontSize:11}}> +{other}</span> : null}
                       </span>
-                    ))}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Total por actividad: dónde se atascaron */}
+              <div style={{display:'grid', gridTemplateColumns:cols, gap:6, alignItems:'center', padding:'8px 11px 4px', borderTop:'1px dashed #E3DCC9', marginTop:8}}>
+                <span style={{fontSize:10.5, fontWeight:900, letterSpacing:'.05em', textTransform:'uppercase', color:'#A8A8A8'}}>Total por actividad</span>
+                {acts.map((a, i) => (
+                  <span key={i} style={{textAlign:'center', fontSize:12, fontWeight:800, color: colTotal(i) ? '#2E7D32' : '#B5B5B5'}}>
+                    {colTotal(i)}/{students.length}{colOther(i) ? <span style={{color:'#B08A2E', fontSize:10.5}}> +{colOther(i)}</span> : ''}
                   </span>
-                  <span style={{width:56, textAlign:'right', fontSize:11.5, fontWeight:800, whiteSpace:'nowrap', color: ok === acts.length ? '#2E7D32' : ok ? '#8A6D1A' : '#B5B5B5'}}>
-                    {ok}/{acts.length}{other ? <span title="hechas otro día" style={{color:'#B08A2E'}}> +{other}</span> : null}
-                  </span>
-                </div>
-              ))}
+                ))}
+                <span></span>
+              </div>
             </div>
           )}
         </div>
-        <div style={{padding:'9px 18px 13px', borderTop:'1px dashed #E3DCC9', fontSize:11, fontWeight:700, color:'#8a7f6a'}}>
-          ✅ hecha en la fecha asignada · 🕐 la hizo otro día · ⬜ pendiente — pasa el cursor por un cuadrito para ver el detalle.
+        <div style={{padding:'9px 18px 13px', borderTop:'1px dashed #E3DCC9', fontSize:11.5, fontWeight:700, color:'#8a7f6a', display:'flex', alignItems:'center', gap:7, flexWrap:'wrap'}}>
+          <PSMark s="ok" /> hecha en la fecha <span style={{opacity:.4}}>·</span> <PSMark s="other" /> la hizo otro día <span style={{opacity:.4}}>·</span> <PSMark s="pend" /> pendiente <span style={{opacity:.5}}>— pasa el cursor por un tramo para ver el detalle.</span>
         </div>
       </div>
     </div>
