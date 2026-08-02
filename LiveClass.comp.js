@@ -29,7 +29,7 @@ function lcFirst(name) {
 }
 
 /* ── Personaje ───────────────────────────────────────────────────────── */
-function LCChar({ student, phase, bubble, mins, score, scale }) {
+function LCChar({ student, phase, bubble, mins, score, scale, onClick }) {
   const k = scale || 1;
   const skin = lcSkin(student.id);
   const off = phase === 'off' || phase === 'gone';
@@ -38,7 +38,8 @@ function LCChar({ student, phase, bubble, mins, score, scale }) {
   const anim = phase === 'working' || phase === 'start' ? 'lcBob 2.4s ease-in-out infinite'
              : phase === 'done' ? 'lcHop .9s ease-out 2' : 'none';
   return (
-    <div style={{width: 92*k, flexShrink:0, display:'flex', flexDirection:'column', alignItems:'center', position:'relative', paddingTop: bubble ? 44*k : 8*k, opacity: off ? .5 : 1}}>
+    <div onClick={onClick || null} title={onClick ? 'Ver qué practicó ' + lcFirst(student.fullName) : null}
+      style={{width: 92*k, flexShrink:0, display:'flex', flexDirection:'column', alignItems:'center', position:'relative', paddingTop: bubble ? 44*k : 8*k, opacity: off ? .5 : 1, cursor: onClick ? 'pointer' : 'default'}}>
       {bubble && (
         <div style={{position:'absolute', top:0, left:'50%', transform:'translateX(-50%)', width:'max-content', maxWidth:150*k, textAlign:'center', lineHeight:1.25, zIndex:3,
           background: phase === 'done' ? '#E8F5E9' : '#FFFFFF', border:'1.5px solid ' + (phase === 'done' ? '#A5D6A7' : '#FFCDD2'),
@@ -76,7 +77,7 @@ function LCChar({ student, phase, bubble, mins, score, scale }) {
 }
 
 /* ── Mesa (actividad) ────────────────────────────────────────────────── */
-function LCZone({ zone, scale, level }) {
+function LCZone({ zone, scale, level, onSelect }) {
   const k = scale || 1;
   const busy = zone.people.length > 0;
   const nDone = zone.people.filter(p => p.phase === 'done' || p.phase === 'finished').length;
@@ -102,7 +103,104 @@ function LCZone({ zone, scale, level }) {
         background:'repeating-linear-gradient(135deg, rgba(0,0,0,0.014) 0 10px, transparent 10px 20px)'}}>
         {zone.people.length === 0
           ? <div style={{width:'100%', textAlign:'center', fontSize:11.5*k, fontWeight:700, color:'#C4C4C4', alignSelf:'center'}}>nadie aquí aún</div>
-          : zone.people.map(p => <LCChar key={p.student.id} student={p.student} phase={p.phase} bubble={p.bubble} mins={p.elapsedMin} score={p.score} scale={k} />)}
+          : zone.people.map(p => <LCChar key={p.student.id} student={p.student} phase={p.phase} bubble={p.bubble} mins={p.elapsedMin} score={p.score} scale={k} onClick={onSelect ? () => onSelect(p.student) : null} />)}
+      </div>
+    </div>
+  );
+}
+
+/* ── 👁 Ventana flotante: qué practicó el alumno ─────────────────────
+ * Se abre al tocar un personaje o un nombre. Solo lee lo ya sincronizado. */
+function lcResolve(D, modId, actId) {
+  const cat = D.MODULE_CATALOG || {};
+  for (const lv of Object.keys(cat)) {
+    const m = (cat[lv] || []).find(x => x.id === modId);
+    if (m) return { mod: m, act: (m.activities || []).find(x => x.id === actId) || null };
+  }
+  return { mod: null, act: null };
+}
+const LC_DAY = (iso) => { const t = Date.parse(iso || ''); return t ? new Date(t - 5 * 3600000).toISOString().slice(0, 10) : null; };
+/* Nombre legible cuando la actividad ya no está en el catálogo (módulos viejos) */
+function lcActFallback(aid) {
+  const m = /^t(\d+)-(fill|id|tr)$/.exec(aid);
+  if (m) return { name: `T${m[1]} · ${({ fill:'Fill in', id:'Identification', tr:'Transform' })[m[2]]}`, ico:'📝' };
+  if (/^sum-/.test(aid)) return { name:'Resumen de gramática · ' + aid.slice(4), ico:'📚' };
+  if (aid === 'story') return { name:'Stories y Diálogos', ico:'📗' };
+  if (aid === 'reading') return { name:'Comprensión lectora', ico:'📖' };
+  if (aid === 'listening') return { name:'Comprensión auditiva', ico:'🎧' };
+  if (/quizlet/.test(aid)) return { name:'Quizlet', ico:'🃏' };
+  return { name: aid, ico:'📄' };
+}
+const LC_HOUR = (iso) => { const t = Date.parse(iso || ''); if (!t) return ''; const d = new Date(t - 5 * 3600000); return String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0'); };
+function StudentDayModal({ student, live, onClose }) {
+  const D = window.JUCUM_DATA;
+  const completed = (D.getStudentProgress(student.id) || {}).completed || {};
+  const today = LC_DAY(new Date().toISOString());
+  const all = Object.keys(completed).map(k => {
+    const i = k.indexOf(':');
+    const mid = k.slice(0, i), aid = k.slice(i + 1);
+    const e = completed[k] || {};
+    const r = lcResolve(D, mid, aid);
+    const fb = r.act ? null : lcActFallback(aid);
+    const sc = (typeof e.score === 'number') ? (e.score > 10 ? Math.round(e.score) : Math.round(e.score * 10)) : null;
+    return { k, e, day: LC_DAY(e.date), hour: LC_HOUR(e.date), sc,
+             name: r.act ? r.act.name : fb.name, ico: r.act ? (LC_ICO[r.act.type] || '📄') : fb.ico,
+             modName: r.mod ? `${r.mod.emoji || '📦'} ${r.mod.name}` : 'módulo anterior',
+             isStory: (r.act && r.act.type === 'story') || (!r.act && aid === 'story') };
+  }).filter(x => x.day).sort((a, b) => String(b.e.date).localeCompare(String(a.e.date)));
+  const hoy = all.filter(x => x.day === today);
+  const antes = all.filter(x => x.day !== today).slice(0, 3);
+  const skin = lcSkin(student.id);
+  const cls = window.JUCUM_LIVE ? window.JUCUM_LIVE.classify(live) : { phase:'off', elapsedMin:0 };
+  const ph = CB_PHASE[live ? cls.phase : 'off'] || CB_PHASE.off;
+  const zr = live ? lcResolve(D, live.module_id, live.activity_id) : { act:null };
+  const fmtD = (d) => { try { return new Date(d + 'T12:00:00').toLocaleDateString('es-PE', { weekday:'short', day:'numeric', month:'short' }); } catch (e) { return d; } };
+  const Row = ({ x }) => (
+    <div style={{display:'flex', alignItems:'center', gap:8, padding:'6px 10px', borderRadius:10, background:'#FCFCFA', border:'1px solid var(--border)'}}>
+      <span style={{fontSize:11, fontWeight:800, color:'#9A9A9A', width:38, flexShrink:0}}>{x.hour}</span>
+      <span style={{fontSize:14, flexShrink:0}}>{x.ico}</span>
+      <span style={{flex:1, minWidth:0}}>
+        <span style={{display:'block', fontWeight:800, fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{x.name}</span>
+        <span style={{display:'block', fontSize:10.5, fontWeight:700, color:'var(--text-soft)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{x.modName}</span>
+      </span>
+      {x.e.minutes ? <span style={{fontSize:11, fontWeight:800, color:'#666', whiteSpace:'nowrap'}}>{Math.round(x.e.minutes)}m</span> : null}
+      <span style={{fontSize:11.5, fontWeight:800, whiteSpace:'nowrap', color: x.isStory ? '#1F3A8A' : x.sc == null ? '#B5B5B5' : x.sc >= 75 ? '#2E7D32' : x.sc >= 50 ? '#B26A00' : '#C62828'}}>
+        {x.isStory ? '📗 leído' : x.sc != null ? x.sc + '%' : '✓'}
+      </span>
+    </div>
+  );
+  return (
+    <div onClick={onClose} style={{position:'fixed', inset:0, zIndex:1002, background:'rgba(15,23,42,0.55)', backdropFilter:'blur(3px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
+      <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, width:'100%', maxWidth:470, boxShadow:'0 24px 60px rgba(0,0,0,0.35)', display:'flex', flexDirection:'column', maxHeight:'84vh'}}>
+        <div style={{display:'flex', alignItems:'center', gap:11, padding:'14px 18px 12px', borderBottom:'1.5px solid var(--border)', position:'relative'}}>
+          <div style={{width:40, height:40, borderRadius:'50%', flexShrink:0, background:`linear-gradient(150deg, ${skin.head}, ${skin.body})`, display:'grid', placeItems:'center', color:'#fff', fontWeight:800, fontSize:14, fontFamily:"'Fredoka',sans-serif"}}>{lcInitials(student.fullName)}</div>
+          <div style={{flex:1, minWidth:0}}>
+            <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:16, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{student.fullName}</div>
+            <div style={{fontSize:11.5, fontWeight:800, color: ph.c}}>{ph.ico} {ph.txt}{live && cls.phase !== 'off' && zr.act ? ` · ${zr.act.name}` : ''}{live && (cls.phase === 'working' || cls.phase === 'paused' || cls.phase === 'start') ? ` · ${cls.elapsedMin} min` : ''}</div>
+          </div>
+          <button onClick={onClose} style={{position:'absolute', top:12, right:12, width:30, height:30, borderRadius:'50%', border:'none', background:'#FAFAF6', color:'#8a7f6a', fontSize:13, fontWeight:800, cursor:'pointer'}}>✕</button>
+        </div>
+        <div style={{padding:'12px 16px 14px', overflowY:'auto'}}>
+          <div style={{fontSize:11, fontWeight:800, letterSpacing:'.05em', textTransform:'uppercase', color:'#A8A8A8', marginBottom:6}}>Hoy · {hoy.length ? `${hoy.length} práctica(s)` : 'sin prácticas registradas'}</div>
+          {hoy.length
+            ? <div style={{display:'grid', gap:4}}>{hoy.map(x => <Row key={x.k} x={x} />)}</div>
+            : <div style={{fontSize:12, fontWeight:700, color:'var(--text-soft)', background:'#FAFAF6', border:'1px dashed var(--border)', borderRadius:10, padding:'9px 12px'}}>Todavía no registra prácticas hoy. Aquí aparecerán apenas termine una actividad.</div>}
+          {antes.length > 0 && (
+            <>
+              <div style={{fontSize:11, fontWeight:800, letterSpacing:'.05em', textTransform:'uppercase', color:'#A8A8A8', margin:'11px 0 6px'}}>Anteriores</div>
+              <div style={{display:'grid', gap:4}}>
+                {antes.map(x => (
+                  <div key={x.k} style={{display:'flex', alignItems:'center', gap:8, padding:'5px 10px', borderRadius:10, background:'#FAFAF8', border:'1px solid #F0EDE4', opacity:.85}}>
+                    <span style={{fontSize:10.5, fontWeight:800, color:'#B0B0B0', width:74, flexShrink:0}}>{fmtD(x.day)}</span>
+                    <span style={{fontSize:13, flexShrink:0}}>{x.ico}</span>
+                    <span style={{flex:1, minWidth:0, fontWeight:800, fontSize:11.5, color:'#6B6B6B', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{x.name}</span>
+                    <span style={{fontSize:11, fontWeight:800, color:'#9A9A9A'}}>{x.isStory ? '📗' : x.sc != null ? x.sc + '%' : '✓'}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -122,6 +220,7 @@ const cbLv = (v) => CB_LV.find(l => l.v === v) || null;
 const CB_PHASE = {
   working:  { ico:'🔴', txt:'practicando',  c:'#B71C1C' },
   start:    { ico:'🔴', txt:'recién entró', c:'#B71C1C' },
+  practiced:{ ico:'✔', txt:'practicó hoy', c:'#2E7D32' },
   paused:   { ico:'⏸',  txt:'sin moverse',  c:'#B26A00' },
   done:     { ico:'✅', txt:'terminó ahora', c:'#2E7D32' },
   finished: { ico:'✅', txt:'ya terminó',   c:'#2E7D32' },
@@ -129,7 +228,7 @@ const CB_PHASE = {
   off:      { ico:'💤', txt:'no ha entrado', c:'#9A9A9A' },
 };
 
-function ClassBoard({ roster, groupId }) {
+function ClassBoard({ roster, groupId, onSelect }) {
   const D = window.JUCUM_DATA;
   const [open, setOpen] = React.useState(true);
   const [marks, setMarks] = React.useState({});
@@ -148,7 +247,7 @@ function ClassBoard({ roster, groupId }) {
   const st = (sid) => cbLv(marks[sid]);
   const pend = roster.filter(e => st(e.student.id));
   const totalXP = pend.reduce((s, e) => s + st(e.student.id).xp, 0);
-  const order = { working:0, start:0, paused:1, done:2, finished:3, gone:4, off:5 };
+  const order = { working:0, start:0, paused:1, done:2, finished:3, practiced:4, gone:5, off:6 };
   const list = roster.slice().sort((a, b) => (order[a.phase] ?? 9) - (order[b.phase] ?? 9) || a.student.fullName.localeCompare(b.student.fullName));
   const nIn = roster.filter(e => e.phase !== 'off').length;
   const nFin = roster.filter(e => e.phase === 'done' || e.phase === 'finished').length;
@@ -204,7 +303,8 @@ function ClassBoard({ roster, groupId }) {
             return (
               <div key={e.student.id} style={{display:'flex', alignItems:'center', gap:8, padding:'5px 9px', borderRadius:9, background:'#fff', border:'1px solid var(--border)'}}>
                 <span style={{fontSize:13, width:18, textAlign:'center'}}>{ph.ico}</span>
-                <span style={{flex:'1 1 120px', minWidth:90, fontWeight:800, fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{lcFirst(e.student.fullName)}</span>
+                <span onClick={onSelect ? () => onSelect(e.student) : null} title={onSelect ? 'Ver qué practicó' : null}
+                  style={{flex:'1 1 120px', minWidth:90, fontWeight:800, fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', cursor: onSelect ? 'pointer' : 'default', textDecoration: onSelect ? 'underline dotted 1px' : 'none', textUnderlineOffset:3}}>{lcFirst(e.student.fullName)}</span>
                 <span style={{flex:'1 1 130px', minWidth:0, fontSize:11, fontWeight:700, color:'var(--text-soft)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
                   {e.actName || '—'}{e.actName && !e.inPlan ? ' ⚠' : ''}{e.exam ? ' 🎓' : ''}
                 </span>
@@ -243,6 +343,7 @@ function LiveClassroom({ groupId, embedded, lockGroup, focusKeys, planId }) {
   const [big, setBig] = React.useState(false);
   const [showEmpty, setShowEmpty] = React.useState(false);
   const [pickOpen, setPickOpen] = React.useState(false);
+  const [inspect, setInspect] = React.useState(null);   // 👁 alumno en la ventana flotante
   const [, setTick] = React.useState(0);
   React.useEffect(() => { if (groupId) setGid(groupId); }, [groupId]);
 
@@ -295,9 +396,23 @@ function LiveClassroom({ groupId, embedded, lockGroup, focusKeys, planId }) {
   const examZone = { key:'__exam', icon:'🎓', name:'Rindiendo examen', sub:'no cuenta como práctica', people:[] };
 
   const byId = {}; (rows || []).forEach(r => { byId[r.user_id] = r; });
+  /* ¿Practicó HOY (día Perú) aunque su presencia ya no esté? La fila única de
+   * presencia se pisa con cada material; las notas del día no mienten. Así un
+   * alumno que SÍ practicó jamás cae en "no entran a practicar". */
+  const todayPeru = new Date(now - 5 * 3600000).toISOString().slice(0, 10);
+  const practicedToday = (sid) => {
+    try {
+      const c = (D.getStudentProgress(sid) || {}).completed || {};
+      return Object.values(c).some(e => {
+        const t = Date.parse((e && e.date) || '');
+        return t && new Date(t - 5 * 3600000).toISOString().slice(0, 10) === todayPeru;
+      });
+    } catch (e) { return false; }
+  };
   const roster = [];                  // 📋 tablero de la clase (todos los alumnos)
   const waiting = [];                 // todavía no entran
-  const leftEarly = [];               // entraron y salieron sin terminar
+  const practiced = [];               // sin presencia AHORA, pero con práctica hoy
+  const leftEarly = [];               // entraron y salieron sin terminar (y sin nota hoy)
   let nWorking = 0, nDone = 0;
   members.forEach(st => {
     const r = byId[st.id];
@@ -307,8 +422,16 @@ function LiveClassroom({ groupId, embedded, lockGroup, focusKeys, planId }) {
                     score: r ? r.score : null, actName: act ? act.name : (r ? (r.material_name || r.activity_id) : null),
                     exam: r ? r.exam : false, inPlan: r ? (!focus.length || focus.includes(r.module_id + ':' + r.activity_id)) : true };
     roster.push(entry);
-    if (!r || c.phase === 'off') { waiting.push({ student: st, phase:'off' }); return; }
-    if (c.phase === 'gone') { leftEarly.push(entry); return; }   // no ocupa mesa: se fue sin terminar
+    if (!r || c.phase === 'off') {
+      if (practicedToday(st.id)) { entry.phase = 'practiced'; practiced.push(entry); }
+      else waiting.push({ student: st, phase:'off' });
+      return;
+    }
+    if (c.phase === 'gone') {
+      if (practicedToday(st.id)) { entry.phase = 'practiced'; practiced.push(entry); }
+      else leftEarly.push(entry);
+      return;
+    }
     const p = { student: st, phase: c.phase, bubble: c.bubble, elapsedMin: c.elapsedMin, score: r.score };
     if (c.phase === 'done' || c.phase === 'finished') nDone++; else nWorking++;
     const z = r.exam ? examZone : (zoneBy[r.module_id + ':' + r.activity_id] || extra);
@@ -356,6 +479,7 @@ function LiveClassroom({ groupId, embedded, lockGroup, focusKeys, planId }) {
         <div style={{flex:1}}></div>
         <span style={{fontSize:12, fontWeight:800, color:'#B71C1C'}}>🔴 {nWorking} practicando</span>
         <span style={{fontSize:12, fontWeight:800, color:'#2E7D32'}}>✅ {nDone} ya terminaron</span>
+        {practiced.length > 0 && <span style={{fontSize:12, fontWeight:800, color:'#2E7D32'}}>✔ {practiced.length} practicaron hoy</span>}
         <span style={{fontSize:12, fontWeight:800, color:'#9A9A9A'}}>💤 {waiting.length} sin entrar</span>
         <button onClick={() => setPickOpen(v => !v)} style={{cursor:'pointer', borderRadius:20, padding:'6px 12px', fontWeight:800, fontSize:12, fontFamily:'inherit',
           border:'1.5px solid ' + (focus.length ? '#1F3A8A' : 'var(--border)'), background: focus.length ? '#EEF2FF' : '#fff', color: focus.length ? '#1F3A8A' : '#777'}}>
@@ -416,8 +540,8 @@ function LiveClassroom({ groupId, embedded, lockGroup, focusKeys, planId }) {
           )}
 
           <div style={{display:'grid', gap:12, gridTemplateColumns:`repeat(auto-fill, minmax(${big ? 380 : 290}px, 1fr))`}}>
-            {busy.map(z => <LCZone key={z.key} zone={z} scale={k} level={level} />)}
-            {(showIdleAlways || showEmpty) && idle.map(z => <LCZone key={z.key} zone={z} scale={k} level={level} />)}
+            {busy.map(z => <LCZone key={z.key} zone={z} scale={k} level={level} onSelect={setInspect} />)}
+            {(showIdleAlways || showEmpty) && idle.map(z => <LCZone key={z.key} zone={z} scale={k} level={level} onSelect={setInspect} />)}
           </div>
 
           {outside.length > 0 && (
@@ -426,7 +550,7 @@ function LiveClassroom({ groupId, embedded, lockGroup, focusKeys, planId }) {
                 ⚠ Practicando algo fuera del plan de clase
               </div>
               <div style={{display:'grid', gap:12, gridTemplateColumns:`repeat(auto-fill, minmax(${big ? 380 : 290}px, 1fr))`}}>
-                {outside.map(z => <LCZone key={z.key} zone={z} scale={k} level={level} />)}
+                {outside.map(z => <LCZone key={z.key} zone={z} scale={k} level={level} onSelect={setInspect} />)}
               </div>
             </>
           )}
@@ -439,7 +563,7 @@ function LiveClassroom({ groupId, embedded, lockGroup, focusKeys, planId }) {
           )}
 
           {/* 📋 Tablero de la clase: quién entró, quién terminó y su participación */}
-          <ClassBoard roster={roster} groupId={group.id} />
+          <ClassBoard roster={roster} groupId={group.id} onSelect={setInspect} />
 
           {/* Sala de espera — solo quienes AÚN no entran (los que ya practicaron se quedan en su mesa) */}
           <div style={{marginTop:14, borderRadius:16, border:'1.5px solid var(--border)', background:'#FAFAF6', padding:'11px 13px 14px'}}>
@@ -449,17 +573,23 @@ function LiveClassroom({ groupId, embedded, lockGroup, focusKeys, planId }) {
               {leftEarly.length > 0 && <span style={{fontSize:11, fontWeight:800, color:'#B26A00', background:'#FFF8E1', border:'1px solid #F0C66B', borderRadius:11, padding:'2px 9px'}}>
                 ⚠ {leftEarly.length} entró y salió sin terminar: {leftEarly.map(e => lcFirst(e.student.fullName)).join(', ')}</span>}
             </div>
+            {practiced.length > 0 && (
+              <div style={{fontSize:11.5, fontWeight:800, color:'#1B5E20', background:'#E8F5E9', border:'1px solid #A5D6A7', borderRadius:11, padding:'6px 11px', marginBottom:7, lineHeight:1.5}}>
+                ✔ Ya practicaron hoy (aunque ahora no están dentro): {practiced.map(e => lcFirst(e.student.fullName)).join(', ')}
+              </div>
+            )}
             {waiting.length === 0
               ? <div style={{fontSize:12.5, fontWeight:800, color:'#2E7D32'}}>🎉 ¡Todo el grupo entró a practicar!</div>
               : <div style={{display:'flex', flexWrap:'wrap', gap:4}}>
-                  {waiting.map(w => <LCChar key={w.student.id} student={w.student} phase="off" bubble={null} mins={0} score={null} scale={k * 0.92} />)}
+                  {waiting.map(w => <LCChar key={w.student.id} student={w.student} phase="off" bubble={null} mins={0} score={null} scale={k * 0.92} onClick={() => setInspect(w.student)} />)}
                 </div>}
           </div>
         </>
       )}
 
+      {inspect && <StudentDayModal student={inspect} live={byId[inspect.id] || null} onClose={() => setInspect(null)} />}
       <div style={{fontSize:11, color:'var(--text-soft)', fontWeight:700, marginTop:10}}>
-        Se actualiza solo cada 10 s{ago != null ? ` · última lectura hace ${ago}s` : ''} · 🔴 practicando · ⏸ dentro pero sin moverse · ✅ ya terminó (se queda en su mesa el resto de la clase)
+        Se actualiza solo cada 10 s{ago != null ? ` · última lectura hace ${ago}s` : ''} · 🔴 practicando · ⏸ dentro pero sin moverse · ✅ ya terminó (se queda en su mesa el resto de la clase) · <b>toca un personaje o un nombre para ver qué practicó</b>
         <br/><b>📗 Stories:</b> no tienen nota — se miden por tiempo de lectura: a los <b>4 minutos</b> leyendo cuentan como terminadas (✅) y el tiempo sigue sumando hasta 30 min.
       </div>
       <style>{`@keyframes lcPulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes lcBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}@keyframes lcHop{0%{transform:translateY(0)}35%{transform:translateY(-9px)}100%{transform:translateY(0)}}@keyframes lcPop{0%{transform:translate(-50%,6px) scale(.8);opacity:0}100%{transform:translate(-50%,0) scale(1);opacity:1}}`}</style>
@@ -467,4 +597,4 @@ function LiveClassroom({ groupId, embedded, lockGroup, focusKeys, planId }) {
   );
 }
 
-Object.assign(window, { LiveClassroom, LCChar, LCZone, ClassBoard });
+Object.assign(window, { LiveClassroom, LCChar, LCZone, ClassBoard, StudentDayModal });

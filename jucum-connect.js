@@ -55,6 +55,7 @@
   // no mueve el mouse); el resto interactúa seguido — y el audio/video
   // reproduciéndose cuenta como actividad (eventos play/timeupdate).
   var WARN_AFTER_SEC   = IS_READING ? 5 * 60 : 2 * 60;
+  var STORY_IDLE_SEC   = 3 * 60;  // stories: 3 min sin señal de vida → pausa el conteo
   var CLOSE_AFTER_SEC  = 5 * 60;  // +5 min sin responder → fin de práctica
   var AUTO_DONE_SEC    = 4 * 60;  // stories: completar tras 4 min activos
   // Tope de lectura que cuenta para el reporte (en stories). El contador en
@@ -441,7 +442,14 @@
       // Cuenta el tiempo mientras la pestaña esté visible; nunca interrumpe,
       // nunca bloquea. Solo registra el tiempo de lectura (lo que monitoreamos).
       if (IS_STORY) {
-        if (document.visibilityState !== 'hidden') {
+        idleSec++;
+        // Lectura REAL (fix precisión): pestaña visible Y alguna señal de vida
+        // reciente — scroll, toque, tecla o audio sonando—. Leer con calma da
+        // hasta 3 min sin tocar nada; después el conteo se PAUSA solo (chip ⏸,
+        // el tablero lo muestra ⏸) y se reanuda al volver. Antes bastaba dejar
+        // la pestaña abierta para sumar hasta el tope y todos “leían” lo mismo.
+        paused = idleSec >= STORY_IDLE_SEC || document.visibilityState === 'hidden';
+        if (!paused) {
           activeSec++; activeDaySec++;
           if (!demo && activeSec % 120 === 0) pushDaily();
           var capMin = Math.min(READING_CAP_MIN, Math.round(activeSec / 60)); // tope silencioso para el reporte
@@ -723,7 +731,10 @@
       // Si YA terminó no se avisa la salida: la fila queda en "done" y el
       // profesor lo sigue viendo como ✅ terminado el resto de la clase
       // (antes volvía a caer en "no entró a practicar" y preocupaba al alumno).
-      if (!done) pushLive('left', null, true);
+      // Micro-visita (<45 s activos, sin terminar): NO se manda "left" — un
+      // vistazo de 5 s pisaba la fila única y borraba el ✅ o la práctica
+      // previa del día (caso fabricio, 01-ago). El estado anterior envejece solo.
+      if (!done && activeSec >= 45) pushLive('left', null, true);
       if (teacher) { logClass(); return; }
       pushDaily(); // los minutos del día SIEMPRE se salvan
       if (IS_STORY) { if (!demo && activeSec >= 60) pushProgress(100, Math.min(READING_CAP_MIN, Math.round(activeSec / 60))); return; }

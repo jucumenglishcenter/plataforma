@@ -168,6 +168,7 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
   const [groupId, setGroupId] = React.useState(GROUPS[0] ? GROUPS[0].id : null);
   const [summaryDate, setSummaryDate] = React.useState(null);   // ✅ resumen de la clase realizada
   const [dupPlan, setDupPlan] = React.useState(null);           // ⧉ duplicar plan a otro grupo
+  const [trackSet, setTrackSet] = React.useState(null);         // 📊 avance de un set de práctica
   const cells = monthMatrix(cursor.y, cursor.m);
   const prevM = () => setCursor(c => { const d = new Date(c.y, c.m - 1, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
   const nextM = () => setCursor(c => { const d = new Date(c.y, c.m + 1, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
@@ -260,7 +261,7 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
         {sel.practicePlans.map(p => (
           <DayRow key={p.id} icon="📝" tint="#F4EEFB" border="#D9CEEC" title={p.title}
             sub={`${(p.activities || []).length} actividad(es) · ${p.assignToStudents !== false ? '👥 asignado a alumnos' : '🙋 solo para mí'} · ${(p.dates || []).length} día(s)`}
-            onOpen={() => onEditPractice(p)} onDelete={() => { TT.deletePracticePlan(p.id); onChange(); }} />
+            onTrack={() => setTrackSet(p)} onOpen={() => onEditPractice(p)} onDelete={() => { TT.deletePracticePlan(p.id); onChange(); }} />
         ))}
         {selLog.length > 0 ? (
           <div style={{marginTop:10, borderTop:'1px dashed #E3DCC9', paddingTop:10}}>
@@ -288,6 +289,7 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
       </div>
       {summaryDate && <ClassSummaryModal date={summaryDate} groupId={groupId} onClose={() => setSummaryDate(null)} onDuplicate={(p) => { setSummaryDate(null); setDupPlan(p); }} />}
       {dupPlan && <DuplicateClassModal plan={dupPlan} onClose={() => setDupPlan(null)} onDone={() => { setDupPlan(null); onChange(); }} />}
+      {trackSet && <PracticeSetProgress plan={trackSet} onClose={() => setTrackSet(null)} />}
     </>
   );
 }
@@ -464,7 +466,7 @@ function DuplicateClassModal({ plan, onClose, onDone }) {
   );
 }
 
-function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDup }) {
+function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDup, onTrack }) {
   return (
     <div style={{display:'flex', alignItems:'center', gap:11, border:'1px solid ' + border, background: tint, borderRadius:11, padding:'10px 12px', marginBottom:8, flexWrap:'wrap'}}>
       <span style={{fontSize:19}}>{icon}</span>
@@ -473,9 +475,79 @@ function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDu
         <div style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700}}>{sub}</div>
       </div>
       {onPlay && <button onClick={onPlay} style={{...btnPrimary, padding:'6px 12px', fontSize:12.5, background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>▶ Modo clase</button>}
+      {onTrack && <button onClick={onTrack} title="Quiénes ya hicieron estas prácticas" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#B7A8E0', color:'#5B3FA0'}}>📊 Avance</button>}
       <button onClick={onOpen} style={{...btnGhost, padding:'6px 12px', fontSize:12.5}}>Abrir</button>
       {onDup && <button onClick={onDup} title="Duplicar a otro grupo" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>⧉ Duplicar</button>}
       <button onClick={onDelete} title="Eliminar" style={{...iconBtn, color:'#C0392B'}}>×</button>
+    </div>
+  );
+}
+
+/* ── 📊 Avance de un set de práctica (ventana flotante) ───────────────
+ * Quiénes ya hicieron las actividades asignadas: ✅ en una fecha asignada ·
+ * 🕐 otro día · ⬜ pendiente. Lee el progreso ya sincronizado (no toca la red). */
+function PracticeSetProgress({ plan, onClose }) {
+  const D = window.JUCUM_DATA;
+  const group = (D.GROUPS || []).find(g => g.id === plan.groupId);
+  const students = (D.STUDENTS || []).filter(s => s.group === plan.groupId).sort((a, b) => a.fullName.localeCompare(b.fullName));
+  const acts = plan.activities || [];
+  const dates = plan.dates || [];
+  const ICO = { story:'📗', reading:'📖', listening:'🎧', grammar:'📝', summary:'📚', quizlet:'🃏' };
+  const dayOf = (iso) => { const t = Date.parse(iso || ''); return t ? new Date(t - 5 * 3600000).toISOString().slice(0, 10) : null; };
+  const rows = students.map(st => {
+    const completed = (D.getStudentProgress(st.id) || {}).completed || {};
+    const cells = acts.map(a => {
+      const e = completed[a.moduleId + ':' + a.activityId];
+      if (!e) return { a, s:'pend' };
+      const d = dayOf(e.date);
+      const sc = (typeof e.score === 'number') ? (e.score > 10 ? Math.round(e.score) : Math.round(e.score * 10)) : null;
+      return { a, s: (!dates.length || dates.includes(d)) ? 'ok' : 'other', d, sc };
+    });
+    return { st, cells, ok: cells.filter(c => c.s === 'ok').length, other: cells.filter(c => c.s === 'other').length };
+  });
+  const full = rows.filter(r => r.ok === acts.length).length;
+  const fmtD = (d) => { try { return new Date(d + 'T12:00:00').toLocaleDateString('es-PE', { day:'numeric', month:'short' }); } catch (e) { return d; } };
+  return (
+    <div onClick={onClose} style={{position:'fixed', inset:0, zIndex:1001, background:'rgba(15,23,42,0.55)', backdropFilter:'blur(3px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
+      <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, width:'100%', maxWidth:640, boxShadow:'0 24px 60px rgba(0,0,0,0.35)', display:'flex', flexDirection:'column', maxHeight:'86vh'}}>
+        <div style={{padding:'15px 20px 12px', borderBottom:'1.5px solid #E3DCC9', position:'relative'}}>
+          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, color:'#5B3FA0'}}>📊 Avance · {plan.title}</div>
+          <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginTop:3}}>
+            {group ? group.name : ''} · {acts.length} actividad(es) · {dates.length ? 'día(s): ' + dates.map(fmtD).join(' · ') : 'sin fecha fija'}
+          </div>
+          <div style={{fontSize:12, fontWeight:800, color: full ? '#2E7D32' : '#8a7f6a', marginTop:4}}>✅ {full} de {students.length} completaron todo en la fecha</div>
+          <button onClick={onClose} style={{position:'absolute', top:14, right:14, width:32, height:32, borderRadius:'50%', border:'none', background:'#FAFAF6', color:'#8a7f6a', fontSize:14, fontWeight:800, cursor:'pointer'}}>✕</button>
+        </div>
+        <div style={{padding:'12px 16px', overflowY:'auto'}}>
+          {!students.length ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">👥</div>Este grupo no tiene alumnos.</div> : (
+            <div style={{display:'grid', gap:4}}>
+              {rows.map(({ st, cells, ok, other }) => (
+                <div key={st.id} style={{display:'flex', alignItems:'center', gap:8, padding:'6px 10px', borderRadius:10,
+                  background: ok === acts.length ? '#F4FAF5' : '#FCFCFA', border:'1px solid ' + (ok === acts.length ? '#CDEBD2' : '#EEE9DC')}}>
+                  <span style={{flex:'1 1 150px', minWidth:120, fontWeight:800, fontSize:12.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{st.fullName}</span>
+                  <span style={{display:'flex', gap:4, flexWrap:'wrap'}}>
+                    {cells.map((c, i) => (
+                      <span key={i} title={`${c.a.label || c.a.activityId} · ${c.s === 'ok' ? ('hecha' + (c.sc != null ? ' · ' + c.sc + '%' : '')) : c.s === 'other' ? `la hizo otro día (${fmtD(c.d)})` : 'pendiente'}`}
+                        style={{display:'inline-flex', alignItems:'center', gap:3, fontSize:11, fontWeight:800, borderRadius:9, padding:'3px 7px',
+                          background: c.s === 'ok' ? '#E8F5E9' : c.s === 'other' ? '#FFF8E1' : '#F5F5F0',
+                          color: c.s === 'ok' ? '#2E7D32' : c.s === 'other' ? '#8A6D1A' : '#B5B5B5',
+                          border:'1px solid ' + (c.s === 'ok' ? '#A5D6A7' : c.s === 'other' ? '#F0C66B' : '#E8E5DC')}}>
+                        {ICO[c.a.type] || '📄'} {c.s === 'ok' ? '✅' : c.s === 'other' ? '🕐' : '⬜'}
+                      </span>
+                    ))}
+                  </span>
+                  <span style={{width:56, textAlign:'right', fontSize:11.5, fontWeight:800, whiteSpace:'nowrap', color: ok === acts.length ? '#2E7D32' : ok ? '#8A6D1A' : '#B5B5B5'}}>
+                    {ok}/{acts.length}{other ? <span title="hechas otro día" style={{color:'#B08A2E'}}> +{other}</span> : null}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div style={{padding:'9px 18px 13px', borderTop:'1px dashed #E3DCC9', fontSize:11, fontWeight:700, color:'#8a7f6a'}}>
+          ✅ hecha en la fecha asignada · 🕐 la hizo otro día · ⬜ pendiente — pasa el cursor por un cuadrito para ver el detalle.
+        </div>
+      </div>
     </div>
   );
 }

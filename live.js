@@ -56,7 +56,11 @@
     if (!row) return { phase: 'off', bubble: null, elapsedMin: 0, fresh: false };
     var age = now - row.updatedMs;
     var since = now - row.startedMs;
-    var elapsedMin = Math.max(row.minutes || 0, Math.floor(since / 60000));
+    // ⏱️ Minutos REALES de práctica: los manda el material en cada latido
+    // (activeSec, que se pausa con pestaña oculta o sin interacción). El reloj
+    // de pared ya NO se usa como mínimo: inflaba el tiempo de quien dejaba la
+    // pestaña abierta y hacía que muchos “marquen lo mismo”.
+    var elapsedMin = (row.minutes != null) ? row.minutes : Math.floor(since / 60000);
     if (row.state === 'done') {
       return {
         phase: age <= DONE_MS ? 'done' : 'finished',
