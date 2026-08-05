@@ -66,7 +66,7 @@ function Forum({ user, groupOverride }) {
   const pinned = posts.filter(p => p.pinned);
   const others = posts.filter(p => !p.pinned);
 
-  const muted = !isTeacher && F.isMuted(user.studentId);
+  const muteInfo = (!isTeacher && F.getMuteInfo) ? F.getMuteInfo(user.studentId) : null;
 
   return (
     <main>
@@ -89,7 +89,7 @@ function Forum({ user, groupOverride }) {
         </div>
       )}
 
-      <NewPostBox user={user} groupId={selectedGroup} onPost={refresh} muted={muted} />
+      <NewPostBox user={user} groupId={selectedGroup} onPost={refresh} muted={muteInfo} />
 
       {pinned.length > 0 && (
         <div className="forum-section">
@@ -112,6 +112,7 @@ function Forum({ user, groupOverride }) {
       </div>
 
       {isTeacher && <MutedList groupId={selectedGroup} onChange={refresh} />}
+      {isTeacher && <FlagsList groupId={selectedGroup} onChange={refresh} />}
     </main>
   );
 }
@@ -122,18 +123,19 @@ function NewPostBox({ user, groupId, onPost, muted }) {
   const [body, setBody] = fUseState('');
   const [err, setErr] = fUseState('');
   const [media, setMedia] = fUseState(null);
+  const [reflect, setReflect] = fUseState(false);
 
-  if (muted) {
-    return (
-      <div className="forum-muted">
-        🔇 <b>Tu participación está restringida.</b> El profesor te ha silenciado temporalmente. Sigues pudiendo leer el foro.
-      </div>
-    );
-  }
+  if (muted) return <MutedBanner info={muted} />;
 
   const submit = () => {
     if (!title.trim()) { setErr('Pon un título a tu pregunta.'); return; }
     if (!body.trim() && !media) { setErr('Escribe el cuerpo de tu mensaje.'); return; }
+    const F = window.JUCUM_FORUM;
+    if (user.role !== 'teacher' && F.containsBadLanguage && F.containsBadLanguage(title + ' ' + body)) {
+      const s = window.JUCUM_DATA.STUDENTS.find(s => s.id === user.studentId);
+      if (s) F.registerBadAttempt({ id: s.id, name: s.fullName }, groupId, (title.trim() + ' — ' + body.trim()));
+      setErr(''); setReflect(true); return;
+    }
     const { STUDENTS } = window.JUCUM_DATA;
     const me = user.role === 'teacher'
       ? { id: 'teacher', name: 'Profesor', role: 'teacher' }
@@ -156,6 +158,7 @@ function NewPostBox({ user, groupId, onPost, muted }) {
   }
   return (
     <div className="forum-new">
+      {reflect && <BadWordsNotice onOk={() => setReflect(false)} />}
       {err && <div className="err" style={{marginBottom:10}}>⚠ {err}</div>}
       <input className="input-text" placeholder="Título de tu pregunta" value={title} onChange={e => setTitle(e.target.value)} />
       <textarea className="eval-textarea" placeholder="Escribe tu mensaje aquí…" rows={4} value={body} onChange={e => setBody(e.target.value)} />
@@ -178,6 +181,8 @@ function PostCard({ post, user, groupId, onChange }) {
   const [replyBody, setReplyBody] = fUseState('');
   const [pickOpen, setPickOpen] = fUseState(false);
   const [replyMedia, setReplyMedia] = fUseState(null);
+  const [replyReflect, setReplyReflect] = fUseState(false);
+  const [muteOpen, setMuteOpen] = fUseState(false);
 
   const reacts = F.getReactions ? F.getReactions(post.id) : (F.postLikes(post.id) || []).map(u => ({ u, e: '❤️' }));
   const myReact = reacts.find(r => r.u === myId);
@@ -186,13 +191,11 @@ function PostCard({ post, user, groupId, onChange }) {
   const onDelete = () => {
     if (confirm('¿Eliminar esta publicación?')) { F.deletePost(groupId, post.id); onChange(); }
   };
-  const onReact = (emoji) => { if (F.toggleReaction) F.toggleReaction(post.id, myId, emoji); else F.toggleLike(post.id, myId); setPickOpen(false); onChange(); };
-  const onMute = () => {
-    const days = parseInt(prompt(`Silenciar a ${post.authorName} por cuántos días?`, '3') || '0', 10);
-    if (!days || days < 1) return;
-    F.setMute(post.authorId, new Date(Date.now() + days*86400000).toISOString());
-    onChange();
+  const onReact = (emoji) => {
+    if (!isTeacher && F.isMuted(myId)) { setPickOpen(false); alert('🔇 Tu participación en el foro está pausada por ahora: puedes leer, pero no reaccionar. Revisa el aviso de arriba.'); return; }
+    if (F.toggleReaction) F.toggleReaction(post.id, myId, emoji); else F.toggleLike(post.id, myId); setPickOpen(false); onChange();
   };
+  const onMute = () => setMuteOpen(true);
   const onUnmute = () => { F.setMute(post.authorId, null); onChange(); };
 
   const submitReply = () => {
@@ -201,13 +204,20 @@ function PostCard({ post, user, groupId, onChange }) {
     const me = isTeacher
       ? { id: 'teacher', name: 'Profesor', role: 'teacher' }
       : (() => { const s = STUDENTS.find(s => s.id === myId); return { id: s.id, name: s.fullName, role: 'student' }; })();
-    if (!isTeacher && F.isMuted(me.id)) { alert('Estás silenciado.'); return; }
+    if (!isTeacher) {
+      const info = F.getMuteInfo ? F.getMuteInfo(me.id) : null;
+      if (info) { alert(`🔇 Tu participación en el foro está pausada (${info.reasonLabel}). Podrás participar de nuevo en ${info.daysLeft} día${info.daysLeft === 1 ? '' : 's'}.`); return; }
+      if (F.containsBadLanguage && F.containsBadLanguage(replyBody)) {
+        F.registerBadAttempt({ id: me.id, name: me.name }, groupId, replyBody.trim());
+        setReplyReflect(true); return;
+      }
+    }
     F.addReply(groupId, post.id, {
       authorId: me.id, authorName: me.name, authorRole: me.role,
       body: replyBody.trim(), parentId: null,
       mediaUrl: replyMedia ? replyMedia.url : null, mediaKind: replyMedia ? replyMedia.kind : null,
     });
-    setReplyBody(''); setReplyMedia(null); setShowReply(false); onChange();
+    setReplyBody(''); setReplyMedia(null); setShowReply(false); setReplyReflect(false); onChange();
   };
 
   const dateStr = relativeTime(post.date);
@@ -266,6 +276,7 @@ function PostCard({ post, user, groupId, onChange }) {
           )); })()}
           {showReply && (
             <div className="freply-new">
+              {replyReflect && <BadWordsNotice onOk={() => setReplyReflect(false)} />}
               <textarea className="eval-textarea" rows={2} placeholder="Escribe tu respuesta…" value={replyBody} onChange={e => setReplyBody(e.target.value)} />
               <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
                 <FAttach pending={replyMedia} setPending={setReplyMedia} />
@@ -278,6 +289,7 @@ function PostCard({ post, user, groupId, onChange }) {
           )}
         </div>
       )}
+      {muteOpen && <MuteModal student={{ id: post.authorId, name: post.authorName }} onClose={() => setMuteOpen(false)} onDone={() => { setMuteOpen(false); onChange(); }} />}
     </div>
   );
 }
@@ -288,6 +300,7 @@ function ReplyRow({ reply, post, user, groupId, onChange, isTeacher, kidsOf, dep
   const [showR, setShowR] = fUseState(false);
   const [body, setBody] = fUseState('');
   const [media, setMedia] = fUseState(null);
+  const [reflect, setReflect] = fUseState(false);
   const onDelete = () => {
     if (confirm('¿Eliminar esta respuesta?')) { F.deleteReply(groupId, post.id, reply.id); onChange(); }
   };
@@ -297,13 +310,20 @@ function ReplyRow({ reply, post, user, groupId, onChange, isTeacher, kidsOf, dep
     const me = isTeacher
       ? { id: 'teacher', name: 'Profesor', role: 'teacher' }
       : (() => { const s = STUDENTS.find(s => s.id === myId); return { id: s.id, name: s.fullName, role: 'student' }; })();
-    if (!isTeacher && F.isMuted(me.id)) { alert('Estás silenciado.'); return; }
+    if (!isTeacher) {
+      const info = F.getMuteInfo ? F.getMuteInfo(me.id) : null;
+      if (info) { alert(`🔇 Tu participación en el foro está pausada (${info.reasonLabel}). Podrás participar de nuevo en ${info.daysLeft} día${info.daysLeft === 1 ? '' : 's'}.`); return; }
+      if (F.containsBadLanguage && F.containsBadLanguage(body)) {
+        F.registerBadAttempt({ id: me.id, name: me.name }, groupId, body.trim());
+        setReflect(true); return;
+      }
+    }
     F.addReply(groupId, post.id, {
       authorId: me.id, authorName: me.name, authorRole: me.role,
       body: body.trim(), parentId: reply.id,
       mediaUrl: media ? media.url : null, mediaKind: media ? media.kind : null,
     });
-    setBody(''); setMedia(null); setShowR(false); onChange();
+    setBody(''); setMedia(null); setShowR(false); setReflect(false); onChange();
   };
   const isTeacherReply = reply.authorRole === 'teacher';
   const initials = reply.authorName.split(' ').map(n=>n[0]).slice(0,2).join('').toUpperCase();
@@ -323,6 +343,7 @@ function ReplyRow({ reply, post, user, groupId, onChange, isTeacher, kidsOf, dep
           <button onClick={() => setShowR(o => !o)} style={{border:'none', background:'none', color:'#1F3A8A', fontFamily:'inherit', fontWeight:800, fontSize:11.5, cursor:'pointer', padding:'4px 0 0'}}>↩ Responder</button>
           {showR && (
             <div className="freply-new" style={{marginTop:6}}>
+              {reflect && <BadWordsNotice onOk={() => setReflect(false)} />}
               <textarea className="eval-textarea" rows={2} placeholder="Escribe tu respuesta…" value={body} onChange={e => setBody(e.target.value)} />
               <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
                 <FAttach pending={media} setPending={setMedia} />
@@ -346,27 +367,132 @@ function ReplyRow({ reply, post, user, groupId, onChange, isTeacher, kidsOf, dep
 function MutedList({ groupId, onChange }) {
   const F = window.JUCUM_FORUM;
   const { STUDENTS } = window.JUCUM_DATA;
-  const mutes = F.getMutes();
-  const muted = Object.entries(mutes).filter(([id, until]) => {
-    if (new Date(until) <= new Date()) return false;
-    const s = STUDENTS.find(st => st.id === id);
-    return s && s.group === groupId;
-  });
+  const muted = Object.keys(F.getMutes()).map(id => ({ id, info: F.getMuteInfo(id), s: STUDENTS.find(st => st.id === id) }))
+    .filter(x => x.info && x.s && x.s.group === groupId);
   if (muted.length === 0) return null;
   return (
     <div className="scard" style={{marginTop:14}}>
-      <div className="sec-head"><div className="sec-title">🔇 Alumnos silenciados</div></div>
-      {muted.map(([id, until]) => {
-        const s = STUDENTS.find(st => st.id === id);
-        const days = Math.ceil((new Date(until) - new Date()) / 86400000);
+      <div className="sec-head"><div className="sec-title">🔇 Alumnos con participación restringida</div></div>
+      <div style={{fontSize:12.5, color:'var(--text-soft,#777)', margin:'2px 0 10px'}}>Pueden leer el foro, pero no publicar, comentar ni reaccionar. Ven el motivo al entrar a su plataforma y al abrir el foro.</div>
+      {muted.map(({ id, info, s }) => (
+        <div key={id} className="muted-row">
+          <span><b>{s.fullName}</b> @{s.username} · {info.reasonEmoji} {info.reasonLabel}</span>
+          <span className="muted-until">Hasta {new Date(info.until).toLocaleDateString('es-PE')} · {info.daysLeft}d restantes</span>
+          <button className="att-btn" onClick={() => { F.setMute(id, null); onChange(); }}>🔊 Quitar restricción</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* 🔇 Aviso al alumno restringido (arriba del foro): motivo + días restantes */
+function MutedBanner({ info }) {
+  const until = new Date(info.until).toLocaleDateString('es-PE', { day:'numeric', month:'long' });
+  return (
+    <div className="forum-muted" style={{lineHeight:1.65}}>
+      <div style={{fontSize:15}}>🔇 <b>Tu participación en el foro está pausada.</b></div>
+      <div style={{marginTop:4}}>Motivo: <b>{info.reasonEmoji} {info.reasonLabel}</b></div>
+      <div>Podrás publicar, comentar y reaccionar de nuevo el <b>{until}</b> ({info.daysLeft} {info.daysLeft === 1 ? 'día' : 'días'} más). Mientras tanto puedes leer el foro.</div>
+      <div style={{marginTop:6, fontSize:12.5}}>💛 Aprovecha este tiempo para pensar cómo tratarnos mejor: las palabras pueden animar o pueden herir. Te esperamos de vuelta con lo mejor de ti.</div>
+    </div>
+  );
+}
+
+/* ✋ Recordatorio reflexivo cuando el filtro detecta lisuras (el mensaje NO se publica) */
+function BadWordsNotice({ onOk }) {
+  return (
+    <div style={{background:'#FFF8E1', border:'2px solid #F6C445', borderRadius:14, padding:'14px 16px', marginBottom:10}}>
+      <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15, color:'#8C5A00'}}>✋ Un momento… tu mensaje tiene palabras que pueden herir</div>
+      <div style={{fontSize:13.5, color:'#6B4A00', lineHeight:1.65, marginTop:6}}>
+        En nuestro foro todos merecemos respeto. Las palabras tienen poder: pueden animar a un compañero… o hacerlo sentir muy mal. 💛<br/>
+        Piensa un momento: ¿cómo te gustaría que te lo dijeran a ti? Seguro puedes expresar lo mismo de una forma amable y respetuosa. ¡Inténtalo de nuevo!
+      </div>
+      <div style={{fontSize:12, color:'#8C5A00', marginTop:8, fontWeight:700}}>Tu mensaje no se publicó. El profesor recibe un aviso de estos intentos.</div>
+      <button className="btn-save" style={{marginTop:10}} onClick={onOk}>Voy a escribirlo mejor 💪</button>
+    </div>
+  );
+}
+
+/* 🔇 Modal del teacher: motivo + días (número libre) para restringir a un alumno */
+function MuteModal({ student, onClose, onDone }) {
+  const F = window.JUCUM_FORUM;
+  const [reason, setReason] = fUseState('lisuras');
+  const [days, setDays] = fUseState('3');
+  const n = parseInt(days, 10);
+  const valid = n >= 1 && n <= 365;
+  const until = valid ? new Date(Date.now() + n * 86400000) : null;
+  const confirm = () => {
+    if (!valid) return;
+    F.setMute(student.id, until.toISOString(), reason);
+    onDone();
+  };
+  return (
+    <div className="onb-backdrop" onClick={onClose}>
+      <div className="onb-card" onClick={e => e.stopPropagation()} style={{textAlign:'left', maxWidth:440}}>
+        <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:17}}>🔇 Restringir a {student.name}</div>
+        <div style={{fontSize:12.5, color:'var(--text-soft,#777)', margin:'5px 0 13px', lineHeight:1.55}}>No podrá publicar, comentar ni reaccionar en el foro (sí puede leerlo). Verá el motivo al entrar a su plataforma y al abrir el foro.</div>
+        <div className="settings-label">Motivo (el alumno lo verá)</div>
+        {Object.entries(F.MUTE_REASONS).map(([k, r]) => (
+          <label key={k} style={{display:'flex', gap:9, alignItems:'center', padding:'8px 11px', border:'1.5px solid ' + (reason === k ? '#1F3A8A' : 'var(--border)'), background:(reason === k ? '#E3E9F8' : '#fff'), borderRadius:10, marginBottom:6, cursor:'pointer', fontSize:13.5, fontWeight:700}}>
+            <input type="radio" name="mute-reason" checked={reason === k} onChange={() => setReason(k)} />
+            {r.emoji} {r.label}
+          </label>
+        ))}
+        <div className="settings-label" style={{marginTop:12}}>¿Por cuántos días?</div>
+        <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
+          <input className="input-text" type="number" min="1" max="365" value={days} onChange={e => setDays(e.target.value)} style={{width:110}} />
+          {valid && <span style={{fontSize:12.5, fontWeight:700}}>Podrá participar de nuevo el {until.toLocaleDateString('es-PE', { day:'numeric', month:'long' })}</span>}
+        </div>
+        <div className="forum-new-actions" style={{marginTop:16}}>
+          <button className="btn-cancel" onClick={onClose}>Cancelar</button>
+          <button className="btn-save" onClick={confirm} disabled={!valid}>🔇 Restringir {valid ? n + (n === 1 ? ' día' : ' días') : ''}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* 🚩 Registro de intentos de lenguaje inapropiado (solo teacher, por grupo) */
+function FlagsList({ groupId, onChange }) {
+  const F = window.JUCUM_FORUM;
+  const { STUDENTS } = window.JUCUM_DATA;
+  const [openId, setOpenId] = fUseState(null);
+  const [muteFor, setMuteFor] = fUseState(null);
+  const flags = (F.getFlags ? F.getFlags() : []).filter(f => {
+    const s = STUDENTS.find(st => st.id === f.studentId);
+    return f.groupId === groupId || (s && s.group === groupId);
+  });
+  if (flags.length === 0) return null;
+  const byStudent = {};
+  flags.forEach(f => { (byStudent[f.studentId] = byStudent[f.studentId] || []).push(f); });
+  return (
+    <div className="scard" style={{marginTop:14}}>
+      <div className="sec-head"><div className="sec-title">🚩 Intentos de lenguaje inapropiado</div></div>
+      <div style={{fontSize:12.5, color:'var(--text-soft,#777)', margin:'2px 0 10px'}}>Mensajes que el filtro <b>no dejó publicar</b>. El alumno vio en ese momento un recordatorio sobre el respeto.</div>
+      {Object.entries(byStudent).map(([sid, list]) => {
+        const s = STUDENTS.find(st => st.id === sid);
+        const name = s ? s.fullName : (list[0].studentName || sid);
         return (
-          <div key={id} className="muted-row">
-            <span><b>{s?.fullName}</b> @{s?.username}</span>
-            <span className="muted-until">Hasta {new Date(until).toLocaleDateString('es-PE')} · {days}d restantes</span>
-            <button className="att-btn" onClick={() => { F.setMute(id, null); onChange(); }}>🔊 Desbloquear</button>
+          <div key={sid} style={{border:'1px solid var(--border)', borderRadius:12, padding:'10px 12px', marginBottom:8}}>
+            <div style={{display:'flex', alignItems:'center', gap:9, flexWrap:'wrap'}}>
+              <b>{name}</b>
+              <span style={{background:'#FFEBEE', color:'#C62828', borderRadius:9, padding:'2px 8px', fontSize:11.5, fontWeight:800}}>{list.length} intento{list.length === 1 ? '' : 's'}</span>
+              <span style={{fontSize:12, color:'var(--text-soft,#777)'}}>último: {relativeTime(list[0].date)}</span>
+              <div style={{marginLeft:'auto', display:'flex', gap:6, flexWrap:'wrap'}}>
+                <button className="att-btn" onClick={() => setOpenId(openId === sid ? null : sid)}>{openId === sid ? 'Ocultar' : '👁 Ver mensajes'}</button>
+                {!F.isMuted(sid) && <button className="att-btn" onClick={() => setMuteFor({ id: sid, name })}>🔇 Restringir</button>}
+                <button className="att-btn" onClick={() => { if (confirm('¿Borrar el registro de intentos de ' + name + '?')) { F.deleteStudentFlags(sid); onChange(); } }}>🧹 Borrar</button>
+              </div>
+            </div>
+            {openId === sid && list.map(f => (
+              <div key={f.id} style={{background:'#FAFAF6', border:'1px solid var(--border-soft,#EEE)', borderRadius:9, padding:'7px 10px', marginTop:7, fontSize:12.5, lineHeight:1.5}}>
+                <span style={{color:'var(--text-soft,#777)', fontWeight:700}}>{new Date(f.date).toLocaleString('es-PE', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })} — </span>{f.content}
+              </div>
+            ))}
           </div>
         );
       })}
+      {muteFor && <MuteModal student={muteFor} onClose={() => setMuteFor(null)} onDone={() => { setMuteFor(null); onChange(); }} />}
     </div>
   );
 }
@@ -380,4 +506,4 @@ function relativeTime(iso) {
   return new Date(iso).toLocaleDateString('es-PE', { day:'numeric', month:'long' });
 }
 
-Object.assign(window, { Forum, NewPostBox, PostCard, ReplyRow, MutedList });
+Object.assign(window, { Forum, NewPostBox, PostCard, ReplyRow, MutedList, MutedBanner, BadWordsNotice, MuteModal, FlagsList });

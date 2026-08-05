@@ -18,6 +18,7 @@
     forum:    'jucum_forum_v1',
     mutes:    'jucum_mutes_v1',
     likes:    'jucum_likes_v1',
+    flags:    'jucum_forum_flags_v1',
   };
   const read  = k => { try { return JSON.parse(localStorage.getItem(k) || '{}'); } catch { return {}; } };
   const _stripHeavy = (node) => { if (Array.isArray(node)) { node.forEach(_stripHeavy); return; } if (node && typeof node === 'object') { if (typeof node.dataUrl === 'string') { delete node.dataUrl; if (!node.url) node.pending = true; } if (typeof node.voucher === 'string' && node.voucher.slice(0, 5) === 'data:') { node.voucher = null; node.voucherRef = true; } if (typeof node.screenshot === 'string' && node.screenshot.slice(0, 5) === 'data:' && node.screenshot.length > 400000) { node.screenshot = null; } Object.keys(node).forEach(k => _stripHeavy(node[k])); } };
@@ -148,8 +149,15 @@
     write(KEYS.likes, likesMap);
 
     const mutesMap = {};
-    (mutes || []).forEach(m => mutesMap[m.user_id] = m.until);
+    (mutes || []).forEach(m => mutesMap[m.user_id] = { until: m.until, reason: m.reason || null, since: m.created_at || null });
     write(KEYS.mutes, mutesMap);
+
+    // 🚩 Moderación · registro de intentos de lenguaje inapropiado (script 27).
+    // Si la tabla aún no existe, se conserva la copia local tal cual.
+    try {
+      const { data: flags, error: flagErr } = await sb.from('forum_flags').select('*').order('created_at', { ascending: false }).limit(300);
+      if (!flagErr && flags) write(KEYS.flags, flags.map(f => ({ id: f.id, studentId: f.student_id, studentName: f.student_name || '', groupId: f.group_id, content: f.content || '', date: f.created_at })));
+    } catch (e) {}
 
     // tareas (assignments + submissions)
     try {
@@ -272,14 +280,26 @@
     if (emojiOrNull) safe(SB().from('forum_likes').upsert({ post_id: postId, user_id: userId, emoji: emojiOrNull }, { onConflict: 'post_id,user_id' }));
     else safe(SB().from('forum_likes').delete().eq('post_id', postId).eq('user_id', userId));
   }
-  function pushMute(userId, until) {
-    if (until) safe(SB().from('forum_mutes').upsert({ user_id: userId, until }));
-    else safe(SB().from('forum_mutes').delete().eq('user_id', userId));
+  function pushMute(userId, until, reason) {
+    if (until) {
+      // Con motivo (script 27). Si la columna reason aún no existe, reintenta sin ella.
+      SB().from('forum_mutes').upsert({ user_id: userId, until, reason: reason || null })
+        .then(({ error }) => { if (error) safe(SB().from('forum_mutes').upsert({ user_id: userId, until })); })
+        .catch(() => safe(SB().from('forum_mutes').upsert({ user_id: userId, until })));
+    } else safe(SB().from('forum_mutes').delete().eq('user_id', userId));
   }
+  /* 🚩 Moderación · registro de intentos (tabla forum_flags · script 27) */
+  function pushFlag(f) {
+    safe(SB().from('forum_flags').insert({
+      id: f.id, student_id: f.studentId, student_name: f.studentName || null,
+      group_id: f.groupId || null, content: f.content || '',
+    }));
+  }
+  function deleteFlagsDb(studentId) { safe(SB().from('forum_flags').delete().eq('student_id', studentId)); }
 
   window.JUCUM_SYNC = {
     hydrate, pushSettings, pushProgress, pushNotif, markNotifRead, markAllNotifRead,
-    pushEvaluation, pushPost, pushReply, pushPin, deletePostDb, deleteReplyDb, pushLike, pushMute,
+    pushEvaluation, pushPost, pushReply, pushPin, deletePostDb, deleteReplyDb, pushLike, pushMute, pushFlag, deleteFlagsDb,
     pushModule, deleteModuleDb, fetchModules, fetchActivityParts, fetchModuleProgress, fetchModuleParts, computeStats,    pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb, uploadAttachments, refreshTasks, refreshProgress,
     pushExam, deleteExamDb, pushWindow, deleteWindowDb,
     pushAttendance, pushSurvey,

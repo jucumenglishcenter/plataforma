@@ -263,10 +263,24 @@ function StudentDashboard({ user, onLogout }) {
   }, [student.id]);
   const [fTick, setFTick] = React.useState(0);
   React.useEffect(() => {
-    const onStorage = (e) => { if (e.key && (e.key.startsWith('jucum_forum') || e.key.startsWith('jucum_likes'))) setFTick(t => t + 1); };
+    const onStorage = (e) => { if (e.key && (e.key.startsWith('jucum_forum') || e.key.startsWith('jucum_likes') || e.key.startsWith('jucum_mutes'))) setFTick(t => t + 1); };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, []);
+  // 🔇 Moderación · ventana la PRIMERA vez que el alumno entra con una
+  // restricción del foro activa (una vez por restricción, por equipo).
+  const [muteModal, setMuteModal] = React.useState(null);
+  React.useEffect(() => {
+    try {
+      const F = window.JUCUM_FORUM;
+      const info = F && F.getMuteInfo ? F.getMuteInfo(student.id) : null;
+      if (!info) return;
+      const mark = student.id + ':' + info.until;
+      if (localStorage.getItem('jucum_mute_seen_v1') === mark) return;
+      localStorage.setItem('jucum_mute_seen_v1', mark);
+      setMuteModal(info);
+    } catch (e) {}
+  }, [student.id, fTick]);
   // Avance en vivo: al volver a la pestaña (o cada 20 s) releemos SOLO el avance
   // de la nube — así lo que el alumno acaba de practicar en otra pestaña aparece
   // como completado y sus puntos suben sin recargar toda la plataforma.
@@ -433,6 +447,7 @@ function StudentDashboard({ user, onLogout }) {
       {!showOnb && !celebrate && alertKind && <StudentAlertModal kind={alertKind} student={student} onClose={() => setAlertKind(null)} />}
       {!showOnb && !celebrate && !alertKind && dropExp && <DropExplainModal exp={dropExp} student={student} onClose={() => { try { window.JUCUM_DATA.ackDropExplanation(student); } catch {} setDropExp(null); }} onGo={() => { setDropExp(null); setView('dashboard'); }} />}
       {!showOnb && !celebrate && !alertKind && !dropExp && taskDue && <TaskDueCartel assignment={taskDue} onGo={() => { setTaskDue(null); setView('tasks'); }} onClose={() => setTaskDue(null)} />}
+      {!showOnb && !celebrate && !alertKind && !dropExp && !taskDue && muteModal && <ForumMuteModal info={muteModal} onClose={() => setMuteModal(null)} />}
       <header className="app-header">
         <div className="app-logo">
           <img src={window.JUCUM_LOGO || 'logo-jucum.png'} alt="JUCUM EC" />
@@ -501,6 +516,9 @@ function StudentDashboard({ user, onLogout }) {
             <div className="streak-lbl">días<br/>seguidos</div>
           </div>
         </div>
+
+        {/* — 🔇 Aviso de restricción del foro (mientras dure) — */}
+        <ForumMuteBanner student={student} />
 
         {/* — Puntos SIEMPRE visibles + aviso de semana nueva — */}
         <PointsStrip student={student} xp={xp} xpInfo={xpInfo} />
@@ -1872,6 +1890,44 @@ function StudentAlertModal({ kind, student, onClose }) {
   );
 }
 
+/* 🔇 Moderación del foro · avisos al alumno (motivo + días restantes).
+ * La restricción la pone el teacher desde el foro; aquí solo se informa. */
+function ForumMuteBanner({ student }) {
+  const F = window.JUCUM_FORUM;
+  const info = F && F.getMuteInfo ? F.getMuteInfo(student.id) : null;
+  if (!info) return null;
+  const until = new Date(info.until).toLocaleDateString('es-PE', { day:'numeric', month:'long' });
+  return (
+    <div style={{display:'flex', gap:12, alignItems:'flex-start', background:'#FFF8E1', border:'2px solid #F6C445', borderRadius:16, padding:'13px 16px', marginTop:14}}>
+      <div style={{fontSize:26, lineHeight:1}}>🔇</div>
+      <div style={{fontSize:13.5, lineHeight:1.6, color:'#6B4A00'}}>
+        <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14.5, color:'#8C5A00'}}>Tu participación en el foro está pausada</b><br/>
+        Motivo: <b>{info.reasonEmoji} {info.reasonLabel}</b>. Podrás publicar y comentar de nuevo el <b>{until}</b> ({info.daysLeft} {info.daysLeft === 1 ? 'día' : 'días'} más). Mientras tanto puedes leer el foro y seguir practicando con normalidad. 💛
+      </div>
+    </div>
+  );
+}
+function ForumMuteModal({ info, onClose }) {
+  const until = new Date(info.until).toLocaleDateString('es-PE', { day:'numeric', month:'long' });
+  return (
+    <div className="onb-backdrop" onClick={onClose}>
+      <div className="onb-card" onClick={e => e.stopPropagation()} style={{borderTop:'6px solid #F6A609'}}>
+        <button className="onb-skip" onClick={onClose}>Cerrar</button>
+        <div className="onb-ico">🔇</div>
+        <div className="onb-title" style={{color:'#8C5A00'}}>Tu participación en el foro está pausada</div>
+        <div className="onb-body" style={{textAlign:'left'}}>
+          Motivo: <b>{info.reasonEmoji} {info.reasonLabel}</b>{info.reasonStudent ? <> — {info.reasonStudent}.</> : '.'}<br/><br/>
+          El foro es de todos, y todos merecemos sentirnos respetados. Las palabras tienen poder: pueden animar a un compañero o hacerlo sentir muy mal. Aprovecha estos días para pensar cómo decir las cosas de una forma amable. 💛<br/><br/>
+          Podrás publicar y comentar de nuevo el <b>{until}</b> ({info.daysLeft} {info.daysLeft === 1 ? 'día' : 'días'}). Mientras tanto puedes <b>leer el foro</b> y seguir practicando con normalidad.
+        </div>
+        <div className="onb-actions">
+          <button className="btn-save" onClick={onClose}>Entendido, lo haré mejor 💪</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProgressExplainer({ studentId }) {
   const key = 'jucum_explainer_dismissed_' + studentId;
   const [open, setOpen] = React.useState(false); // por defecto plegado: aparece como enlace discreto
@@ -2079,4 +2135,4 @@ function Collapsible({ title, meta, defaultOpen, children }) {
   );
 }
 
-Object.assign(window, { StudentDashboard, DirectedPracticeCard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase, AchievementWarning, ImproveBanner, StudentAlertModal, ProgressExplainer, ExplainerBody, TodayPracticeCard, Collapsible, StudentAvance, StudentNoGroup });
+Object.assign(window, { StudentDashboard, ForumMuteBanner, ForumMuteModal, DirectedPracticeCard, ActivityRow, DailyRing, ModuleProgress, XpCard, StreakCard, RankCard, MedalShowcase, AchievementWarning, ImproveBanner, StudentAlertModal, ProgressExplainer, ExplainerBody, TodayPracticeCard, Collapsible, StudentAvance, StudentNoGroup });

@@ -9,6 +9,7 @@ const NOTIF_ICONS = {
   'daily-reminder':   { icon:'🎯', color:'#E65100', bg:'#FFF3E0' },
   'forum-reply':      { icon:'💬', color:'#0D47A1', bg:'#E3F2FD' },
   'forum-like':       { icon:'❤️', color:'#C62828', bg:'#FFEBEE' },
+  'forum-flag':       { icon:'🚩', color:'#B71C1C', bg:'#FFEBEE' },
   'payment':          { icon:'💳', color:'#1F3A8A', bg:'#E3E9F8' },
   'payment-ok':       { icon:'✅', color:'#2E7D32', bg:'#E8F5E9' },
   'assignment':       { icon:'📝', color:'#6A1B9A', bg:'#F3E5F5' },
