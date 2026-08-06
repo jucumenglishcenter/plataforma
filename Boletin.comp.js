@@ -51,11 +51,22 @@ function boModulo(student, mod, examAtt, partis) {
   const examNota = (man && typeof man.grade === 'number') ? (att && (att.score || 0) > man.grade ? att.score : man.grade) : (att ? att.score : null);
   const examDia = att ? boPeruDay(att.created_at) : (man && man.gradedAt ? boPeruDay(man.gradedAt) : null);
   let abierto = D.getModuleOpenedAt ? D.getModuleOpenedAt(student.group, mod.id) : null;
+  /* 🚑 (06-ago) La fecha local de apertura puede faltar o ser reciente (se re-activó el módulo):
+   * referencia firme = la PRIMERA práctica del GRUPO en el módulo (progress está en todos los equipos). */
+  try {
+    let firstG = null;
+    (D.STUDENTS || []).filter(x => x.group === student.group).forEach(x => {
+      const c2 = (D.getStudentProgress(x.id) || {}).completed || {};
+      Object.keys(c2).forEach(k => { if (k.indexOf(mod.id + ':') !== 0) return; const e = c2[k]; if (e && e.date) { const d = boPeruDay(e.date); if (!firstG || d < firstG) firstG = d; } });
+    });
+    if (firstG && (!abierto || firstG < abierto)) abierto = firstG;
+  } catch (e) {}
   if (!abierto && dias.size) abierto = Array.from(dias).sort()[0];
   const hoy = boPeruDay(Date.now());
   const activo = activos.includes(mod.id);
   const fin = examDia || (activo ? hoy : (last || hoy));
-  const daysOpen = abierto ? Math.max(1, Math.round((Date.parse(fin) - Date.parse(abierto)) / 86400000) + 1) : null;
+  /* el denominador jamás puede ser menor que los días practicados (nada de “5/1 d”) */
+  const daysOpen = abierto ? Math.max(dias.size, 1, Math.round((Date.parse(fin) - Date.parse(abierto)) / 86400000) + 1) : (dias.size || null);
   const prac = daysOpen ? Math.min(100, Math.round(dias.size / daysOpen * 100)) : null;
   const stats = D.getModuleStats ? D.getModuleStats(student, mod) : { quality: 0, coverage: 0, done: 0, total: 0 };
   const pracDom = Math.round((stats.quality || 0) * (stats.coverage || 0) / 100);   // promedio de prácticas × cobertura
