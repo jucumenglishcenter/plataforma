@@ -236,10 +236,53 @@ function getAnnouncement(groupId, moduleId) { return loadAnn()[groupId + ':' + m
 function examForModule(moduleId, level) {
   return loadExams().find(e => (e.moduleIds || []).includes(moduleId) && (!level || e.level === level)) || null;
 }
-/* Ventana de examen (grupo completo) para un examen + grupo */
-function windowForExamGroup(examId, groupId) {
-  return loadWindows().find(w => w.examId === examId && w.groupId === groupId && !((w.targetStudentIds || []).length)) || null;
+/* Ventana de examen (grupo completo) para un examen + grupo.
+ * ⚠ ANTI-SOMBRA (fix 06-ago): si hay DUPLICADOS (p.ej. una ventana vacía creada desde otro
+ * equipo antes de hidratar la nube), SIEMPRE gana la que tiene notas (más results → published →
+ * la más antigua). Así una ventana vacía jamás "desaparece" las notas ya registradas. */
+function bestWindow(list) {
+  if (list.length <= 1) return list[0] || null;
+  return list.slice().sort((a, b) =>
+    (Object.keys(b.results || {}).length - Object.keys(a.results || {}).length) ||
+    ((b.published ? 1 : 0) - (a.published ? 1 : 0)) ||
+    ((a.date || '').localeCompare(b.date || '')))[0];
 }
+function windowForExamGroup(examId, groupId) {
+  return bestWindow(loadWindows().filter(w => w.examId === examId && w.groupId === groupId && !((w.targetStudentIds || []).length)));
+}
+
+/* 🚑 Reparación automática: fusiona ventanas duplicadas del MISMO examen+grupo (la que tiene
+ * notas absorbe a las demás: results/entregas/habilitados/published) y borra las sobrantes,
+ * en este equipo y en la nube. Corre sola al arrancar (tras hidratar) y puede llamarse a mano. */
+function repairDuplicateWindows() {
+  try {
+    const arr = loadWindows();
+    const groups = {};
+    arr.forEach(w => { if ((w.targetStudentIds || []).length) return; const k = w.examId + '|' + w.groupId; (groups[k] = groups[k] || []).push(w); });
+    let fixed = 0;
+    Object.values(groups).forEach(list => {
+      if (list.length <= 1) return;
+      const best = bestWindow(list);
+      let merged = false;
+      list.forEach(w => {
+        if (w.id === best.id) return;
+        Object.entries(w.results || {}).forEach(([sid, r]) => {
+          const cur = (best.results || {})[sid];
+          if (!cur || (typeof r.grade === 'number' && typeof cur.grade !== 'number') || (typeof r.grade === 'number' && (r.gradedAt || '') > (cur.gradedAt || ''))) { best.results = best.results || {}; best.results[sid] = r; }
+        });
+        Object.entries(w.submissions || {}).forEach(([sid, s]) => { best.submissions = best.submissions || {}; if (!best.submissions[sid]) best.submissions[sid] = s; });
+        (w.allowOverrides || []).forEach(id => { best.allowOverrides = best.allowOverrides || []; if (!best.allowOverrides.includes(id)) best.allowOverrides.push(id); });
+        if (w.published) best.published = true;
+        if (w.isOpen) best.isOpen = true;
+        deleteWindow(w.id);
+        merged = true; fixed++;
+      });
+      if (merged) saveWindow(best);
+    });
+    return fixed;
+  } catch (e) { return 0; }
+}
+setTimeout(function () { try { const n = repairDuplicateWindows(); if (n) console.log('🚑 Exámenes: ' + n + ' ventana(s) duplicada(s) fusionada(s) — notas restauradas a la vista.'); } catch (e) {} }, 12000);
 
 /* ETAPA 1 · Anunciar: avisa a los alumnos del grupo cuándo será su examen */
 function announceExam(groupId, moduleId, examId, dateStr) {
@@ -318,5 +361,5 @@ window.JUCUM_EXAMS = {
   openWindowsForStudent, canTakeWindow, toggleOverride, setWindowOpen,
   submitExam, gradeExam, publishResults, unpublishResults, partWeight, suggestedGrade, createDemoExam,
   groupsReadyForExam, notifyExamSoon, examPartLink,
-  examForModule, windowForExamGroup, getAnnouncement, announceExam, cancelAnnouncement,
+  examForModule, windowForExamGroup, getAnnouncement, announceExam, cancelAnnouncement, repairDuplicateWindows,
 };

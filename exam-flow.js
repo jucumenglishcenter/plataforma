@@ -261,7 +261,10 @@
   function formsExamId(level) { return 'ex-m1forms-' + level; }
   function formsWindowFor(group) {
     const X = window.JUCUM_EXAMS;
-    return X.getWindows().find(function (w) { return w.examId === formsExamId(group.level) && w.groupId === group.id; }) || null;
+    const list = X.getWindows().filter(function (w) { return w.examId === formsExamId(group.level) && w.groupId === group.id; });
+    if (list.length <= 1) return list[0] || null;
+    /* anti-sombra: gana la ventana CON notas */
+    return list.sort(function (a, b) { return (Object.keys(b.results || {}).length - Object.keys(a.results || {}).length) || ((a.date || '').localeCompare(b.date || '')); })[0];
   }
   function registerM1Forms(group) {
     const D = window.JUCUM_DATA, X = window.JUCUM_EXAMS, F = window.JUCUM_M1FORMS;
