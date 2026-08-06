@@ -380,23 +380,27 @@ function EcModResults({ group, module, members, onChange }) {
   const min = F.minGradeFor(group.id);
   const [rows, setRows] = ecUS(null);
   const [busy, setBusy] = ecUS(false);
+  const [err, setErr] = ecUS(null);
   const [ficha, setFicha] = ecUS('ap');
   const load = async () => {
     const SBW = window.JUCUM_SB; if (!SBW || !exam || isForms) { setRows([]); return; }
-    setBusy(true);
+    setBusy(true); setErr(null);
     try {
       const slugs = (exam.parts || []).map(p => (((p.url || '').match(/\/(m\d+)\/examen/) || [])[1])).filter(Boolean);
       const sb = SBW.getClient();
       const res = await sb.from('diagnostic_attempts').select('user_id,score,correct,total,sections,attempt_no,created_at,module_id,activity_id')
         .in('user_id', members.map(s => s.id)).order('created_at', { ascending: true }).limit(1000);
-      setRows(((res && res.data) || []).filter(r => r.module_id === 'exam-' + exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl)));
-    } catch (e) { setRows([]); }
+      if (res && res.error) { setErr(res.error.message); setRows([]); }
+      else setRows(((res && res.data) || []).filter(r => r.module_id === 'exam-' + exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl)));
+    } catch (e) { setErr(String(e && e.message || e)); setRows([]); }
     setBusy(false);
   };
   ecUE(() => { load(); }, [module.id]);
 
-  /* M1 por Google Forms: solo mostrar las notas registradas */
-  if (isM1 && formsWin && (!exam || isForms)) {
+  /* M1 por Google Forms: mostrar las notas registradas SIEMPRE que existan para este módulo */
+  const formsExam0 = formsWin ? X.getExam(formsWin.examId) : null;
+  const formsCubre = !!(formsWin && formsExam0 && (formsExam0.moduleIds || []).includes(module.id));
+  if (formsCubre && (!exam || isForms)) {
     return (
       <div className="scard">
         <div className="sec-head"><div className="sec-title">📋 Notas del {module.name}</div><span className="sec-meta">Google Forms · registradas y conservadas</span></div>
@@ -445,6 +449,13 @@ function EcModResults({ group, module, members, onChange }) {
           <button className="att-btn" onClick={load} disabled={busy}>{busy ? '⏳…' : '↻ Actualizar'}</button>
         </div>
       </div>
+      {err && <div className="scard" style={{marginBottom:12, background:'#FFEBEE', borderColor:'#EF9A9A'}}><div style={{fontSize:12.5, fontWeight:700, color:'#C62828'}}>⚠ No pude leer los intentos del examen desde la nube: {err} — avisa a Desarrollo con este mensaje.</div></div>}
+      {formsCubre && (
+        <div className="scard" style={{marginBottom:12}}>
+          <div className="sec-head"><div className="sec-title">📋 Notas registradas (Google Forms)</div><span className="sec-meta">se conservan tal cual</span></div>
+          <NotesList members={members} results={formsWin.results || {}} />
+        </div>
+      )}
       <div style={{display:'flex', gap:12, alignItems:'center', flexWrap:'wrap', background:'#FBFAF5', border:'1px solid var(--border)', borderRadius:12, padding:'9px 15px', fontSize:12.5, fontWeight:700, color:'#777', marginBottom:14}}>
         <span><b style={{fontSize:15}}>{list.filter(x => x.rindio).length}/{members.length}</b> rindieron</span>
         {prom != null && <span>promedio <b style={{fontSize:15}}>{prom}</b></span>}

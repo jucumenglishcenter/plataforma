@@ -232,9 +232,14 @@ function loadAnn() { try { return JSON.parse(localStorage.getItem(EANN_KEY) || '
 function saveAnn(a) { localStorage.setItem(EANN_KEY, JSON.stringify(a)); }
 function getAnnouncement(groupId, moduleId) { return loadAnn()[groupId + ':' + moduleId] || null; }
 
-/* Examen DEFINIDO (por Desarrollo) que cubre este módulo */
+/* Examen DEFINIDO (por Desarrollo) que cubre este módulo.
+ * ⚠ Preferencia (fix 06-ago): un examen REAL gana siempre; luego el registro de Forms;
+ * los 🧪 de PRUEBA al final — un examen de prueba olvidado ya no tapa las notas reales. */
 function examForModule(moduleId, level) {
-  return loadExams().find(e => (e.moduleIds || []).includes(moduleId) && (!level || e.level === level)) || null;
+  const list = loadExams().filter(e => (e.moduleIds || []).includes(moduleId) && (!level || e.level === level));
+  if (!list.length) return null;
+  const rank = e => /^ex-m1forms-/.test(e.id) ? 1 : /🧪/.test(e.title || '') ? 0 : 2;
+  return list.sort((a, b) => (rank(b) - rank(a)) || String(b.date || '').localeCompare(String(a.date || '')))[0];
 }
 /* Ventana de examen (grupo completo) para un examen + grupo.
  * ⚠ ANTI-SOMBRA (fix 06-ago): si hay DUPLICADOS (p.ej. una ventana vacía creada desde otro
