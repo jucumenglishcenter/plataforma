@@ -90,7 +90,9 @@ function TeacherDashboard({ onLogout, user }) {
       ) : view.kind === 'promote' ? (
         <LevelPromotion onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'exams' ? (
-        window.TeacherExamsFolders
+        window.ExamsCenter
+          ? <ExamsCenter onBack={() => setView({kind:'groups'})} initialGroup={view.group} />
+          : window.TeacherExamsFolders
           ? <TeacherExamsFolders onBack={() => setView({kind:'groups'})} initialGroup={view.group} />
           : <TeacherExams onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'forum' ? (
@@ -167,7 +169,7 @@ function TeacherAssessment({ onBack, canDefine, initialTab }) {
         </div>
       </div>
       {tab === 'eval' ? <TeacherEvaluate onBack={onBack} hideBack />
-        : tab === 'exams' ? (window.TeacherExamsFolders ? <TeacherExamsFolders onBack={onBack} hideBack canDefine={canDefine} /> : <TeacherExams onBack={onBack} canDefine={canDefine} hideBack />)
+        : tab === 'exams' ? (window.ExamsCenter ? <ExamsCenter onBack={onBack} hideBack canDefine={canDefine} /> : window.TeacherExamsFolders ? <TeacherExamsFolders onBack={onBack} hideBack canDefine={canDefine} /> : <TeacherExams onBack={onBack} canDefine={canDefine} hideBack />)
         : tab === 'tareas' ? (window.TeacherPractice ? <TeacherPractice onBack={onBack} only="tasks" /> : <main><div className="empty-state">Falta el módulo de tareas.</div></main>)
         : <PrepNotas />}
     </div>

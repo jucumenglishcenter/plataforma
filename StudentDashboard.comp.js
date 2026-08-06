@@ -462,6 +462,7 @@ function StudentDashboard({ user, onLogout }) {
           <a className={`nav-link ${view==='tasks'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('tasks');}}>📝 Tareas</a>
           <a className={`nav-link ${view==='exam'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('exam');}}>🎓 Examen</a>
           <a className={`nav-link ${(view==='diagnosis'||view==='report'||view==='avance')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('avance');}}>📈 Mi avance</a>
+          {window.StudentBoletin && <a className={`nav-link ${view==='boletin'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('boletin');}}>📔 Boletín</a>}
           <a className={`nav-link ${view==='payments'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('payments');}} style={{position:'relative', color:(acct.blocked||acct.state==='por_vencer')?'#C62828':undefined}}>💳 Pagos{(acct.blocked||acct.state==='por_vencer') && <span className="nav-dot">!</span>}</a>
           <span data-tut="bell" style={{display:'inline-flex'}}><NotifBell userId={student.id} onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); else if (n.link === 'tasks') setView('tasks'); else if (n.link === 'exam') setView('exam'); else if (n.link === 'messages') setView('mensajes'); else if (n.link === 'practica' || n.type === 'daily-reminder' || n.type === 'streak' || n.type === 'achievement') setView('practica'); }} /></span>
           <div className="user-pill">
@@ -490,6 +491,8 @@ function StudentDashboard({ user, onLogout }) {
         <StudentExams user={user} onBack={() => setView('dashboard')} />
       ) : (view === 'avance' || view === 'report' || view === 'diagnosis') ? (
         <StudentAvance user={user} student={student} onBack={() => setView('dashboard')} />
+      ) : view === 'boletin' && window.StudentBoletin ? (
+        <StudentBoletin user={user} student={student} onBack={() => setView('dashboard')} />
       ) : view === 'forum' ? (
         <>
           <button className="back-btn" onClick={() => setView('dashboard')} style={{padding:'10px 28px 0'}}>← Volver al panel</button>

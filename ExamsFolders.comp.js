@@ -623,7 +623,8 @@ function ModuleExamBanner({ mod, studentId }) {
 
   /* Ya rindió (nota automática instantánea): resultado + retroalimentación por parte */
   if (att && info.phase !== 'done') {
-    const passed = (att.score || 0) >= 75;
+    const minG = (F.minGradeFor ? F.minGradeFor(student.group) : 75);
+    const passed = (att.score || 0) >= minG;
     const rd = (info.ann && info.ann.retakeDays) ? Number(info.ann.retakeDays) : null;
     const availT = rd ? Date.parse(att._last || att.created_at) + rd * 86400000 : null;
     const canRetry = availT != null && Date.now() >= availT;
@@ -643,11 +644,43 @@ function ModuleExamBanner({ mod, studentId }) {
             : <>Terminaste el examen de <b>{mod.name}</b> y tu nota quedó registrada automáticamente. Aún hay temas que necesitas seguir repasando: <b>{weak.length ? weak.join(' · ') : 'las prácticas del módulo'}</b>. Cada minuto de práctica cuenta — síguele con tus repasos diarios. 💪</>}
           <br/>Tu profesora ya ve tu resultado con el detalle pregunta por pregunta. La <b>nota final del módulo</b> combina examen + práctica diaria — mírala en <b>Mi avance</b>.
           {att._n > 1 ? <><br/>🔁 Llevas <b>{att._n}</b> intentos — se muestra tu <b>mejor nota</b>.</> : null}
-          {rd != null && (canRetry && retryLink
-            ? <a href={retryLink} target="_blank" rel="noreferrer" style={{display:'block', textAlign:'center', marginTop:10, borderRadius:24, padding:'12px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15, color:'#fff', textDecoration:'none', background:'linear-gradient(135deg,#F4A02C,#E07A12)'}}>{passed ? '💪 Mejorar mi nota (opcional)' : '🔁 Volver a intentar el examen y mejorar mi nota'}</a>
-            : !canRetry ? <div style={{marginTop:9, background:'#FFF3E0', border:'1.5px solid #FFB74D', borderRadius:10, padding:'8px 11px', fontSize:12, color:'#8A5100', fontWeight:700}}>{passed
-                ? <>💪 <b>¿Quieres mejorar tu nota?</b> Podrás repetir el examen desde el <b>{new Date(availT).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })}</b> — es opcional: tu nota ya está registrada y siempre vale la mejor.</>
-                : <>🔁 Podrás volver a intentarlo el <b>{new Date(availT).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })}</b>. Tu plan hasta ese día: repite las prácticas de los temas marcados arriba y entrena con el 🧭 <b>pre-examen</b> de tu módulo — cada intento te deja más listo. 💪</>}</div> : null)}
+          {(() => {
+            /* 🔁 Nueva oportunidad tipo VENTANA (nuevo orden): abierta N días; rinde apenas cumple requisitos */
+            const rs = F.retOpenFor ? F.retOpenFor(student, mod.id, !passed) : { has: false };
+            if (rs.has) {
+              const R = rs.ret, q = rs.reqs || {};
+              if (!rs.inScope) return null;
+              const planBlk = !rs.blocked ? <RetPlanBlock student={student} mod={mod} att={att} /> : null;
+              if (rs.open && retryLink) return (
+                <>
+                  <a href={retryLink} target="_blank" rel="noreferrer" style={{display:'block', textAlign:'center', marginTop:10, borderRadius:24, padding:'12px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15, color:'#fff', textDecoration:'none', background:'linear-gradient(135deg,#F4A02C,#E07A12)'}}>{passed ? '💪 Mejorar mi nota (opcional)' : '🔁 Rendir mi recuperación ahora'}</a>
+                  <div style={{marginTop:6, fontSize:11.5, fontWeight:800, color:'#8A5100', textAlign:'center'}}>Ventana abierta hasta el <b>{F.fmtFecha(R.to)}</b> · vale tu mejor nota.</div>
+                  {planBlk}
+                </>
+              );
+              if (rs.blocked) return <div style={{marginTop:9, background:'#F7F5EF', border:'1.5px solid var(--border)', borderRadius:10, padding:'8px 11px', fontSize:12, color:'#777', fontWeight:700}}>⏸ Tu profesora habilitará tu nueva oportunidad — sigue practicando tu plan y consulta con ella. 💬</div>;
+              if (!rs.active) return F.pDay() < R.from ? (
+                <>
+                  <div style={{marginTop:9, background:'#FFF3E0', border:'1.5px solid #FFB74D', borderRadius:10, padding:'8px 11px', fontSize:12, color:'#8A5100', fontWeight:700}}>🔁 <b>Tu nueva oportunidad:</b> del <b>{F.fmtFecha(R.from)}</b> al <b>{F.fmtFecha(R.to)}</b>. Llega apto practicando cada día: 📘 resúmenes · ✏️ gramática · 📗 stories.</div>
+                  {planBlk}
+                </>
+              ) : null;
+              return (
+                <>
+                  <div style={{marginTop:9, background:'#FFF3E0', border:'1.5px solid #FFB74D', borderRadius:10, padding:'8px 11px', fontSize:12, color:'#8A5100', fontWeight:700, lineHeight:1.6}}>
+                    🔁 <b>Recuperación ABIERTA</b> del <b>{F.fmtFecha(R.from)}</b> al <b>{F.fmtFecha(R.to)}</b> — te falta: <b>apto {q.overall}% / {q.threshold}%</b>{q.dias14 != null ? <> · <b>práctica {q.dias14}/{F.retMin} días</b></> : null} · <b>avance {q.avance || 0}/{q.avanceMin || 2} días en tu ventana</b>. Apenas cumplas, tu botón aparece <b>aquí solo</b>. 💪
+                  </div>
+                  {planBlk}
+                </>
+              );
+            }
+            /* Modo clásico (retakeDays): se conserva si no hay ventana configurada */
+            return rd != null && (canRetry && retryLink
+              ? <a href={retryLink} target="_blank" rel="noreferrer" style={{display:'block', textAlign:'center', marginTop:10, borderRadius:24, padding:'12px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15, color:'#fff', textDecoration:'none', background:'linear-gradient(135deg,#F4A02C,#E07A12)'}}>{passed ? '💪 Mejorar mi nota (opcional)' : '🔁 Volver a intentar el examen y mejorar mi nota'}</a>
+              : !canRetry ? <div style={{marginTop:9, background:'#FFF3E0', border:'1.5px solid #FFB74D', borderRadius:10, padding:'8px 11px', fontSize:12, color:'#8A5100', fontWeight:700}}>{passed
+                  ? <>💪 <b>¿Quieres mejorar tu nota?</b> Podrás repetir el examen desde el <b>{new Date(availT).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })}</b> — es opcional: tu nota ya está registrada y siempre vale la mejor.</>
+                  : <>🔁 Podrás volver a intentarlo el <b>{new Date(availT).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })}</b>. Tu plan hasta ese día: repite las prácticas de los temas marcados arriba y entrena con el 🧭 <b>pre-examen</b> de tu módulo — cada intento te deja más listo. 💪</>}</div> : null);
+          })()}
         </div>
       </>
     ));
@@ -668,6 +701,25 @@ function ModuleExamBanner({ mod, studentId }) {
     ));
   }
   if (info.phase === 'waitgrade') {
+    /* 🔁 No rindió a tiempo pero hay VENTANA de recuperación: misma fecha y apoyo que los que recuperan */
+    const rs = F.retOpenFor ? F.retOpenFor(student, mod.id, true) : { has: false };
+    if (rs.has && rs.inScope && (rs.active || F.pDay() < rs.ret.from) && !rs.blocked) {
+      const R = rs.ret, q = rs.reqs || {};
+      const part0 = ((info.exam && info.exam.parts) || []).find(p => p.url);
+      const link2 = part0 ? part0.url + (part0.url.includes('?') ? '&' : '?') + 'jucum_exam=1&jucum_uid=' + encodeURIComponent(studentId) + '&jucum_mod=' + encodeURIComponent('exam-' + info.exam.id) + '&jucum_act=' + encodeURIComponent(part0.competency || '') + (info.ann && info.ann.variant ? '&jucum_variant=' + encodeURIComponent(info.ann.variant) : '') : null;
+      return box('#F0C46C', (
+        <>
+          {head('linear-gradient(135deg,#8A5100,#B26A00)', '🎓', 'Aún puedes rendirlo', mod.name + ' · nueva oportunidad', 'ventana del ' + F.fmtFecha(R.from) + ' al ' + F.fmtFecha(R.to), rs.active ? cd('🟢', 'abierta') : cd(F.daysTo(R.from), 'días'))}
+          <div style={{background:'#fff', padding:'12px 15px', fontSize:12.5, lineHeight:1.65, color:'#4A4A44', fontWeight:600}}>
+            {rs.open && link2
+              ? <>Cumples tus requisitos — puedes rendirlo <b>ahora</b>, dentro de la ventana. 📵 Quédate solo en la pestaña del examen; tus respuestas se guardan solas.
+                  <a href={link2} target="_blank" rel="noreferrer" style={{display:'block', textAlign:'center', marginTop:10, borderRadius:24, padding:'13px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:16, color:'#fff', textDecoration:'none', background:'linear-gradient(135deg,#E11930,#B71C1C)', boxShadow:'0 6px 18px rgba(225,25,48,.45)'}}>🎓 Dar mi examen ahora</a></>
+              : <>Para que tu examen se abra te falta: <b>apto {q.overall}% / {q.threshold}%</b>{q.dias14 != null ? <> · <b>práctica {q.dias14}/{F.retMin} días</b></> : null} · <b>avance {q.avance || 0}/{q.avanceMin || 2} días en tu ventana</b>. Practica cada día 📘 resúmenes · ✏️ gramática · 📗 stories — apenas cumplas, el botón aparece <b>aquí solo</b>. Tu profesora ve tu avance y puede abrirte el examen. 💪</>}
+            <RetPlanBlock student={student} mod={mod} att={null} />
+          </div>
+        </>
+      ));
+    }
     return box('var(--border)', (
       <div style={{background:'#F7F5EF', padding:'11px 15px', fontSize:12.5, fontWeight:700, color:'#777', display:'flex', gap:9, alignItems:'center'}}>
         🎓 El examen de {mod.name} ya cerró. Si lo rendiste, tu nota se registró <b>automáticamente</b> y aparecerá aquí en un momento. ✓
@@ -744,6 +796,60 @@ function ExamPlanModal({ student, mod, info, minDia, onClose }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* 🧭 ETAPA 3 · Plan de refuerzo con seguimiento diario (dentro de la ventana de recuperación).
+ * Todo se deriva del progreso real: sin marcar a mano. Lo no completado sigue pendiente
+ * al día siguiente (“se recupera”); items hechos ANTES de la ventana salen como “repásala”. */
+function RetPlanBlock({ student, mod, att }) {
+  const F = window.JUCUM_EXAMFLOW;
+  const [sel, setSel] = React.useState(null);
+  if (!F || !F.retPlan) return null;
+  const rs = F.retOpenFor(student, mod.id, true);
+  if (!rs.has || !rs.inScope) return null;
+  const R = rs.ret;
+  const weakK = att && att.sections ? ['L','R','X','G','V'].filter(k => { const s = att.sections[k]; return s && s.t && (s.h / s.t) < 0.75; }) : [];
+  const plan = F.retPlan(student, mod, weakK);
+  if (!plan.length) return null;
+  const done = F.retPlanDone(student, plan, R.from);
+  const hoy = F.pDay();
+  const av = F.retDias(student, R);
+  const minByDay = {}; (av.dias || []).forEach(d => { minByDay[d.date] = d.total || 0; });
+  const doneByDay = {}; Object.values(done).forEach(d => { if (d && d !== 'antes') doneByDay[d] = (doneByDay[d] || 0) + 1; });
+  const dias = [];
+  for (let t = Date.parse(R.from + 'T00:00:00Z'); t <= Date.parse(R.to + 'T00:00:00Z') && dias.length < 12; t += 86400000) dias.push(new Date(t).toISOString().slice(0, 10));
+  const pend = plan.filter(it => !done[it.actId] || done[it.actId] === 'antes');
+  const selDia = sel || hoy;
+  const itemsDia = selDia === hoy ? plan : plan.filter(it => done[it.actId] === selDia);
+  const dLbl = d => { try { return new Date(d + 'T12:00:00Z').toLocaleDateString('es-PE', { weekday: 'short', day: 'numeric' }); } catch (e) { return d; } };
+  const stC = d => d > hoy ? ['#fff', '#B0A99A', '1.5px dashed #E0DACB'] : doneByDay[d] ? ['#E8F5E9', '#2E7D32', '1.5px solid #A5D6A7'] : (minByDay[d] > 0 ? ['#FFF8E1', '#8A5100', '1.5px solid #FFD54F'] : d === hoy ? ['#fff', '#1F3A8A', '1.5px solid #1F3A8A'] : ['#FFEBEE', '#C62828', '1.5px solid #EF9A9A']);
+  return (
+    <div style={{marginTop:10, border:'1.5px solid #FFB74D', background:'#FFFDF6', borderRadius:12, padding:'10px 13px'}}>
+      <div style={{fontSize:11.5, fontWeight:800, color:'#8A5100', marginBottom:7}}>🧭 Tu plan de refuerzo · {plan.length - pend.length}/{plan.length} hechas <span style={{fontWeight:700}}>· se actualiza cada día · muéstrame avance al menos {F.retAvanceMin || 2} días (llevas {av.avance})</span></div>
+      <div style={{display:'flex', gap:5, flexWrap:'wrap', marginBottom:8}}>
+        {dias.map(d => { const [bg, c, bd] = stC(d); return (
+          <button key={d} type="button" onClick={() => setSel(d === selDia ? null : d)} style={{background:bg, color:c, border:bd, borderRadius:9, padding:'4px 8px', cursor:'pointer', fontFamily:"'Nunito',sans-serif", fontWeight:800, fontSize:10.5, lineHeight:1.25, outline: d === selDia ? '2px solid #F9A825' : 'none'}}>
+            {dLbl(d)}<span style={{display:'block', fontSize:9.5, opacity:.85}}>{d > hoy ? '·' : doneByDay[d] ? '✓ ' + doneByDay[d] : minByDay[d] > 0 ? '⚠' : d === hoy ? 'hoy' : '✗'}</span>
+          </button>
+        ); })}
+      </div>
+      <div style={{display:'grid', gap:4}}>
+        {itemsDia.length === 0 && <div style={{fontSize:11.5, fontWeight:700, color:'#999'}}>Ese día no completaste actividades del plan.</div>}
+        {itemsDia.map(it => {
+          const dd = done[it.actId];
+          const ok = dd && dd !== 'antes';
+          return (
+            <div key={it.modId + it.actId} style={{display:'flex', alignItems:'center', gap:7, fontSize:12, fontWeight:700, color: ok ? '#2E7D32' : '#4A4A44'}}>
+              <span>{ok ? '✅' : '⬜'}</span>
+              <span style={{textDecoration: ok ? 'line-through' : 'none', flex:1}}>{it.label}{dd === 'antes' ? <span style={{color:'#8A5100'}}> · ↩️ repásala (la hiciste antes del plan)</span> : null}</span>
+              {ok && dd !== selDia && selDia === hoy ? <span style={{fontSize:10, color:'#999'}}>✓ {dLbl(dd)}</span> : null}
+            </div>
+          );
+        })}
+      </div>
+      {selDia === hoy && <div style={{marginTop:7, fontSize:11, fontWeight:700, color:'#8A5100'}}>↩️ Lo que no completas <b>pasa al día siguiente</b> — hoy tienes <b>{pend.length}</b> pendiente(s). 💬 Si te trabas, escríbele a tu profesora: ella ve tu avance y puede abrirte el examen.</div>}
     </div>
   );
 }

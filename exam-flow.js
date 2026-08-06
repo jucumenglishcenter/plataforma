@@ -21,7 +21,7 @@
   function daysTo(d) { return Math.round((Date.parse(d + 'T00:00:00Z') - Date.parse(pDay() + 'T00:00:00Z')) / 86400000); }
 
   /* ── Almacén (local + nube app_settings) ── */
-  function load() { try { const o = JSON.parse(localStorage.getItem(KEY) || '{}'); return { ann: o.ann || {}, pre: o.pre || {} }; } catch (e) { return { ann: {}, pre: {} }; } }
+  function load() { try { const o = JSON.parse(localStorage.getItem(KEY) || '{}'); return { ann: o.ann || {}, pre: o.pre || {}, ret: o.ret || {}, cfg: o.cfg || {} }; } catch (e) { return { ann: {}, pre: {}, ret: {}, cfg: {} }; } }
   function save(flow) {
     try { localStorage.setItem(KEY, JSON.stringify(flow)); } catch (e) {}
     try { if (window.JUCUM_SB) window.JUCUM_SB.getClient().from('app_settings').upsert({ key: 'exam_flow', value: flow }, { onConflict: 'key' }).then(function () {}, function () {}); } catch (e) {}
@@ -32,7 +32,7 @@
       if (!window.JUCUM_SB) return;
       const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key', 'exam_flow').maybeSingle();
       if (data && data.value && typeof data.value === 'object') {
-        localStorage.setItem(KEY, JSON.stringify({ ann: data.value.ann || {}, pre: data.value.pre || {} }));
+        localStorage.setItem(KEY, JSON.stringify({ ann: data.value.ann || {}, pre: data.value.pre || {}, ret: data.value.ret || {}, cfg: data.value.cfg || {} }));
         try { window.dispatchEvent(new CustomEvent('jucum:examflow')); } catch (e) {}
       }
     } catch (e) {}
@@ -79,6 +79,118 @@
   function preexamVisibleFor(student, mod) {
     if (!student || !mod) return false;
     return preOpenNow(getPre(student.group, mod.id));
+  }
+
+  /* ── ETAPA 1 (nuevo orden) · Reglas por grupo + ventana de RECUPERACIÓN ──
+   * cfg[groupId] = { minGrade }  ·  nota mínima para aprobar el examen (default 75)
+   * ret[groupId:moduleId] = { from, to, scope:'need'|'all'|'pick', ids:[], force:[], block:[], setAt }
+   *   Ventana única para DESAPROBADOS y los que NO rindieron: dentro de ella cada uno
+   *   rinde apenas cumple sus requisitos (apto ≥75% + práctica 10 de los últimos 14 días).
+   *   force = la profesora se lo abre YA (última palabra) · block = se lo mantiene cerrado. */
+  var RET_MIN_DIAS = 10, RET_DE_DIAS = 14;
+  function pDayOf(t) { return new Date((typeof t === 'number' ? t : Date.parse(t)) - 5 * 3600000).toISOString().slice(0, 10); }
+  function getCfg(groupId) { return load().cfg[groupId] || {}; }
+  function setCfg(groupId, patch) { const flow = load(); flow.cfg[groupId] = Object.assign({}, flow.cfg[groupId] || {}, patch); save(flow); return flow.cfg[groupId]; }
+  function minGradeFor(groupId) { const n = Number((load().cfg[groupId] || {}).minGrade); return (n >= 1 && n <= 100) ? n : 75; }
+  function getRet(groupId, moduleId) { return load().ret[groupId + ':' + moduleId] || null; }
+  function setRet(groupId, moduleId, patch) {
+    const flow = load(); const k = groupId + ':' + moduleId;
+    if (patch === null) delete flow.ret[k];
+    else flow.ret[k] = Object.assign({}, flow.ret[k] || {}, patch);
+    save(flow);
+    return flow.ret[k] || null;
+  }
+  function retActive(ret) { if (!ret || !ret.from || !ret.to) return false; const t = pDay(); return t >= ret.from && t <= ret.to; }
+  /* Requisitos del alumno para rendir en recuperación. dias14 = días distintos con práctica
+   * en los últimos 14 (día Perú). Si este equipo no tiene su historial (p.ej. el de la
+   * profesora), dias14 = null y NO bloquea — el candado real corre en el equipo del alumno. */
+  function retReqsFor(student) {
+    const D = window.JUCUM_DATA;
+    const r = (D && D.getStudentReadiness) ? D.getStudentReadiness(student) : { apt: false, overall: 0, threshold: 75 };
+    var dias14 = null;
+    try {
+      if (D && D.getStudentProgress) {
+        const comp = (D.getStudentProgress(student.id) || {}).completed || [];
+        if (comp.length) {
+          const lim = pDayOf(Date.now() - (RET_DE_DIAS - 1) * 86400000);
+          const set = new Set();
+          comp.forEach(function (e) { if (e && e.date) { const d = pDayOf(e.date); if (d >= lim) set.add(d); } });
+          dias14 = set.size;
+        }
+      }
+    } catch (e) {}
+    const okDias = dias14 == null ? true : dias14 >= RET_MIN_DIAS;
+    return { apt: !!r.apt, overall: r.overall || 0, threshold: r.threshold || 75, dias14: dias14, okDias: okDias, ok: !!r.apt && okDias };
+  }
+  /* Estado de la recuperación para UN alumno. needsIt = desaprobó o no rindió. */
+  function retOpenFor(student, moduleId, needsIt) {
+    const ret = getRet(student.group, moduleId);
+    if (!ret) return { has: false, open: false };
+    const act = retActive(ret);
+    const blocked = (ret.block || []).includes(student.id);
+    const forced = (ret.force || []).includes(student.id);
+    const inScope = ret.scope === 'all' ? true : ret.scope === 'pick' ? (ret.ids || []).includes(student.id) : !!needsIt;
+    const reqs = retReqsFor(student);
+    /* ETAPA 3 · además debe mostrar AVANCE al menos 2 días dentro de la ventana */
+    const av = retDias(student, ret);
+    reqs.avance = av.avance; reqs.avanceMin = RET_AVANCE_MIN;
+    reqs.okAvance = av.avance >= RET_AVANCE_MIN;
+    reqs.ok = reqs.ok && reqs.okAvance;
+    const open = act && inScope && !blocked && (forced || reqs.ok);
+    return { has: true, ret: ret, active: act, inScope: inScope, blocked: blocked, forced: forced, reqs: reqs, open: open };
+  }
+
+  /* ── ETAPA 3 · Plan de refuerzo + seguimiento diario dentro de la ventana ── */
+  var RET_AVANCE_MIN = 2;
+  /* Días de la ventana con práctica (dailyData viene de la nube: sirve en el equipo de la profesora también) */
+  function retDias(student, ret) {
+    try {
+      var D = window.JUCUM_DATA; if (!D || !D.dailyData || !ret || !ret.from) return { dias: [], avance: 0 };
+      var hoy = pDay();
+      var fin = ret.to && ret.to < hoy ? ret.to : hoy;
+      var days = (D.dailyData(student) || []).filter(function (d) { return d.date >= ret.from && d.date <= fin; });
+      return { dias: days, avance: days.filter(function (d) { return (d.total || 0) > 0; }).length, fin: fin };
+    } catch (e) { return { dias: [], avance: 0 }; }
+  }
+  /* Plan de refuerzo del módulo según las partes flojas del examen (weak ⊆ ['L','R','G','X','V']).
+   * Si la comprensión (R/L) está floja, agrega RELEER las stories de módulos ANTERIORES. */
+  function retPlan(student, mod, weak) {
+    var D = window.JUCUM_DATA; if (!D || !mod) return [];
+    var acts = mod.activities || [];
+    var out = [];
+    var push = function (a, ic) { if (a && !out.some(function (x) { return x.actId === a.id && x.modId === mod.id; })) out.push({ modId: mod.id, actId: a.id, label: ic + ' ' + (a.name || a.id), type: a.type }); };
+    var byType = function (t) { return acts.filter(function (a) { return a.type === t; }); };
+    var w = (weak && weak.length) ? weak : ['G', 'R', 'L'];
+    w.forEach(function (k) {
+      if (k === 'L') byType('listening').slice(0, 1).forEach(function (a) { push(a, '🎧'); });
+      if (k === 'R') { byType('reading').slice(0, 1).forEach(function (a) { push(a, '📖'); }); byType('story').slice(0, 1).forEach(function (a) { push(a, '📗'); }); }
+      if (k === 'G' || k === 'X') { byType('summary').slice(0, 2).forEach(function (a) { push(a, '📘'); }); byType('grammar').slice(0, 3).forEach(function (a) { push(a, '✏️'); }); }
+      if (k === 'V') byType('quizlet').slice(0, 1).forEach(function (a) { push(a, '🔤'); });
+    });
+    if (!out.length) { byType('summary').slice(0, 1).forEach(function (a) { push(a, '📘'); }); byType('grammar').slice(0, 2).forEach(function (a) { push(a, '✏️'); }); }
+    out = out.slice(0, 6);
+    if (w.indexOf('R') >= 0 || w.indexOf('L') >= 0) {
+      var mods = D.MODULE_CATALOG[student.level] || [];
+      var i = mods.findIndex(function (m) { return m.id === mod.id; });
+      for (var j = Math.max(0, i - 2); j < i && out.length < 8; j++) {
+        var st = (mods[j].activities || []).find(function (a) { return a.type === 'story'; });
+        if (st) out.push({ modId: mods[j].id, actId: st.id, label: '📗 Vuelve a leer la story de ' + mods[j].name, type: 'story' });
+      }
+    }
+    return out;
+  }
+  /* Qué items del plan ya hizo y QUÉ DÍA (día Perú) — progreso local del alumno.
+   * Valor 'antes' = lo había hecho antes de la ventana (cuenta como pendiente de repasar). */
+  function retPlanDone(student, plan, desde) {
+    var D = window.JUCUM_DATA, out = {};
+    try {
+      var completed = (D.getStudentProgress(student.id) || {}).completed || {};
+      plan.forEach(function (it) {
+        var e = completed[it.modId + ':' + it.actId];
+        if (e && e.date) { var d = pDayOf(e.date); out[it.actId] = (!desde || d >= desde) ? d : 'antes'; }
+      });
+    } catch (e) {}
+    return out;
   }
 
   /* ── Apertura efectiva de una ventana de examen (manual O automática) ── */
@@ -189,6 +301,9 @@
         if (p.fromDate === dstr) out.push({ kind: 'preexam', icon: '🧭', moduleId: m.id, title: 'Abre pre-examen · ' + m.name, sub: (p.from ? fmtHora(p.from) : '') });
         if (p.toDate === dstr && p.toDate !== p.fromDate) out.push({ kind: 'preexam', icon: '🧭', moduleId: m.id, title: 'Cierra pre-examen · ' + m.name, sub: (p.to ? fmtHora(p.to) : '') });
       }
+      const rt = getRet(groupId, m.id);
+      if (rt && rt.from === dstr) out.push({ kind: 'exam', icon: '🔁', moduleId: m.id, title: 'Abre recuperación · ' + m.name, sub: 'hasta el ' + fmtFecha(rt.to) });
+      if (rt && rt.to === dstr && rt.to !== rt.from) out.push({ kind: 'exam', icon: '🔁', moduleId: m.id, title: 'Último día de recuperación · ' + m.name, sub: '' });
     });
     return out;
   }
@@ -220,5 +335,9 @@
     isPreexamActivity: isPreexamActivity, preOpenNow: preOpenNow, preexamVisibleFor: preexamVisibleFor,
     annForWindow: annForWindow, winEffectiveOpen: winEffectiveOpen, infoForModule: infoForModule,
     registerM1Forms: registerM1Forms, formsWindowFor: formsWindowFor, eventsForDay: eventsForDay, hydrate: hydrate,
+    getCfg: getCfg, setCfg: setCfg, minGradeFor: minGradeFor,
+    getRet: getRet, setRet: setRet, retActive: retActive, retReqsFor: retReqsFor, retOpenFor: retOpenFor,
+    retDias: retDias, retPlan: retPlan, retPlanDone: retPlanDone, retAvanceMin: RET_AVANCE_MIN,
+    retMin: RET_MIN_DIAS, retDe: RET_DE_DIAS,
   };
 })();
