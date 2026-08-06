@@ -583,12 +583,21 @@ function ModuleExamBanner({ mod, studentId }) {
         const res = await sb.from('diagnostic_attempts').select('score,correct,total,sections,created_at,activity_id,module_id,attempt_no')
           .eq('user_id', studentId).order('created_at', { ascending: true }).limit(100);
         const data = res && res.data;
-        if (dead || !data || !data.length) return;
-        const rows = data.filter(r => r.module_id === 'exam-' + inf.exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl));
+        if (dead) return;
+        const rows = (data || []).filter(r => r.module_id === 'exam-' + inf.exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl));
         if (rows.length) {
           const best = rows.reduce((a, b) => ((b.score || 0) > (a.score || 0) ? b : a), rows[0]);
           best._last = rows[rows.length - 1].created_at; best._n = rows.length;
           setAtt(prev => (prev && prev.created_at === best.created_at && prev._n === best._n) ? prev : best);
+        } else {
+          /* 🚑 respaldo (06-ago): la nube de intentos no respondió — su nota vive también en su registro de práctica */
+          const comp = (D0.getStudentProgress(studentId) || {}).completed || {};
+          const ks = Object.keys(comp).filter(k => k.indexOf('exam-' + inf.exam.id + ':') === 0);
+          if (ks.length) {
+            let sum = 0, n = 0, last = null;
+            ks.forEach(k => { const e = comp[k] || {}; if (typeof e.score === 'number') { sum += e.score; n++; } if (e.date && (!last || e.date > last)) last = e.date; });
+            if (n) { const best = { score: Math.round(sum / n), created_at: last, _last: last, _n: 1, sections: null, fromProgress: true }; setAtt(prev => prev || best); }
+          }
         }
       } catch (e) {}
     })();

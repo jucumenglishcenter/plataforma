@@ -413,9 +413,22 @@ function EcModResults({ group, module, members, onChange }) {
   const win = X.windowForExamGroup(exam.id, group.id);
   const manual = (win && win.results) || {};
   const by = {}; (rows || []).forEach(r => { (by[r.user_id] = by[r.user_id] || []).push(r); });
+  /* 🚑 Respaldo (06-ago): la nota del examen también queda en el registro de práctica
+   * (progress → 'exam-<examId>:<parte>'), hidratado en ESTE equipo. Si la nube de
+   * intentos no responde (RLS/anon), el panel igual muestra las notas — nunca un falso 0. */
+  const progOf = s => { try {
+    const comp = (D.getStudentProgress(s.id) || {}).completed || {};
+    const ks = Object.keys(comp).filter(k => k.indexOf('exam-' + exam.id + ':') === 0);
+    if (!ks.length) return null;
+    let sum = 0, n = 0, last = null;
+    ks.forEach(k => { const e = comp[k] || {}; if (typeof e.score === 'number') { sum += e.score; n++; } if (e.date && (!last || e.date > last)) last = e.date; });
+    return n ? { score: Math.round(sum / n), created_at: last, fromProgress: true } : null;
+  } catch (e) { return null; } };
   const list = members.map(s => {
     const rs = by[s.id] || [];
-    const best = rs.length ? rs.reduce((a, b) => ((b.score || 0) > (a.score || 0) ? b : a), rs[0]) : null;
+    let best = rs.length ? rs.reduce((a, b) => ((b.score || 0) > (a.score || 0) ? b : a), rs[0]) : null;
+    const pr = progOf(s);
+    if (!best && pr) best = pr; else if (best && pr && (pr.score || 0) > (best.score || 0)) best = Object.assign({}, best, { score: pr.score });
     const man = manual[s.id] || null;
     const nota = man && typeof man.grade === 'number' ? Math.max(man.grade, best ? (best.score || 0) : 0) : (best ? best.score : null);
     const rindio = !!(best || man);
@@ -426,7 +439,7 @@ function EcModResults({ group, module, members, onChange }) {
   const recupera = list.filter(x => x.rindio && !x.aprob);
   const porRendir = list.filter(x => !x.rindio);
   const ann = F.getAnn(group.id, module.id);
-  const yaFue = (ann && ann.date && ann.date <= F.pDay()) || (rows || []).length > 0 || Object.keys(manual).length > 0;
+  const yaFue = (ann && ann.date && ann.date <= F.pDay()) || (rows || []).length > 0 || Object.keys(manual).length > 0 || list.some(x => x.rindio);
   const prom = (() => { const con = list.filter(x => typeof x.nota === 'number'); return con.length ? Math.round(con.reduce((a, x) => a + x.nota, 0) / con.length) : null; })();
 
   if (rows === null) return <div className="scard"><div className="empty-state"><div className="icon">⏳</div>Leyendo resultados de la nube…</div></div>;
@@ -513,7 +526,7 @@ function EcFBBox({ x, group, exam, win, min, onChange }) {
     <div>
       <div style={{background:'#F8FAFF', border:'1px solid #D9E2F4', borderRadius:11, padding:'9px 12px', margin:'8px 0', fontSize:12.5, lineHeight:1.6}}>
         <b style={{color:'#1F3A8A'}}>🧩 Mi lectura (solo tú):</b> {x.best
-          ? (weak.length ? <>Le costaron <b>{weak.map(k => EC_PARTES[k]).join(' · ')}</b> — recomiéndale esas prácticas.</> : 'Dominó todas las partes del examen.')
+          ? (weak.length ? <>Le costaron <b>{weak.map(k => EC_PARTES[k]).join(' · ')}</b> — recomiéndale esas prácticas.</> : (x.best && x.best.fromProgress ? 'Nota tomada de su registro de práctica; el detalle por partes aparecerá cuando la nube de intentos responda.' : 'Dominó todas las partes del examen.'))
           : 'Nota registrada a mano (sin detalle por partes).'}
         {x.rs.length > 1 ? <> Rindió {x.rs.length} veces — vale la mejor.</> : null}
       </div>
@@ -537,7 +550,7 @@ function EcApRow({ x, group, exam, win, min, onChange }) {
         <div className="st-ava" style={{background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>{x.s.fullName.split(' ').map(n => n[0]).slice(0, 2).join('')}</div>
         <div style={{flex:1, minWidth:0}}>
           <div style={{fontWeight:800, fontSize:13}}>{x.s.fullName}</div>
-          <div className="settings-hint" style={{margin:0}}>{weak.length ? 'Reforzar: ' + weak.map(k => EC_PARTES[k]).join(' · ') : x.best ? '✓ dominó todas las partes' : 'nota registrada a mano'}{x.best && x.best.attempt_no > 1 ? ' · mejor de ' + x.rs.length + ' intentos' : ''}</div>
+          <div className="settings-hint" style={{margin:0}}>{weak.length ? 'Reforzar: ' + weak.map(k => EC_PARTES[k]).join(' · ') : x.best ? (x.best.fromProgress ? 'nota de su registro de práctica' : '✓ dominó todas las partes') : 'nota registrada a mano'}{x.best && x.best.attempt_no > 1 ? ' · mejor de ' + x.rs.length + ' intentos' : ''}</div>
         </div>
         {ecPill('#E8F5E9', '#2E7D32', <><b>{x.nota}</b>/100</>, 'n')}
         <span style={{color:'#B0A99A', fontSize:17, transform: open ? 'rotate(90deg)' : 'none', transition:'.2s'}}>›</span>
