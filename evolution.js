@@ -44,7 +44,7 @@
       if (!e || !e.date) return;
       const comp = compOf(typeByKey[key]);
       if (!comp) return;
-      const pct = typeof e.score === 'number' ? (e.score > 10 ? Math.min(100, e.score) : Math.min(100, e.score/10*100)) : 70;
+      const pct = typeof e.score === 'number' ? Math.max(0, Math.min(100, Math.round(e.score))) : 70;
       evs.push({ date: new Date(e.date), comp, pct, key });
     });
     // evaluaciones de speaking del profesor

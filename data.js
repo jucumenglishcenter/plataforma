@@ -254,7 +254,7 @@ function dailyDataReal(student) {
     byDay[dStr][cat] += min;
     byDay[dStr].total += min;
     const row = { module: info.module, item: info.item, minutes: min };
-    if (typeof e.score === 'number') { row.score = e.score > 10 ? Math.round(e.score) : Math.round(e.score * 10); row.max = 100; }
+    if (typeof e.score === 'number') { row.score = scorePct(e.score); row.max = 100; }
     byDay[dStr].details[cat].push(row);
   });
   const days = [];
@@ -284,7 +284,7 @@ function getStudentLog(studentId) {
       detail: info.item + (e.minutes ? ` · ${Math.round(e.minutes)} min` : ''),
       date: isNaN(ts) ? '' : new Date(ts - 5 * 3600000).toISOString().replace('T', ' ').slice(0, 16),
     };
-    if (typeof e.score === 'number') { ev.score = e.score > 10 ? Math.round(e.score) : Math.round(e.score * 10); ev.max = 100; }
+    if (typeof e.score === 'number') { ev.score = scorePct(e.score); ev.max = 100; }
     return ev;
   });
   return events.sort((a, b) => b.date.localeCompare(a.date));
@@ -739,11 +739,15 @@ async function loadMaintenanceFromCloud() {
 }
 
 /* Normaliza una nota a porcentaje 0-100.
- * Convención de la plataforma: notas >10 = porcentaje (0-100); ≤10 = escala /10.
+ * TODAS las notas de la plataforma son PORCENTAJE (0-100): los materiales envían
+ * score = aciertos/total*100, y los exámenes y tareas también se guardan /100.
+ * ⚠️ La regla vieja ("≤10 = escala /10") multiplicaba ×10 las notas bajas reales:
+ * 1 acierto de 10 (10%) se veía como 100% y APROBADO, y un 7% como 70%. De ahí
+ * venían las notas que no correspondían a lo que hizo el alumno.
  * Devuelve null si la actividad no tiene nota (story / diálogo / quizlet). */
 function scorePct(score) {
-  if (typeof score !== 'number') return null;
-  return score > 10 ? Math.min(100, Math.round(score)) : Math.min(100, Math.round((score / 10) * 100));
+  if (typeof score !== 'number' || !isFinite(score)) return null;
+  return Math.max(0, Math.min(100, Math.round(score)));
 }
 /* Nivel al que pertenece un módulo (para juzgar contra su umbral) */
 function levelOfModule(moduleId) {
@@ -891,15 +895,19 @@ function _findAct(modId, actId) {
  * alumno podía liderar la liga con prácticas reprobadas). */
 function activityEarnedXP(entry, key, student) {
   if (!entry) return 0;
-  // Anti-farmeo: con nota bajo el umbral → solo participación (+5). Aprobar da todo.
-  if (!entryPassed(entry, student.level, student.group)) return 5;
   const [modId, actId] = key.split(':');
   const act = _findAct(modId, actId);
+  // Resúmenes y Quizlet son PARTICIPACIÓN: completarlos entrega su XP aunque el
+  // auto-chequeo salga bajo (su nota no mide dominio). Antes caían en el
+  // anti-farmeo y solo daban 5 XP — el alumno practicaba y no veía puntos.
+  const low = act ? isLowStakesType(act.type) : /^(sum-|quizlet)/.test(actId || '');
+  // Anti-farmeo: con nota bajo el umbral → solo participación (+5). Aprobar da todo.
+  if (!low && !entryPassed(entry, student.level, student.group)) return 5;
   if (!act) return 10;
   if (act.type === 'story') return readingTimeXP(entry.minutes);   // lectura: XP por tiempo
   const base = XP_BASE[act.type] || 10;
-  let bonusPct = 0.5;
-  if (typeof entry.score === 'number') bonusPct = entry.score > 10 ? Math.min(1, entry.score / 100) : Math.min(1, entry.score / 10);
+  const pct = scorePct(entry.score);
+  const bonusPct = (pct == null || low) ? 0.5 : Math.min(1, pct / 100);
   return Math.round(base * (1 + bonusPct));
 }
 
@@ -1331,7 +1339,7 @@ function getStudentMastery(student) {
     if (e && (entryPassed(e, student.level, student.group) || low)) {
       done++;
       if (typeof e.score === 'number' && !low && a.type !== 'story') {
-        const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100);
+        const pct = scorePct(e.score);
         scoreSum += pct; scoreN++;
       } else { scoreSum += 70; scoreN++; } // participación (story / resumen / quizlet / sin nota)
     }
@@ -1437,7 +1445,7 @@ function getStudentReadiness(student) {
       const e = completed[`${mod.id}:${a.id}`];
       if (e && entryPassed(e, student.level, student.group)) {
         done++;
-        if (typeof e.score === 'number' && a.type !== 'story' && !isLowStakesType(a.type)) { const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100); sSum += pct; sN++; }
+        if (typeof e.score === 'number' && a.type !== 'story' && !isLowStakesType(a.type)) { const pct = scorePct(e.score); sSum += pct; sN++; }
         else { sSum += 70; sN++; }
       }
     }));
@@ -1605,7 +1613,7 @@ function getStudentTrends(student) {
     if (t === 'story') return; // lectura: sin nota real, no alimenta tendencia (Speaking se mide por la evaluación del profesor)
     let comp = t === 'listening' ? 'listening' : t === 'reading' ? 'reading' : (t === 'grammar' || t === 'summary') ? 'grammar' : null;
     if (!comp) return;
-    const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100);
+    const pct = scorePct(e.score);
     series[comp].push({ date: e.date, pct });
   });
   try {
@@ -1649,7 +1657,7 @@ function getModuleStats(student, module) {
   (module.activities || []).forEach(a => {
     total++;
     const e = completed[`${module.id}:${a.id}`];
-    if (e && entryPassed(e, student.level, student.group)) { done++; if (typeof e.score === 'number' && a.type !== 'story' && !isLowStakesType(a.type)) { const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100); sSum += pct; sN++; } else { sSum += 70; sN++; } }
+    if (e && entryPassed(e, student.level, student.group)) { done++; if (typeof e.score === 'number' && a.type !== 'story' && !isLowStakesType(a.type)) { const pct = scorePct(e.score); sSum += pct; sN++; } else { sSum += 70; sN++; } }
   });
   const coverage = total ? done / total : 0;
   const quality = sN ? (sSum / sN) / 100 : 0;
@@ -2057,7 +2065,7 @@ function getRefuerzo(student, limit) {
       if (isLowStakesType(a.type)) return;                         // resúmenes/quizlet: baja exigencia, no son refuerzo medible
       if (dueSet.has(key) || impSet.has(key)) return;             // no duplicar con repaso / por mejorar
       if (typeof e.score !== 'number') return;                    // participación (story/quizlet) no aporta como refuerzo medible
-      const pct = e.score > 10 ? e.score : e.score * 10;
+      const pct = scorePct(e.score);
       const typeRank = a.type === 'grammar' ? 0 : (a.type === 'reading' || a.type === 'listening') ? 1 : 2;
       const ageDays = e.date ? (Date.now() - new Date(e.date).getTime()) / 86400000 : 0;
       pool.push({ moduleId: m.id, moduleName: m.name, activityId: a.id, name: a.name, type: a.type, group: a.group || null,

@@ -12,7 +12,7 @@ const MT_BASE_BLOCK = '📚 Comprensión y vocabulario';
 
 function mtScoreOf(e) {
   if (!e || typeof e.score !== 'number') return null;
-  return e.score > 10 ? Math.round(e.score) : Math.round(e.score * 10);
+  return Math.max(0, Math.min(100, Math.round(e.score)));
 }
 function mtDate(d) {
   if (!d) return null;

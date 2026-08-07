@@ -514,7 +514,7 @@ function PracticeSetProgress({ plan, onClose }) {
       const e = completed[a.moduleId + ':' + a.activityId];
       if (!e) return { a, s:'pend' };
       const d = dayOf(e.date);
-      const sc = (typeof e.score === 'number') ? (e.score > 10 ? Math.round(e.score) : Math.round(e.score * 10)) : null;
+      const sc = (typeof e.score === 'number') ? Math.max(0, Math.min(100, Math.round(e.score))) : null;
       return { a, s: (!dates.length || dates.includes(d)) ? 'ok' : 'other', d, sc };
     });
     return { st, cells, ok: cells.filter(c => c.s === 'ok').length, other: cells.filter(c => c.s === 'other').length };

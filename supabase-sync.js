@@ -385,7 +385,10 @@
       // Cuando la nota de una actividad CON NOTA cambia (nueva o mejorada) respecto a
       // lo que ya teníamos, la registramos en el motor de repaso. Antes solo Quizlet
       // (sin nota) lo alimentaba → "Repasos de hoy" y "Retención" quedaban vacíos.
-      // Solo dispara ante cambios reales (no en cada refresco, no en la 1ª carga).
+      // 07-ago: TAMBIÉN dispara cuando la práctica es de otro DÍA aunque la nota sea
+      // idéntica. Quien repasaba cada día sacando siempre 100% no cambiaba de nota,
+      // así que el motor nunca se enteraba y su repaso se quedaba clavado en
+      // "Hace 13 días · vencido hace 6d" para siempre.
       try {
         const D = window.JUCUM_DATA;
         if (D && D.recordReviewAttempt) {
@@ -396,7 +399,9 @@
             Object.keys(nowC).forEach(k => {
               const nw = nowC[k], pv = prevC[k];
               if (!nw || typeof nw.score !== 'number') return;   // sin nota → no entra a repaso
-              if (pv && pv.score === nw.score) return;            // sin cambio → no re-registrar
+              const mismaNota = pv && pv.score === nw.score;
+              const mismoDia = pv && pv.date && nw.date && dayStr(Date.parse(pv.date)) === dayStr(Date.parse(nw.date));
+              if (mismaNota && mismoDia) return;                   // nada nuevo → no re-registrar
               const [modId, actId] = k.split(':');
               D.recordReviewAttempt(uid, modId, actId, nw.score, stu ? stu.group : null, stu ? stu.level : null);
             });
@@ -501,8 +506,8 @@
       entries.forEach(e => {
         minutes += e.minutes || 0;
         if (typeof e.score === 'number') {
-          // >10 = percent (0-100); ≤10 = out of 10 — same rule as getStudentXP
-          const pct = e.score > 10 ? Math.min(100, e.score) : Math.min(100, (e.score / 10) * 100);
+          // Toda nota es porcentaje 0-100 (ver scorePct en data.js)
+          const pct = Math.max(0, Math.min(100, Math.round(e.score)));
           scoreSum += pct; scoreN++;
           if (pct >= 100) perfect = true;
         }

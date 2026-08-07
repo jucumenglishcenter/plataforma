@@ -770,7 +770,7 @@ function ChecklistRow({ it, mod, studentId }) {
   }
   // PASO 2 · "a mejorar" — hecho bajo el umbral: no marca ✓, invita a repetir.
   if (status === 'redo') {
-    const pct = typeof done.score === 'number' ? (done.score > 10 ? Math.round(done.score) : Math.round(done.score*10)) : null;
+    const pct = typeof done.score === 'number' ? Math.max(0, Math.min(100, Math.round(done.score))) : null;
     return (
       <a href={href || undefined} className="al-item open"
          style={{background:'#FFF7E8', borderColor:'#F0C66B'}}

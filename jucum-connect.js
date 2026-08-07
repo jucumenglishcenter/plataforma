@@ -37,6 +37,163 @@
       de LECTURA ACTIVA real (sin score, cuenta como practicado).
    ════════════════════════════════════════════════════════════════════ */
 (function () {
+  /* ══ 🔊 VOZ DE LOS MATERIALES (TTS) · motor blindado ═══════════════════
+     Los materiales leen en voz alta con speechSynthesis (stories, readings y
+     los audios del listening). Chrome/Edge tienen 3 fallas conocidas que
+     hacían que el audio se oyera "lento y cortándose a cada rato":
+       1) cancel() + speak() seguidos (así lo llama cada material en CADA
+          frase): la voz nueva se pierde o tarda 1-3 s en arrancar → silencios
+          largos entre frases (se percibe como lentitud) o el audio se detiene.
+       2) A los ~15 s el motor se "duerme" y corta la frase por la mitad.
+       3) getVoices() todavía vacío en la primera reproducción → usa la voz por
+          defecto del sistema (robótica y lenta) en vez de la voz inglesa.
+     Se arregla aquí UNA vez para TODOS los materiales (sin tocar el código de
+     cada actividad): envolvemos speak/cancel con cola propia, troceo por
+     frases, espera a que el motor esté libre y latido anti-sueño. */
+  (function jecSpeechFix() {
+    var S = window.speechSynthesis;
+    if (!S || !window.SpeechSynthesisUtterance || window.__JEC_TTS) return;
+    window.__JEC_TTS = 1;
+    var nSpeak = S.speak.bind(S), nCancel = S.cancel.bind(S);
+    var ua = navigator.userAgent || '';
+    // El truco pause()+resume() revive a Chrome de escritorio, pero en Android
+    // deja la voz muda: allí no se aplica.
+    var CHROMISH = /Chrome|Chromium|Edg/.test(ua) && !/Android/i.test(ua);
+    var gen = 0, q = [], busy = false, keep = null, lastCancel = 0;
+
+    function stopKeep() { if (keep) { clearInterval(keep); keep = null; } }
+    function startKeep() {
+      if (!CHROMISH || keep) return;
+      keep = setInterval(function () {
+        if (!S.speaking) { stopKeep(); return; }
+        if (S.paused) return;                 // pausa a propósito: respetarla
+        try { S.pause(); S.resume(); } catch (e) {}
+      }, 8000);
+    }
+    // Trozos de ~160 caracteres cortando en punto/coma: el motor nunca llega al
+    // límite donde se duerme, y cada trozo se oye completo.
+    function chunk(text) {
+      var t = String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
+      if (!t) return [];
+      if (t.length <= 160) return [t];
+      var frases = t.match(/[^.!?…;]+[.!?…;]*\s*/g) || [t], out = [], cur = '';
+      frases.forEach(function (p) {
+        if (p.length > 160) {
+          if (cur.trim()) { out.push(cur.trim()); cur = ''; }
+          var linea = '';
+          p.split(' ').forEach(function (w) {
+            if ((linea + ' ' + w).trim().length > 160) { if (linea) out.push(linea.trim()); linea = w; }
+            else linea = (linea ? linea + ' ' : '') + w;
+          });
+          cur = linea ? linea + ' ' : '';
+          return;
+        }
+        if ((cur + p).length > 160 && cur.trim()) { out.push(cur.trim()); cur = ''; }
+        cur += p;
+      });
+      if (cur.trim()) out.push(cur.trim());
+      return out;
+    }
+    function bestVoice(lang) {
+      var vs = []; try { vs = S.getVoices() || []; } catch (e) {}
+      var en = vs.filter(function (v) { return v.lang && v.lang.toLowerCase().indexOf('en') === 0; });
+      if (!en.length) return null;
+      var want = String(lang || 'en-US').toLowerCase();
+      var pool = en.filter(function (v) { return v.lang.toLowerCase() === want; }).concat(en);
+      var pref = ['Google US English', 'Google UK English Female', 'Google UK English Male',
+                  'Microsoft Aria', 'Microsoft Jenny', 'Microsoft Michelle', 'Microsoft Libby',
+                  'Microsoft Sonia', 'Samantha', 'Daniel'];
+      for (var i = 0; i < pref.length; i++) {
+        for (var j = 0; j < pool.length; j++) {
+          if (pool[j].name && pool[j].name.indexOf(pref[i]) === 0) return pool[j];
+        }
+      }
+      return pool[0] || null;
+    }
+    // La primera reproducción suele pillar getVoices() vacío: esperamos (máx
+    // 1.5 s) a que el navegador cargue las voces antes de hablar.
+    function withVoices(cb) {
+      var vs = []; try { vs = S.getVoices() || []; } catch (e) {}
+      if (vs.length) { cb(); return; }
+      var listo = false, t0 = Date.now();
+      function go() { if (listo) return; listo = true; cb(); }
+      try { S.addEventListener('voiceschanged', go, { once: true }); } catch (e) {}
+      (function poll() {
+        if (listo) return;
+        var v = []; try { v = S.getVoices() || []; } catch (e) {}
+        if (v.length || Date.now() - t0 > 1500) { go(); return; }
+        setTimeout(poll, 120);
+      })();
+    }
+    function pump(my, intento) {
+      if (my !== gen) { busy = false; return; }
+      if (!q.length) { busy = false; stopKeep(); return; }
+      busy = true;
+      // El motor sigue ocupado o acaba de recibir un cancel: esperar a que esté
+      // libre de verdad (aquí se perdían las frases y aparecían los silencios).
+      if ((S.speaking || S.pending || Date.now() - lastCancel < 130) && (intento || 0) < 25) {
+        setTimeout(function () { pump(my, (intento || 0) + 1); }, 90);
+        return;
+      }
+      var job = q.shift();
+      var u = job.u, uu = new SpeechSynthesisUtterance(job.text);
+      uu.rate = (typeof u.rate === 'number' && u.rate > 0) ? u.rate : 1;
+      uu.pitch = (typeof u.pitch === 'number') ? u.pitch : 1;
+      uu.volume = (typeof u.volume === 'number') ? u.volume : 1;
+      uu.lang = u.lang || (job.voice && job.voice.lang) || 'en-US';
+      if (job.voice) uu.voice = job.voice;
+      var fin = false, wd = null;
+      function next(err) {
+        if (fin) return; fin = true;
+        if (wd) clearTimeout(wd);
+        if (my !== gen) { busy = false; return; }
+        if (job.last) {
+          if (err && typeof u.onerror === 'function') { try { u.onerror(err); } catch (e) {} }
+          if (typeof u.onend === 'function') { try { u.onend({ target: u, type: 'end', charIndex: String(u.text || '').length, elapsedTime: 0 }); } catch (e) {} }
+        }
+        setTimeout(function () { pump(my, 0); }, 30);
+      }
+      uu.onstart = function () { if (job.first && typeof u.onstart === 'function') { try { u.onstart({ target: u, type: 'start' }); } catch (e) {} } };
+      uu.onboundary = function (ev) {
+        if (typeof u.onboundary !== 'function') return;
+        try { u.onboundary({ target: u, type: 'boundary', name: ev.name, charIndex: job.off + (ev.charIndex || 0), charLength: ev.charLength }); } catch (e) {}
+      };
+      uu.onend = function () { next(null); };
+      uu.onerror = function (e) { next(e); };
+      // Reloj de seguridad: si el motor se cuelga y nunca avisa el final, la
+      // actividad sigue igual (antes se quedaba muda esperando para siempre).
+      var esperado = 2500 + (job.text.split(' ').length * 420) / (uu.rate || 1);
+      wd = setTimeout(function () { if (!fin) { try { nCancel(); } catch (e) {} next(null); } }, esperado + 7000);
+      try { nSpeak(uu); startKeep(); } catch (e) { next(e); }
+    }
+    S.cancel = function () {
+      gen++; q = []; busy = false; lastCancel = Date.now(); stopKeep();
+      try { nCancel(); } catch (e) {}
+    };
+    S.speak = function (u) {
+      if (!u || typeof u.text !== 'string') { try { nSpeak(u); } catch (e) {} return; }
+      var my = gen, trozos = chunk(u.text);
+      if (!trozos.length) {
+        if (typeof u.onend === 'function') setTimeout(function () { try { u.onend({ target: u, type: 'end' }); } catch (e) {} }, 30);
+        return;
+      }
+      withVoices(function () {
+        if (my !== gen) return;                        // lo cancelaron mientras tanto
+        var v = u.voice || bestVoice(u.lang), off = 0;
+        trozos.forEach(function (t, i) {
+          q.push({ text: t, u: u, voice: v, off: off, first: i === 0, last: i === trozos.length - 1 });
+          off += t.length + 1;
+        });
+        if (!busy) setTimeout(function () { if (!busy) pump(my, 0); }, 80);
+      });
+    };
+    // Al volver a la pestaña, reanudar lo que el navegador dejó en pausa.
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && S.paused && S.speaking) { try { S.resume(); } catch (e) {} }
+    });
+    window.JUCUM_TTS = { ok: true, chunk: chunk, bestVoice: bestVoice };
+  })();
+
   // ── Config (los mismos valores de tu plataforma) ──
   var SUPABASE_URL = 'https://dwwzkzuonltaavzhvilu.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_6pruJuV5P2cMVWqd8Wt8gg_UAtuEj_m';
@@ -132,6 +289,26 @@
     var done = false;           // ya registrado en esta sesión
     var paused = false;         // conteo pausado por inactividad (sin cerrar nada)
 
+    /* ── Ancla LOCAL de la regla de ½ hora ──────────────────────────────
+     * Antes el ancla era completed_at de la nube, así que para no moverla NO se
+     * escribía nada cuando la nota estaba congelada: la práctica del alumno
+     * quedaba sin registrar (sin ✓ del día, sin XP, sin racha). Ahora la fecha
+     * de la nube se refresca SIEMPRE (es la evidencia de que practicó) y el
+     * ancla de la ventana vive aquí, junto con QUÉ parte se calificó: repetir
+     * otro audio/otra historia del mismo material ya no queda bloqueado. */
+    var GRADE_KEY = 'jucum_grade_' + (uid || 'demo') + '_' + modId + '_' + actId;
+    function gradeAnchor() { try { return JSON.parse(localStorage.getItem(GRADE_KEY) || 'null'); } catch (e) { return null; } }
+    function setGradeAnchor(part, score) {
+      try { localStorage.setItem(GRADE_KEY, JSON.stringify({ ts: Date.now(), part: (part == null ? null : String(part)), score: score })); } catch (e) {}
+    }
+    function gateLeftMs(part) {
+      var a = gradeAnchor();
+      if (!a || !a.ts) return 0;
+      if (String(a.part) !== String(part == null ? null : part)) return 0;   // otra parte = otro ejercicio
+      return Math.max(0, a.ts + GRADE_WINDOW_MS - Date.now());
+    }
+    var storyBaseMin = null;    // minutos de lectura ya registrados ANTES de esta sesión
+
     // ── Sesiones diarias (meta diaria multi-equipo) ──
     // Guarda los minutos de HOY por actividad en la tabla daily_sessions; la
     // plataforma los suma para el anillo de meta diaria en CUALQUIER equipo.
@@ -179,6 +356,14 @@
       } catch (e) {}
     }
     pushLive('start');
+
+    // Lectura: sabemos de entrada cuántos minutos ya tenía registrados, para
+    // ACUMULAR el tiempo de esta sesión y no pisar lo leído antes.
+    if (IS_STORY && !demo) setTimeout(function () {
+      if (!ensureSb()) return;
+      sb.from('progress').select('minutes').eq('user_id', uid).eq('module_id', modId).eq('activity_id', actId).maybeSingle()
+        .then(function (r) { if (storyBaseMin == null) storyBaseMin = (r && r.data && r.data.minutes) || 0; }, function () {});
+    }, 1500);
 
     // ── Chip flotante con el tiempo activo ──
     var chip = document.createElement('div');
@@ -457,11 +642,11 @@
             done = true; // marcada como practicada (desbloquea la siguiente) — sin cooldown ni tarjeta
             pushLive('done', null);
             try { if (window.parent && window.parent !== window) window.parent.postMessage({ source: 'jucum-connect', type: 'done', uid: uid, mod: modId, act: actId, score: null, minutes: Math.max(1, capMin) }, '*'); } catch (e) {}
-            if (!demo) pushProgress(100, Math.max(1, capMin));
+            if (!demo) pushStory(Math.round(activeSec / 60));
             if (!demo && activePart != null) pushPart(activePart, null, Math.max(1, capMin)); // qué historia leyó (nube)
           }
           // refresca el tiempo de lectura cada 2 min (hasta el tope) para que el profesor lo vea
-          if (!demo && done && activeSec % 120 === 0 && Math.round(activeSec / 60) <= READING_CAP_MIN) pushProgress(100, capMin);
+          if (!demo && done && activeSec % 120 === 0) pushStory(Math.round(activeSec / 60));
           if (teacher && activeSec % 60 === 0) logClass();
         }
         updateChip();
@@ -476,7 +661,9 @@
       // abierta en segundo plano sumaba hasta el tope de inactividad y muchos
       // terminaban registrando los mismos minutos fantasma.)
       paused = idleSec >= WARN_AFTER_SEC || document.visibilityState === 'hidden';
-      if (!done && !paused) {
+      // El tiempo sigue contando DESPUÉS de terminar: en un material de 4 audios
+      // el reloj se congelaba al primero y los minutos del resto se perdían.
+      if (!paused) {
         activeSec++; activeDaySec++;
         if (!demo && activeSec % 120 === 0) pushDaily();
         if (teacher && activeSec % 60 === 0) logClass();
@@ -484,84 +671,99 @@
       updateChip();
     }, 1000);
 
-    function complete(score, lowStakes) {
-      if (done) return;
+    /* Registro de ESTA sesión, por parte (historia/audio/diálogo). Un material
+     * con 4 audios dispara 'jucum:done' 4 veces: antes solo se registraba el
+     * PRIMERO y su nota quedaba como nota de TODA la actividad (por eso se
+     * veían notas que no correspondían). Ahora cada parte cuenta. */
+    var sessionReg = {};
+    function complete(score, lowStakes, partId) {
+      if (exam && done) return;                    // examen: vale el primer intento
+      var pkey = (partId == null ? 'all' : 'p' + partId);
+      var sc = (score == null) ? null : Math.max(0, Math.min(100, Math.round(Number(score))));
+      var visto = sessionReg[pkey];
+      if (visto !== undefined && (sc == null || (visto != null && sc <= visto))) return; // nada nuevo
+      sessionReg[pkey] = sc;
       done = true;
       updateChip();
       var minutes = Math.max(1, Math.round(activeSec / 60));
       pushDaily(); // asegura los minutos del día antes de registrar la nota
-      var pct = score == null ? 100 : score;
-      pushLive('done', { score: (score == null ? null : pct) });
+      var pct = sc == null ? 100 : sc;
+      pushLive('done', { score: sc });
 
       // Puente con la plataforma: si el material está EMBEBIDO en una tarea,
       // avisa al panel padre para registrar la nota en la entrega.
-      try { if (window.parent && window.parent !== window) window.parent.postMessage({ source: 'jucum-connect', type: 'done', uid: uid, mod: modId, act: actId, score: (score == null ? null : pct), minutes: minutes }, '*'); } catch (e) {}
+      try { if (window.parent && window.parent !== window) window.parent.postMessage({ source: 'jucum-connect', type: 'done', uid: uid, mod: modId, act: actId, score: sc, minutes: minutes }, '*'); } catch (e) {}
 
       if (demo) {
-        if (exam && uid) { finishExam(pct, minutes, score != null); return; }
-        showResultCard(pct, '🧪 Modo prueba · ' + minutes + ' min' + (score != null ? ' · ' + pct + '%' : '') + ' (no se registró)', score != null, lowStakes);
+        if (exam && uid) { finishExam(pct, minutes, sc != null); return; }
+        showResultCard(pct, '🧪 Modo prueba · ' + minutes + ' min' + (sc != null ? ' · ' + sc + '%' : '') + ' (no se registró)', sc != null, lowStakes);
         return;
       }
 
-      // Bug reportado: una nota baja quedaba "congelada" 7 días → el material se
-      // atascaba en 0% aunque el alumno lo rehiciera bien. Ahora SIEMPRE registramos
-      // quedándonos con la MEJOR nota: si el alumno vuelve a practicar y mejora, su
-      // estado y sus puntos se actualizan al instante. Puede repasar cuando quiera.
-      // El anti-farmeo lo maneja la plataforma: el XP de un material se vuelve a ganar
-      // UNA vez por semana (no por cada intento del día).
-      var firstTs = parseInt(localStorage.getItem(ATTEMPT_KEY) || '0', 10);
-      var now = Date.now();
-      improveProgress(pct, minutes, lowStakes, function (res) {
-        if (!firstTs) localStorage.setItem(ATTEMPT_KEY, String(now));
+      // SIEMPRE queda registrada la práctica (fecha + minutos). La regla de la
+      // ½ hora solo congela la NOTA, y solo si se repite el MISMO ejercicio.
+      improveProgress(sc, minutes, lowStakes, partId, function (res) {
+        try { if (!localStorage.getItem(ATTEMPT_KEY)) localStorage.setItem(ATTEMPT_KEY, String(Date.now())); } catch (e) {}
         var prev = res.prev, msg;
-        if (res.offline) msg = '📡 Sin internet en este momento. Tu resultado (' + (score != null ? pct + '% · ' : '') + minutes + ' min) quedó guardado en ESTE equipo y se registrará solo en tu próxima práctica con conexión.';
-        else if (res.gated) msg = '🕐 Sacaste ' + pct + '%, pero tu nota registrada sigue en ' + prev + '%: la nota puede cambiar recién MEDIA HORA después de tu intento anterior. Repasa el feedback y vuelve a intentarlo en ~' + res.waitMin + ' min para que sí cuente.';
-        else if (prev == null) msg = '✅ Práctica registrada · ' + minutes + ' min' + (score != null ? ' · ' + pct + '%' : '');
-        else if (score != null && pct > prev) msg = '🎉 ¡Mejoraste tu nota! Antes ' + prev + '% → ahora ' + pct + '%.';
-        else if (score != null && pct === prev) msg = '👍 Practicaste de nuevo. Tu nota (' + prev + '%) se mantiene.';
-        else if (score != null) msg = '👍 Lo intentaste de nuevo. Tu mejor nota (' + prev + '%) se mantiene.';
+        if (res.offline) msg = '📡 Sin internet en este momento. Tu resultado (' + (sc != null ? sc + '% · ' : '') + minutes + ' min) quedó guardado en ESTE equipo y se registrará solo en tu próxima práctica con conexión.';
+        else if (res.gated) msg = '🕐 Sacaste ' + sc + '%, pero tu nota registrada sigue en ' + prev + '%: la nota puede cambiar recién MEDIA HORA después de tu intento anterior. Tu práctica de hoy SÍ quedó registrada — repasa el feedback y vuelve a intentarlo en ~' + res.waitMin + ' min para que la nota también cuente.';
+        else if (prev == null) msg = '✅ Práctica registrada · ' + minutes + ' min' + (sc != null ? ' · ' + sc + '%' : '');
+        else if (sc != null && sc > prev) msg = '🎉 ¡Mejoraste tu nota! Antes ' + prev + '% → ahora ' + sc + '%.';
+        else if (sc != null && sc === prev) msg = '👍 Practicaste de nuevo. Tu nota (' + prev + '%) se mantiene.';
+        else if (sc != null) msg = '👍 Lo intentaste de nuevo. Tu mejor nota (' + prev + '%) se mantiene.';
         else msg = '✅ Práctica registrada · ' + minutes + ' min';
-        showResultCard(pct, msg, score != null, lowStakes);
+        showResultCard(pct, msg, sc != null, lowStakes);
       });
     }
 
-    // Registra el progreso quedándonos con la MEJOR nota (nunca baja una nota previa).
-    // Regla de la ½ hora: si ya hay una nota registrada hace <30 min, la nota NO
-    // cambia todavía (res.gated; no se escribe nada para no correr el ancla de la
-    // ventana). Si la nube falla, el intento va a la bandeja local y se reenvía
-    // solo (res.offline). res = { prev, saved, improved, gated, waitMin, offline }.
-    function improveProgress(score, minutes, lowStakes, cb) {
+    /* Registra el progreso quedándonos con la MEJOR nota (nunca baja una nota
+     * previa) y dejando SIEMPRE la fecha de hoy + los minutos máximos: esa fila
+     * es la evidencia de que el alumno practicó (✓ del día, XP, racha, boletín).
+     * Si la nube falla, el intento va a la bandeja local y se reenvía solo.
+     * res = { prev, saved, improved, gated, waitMin, offline }. */
+    function improveProgress(score, minutes, lowStakes, partId, cb) {
       function fail() { outboxAdd(score, minutes); cb({ prev: null, saved: false, offline: true }); }
       if (demo) { cb({ prev: null, saved: false }); return; }
       if (!ensureSb()) { fail(); return; }
       sb.from('progress').select('score,minutes,completed_at').eq('user_id', uid).eq('module_id', modId).eq('activity_id', actId).maybeSingle()
         .then(function (r) {
           var row = r && r.data;
-          var prev = (row && row.score != null) ? row.score : null;
-          function write(sc, mn, after) {
-            sb.from('progress').upsert({
-              user_id: uid, module_id: modId, activity_id: actId,
-              score: sc, minutes: mn, completed_at: new Date().toISOString()
-            }, { onConflict: 'user_id,module_id,activity_id' }).then(function (r2) {
-              if (r2 && r2.error) { fail(); return; }
-              after();
-            }, fail);
-          }
-          if (prev == null) { write(score, minutes, function () { cb({ prev: null, saved: true }); }); return; }
-          var last = row.completed_at ? Date.parse(row.completed_at) : 0;
-          var waitMs = last ? (last + GRADE_WINDOW_MS - Date.now()) : 0;
-          if (waitMs > 0 && !lowStakes) {
-            cb(score > prev
-              ? { prev: prev, saved: false, gated: true, waitMin: Math.max(1, Math.ceil(waitMs / 60000)) }
-              : { prev: prev, saved: true });
-            return;
-          }
-          // Fuera de la ventana (o participación): mejor nota + minutos mayores,
-          // con fecha nueva (deja evidencia de que practicó HOY para sus ✓ del día).
-          write(Math.max(prev, score), Math.max(minutes, row.minutes || 0), function () {
-            cb({ prev: prev, saved: true, improved: score > prev });
-          });
+          var prev = (row && row.score != null) ? Math.round(row.score) : null;
+          var prevMin = (row && row.minutes) || 0;
+          var waitMs = (lowStakes || score == null) ? 0 : gateLeftMs(partId);
+          var congelada = waitMs > 0 && prev != null;
+          var nota = congelada ? prev : (score == null ? prev : (prev == null ? score : Math.max(prev, score)));
+          sb.from('progress').upsert({
+            user_id: uid, module_id: modId, activity_id: actId,
+            score: nota, minutes: Math.max(minutes, prevMin),
+            completed_at: new Date().toISOString()
+          }, { onConflict: 'user_id,module_id,activity_id' }).then(function (r2) {
+            if (r2 && r2.error) { fail(); return; }
+            if (!congelada && score != null) setGradeAnchor(partId, nota);
+            cb({
+              prev: prev, saved: true,
+              gated: congelada && score > prev,
+              waitMin: Math.max(1, Math.ceil(waitMs / 60000)),
+              improved: !congelada && prev != null && score != null && score > prev
+            });
+          }, fail);
         }, fail);
+    }
+
+    /* Lectura (stories/diálogos): los minutos se ACUMULAN, nunca bajan. Antes se
+     * escribían los minutos de la sesión encima de los anteriores: volver a abrir
+     * una historia 2 minutos borraba los 30 min ya leídos — y con ellos su XP. */
+    function pushStory(sessionMin) {
+      if (demo || !ensureSb()) return;
+      var ses = Math.max(0, Math.round(sessionMin || 0));
+      sb.from('progress').select('minutes').eq('user_id', uid).eq('module_id', modId).eq('activity_id', actId).maybeSingle()
+        .then(function (r) {
+          var prev = (r && r.data && r.data.minutes) || 0;
+          if (storyBaseMin == null) storyBaseMin = prev;         // ancla de esta sesión
+          var mins = Math.max(1, Math.min(READING_CAP_MIN, storyBaseMin + ses));
+          if (mins < prev) mins = prev;                          // nunca bajar lo ya leído
+          pushProgress(100, mins);
+        }, function () { pushProgress(100, Math.max(1, Math.min(READING_CAP_MIN, (storyBaseMin || 0) + ses))); });
     }
 
     function pushProgress(score, minutes, ok) {
@@ -623,9 +825,10 @@
     if (!demo && !IS_STORY && !exam && !/summary|quizlet/.test(KIND)) setTimeout(function () {
       if (!ensureSb()) return;
       sb.from('progress').select('score,completed_at').eq('user_id', uid).eq('module_id', modId).eq('activity_id', actId).maybeSingle().then(function (r) {
-        var row = r && r.data; if (!row || row.score == null || !row.completed_at) return;
-        var p = row.score > 10 ? Math.round(row.score) : Math.round(row.score * 10);
-        var left = Date.parse(row.completed_at) + GRADE_WINDOW_MS - Date.now();
+        var row = r && r.data; if (!row || row.score == null) return;
+        var p = Math.max(0, Math.min(100, Math.round(row.score)));
+        var a = gradeAnchor();
+        var left = (a && a.ts) ? (a.ts + GRADE_WINDOW_MS - Date.now()) : 0;
         if (left > 0) banner('🕐 Ya tienes un intento registrado (' + p + '%). Tu nota podrá cambiar en ~' + Math.max(1, Math.ceil(left / 60000)) + ' min — mientras tanto repasa con calma: el feedback es tu mejor maestro.');
         else if (p < 75) banner('💪 Tu nota anterior fue ' + p + '%. Ya pasó la media hora: este intento SÍ puede actualizarla. ¡Tú puedes!');
       }, function () {});
@@ -669,18 +872,18 @@
       var lowStakes = d.type === 'summary' || d.type === 'quizlet';
       // Nota por PARTE: el material envía story/audio/part; lo guardamos aparte.
       var part = (d.part != null) ? d.part : (d.story != null ? d.story : (d.audio != null ? d.audio : null));
-      if (part != null) pushPart(part, (d.score != null) ? d.score : null, Math.max(1, Math.round(activeSec / 60)));
+      if (part != null) pushPart(part, (d.score != null) ? Math.round(d.score) : null, Math.max(1, Math.round(activeSec / 60)));
       if (IS_STORY || d.type === 'story' || d.type === 'dialog') {
         // Stories/diálogos = lectura sin nota: registra en silencio, SIN tarjeta emergente.
         if (!done) {
-          done = true; updateChip(); pushDaily();
-          var minsSt = Math.max(1, Math.min(READING_CAP_MIN, Math.round(activeSec / 60)));
-          try { if (window.parent && window.parent !== window) window.parent.postMessage({ source: 'jucum-connect', type: 'done', uid: uid, mod: modId, act: actId, score: null, minutes: minsSt }, '*'); } catch (e2) {}
-          if (!demo) pushProgress(100, minsSt);
+          done = true; updateChip();
+          try { if (window.parent && window.parent !== window) window.parent.postMessage({ source: 'jucum-connect', type: 'done', uid: uid, mod: modId, act: actId, score: null, minutes: Math.max(1, Math.round(activeSec / 60)) }, '*'); } catch (e2) {}
         }
+        pushDaily();
+        if (!demo) pushStory(Math.round(activeSec / 60));
         return;
       }
-      complete((d.score != null) ? d.score : 80, lowStakes);
+      complete((d.score != null) ? d.score : null, lowStakes, part);
     });
 
     function toast(msg) {
@@ -737,7 +940,7 @@
       if (!done && activeSec >= 45) pushLive('left', null, true);
       if (teacher) { logClass(); return; }
       pushDaily(); // los minutos del día SIEMPRE se salvan
-      if (IS_STORY) { if (!demo && activeSec >= 60) pushProgress(100, Math.min(READING_CAP_MIN, Math.round(activeSec / 60))); return; }
+      if (IS_STORY) { if (!demo && activeSec >= 60) pushProgress(100, Math.max(1, Math.min(READING_CAP_MIN, (storyBaseMin || 0) + Math.round(activeSec / 60)))); return; }
       // Salida temprana: ya NO se registra 0% (no pisa notas previas ni bloquea el
       // reintento con "Repetir"). El tiempo quedó en daily_sessions; la nota solo
       // existe cuando el alumno termina la actividad.

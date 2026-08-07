@@ -142,7 +142,7 @@ function StudentDayModal({ student, live, onClose }) {
     const e = completed[k] || {};
     const r = lcResolve(D, mid, aid);
     const fb = r.act ? null : lcActFallback(aid);
-    const sc = (typeof e.score === 'number') ? (e.score > 10 ? Math.round(e.score) : Math.round(e.score * 10)) : null;
+    const sc = (typeof e.score === 'number') ? Math.max(0, Math.min(100, Math.round(e.score))) : null;
     return { k, e, day: LC_DAY(e.date), hour: LC_HOUR(e.date), sc,
              name: r.act ? r.act.name : fb.name, ico: r.act ? (LC_ICO[r.act.type] || '📄') : fb.ico,
              modName: r.mod ? `${r.mod.emoji || '📦'} ${r.mod.name}` : 'módulo anterior',

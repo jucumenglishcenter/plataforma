@@ -261,7 +261,7 @@
       const e = prog.completed && prog.completed[`${a.moduleId}:${a.activityId}`];
       if (e) {
         done++;
-        const sc = typeof e.score === 'number' ? (e.score > 10 ? e.score : e.score * 10) : 100;
+        const sc = typeof e.score === 'number' ? Math.max(0, Math.min(100, Math.round(e.score))) : 100;
         if (sc >= thr) passed++;
         if (e.date && (!lastDate || e.date > lastDate)) lastDate = e.date;
       }
