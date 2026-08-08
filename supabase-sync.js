@@ -26,7 +26,9 @@
   const write = (k, v) => {
     try { localStorage.setItem(k, JSON.stringify(v)); }
     catch (e) {
-      // Cupo lleno (base64 viejo): purga adjuntos pesados y reintenta.
+      // Cupo lleno: libera lo recuperable (caché de arranque, notificaciones
+      // viejas) y purga adjuntos pesados en base64; luego reintenta.
+      try { if (window.JUCUM_STORE) window.JUCUM_STORE.freeSpace(1); } catch (e0) {}
       try { _purgeKey('jucum_submissions_v1'); _purgeKey('jucum_assignments_v1'); _purgeKey('jucum_registrations_v1'); _purgeKey('jucum_payments_v1'); } catch (e2) {}
       try { const light = JSON.parse(JSON.stringify(v)); _stripHeavy(light); localStorage.setItem(k, JSON.stringify(light)); }
       catch (e3) { console.warn('write quota:', k); }
@@ -104,6 +106,16 @@
       nByUser[n.user_id].push({ id:n.id, type:n.type, title:n.title, body:n.body, link:n.link, read:n.read, date:n.created_at });
     });
     Object.values(nByUser).forEach(arr => arr.sort((a,b)=>b.date.localeCompare(a.date)));
+    // Poda ANTES de guardar: bajarse las notificaciones de todos los alumnos
+    // llenaba el cupo del navegador del profesor (3.3 MB) y a partir de ahí
+    // nada más se podía guardar (planes, sets de práctica…).
+    try {
+      const corteN = Date.now() - 10 * 86400000;
+      Object.keys(nByUser).forEach(u => {
+        const arr = nByUser[u].filter(n => !(n.read && n.date && Date.parse(n.date) < corteN)).slice(0, 15);
+        if (arr.length) nByUser[u] = arr; else delete nByUser[u];
+      });
+    } catch (e) {}
     write(KEYS.notifs, nByUser);
 
     // evaluations

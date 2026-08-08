@@ -14,7 +14,11 @@
   const REM_KEY = 'jucum_teacher_reminders_v1'; // array de recordatorios
 
   const j = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch { return d; } };
-  const w = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+  /* 🛡️ Guardado a prueba de "cupo lleno": si el navegador ya no tiene espacio,
+   * ANTES esto lanzaba error y cortaba el clic a la mitad — el plan no se
+   * guardaba y el botón parecía muerto ("no puedo guardar mis sets"). Ahora
+   * libera espacio y sigue: la copia a la nube (cloudSetting) siempre se envía. */
+  const w = (k, v) => { try { if (window.JUCUM_STORE) return window.JUCUM_STORE.setJSON(k, v); localStorage.setItem(k, JSON.stringify(v)); } catch (e) { try { console.warn('teacher-tools: no se pudo guardar', k, e && e.name); } catch (e2) {} } };
 
   /* ── Práctica del día ───────────────────────────────────────────── */
   function getDailyAll() { return j(DP_KEY, {}); }
@@ -74,7 +78,8 @@
       const fresh = {};
       Object.keys(all).forEach(kk => { if (kk.slice(-10) === date) fresh[kk] = all[kk]; }); // conserva a otros alumnos del MISMO día (equipos compartidos)
       fresh[k] = items;
-      localStorage.setItem(TODAYSET_KEY, JSON.stringify(fresh));
+      if (window.JUCUM_STORE) window.JUCUM_STORE.setJSON(TODAYSET_KEY, fresh);
+      else localStorage.setItem(TODAYSET_KEY, JSON.stringify(fresh));
     } catch {}
     return items;
   }

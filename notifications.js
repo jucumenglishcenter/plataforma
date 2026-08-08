@@ -10,7 +10,23 @@ function loadNotifs() {
   try { return JSON.parse(localStorage.getItem(NOTIF_KEY) || '{}'); }
   catch { return {}; }
 }
-function saveNotifs(data) { localStorage.setItem(NOTIF_KEY, JSON.stringify(data)); }
+function saveNotifs(data) {
+  /* Poda antes de guardar: en el equipo del profesor se acumulaban las
+   * notificaciones de TODOS los alumnos (3.3 MB) y llenaban el cupo del
+   * navegador — con el cupo lleno ya no se podían guardar planes ni sets. */
+  try {
+    const corte = Date.now() - 30 * 86400000;
+    Object.keys(data).forEach(u => {
+      let arr = Array.isArray(data[u]) ? data[u] : [];
+      arr = arr.filter(n => !(n.read && n.date && Date.parse(n.date) < corte));
+      arr.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+      data[u] = arr.slice(0, 25);
+      if (!data[u].length) delete data[u];
+    });
+  } catch {}
+  if (window.JUCUM_STORE) return window.JUCUM_STORE.setJSON(NOTIF_KEY, data);
+  try { localStorage.setItem(NOTIF_KEY, JSON.stringify(data)); } catch {}
+}
 
 function getNotifs(userId) {
   const all = loadNotifs();
@@ -25,7 +41,7 @@ function pushNotif(userId, notif) {
     read: false,
     ...notif,
   });
-  if (all[userId].length > 50) all[userId] = all[userId].slice(0, 50);
+  if (all[userId].length > 25) all[userId] = all[userId].slice(0, 25);
   saveNotifs(all);
   // Sonido solo si la notificación es para el usuario logueado (debounced en sounds.js)
   try {

@@ -70,6 +70,8 @@
   }
   /* Modo clásico (idéntico a como funcionaba antes) por si algo sale mal */
   function fallback(err) {
+    if (arrancado) return;
+    arrancado = true;
     console.warn('fast-loader → modo clásico:', err && err.message);
     loadBabel().then(function () {
       LIST.forEach(function (src) {
@@ -125,15 +127,63 @@
     }
   }, true);
 
+  /* ── 📦 Caché del compilado en IndexedDB (no en localStorage) ──────
+   * Guardar ~3 MB de código compilado en localStorage se comía la mayor parte
+   * del cupo de ~5 MB del navegador: al profesor ya no le entraban sus planes
+   * ni sus sets de práctica (las escrituras fallaban). IndexedDB tiene un
+   * espacio MUCHO mayor y no compite con los datos de la plataforma.
+   * Si el navegador no lo soporta, se usa el modo anterior (localStorage). */
+  var DB_NAME = 'jucum_jsc', STORE = 'code';
+  function idbOpen() {
+    return new Promise(function (res, rej) {
+      if (!window.indexedDB) { rej(new Error('sin indexedDB')); return; }
+      var rq;
+      try { rq = indexedDB.open(DB_NAME, 1); } catch (e) { rej(e); return; }
+      rq.onupgradeneeded = function () { try { rq.result.createObjectStore(STORE); } catch (e) {} };
+      rq.onsuccess = function () { res(rq.result); };
+      rq.onerror = function () { rej(rq.error || new Error('idb')); };
+      rq.onblocked = function () { rej(new Error('idb bloqueado')); };
+      setTimeout(function () { rej(new Error('idb lento')); }, 3000);
+    });
+  }
+  function idbAll(db) {
+    return new Promise(function (res, rej) {
+      try {
+        var out = {}, rq = db.transaction(STORE, 'readonly').objectStore(STORE).openCursor();
+        rq.onsuccess = function () { var c = rq.result; if (!c) { res(out); return; } out[c.key] = c.value; c.continue(); };
+        rq.onerror = function () { rej(rq.error || new Error('idb read')); };
+      } catch (e) { rej(e); }
+    });
+  }
+  function idbPut(db, k, v) { try { db.transaction(STORE, 'readwrite').objectStore(STORE).put(v, k); } catch (e) {} }
+  function idbDel(db, k) { try { db.transaction(STORE, 'readwrite').objectStore(STORE).delete(k); } catch (e) {} }
+
+  var arrancado = false;
   function boot() {
-    prune();
-    var cached = LIST.map(getCache);
-    var allCached = cached.every(function (c) { return !!c; });
+    prune();                                  // limpia claves viejas del modo anterior
+    idbOpen().then(function (db) {
+      return idbAll(db).then(function (all) {
+        clearCompiledCache();                 // migración: libera los ~3 MB de localStorage
+        Object.keys(all).forEach(function (k) { if (LIST.indexOf(k) < 0) { idbDel(db, k); delete all[k]; } });
+        run(all, function (src, code) { idbPut(db, src, code); });
+      });
+    }).catch(function () {
+      var cached = {};
+      LIST.forEach(function (s) { var c = getCache(s); if (c) cached[s] = c; });
+      run(cached, setCache);
+    });
+  }
+
+  function run(cacheMap, put) {
+    if (arrancado) return;
+    arrancado = true;
+    var cached = LIST.map(function (s) { return cacheMap[s] || null; });
+    var allCached = cached.length > 0 && cached.every(function (c) { return !!c; });
 
     if (allCached) {
       // 🚀 Visita normal: sin Babel, sin compilar — directo
       try { LIST.forEach(function (src, i) { exec(cached[i], src); }); }
-      catch (e) { return fallback(e); }
+      catch (e) { arrancado = false; return fallback(e); }
       unmountSplash();
       scheduleHealCheck();
       return;
@@ -156,13 +206,13 @@
           sourceType: 'script',
           filename: src.split('?')[0],
         }).code;
-        setCache(src, out);
+        try { put(src, out); } catch (e) {}
         return out;
       });
       codes.forEach(function (code, i) { exec(code, LIST[i]); });
       unmountSplash();
       scheduleHealCheck();
-    }).catch(fallback);
+    }).catch(function (e) { arrancado = false; fallback(e); });
   }
 
   if (document.body) boot(); else document.addEventListener('DOMContentLoaded', boot);
