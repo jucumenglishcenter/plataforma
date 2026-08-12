@@ -411,6 +411,14 @@ function StudentDashboard({ user, onLogout }) {
     }
   }, [student.id, progress.todayMinutes, settings.dailyTargetMin]);
 
+  // ⏳ Nota en espera: trae las anclas vivas para avisar al tocar un material
+  React.useEffect(() => {
+    const l = () => { if (window.JUCUM_GATE) window.JUCUM_GATE.load(student.id); };
+    l();
+    window.addEventListener('focus', l);
+    return () => window.removeEventListener('focus', l);
+  }, [student.id]);
+
   // Alarma visual + sonora (1 vez al día): inactividad o racha en peligro
   React.useEffect(() => {
     const today = peruDayKey();
@@ -548,7 +556,7 @@ function StudentDashboard({ user, onLogout }) {
         {/* ── Recordatorio suave de vocabulario (2–3x al día) ── */}
         <VocabReminder student={student} settings={settings} onGo={(vocab, mod) => {
           const href = vocab && vocab.url ? linkFor(vocab, mod, student.id) : null;
-          if (href) window.location.href = href; else setView('practica');
+          if (href) openMat(href); else setView('practica');
         }} />
 
         {/* ── Motivación: no pierdas tu avance ── */}
@@ -973,6 +981,16 @@ function linkFor(a, mod, studentId) {
   return `${base}${sep}jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent(mod.id)}&jucum_act=${encodeURIComponent(a.id)}&jucum_kind=${encodeURIComponent(a.type||'')}${free}`;
 }
 
+/* Abrir un material desde el panel. Pasa por el aviso de "nota en espera"
+ * (grade-gate.js): si la nota de ese ejercicio sigue congelada, el alumno ve la
+ * cuenta regresiva y decide con el botón "Practicar de todas formas". Sin el
+ * guardián cargado, navega igual: nunca bloquea. */
+function openMat(href) {
+  if (!href) return;
+  if (window.JUCUM_GATE) return window.JUCUM_GATE.go(href);
+  window.location.href = href;
+}
+
 /* ─── Bloque C · gamification components ─── */
 function XpCard({ xp, xpInfo, student }) {
   return (
@@ -1103,7 +1121,7 @@ function ReviewSection({ student }) {
     const mod = (MODULE_CATALOG[student.level] || []).find(m => m.id === it.moduleId);
     const a = mod && (mod.activities || []).find(x => x.id === it.activityId);
     const href = a ? linkFor(a, mod, student.id) : null;
-    if (href) window.location.href = href;
+    if (href) openMat(href);
   };
   const dismissResult = () => {
     if (result) D.markReviewResultSeen(student.id, result.moduleId, result.activityId);
@@ -1578,7 +1596,7 @@ function RefuerzoSection({ student, highlight }) {
     const mod = mods.find(m => m.id === it.moduleId);
     const a = mod && (mod.activities || []).find(x => x.id === it.activityId);
     const href = a ? linkFor(a, mod, student.id) : null;
-    if (href) window.location.href = href;
+    if (href) openMat(href);
   };
   return (
     <div style={{marginTop:24}}>
@@ -1738,7 +1756,7 @@ function StudentPractice({ student, settings, onBack }) {
         const mod = (MODULE_CATALOG[student.level] || []).find(m => m.id === it.moduleId);
         const a = mod && (mod.activities || []).find(x => x.id === it.activityId);
         const href = a ? linkFor(a, mod, student.id) : null;
-        if (href) window.location.href = href;
+        if (href) openMat(href);
       }} />
 
       {selMod && (

@@ -35,6 +35,141 @@ if (window.JUCUM_CONFIG.SUPABASE_ANON_KEY === 'PEGA_TU_PUBLISHABLE_KEY_AQUI') {
 }
 
 /* ════════════════════════════════════════════════════════════════════
+   🗄️ JUCUM_BIG · los datos pesados YA NO viven en localStorage
+   ════════════════════════════════════════════════════════════════════
+   El navegador da solo ~5 MB de localStorage por sitio, y ese cupo es lo
+   que se llenaba (notificaciones y progreso de TODOS los alumnos en el
+   equipo del profesor) hasta que dejaba de guardar planes y sets.
+
+   Dónde vive cada cosa a partir de ahora:
+     • Supabase  → la VERDAD. Todo lo importante ya se guarda ahí y por eso
+                   se ve igual en cualquier equipo. Nada de esto lo cambia.
+     • IndexedDB → la copia local para trabajar rápido y sin internet.
+                   Es el almacén GRANDE del navegador (cientos de MB, no 5).
+     • localStorage → solo las claves chiquitas (sesión, preferencias).
+     • Netlify   → solo publica la página; no guarda datos.
+
+   Cómo funciona sin tocar el resto del código: interceptamos getItem/
+   setItem/removeItem SOLO para las claves pesadas de la lista. Al arrancar
+   se traen de IndexedDB a memoria (y se migra lo que hubiera en
+   localStorage, liberando ese espacio). Las lecturas siguen siendo
+   instantáneas; las escrituras se copian a IndexedDB en segundo plano.
+   Si el navegador no soporta IndexedDB, todo sigue como antes.
+   ════════════════════════════════════════════════════════════════════ */
+(function () {
+  if (window.JUCUM_BIG) return;
+  var HEAVY = {
+    jucum_student_progress_v1: 1, jucum_notifs_v1: 1, jucum_submissions_v1: 1,
+    jucum_assignments_v1: 1, jucum_registrations_v1: 1, jucum_payments_v1: 1,
+    jucum_class_log_v1: 1, jucum_teacher_notes_v1: 1, jucum_forum_v1: 1,
+    jucum_evaluations_v1: 1, jucum_messages_v1: 1, jucum_forum_flags_v1: 1,
+    jucum_attendance_v1: 1, jucum_diagnostics_v1: 1, jucum_error_reports_v1: 1
+  };
+  var LS = window.localStorage;
+  if (!LS || !window.Storage || !window.indexedDB) { window.JUCUM_BIG = { ok: false, ready: Promise.resolve(false) }; return; }
+
+  var P = window.Storage.prototype;
+  var nGet = P.getItem, nSet = P.setItem, nDel = P.removeItem, nClear = P.clear;
+  var mem = Object.create(null);     // clave → string | null (null = borrada)
+  var have = Object.create(null);    // la memoria manda para esta clave
+  var dirty = Object.create(null), db = null, listo = false, timer = null, resolver;
+  var ready = new Promise(function (r) { resolver = r; });
+
+  var DB = 'jucum_big', ST = 'kv';
+  function open() {
+    return new Promise(function (res, rej) {
+      var rq;
+      try { rq = indexedDB.open(DB, 1); } catch (e) { rej(e); return; }
+      rq.onupgradeneeded = function () { try { rq.result.createObjectStore(ST); } catch (e) {} };
+      rq.onsuccess = function () { res(rq.result); };
+      rq.onerror = function () { rej(rq.error || new Error('idb')); };
+      rq.onblocked = function () { rej(new Error('idb bloqueado')); };
+      setTimeout(function () { rej(new Error('idb lento')); }, 4000);
+    });
+  }
+  function readAll(d) {
+    return new Promise(function (res, rej) {
+      try {
+        var out = {}, rq = d.transaction(ST, 'readonly').objectStore(ST).openCursor();
+        rq.onsuccess = function () { var c = rq.result; if (!c) { res(out); return; } out[c.key] = c.value; c.continue(); };
+        rq.onerror = function () { rej(rq.error || new Error('idb read')); };
+      } catch (e) { rej(e); }
+    });
+  }
+  function flush() {
+    timer = null;
+    if (!db) return;
+    var keys = Object.keys(dirty);
+    if (!keys.length) return;
+    dirty = Object.create(null);
+    try {
+      var st = db.transaction(ST, 'readwrite').objectStore(ST);
+      keys.forEach(function (k) {
+        var v = mem[k];
+        if (v == null) { try { st.delete(k); } catch (e) {} }
+        else { try { st.put(v, k); } catch (e) {} }
+      });
+    } catch (e) { keys.forEach(function (k) { dirty[k] = 1; }); }
+  }
+  function queue(k) { dirty[k] = 1; if (!timer) timer = setTimeout(flush, 400); }
+
+  P.getItem = function (k) {
+    if (this === LS && HEAVY[k] === 1 && have[k]) return mem[k] == null ? null : mem[k];
+    return nGet.call(this, k);
+  };
+  P.setItem = function (k, v) {
+    if (this === LS && HEAVY[k] === 1) {
+      mem[k] = String(v); have[k] = 1; queue(k);
+      // Antes de que IndexedDB esté listo también dejamos la copia de siempre,
+      // por si el navegador cierra la pestaña en ese primer segundo.
+      if (!listo) { try { nSet.call(this, k, mem[k]); } catch (e) {} }
+      return;
+    }
+    return nSet.call(this, k, v);
+  };
+  P.removeItem = function (k) {
+    if (this === LS && HEAVY[k] === 1) { mem[k] = null; have[k] = 1; queue(k); }
+    return nDel.call(this, k);
+  };
+  P.clear = function () {
+    if (this === LS) { Object.keys(HEAVY).forEach(function (k) { mem[k] = null; have[k] = 1; queue(k); }); }
+    return nClear.call(this);
+  };
+
+  open().then(function (d) {
+    db = d;
+    return readAll(d);
+  }).then(function (rec) {
+    var migradas = 0;
+    Object.keys(HEAVY).forEach(function (k) {
+      if (have[k]) { queue(k); return; }                    // ya se escribió en esta sesión → memoria manda
+      if (typeof rec[k] === 'string') { mem[k] = rec[k]; have[k] = 1; return; }
+      var viejo = null; try { viejo = nGet.call(LS, k); } catch (e) {}
+      if (viejo != null) { mem[k] = viejo; have[k] = 1; queue(k); migradas++; }
+    });
+    listo = true;
+    // Libera el cupo de localStorage: esos datos ya están en IndexedDB.
+    Object.keys(HEAVY).forEach(function (k) { try { nDel.call(LS, k); } catch (e) {} });
+    flush();
+    try { if (migradas) console.info('JUCUM_BIG: ' + migradas + ' datos mudados a IndexedDB (localStorage liberado)'); } catch (e) {}
+    resolver(true);
+  }).catch(function (e) {
+    // Sin IndexedDB: se sigue usando localStorage como siempre.
+    try { console.warn('JUCUM_BIG no disponible, sigo en localStorage:', e && e.message); } catch (e2) {}
+    Object.keys(mem).forEach(function (k) { if (mem[k] != null) { try { nSet.call(LS, k, mem[k]); } catch (e3) {} } });
+    mem = Object.create(null); have = Object.create(null);
+    resolver(false);
+  });
+
+  window.JUCUM_BIG = {
+    ok: true, ready: ready, keys: HEAVY,
+    isBig: function (k) { return HEAVY[k] === 1; },
+    flush: flush,
+    bytes: function () { var t = 0; Object.keys(mem).forEach(function (k) { if (mem[k]) t += (k.length + mem[k].length) * 2; }); return t; }
+  };
+})();
+
+/* ════════════════════════════════════════════════════════════════════
    🗄️ JUCUM_STORE · guardado a prueba de "cupo lleno"
    ════════════════════════════════════════════════════════════════════
    El navegador solo da ~5 MB de localStorage por sitio. Cuando se llena,

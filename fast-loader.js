@@ -161,6 +161,13 @@
   var arrancado = false;
   function boot() {
     prune();                                  // limpia claves viejas del modo anterior
+    // Espera a que los datos pesados terminen de mudarse a IndexedDB (JUCUM_BIG),
+    // así la app lee los valores ya migrados y no una copia a medias.
+    var big = (window.JUCUM_BIG && window.JUCUM_BIG.ready) || Promise.resolve(false);
+    var seguir = Promise.race([big, new Promise(function (r) { setTimeout(r, 4500); })]);
+    seguir.catch(function () {}).then(bootIDB, bootIDB);
+  }
+  function bootIDB() {
     idbOpen().then(function (db) {
       return idbAll(db).then(function (all) {
         clearCompiledCache();                 // migración: libera los ~3 MB de localStorage

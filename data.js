@@ -646,7 +646,11 @@ function setGroupSettings(groupId, partial) {
  * umbral, todo el ranking se corrige solo y Mijhael deja de estar 1° sin migrar
  * un solo dato. */
 const PASS_THRESHOLD_KEY = 'jucum_pass_threshold_v1';
-const DEFAULT_PASS_THRESHOLD = { 'pre-a1': 75, 'a1': 78, 'a2': 85 };
+const DEFAULT_PASS_THRESHOLD = { 'pre-a1': 73, 'a1': 78, 'a2': 85 };
+/* 12-ago-2026 · Pre-A1 bajó de 75 a 73 por decisión de la usuaria: los ejercicios
+ * tienen 15 ítems, así que las notas posibles saltan de 73 (11/15) a 80 (12/15).
+ * Con 75 se exigían de hecho 12 de 15; con 73 aprueba 11 de 15. Al mover un
+ * umbral, mirar SIEMPRE cuántos ítems tiene el ejercicio real. */
 /* Estructura guardada: { 'pre-a1':75, 'a1':78, 'a2':85, __groups: { <groupId>: 80 } }
  * - Las claves de nivel son el ESTÁNDAR base (rigor creciente del nivel).
  * - __groups guarda OVERRIDES por grupo. Si un grupo no está en __groups,

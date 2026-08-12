@@ -299,7 +299,23 @@
     var GRADE_KEY = 'jucum_grade_' + (uid || 'demo') + '_' + modId + '_' + actId;
     function gradeAnchor() { try { return JSON.parse(localStorage.getItem(GRADE_KEY) || 'null'); } catch (e) { return null; } }
     function setGradeAnchor(part, score) {
-      try { localStorage.setItem(GRADE_KEY, JSON.stringify({ ts: Date.now(), part: (part == null ? null : String(part)), score: score })); } catch (e) {}
+      var ts = Date.now();
+      try { localStorage.setItem(GRADE_KEY, JSON.stringify({ ts: ts, part: (part == null ? null : String(part)), score: score })); } catch (e) {}
+      pushGateAnchor(part, ts, score);
+    }
+    /* Espejo del ancla en la NUBE para que la plataforma pueda avisarle al alumno
+     * cuánto falta para que su nota vuelva a contar (ella vive en otro dominio y
+     * no puede leer este localStorage). Solo ejercicios de UNA parte: en los de
+     * varias el alumno sigue con otra parte y no hay nada que avisar.
+     * part = 95 va en la banda reservada (>=90) que las vistas de historias y
+     * audios ya filtran, así que no ensucia ningún reporte. */
+    function pushGateAnchor(part, ts, score) {
+      if (demo || exam || part != null || !uid || !ensureSb()) return;
+      sb.from('activity_parts').upsert({
+        user_id: uid, module_id: modId, activity_id: actId, part: 95,
+        score: (score == null ? null : score), minutes: 0,
+        completed_at: new Date(ts).toISOString()
+      }, { onConflict: 'user_id,module_id,activity_id,part' }).then(function () {}, function () {});
     }
     function gateLeftMs(part) {
       var a = gradeAnchor();
