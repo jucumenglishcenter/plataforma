@@ -32,7 +32,7 @@
    A) CON quiz/MCQ (readings, listenings, prácticas y resúmenes de gramática):
       en tu función de resultados dispara:
         window.dispatchEvent(new CustomEvent('jucum:done', { detail: { score: 86 } }))
-      (score 0-100).
+      (score 0-100; añade `pass: 65` si ese material aprueba con otra nota).
    B) SIN quiz (stories y diálogos): se registra automáticamente tras 4 minutos
       de LECTURA ACTIVA real (sin score, cuenta como practicado).
    ════════════════════════════════════════════════════════════════════ */
@@ -846,7 +846,7 @@
         var a = gradeAnchor();
         var left = (a && a.ts) ? (a.ts + GRADE_WINDOW_MS - Date.now()) : 0;
         if (left > 0) banner('🕐 Ya tienes un intento registrado (' + p + '%). Tu nota podrá cambiar en ~' + Math.max(1, Math.ceil(left / 60000)) + ' min — mientras tanto repasa con calma: el feedback es tu mejor maestro.');
-        else if (p < 75) banner('💪 Tu nota anterior fue ' + p + '%. Ya pasó la media hora: este intento SÍ puede actualizarla. ¡Tú puedes!');
+        else if (p < PASS_MARK) banner('💪 Tu nota anterior fue ' + p + '%. Ya pasó la media hora: este intento SÍ puede actualizarla. ¡Tú puedes!');
       }, function () {});
     }, 2500);
 
@@ -885,6 +885,7 @@
     // Quizzes (readings, listenings, gramática, resúmenes MCQ) avisan así:
     window.addEventListener('jucum:done', function (e) {
       var d = e.detail || {};
+      if (typeof d.pass === 'number' && d.pass > 0 && d.pass <= 100) PASS_MARK = d.pass; // el material manda su nota mínima
       var lowStakes = d.type === 'summary' || d.type === 'quizlet';
       // Nota por PARTE: el material envía story/audio/part; lo guardamos aparte.
       var part = (d.part != null) ? d.part : (d.story != null ? d.story : (d.audio != null ? d.audio : null));
@@ -917,15 +918,19 @@
     }
 
     // ── Frase motivacional + cierre de práctica ──
+    /* Nota mínima para aprobar: por defecto 75, pero un material puede enviar la suya
+     * (los exámenes de módulo usan 65 en la versión de niños y 70 en la de adultos). */
+    var PASS_MARK = 75;
     function jecMotivation(pct) {
+      var pm = PASS_MARK;
       if (pct >= 90) return { emoji:'🌟', title:'¡Excelente!',    text:'Dominaste el tema. Tu constancia se nota — sigue así.',                                         bg:'#E8F5E9', color:'#2E7D32' };
-      if (pct >= 75) return { emoji:'💪', title:'¡Muy bien!',     text:'Vas por buen camino. Repasa los pocos errores y serás imparable.',                                bg:'#E3F2FD', color:'#1565C0' };
-      if (pct >= 50) return { emoji:'🌱', title:'¡Buen intento!', text:'Aprendiste más de lo que crees. Revisa el feedback y vuelve a intentarlo: cada error te acerca.',     bg:'#FFF8E1', color:'#F57F17' };
+      if (pct >= pm) return { emoji:'💪', title:'¡Muy bien!',     text:'Vas por buen camino. Repasa los pocos errores y serás imparable.',                                bg:'#E3F2FD', color:'#1565C0' };
+      if (pct >= Math.max(35, pm - 25)) return { emoji:'🌱', title:'¡Buen intento!', text:'Aprendiste más de lo que crees. Revisa el feedback y vuelve a intentarlo: cada error te acerca.',     bg:'#FFF8E1', color:'#F57F17' };
       return               { emoji:'🤗', title:'¡Sigue adelante!', text:'Equivocarse ES aprender — tu cerebro ya está cambiando aunque no lo sientas. Repasa con calma y verás el avance.', bg:'#FCE4EC', color:'#AD1457' };
     }
     function showResultCard(pct, statusMsg, hasScore, lowStakes) {
       var m = jecMotivation(pct);
-      var needRetry = hasScore && pct < 75 && !lowStakes;
+      var needRetry = hasScore && pct < PASS_MARK && !lowStakes;
       var retryHtml = needRetry ? '<div style="font-size:13px;font-weight:800;color:#92510F;background:#FFF3D6;border:1.5px solid #F0C66B;border-radius:12px;padding:11px 13px;margin-bottom:14px;line-height:1.5;">🔁 Necesitas <b>75% o más</b> de respuestas correctas para aprobar. Revisa el feedback y <b>vuelve a realizar la actividad</b> para completarla. 🕐 Ojo: tu nota se actualiza recién <b>media hora después</b> de este intento — usa ese tiempo para repasar.</div>' : '';
       var ov = document.createElement('div');
       ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.6);z-index:1000000;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;padding:16px;';
