@@ -290,6 +290,24 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
     onChange();
     return X.windowForExamGroup(exam.id, group.id);
   };
+  /* Habilitar dice QUIÉN puede entrar; si la ventana no está abierta (sin fecha o ya pasó),
+   * nadie entra. Al habilitar, ofrecemos abrirla ahora mismo. */
+  const abrirSiHaceFalta = (w) => {
+    try {
+      if (!w) return;
+      const a = F.getAnn(group.id, module.id) || {};
+      const hoy = F.pDay();
+      const abierta = w.isOpen && !a.forceClosed;
+      const abriráSola = !a.forceClosed && a.auto !== false && a.date && a.date >= hoy;
+      if (abierta || abriráSola) return;
+      const msg = a.date && a.date < hoy
+        ? 'La fecha programada (' + F.fmtFecha(a.date) + ') ya pasó, así que el examen está cerrado y nadie puede entrar.\n\n¿Abrirlo AHORA para los habilitados?'
+        : 'Este examen todavía no está abierto, así que el alumno aún no podrá entrar.\n\n¿Abrirlo AHORA para los habilitados?';
+      if (!confirm(msg)) return;
+      X.setWindowOpen(w.id, true);
+      F.setAnn(group.id, module.id, { forceClosed: false });
+    } catch (e) {}
+  };
   const doProgram = () => {
     if (!date) { alert('Elige la fecha del examen.'); return; }
     const schedNotif = aviso === 'fecha' && avisoDate && avisoDate > F.pDay();
@@ -381,6 +399,7 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
               if (!confirm('¿Habilitar el examen para TODO el grupo (' + members.length + ' alumnos), sin importar su porcentaje?')) return;
               const w = win || (X.createWindow({ examId: exam.id, groupId: group.id, isOpen: false }), X.windowForExamGroup(exam.id, group.id));
               members.forEach(s => { if (!(w.allowOverrides || []).includes(s.id)) X.toggleOverride(w.id, s.id); });
+              abrirSiHaceFalta(w);
               onChange();
             }}>✅ Habilitar a todo el grupo</button>
             {win && (win.allowOverrides || []).length > 0 && <button className="att-btn" onClick={() => {
@@ -389,7 +408,7 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
               onChange();
             }}>✕ Quitar habilitaciones ({(win.allowOverrides || []).length})</button>}
           </div>
-          <div className="settings-hint" style={{margin:'0 0 8px'}}>El % es la preparación en el <b>módulo activo del grupo</b>: si este examen es de un módulo anterior y ya abriste uno nuevo, saldrán bajos aunque estén listos — en ese caso <b>habilítalos tú</b> (uno por uno o todo el grupo). Tienes la última palabra.</div>
+          <div className="settings-hint" style={{margin:'0 0 8px'}}>El % es la preparación en el <b>módulo activo del grupo</b> (por eso baja al abrir un módulo nuevo: la cobertura empieza de cero). Si este examen es de un módulo anterior, ignora el % y <b>habilítalos tú</b> — al hacerlo, si el examen estaba cerrado te ofrece <b>abrirlo ahora</b>. Tienes la última palabra.</div>
           <ExamResultsPanel exam={exam} members={members} />
           <div className="sm-list">
             {[...members].sort((a, b) => getStudentReadiness(b).overall - getStudentReadiness(a).overall).map(s => {
@@ -414,7 +433,7 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
                   </div>
                   {res
                     ? exfPill(res.passed ? '#E8F5E9' : '#FFEBEE', res.passed ? '#2E7D32' : '#C62828', <>{res.passed ? 'Aprobó' : 'Reprobó'}{typeof res.grade === 'number' ? ' · ' + res.grade : ''}</>, 'res')
-                    : <label className="check-row" title="Abrirle el examen a este alumno, sin importar su porcentaje"><input type="checkbox" checked={r.apt || overridden} onChange={() => { const w = win || (X.createWindow({ examId: exam.id, groupId: group.id, isOpen: false }), X.windowForExamGroup(exam.id, group.id)); X.toggleOverride(w.id, s.id); onChange(); }} /><span style={{fontSize:12}}>{overridden ? 'Habilitado' : r.apt ? 'Apto' : 'Habilitar'}</span></label>}
+                    : <label className="check-row" title="Abrirle el examen a este alumno, sin importar su porcentaje"><input type="checkbox" checked={r.apt || overridden} onChange={() => { const w = win || (X.createWindow({ examId: exam.id, groupId: group.id, isOpen: false }), X.windowForExamGroup(exam.id, group.id)); X.toggleOverride(w.id, s.id); abrirSiHaceFalta(w); onChange(); }} /><span style={{fontSize:12}}>{overridden ? 'Habilitado' : r.apt ? 'Apto' : 'Habilitar'}</span></label>}
                   {win && <button className="att-btn" onClick={() => setGrading(s)}>📊 Resultado</button>}
                 </div>
               );
