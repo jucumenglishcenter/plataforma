@@ -377,8 +377,19 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
           <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap', margin:'5px 0 3px'}}>
             {exfPill('#E8F5E9', '#2E7D32', <>✅ {members.filter(s => getStudentReadiness(s).apt).length} apto(s)</>, 'ca')}
             {exfPill('#FFF8E1', '#E65100', <>⚠ {members.filter(s => !getStudentReadiness(s).apt).length} aún no — habilítalos aquí abajo</>, 'cb')}
+            <button className="att-btn" onClick={() => {
+              if (!confirm('¿Habilitar el examen para TODO el grupo (' + members.length + ' alumnos), sin importar su porcentaje?')) return;
+              const w = win || (X.createWindow({ examId: exam.id, groupId: group.id, isOpen: false }), X.windowForExamGroup(exam.id, group.id));
+              members.forEach(s => { if (!(w.allowOverrides || []).includes(s.id)) X.toggleOverride(w.id, s.id); });
+              onChange();
+            }}>✅ Habilitar a todo el grupo</button>
+            {win && (win.allowOverrides || []).length > 0 && <button className="att-btn" onClick={() => {
+              if (!confirm('¿Quitar las habilitaciones manuales de este examen?')) return;
+              (win.allowOverrides || []).slice().forEach(id => X.toggleOverride(win.id, id));
+              onChange();
+            }}>✕ Quitar habilitaciones ({(win.allowOverrides || []).length})</button>}
           </div>
-          <div className="settings-hint" style={{margin:'0 0 8px'}}>Aptos (≥75%) entran solos el día del examen; a los demás tú puedes <b>habilitarlos</b> — tienes la última palabra. La nota sugerida sale de su examen rendido.</div>
+          <div className="settings-hint" style={{margin:'0 0 8px'}}>El % es la preparación en el <b>módulo activo del grupo</b>: si este examen es de un módulo anterior y ya abriste uno nuevo, saldrán bajos aunque estén listos — en ese caso <b>habilítalos tú</b> (uno por uno o todo el grupo). Tienes la última palabra.</div>
           <ExamResultsPanel exam={exam} members={members} />
           <div className="sm-list">
             {[...members].sort((a, b) => getStudentReadiness(b).overall - getStudentReadiness(a).overall).map(s => {
@@ -403,7 +414,7 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
                   </div>
                   {res
                     ? exfPill(res.passed ? '#E8F5E9' : '#FFEBEE', res.passed ? '#2E7D32' : '#C62828', <>{res.passed ? 'Aprobó' : 'Reprobó'}{typeof res.grade === 'number' ? ' · ' + res.grade : ''}</>, 'res')
-                    : <label className="check-row" title="Habilitar pese a no llegar al 75%"><input type="checkbox" checked={r.apt || overridden} disabled={r.apt} onChange={() => { const w = win || (X.createWindow({ examId: exam.id, groupId: group.id, isOpen: false }), X.windowForExamGroup(exam.id, group.id)); X.toggleOverride(w.id, s.id); onChange(); }} /><span style={{fontSize:12}}>{r.apt ? 'Apto' : 'Habilitar'}</span></label>}
+                    : <label className="check-row" title="Abrirle el examen a este alumno, sin importar su porcentaje"><input type="checkbox" checked={r.apt || overridden} onChange={() => { const w = win || (X.createWindow({ examId: exam.id, groupId: group.id, isOpen: false }), X.windowForExamGroup(exam.id, group.id)); X.toggleOverride(w.id, s.id); onChange(); }} /><span style={{fontSize:12}}>{overridden ? 'Habilitado' : r.apt ? 'Apto' : 'Habilitar'}</span></label>}
                   {win && <button className="att-btn" onClick={() => setGrading(s)}>📊 Resultado</button>}
                 </div>
               );
@@ -749,10 +760,11 @@ function ModuleExamBanner({ mod, studentId }) {
       </>
     ));
   }
-  /* announced (apto o no apto) */
+  /* announced · apto, habilitado por la profesora, o aún no */
   const r = info.r || { overall: 0, apt: false };
-  const color = r.apt ? '#2EA84B' : r.overall >= 50 ? '#F9A825' : '#E53935';
-  return box(r.apt ? '#A5D6A7' : '#F0C46C', (
+  const habil = !info.canTake ? false : !r.apt;                 // tú se lo abriste a mano
+  const color = (r.apt || habil) ? '#2EA84B' : r.overall >= 50 ? '#F9A825' : '#E53935';
+  return box((r.apt || habil) ? '#A5D6A7' : '#F0C46C', (
     <>
       {head('linear-gradient(135deg,#1F3A8A,#0D1B5A)', '🎓', 'Examen del módulo', mod.name,
         info.ann && info.ann.date ? F.fmtFecha(info.ann.date) + (horario ? ' · ' + horario : '') : 'fecha por anunciar',
@@ -764,14 +776,18 @@ function ModuleExamBanner({ mod, studentId }) {
             <i style={{position:'absolute', top:-2, bottom:-2, left:'75%', width:2, background:'#1F3A8A'}}></i>
           </div>
           <b style={{fontSize:13, color}}>{r.overall}%</b>
-          {exfPill(r.apt ? '#E8F5E9' : '#FFF8E1', r.apt ? '#2E7D32' : '#E65100', r.apt ? '✓ Apto' : 'Falta ' + Math.max(0, 75 - r.overall) + '% para ser Apto', 'apt')}
+          {habil
+            ? exfPill('#E8F5E9', '#2E7D32', '✅ Habilitada por tu profesora', 'apt')
+            : exfPill(r.apt ? '#E8F5E9' : '#FFF8E1', r.apt ? '#2E7D32' : '#E65100', r.apt ? '✓ Apto' : 'Falta ' + Math.max(0, (r.threshold || 75) - r.overall) + '% para ser Apto', 'apt')}
         </div>
         <div style={{fontSize:12.5, lineHeight:1.6, color:'#4A4A44', fontWeight:600}}>
-          {r.apt
+          {habil
+            ? <>✅ <b>Tu profesora te habilitó</b> para rendir este examen: no necesitas llegar al 75%. El botón para entrar aparecerá <b>aquí mismo</b> {info.ann && info.ann.date ? <>el <b>{F.fmtFecha(info.ann.date)}</b>{horario ? <> a la hora indicada ({horario})</> : null}</> : 'el día del examen'}. Mientras tanto, repasa con calma. 💪</>
+            : r.apt
             ? <>¡Eres Apto! 🎉 Pero ojo: tu preparación es una <b>foto viva</b> — si dejas de practicar puede <b>bajar del 75%</b> y quedarías sin rendir tu examen. Mantén tu Apto con <b>{minDia} min cada día</b>. El botón para dar tu examen aparecerá <b>aquí mismo</b> ese día.</>
             : <>El examen se abre solo para alumnos <b>Aptos (75%)</b>. Aún estás a tiempo: tu preparación sube con la <b>práctica de cada día</b> — <b>{minDia} min diarios</b>, no todo de golpe. 💪</>}
         </div>
-        {!r.apt && <button type="button" onClick={() => setPlan(true)} style={{marginTop:10, width:'100%', border:'none', borderRadius:24, padding:'11px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14, cursor:'pointer', color:'#fff', background:'linear-gradient(135deg,#F4A02C,#E07A12)'}}>🎯 ¿Qué hago para dar mi examen?</button>}
+        {!r.apt && !habil && <button type="button" onClick={() => setPlan(true)} style={{marginTop:10, width:'100%', border:'none', borderRadius:24, padding:'11px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14, cursor:'pointer', color:'#fff', background:'linear-gradient(135deg,#F4A02C,#E07A12)'}}>🎯 ¿Qué hago para dar mi examen?</button>}
       </div>
       {plan && <ExamPlanModal student={student} mod={mod} info={info} minDia={minDia} onClose={() => setPlan(false)} />}
     </>
@@ -902,15 +918,20 @@ function ExamChecklistRow({ mod, studentId }) {
     );
   }
   const r = info.r || { apt: false, overall: 0 };
+  const hab = !!info.canTake && !r.apt;
   return (
     <div className="al-item locked" style={{cursor:'default'}}>
       <span className="al-num">🔒</span><span className="al-ico">🎓</span>
       <span className="al-name">Examen del módulo · {mod.name}
         <span style={{display:'block', fontSize:10.5, color:'#999', fontWeight:800}}>
-          {info.ann && info.ann.date ? <>Se abre el {F.fmtFecha(info.ann.date)}{info.ann.from ? ', ' + F.fmtHora(info.ann.from) : ''} · solo Aptos (75%){r.apt ? ' — mantén tu Apto practicando a diario' : ''}</> : 'Tu profesora anunciará la fecha · solo Aptos (75%)'}
+          {info.ann && info.ann.date
+            ? <>Se abre el {F.fmtFecha(info.ann.date)}{info.ann.from ? ', ' + F.fmtHora(info.ann.from) : ''}{hab ? ' · tu profesora te habilitó' : <> · solo Aptos (75%){r.apt ? ' — mantén tu Apto practicando a diario' : ''}</>}</>
+            : hab ? 'Tu profesora te habilitó · anunciará la fecha' : 'Tu profesora anunciará la fecha · solo Aptos (75%)'}
         </span>
       </span>
-      {r.apt
+      {hab
+        ? <span className="mm-chip" style={{background:'#E8F5E9', color:'#2E7D32', whiteSpace:'nowrap'}}>✓ Habilitada</span>
+        : r.apt
         ? <span className="mm-chip" style={{background:'#E8F5E9', color:'#2E7D32', whiteSpace:'nowrap'}}>✓ Apto</span>
         : <span className="mm-chip" style={{background:'#FFF8E1', color:'#E65100', whiteSpace:'nowrap'}}>Falta {Math.max(0, 75 - r.overall)}%</span>}
     </div>
