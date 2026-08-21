@@ -44,6 +44,84 @@ function _jucumSafeSet(key, val) {
   }
 }
 
+/* ⏳ ESTADO DE SUBIDA (ago-2026) ─────────────────────────────────
+ * Bug reportado: "dejé una tarea y mis alumnos no la ven; además les
+ * desaparece la anterior". La subida a la nube era A CIEGAS: si fallaba (sin
+ * internet, adjunto pesado, nube lenta) la tarea quedaba SOLO en el equipo de
+ * la profesora — y la siguiente lectura de la nube la borraba también de ahí.
+ * Ahora cada tarea/entrega nace con pendingSync:true y solo se le quita
+ * cuando la nube CONFIRMA. Lo pendiente se reintenta al abrir Tareas
+ * (pullTasks, en supabase-sync.js) y con el botón “Reintentar subida”. */
+const TASK_TOMB_KEY = 'jucum_tasks_tomb_v1';
+function taskTombs() { try { const o = JSON.parse(localStorage.getItem(TASK_TOMB_KEY) || '{}'); return (o && typeof o === 'object') ? o : {}; } catch (e) { return {}; } }
+function addTaskTomb(id) {
+  const o = taskTombs(); o[id] = Date.now();
+  if (window.JUCUM_STORE) window.JUCUM_STORE.setJSON(TASK_TOMB_KEY, o);
+  else { try { localStorage.setItem(TASK_TOMB_KEY, JSON.stringify(o)); } catch (e) {} }
+}
+/* Sube y DEVUELVE si la nube confirmó. (Si el equipo tiene cacheada una
+ * versión vieja de supabase-sync que no devuelve nada, se asume subido.) */
+async function pushTaskSafe(a) {
+  const S = window.JUCUM_SYNC;
+  if (!S || !S.pushAssignment) return { ok: false, msg: 'este equipo no está conectado a la nube' };
+  try { const r = await S.pushAssignment(a); return (r === undefined || r.ok) ? { ok: true } : { ok: false, msg: (r.error && (r.error.message || r.error.hint)) || 'la nube rechazó el guardado' }; }
+  catch (e) { return { ok: false, msg: (e && e.message) || 'sin internet' }; }
+}
+async function pushSubSafe(assignmentId, studentId, sub) {
+  const S = window.JUCUM_SYNC;
+  if (!S || !S.pushSubmission) return { ok: false, msg: 'este equipo no está conectado a la nube' };
+  try { const r = await S.pushSubmission(assignmentId, studentId, sub); return (r === undefined || r.ok) ? { ok: true } : { ok: false, msg: (r.error && r.error.message) || 'la nube rechazó la entrega' }; }
+  catch (e) { return { ok: false, msg: (e && e.message) || 'sin internet' }; }
+}
+function markSynced(id) {
+  const arr = loadAssignments(); const i = arr.findIndex(a => a && a.id === id);
+  if (i < 0 || !arr[i].pendingSync) return;
+  delete arr[i].pendingSync; saveAssignments(arr);
+}
+function markSubSynced(assignmentId, studentId) {
+  const subs = loadSubmissions(); const s = (subs[assignmentId] || {})[studentId];
+  if (!s || !s.pendingSync) return;
+  delete s.pendingSync; saveSubmissions(subs);
+}
+/* Cuántas cosas están guardadas SOLO en este equipo */
+function pendingCount() {
+  let n = loadAssignments().filter(a => a && a.pendingSync).length;
+  const subs = loadSubmissions();
+  Object.keys(subs).forEach(aid => Object.keys(subs[aid] || {}).forEach(sid => { if (subs[aid][sid] && subs[aid][sid].pendingSync) n++; }));
+  return n;
+}
+/* Reintenta TODO lo pendiente. Devuelve cuántas quedaron sin subir. */
+async function retryPending() {
+  for (const a of loadAssignments().filter(x => x && x.pendingSync)) {
+    const r = await pushTaskSafe(a);
+    if (r.ok) { markSynced(a.id); notifyRecipients(a, !!a.editedAt); }
+  }
+  const subs = loadSubmissions();
+  for (const aid of Object.keys(subs)) {
+    for (const sid of Object.keys(subs[aid] || {})) {
+      const s = subs[aid][sid];
+      if (!s || !s.pendingSync) continue;
+      const r = await pushSubSafe(aid, sid, s);
+      if (!r.ok) continue;
+      if (s.status === 'graded' && window.JUCUM_SYNC && window.JUCUM_SYNC.gradeSubmissionDb) { try { await window.JUCUM_SYNC.gradeSubmissionDb(aid, sid, s); } catch (e) {} }
+      markSubSynced(aid, sid);
+    }
+  }
+  return pendingCount();
+}
+/* Aviso de campanita a los destinatarios (solo cuando la tarea YA está en la
+ * nube: avisar de una tarea que el alumno no puede abrir solo confunde). */
+function notifyRecipients(a, editada) {
+  if (!window.JUCUM_NOTIF || !window.JUCUM_DATA) return;
+  const dueTxt = a.dueAt ? ` · cierra ${new Date(a.dueAt).toLocaleDateString('es-PE',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}` : '';
+  recipientsOf(a, window.JUCUM_DATA.STUDENTS).forEach(s => window.JUCUM_NOTIF.pushNotif(s.id, {
+    type: 'assignment',
+    title: editada ? '✏️ Tarea actualizada' : '📝 Nueva tarea asignada',
+    body: editada ? `"${a.title}" cambió. Revísala en Tareas.` : `"${a.title}"${dueTxt}. Entrégala desde la pestaña Tareas.`,
+    link: 'tasks',
+  }));
+}
+
 /* Todas las tareas, más recientes primero */
 function getAssignments() {
   return loadAssignments().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -82,22 +160,14 @@ async function createAssignment(data) {
     gradable: false,
     ...data,
     attachments: lightAtts,
+    savedAt: new Date().toISOString(),
+    pendingSync: true,
   };
   arr.unshift(a);
   saveAssignments(arr);
-  if (window.JUCUM_SYNC && window.JUCUM_SYNC.pushAssignment) window.JUCUM_SYNC.pushAssignment({ ...a, attachments: atts });
-  // Notificar a los destinatarios
-  if (window.JUCUM_NOTIF && window.JUCUM_DATA) {
-    const recipients = recipientsOf(a, window.JUCUM_DATA.STUDENTS);
-    const dueTxt = a.dueAt ? ` · cierra ${new Date(a.dueAt).toLocaleDateString('es-PE',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}` : '';
-    recipients.forEach(s => window.JUCUM_NOTIF.pushNotif(s.id, {
-      type: 'assignment',
-      title: '📝 Nueva tarea asignada',
-      body: `"${a.title}"${dueTxt}. Entrégala desde la pestaña Tareas.`,
-      link: 'tasks',
-    }));
-  }
-  return a.id;
+  const r = await pushTaskSafe({ ...a, attachments: atts });
+  if (r.ok) { markSynced(a.id); notifyRecipients(a, false); }
+  return { id: a.id, synced: r.ok, error: r.msg };
 }
 
 async function updateAssignment(id, data) {
@@ -109,23 +179,15 @@ async function updateAssignment(id, data) {
   const arr = loadAssignments();
   const i = arr.findIndex(a => a.id === id);
   if (i < 0) return;
-  arr[i] = { ...arr[i], ...data, ...(lightAtts ? { attachments: lightAtts } : {}) };
+  arr[i] = { ...arr[i], ...data, ...(lightAtts ? { attachments: lightAtts } : {}), editedAt: new Date().toISOString(), savedAt: new Date().toISOString(), pendingSync: true };
   saveAssignments(arr);
-  if (window.JUCUM_SYNC && window.JUCUM_SYNC.pushAssignment) window.JUCUM_SYNC.pushAssignment({ ...arr[i], ...(atts ? { attachments: atts } : {}) });
-  // Avisar a los destinatarios que la tarea cambió
-  if (window.JUCUM_NOTIF && window.JUCUM_DATA) {
-    const recipients = recipientsOf(arr[i], window.JUCUM_DATA.STUDENTS);
-    recipients.forEach(s => window.JUCUM_NOTIF.pushNotif(s.id, {
-      type: 'assignment',
-      title: '✏️ Tarea actualizada',
-      body: `"${arr[i].title}" cambió. Revísala en Tareas.`,
-      link: 'tasks',
-    }));
-  }
-  return id;
+  const r = await pushTaskSafe({ ...arr[i], ...(atts ? { attachments: atts } : {}) });
+  if (r.ok) { markSynced(id); notifyRecipients(arr[i], true); }
+  return { id, synced: r.ok, error: r.msg };
 }
 
 function deleteAssignment(id) {
+  addTaskTomb(id);                                    // lápida: que la nube no la resucite
   saveAssignments(loadAssignments().filter(a => a.id !== id));
   const subs = loadSubmissions(); delete subs[id]; saveSubmissions(subs);  if (window.JUCUM_SYNC && window.JUCUM_SYNC.deleteAssignmentDb) window.JUCUM_SYNC.deleteAssignmentDb(id);
 }
@@ -165,6 +227,7 @@ async function submitAssignment(assignmentId, studentId, payload) {
     grade: prev?.grade ?? null,
     feedback: prev?.feedback ?? null,
     gradedAt: prev?.gradedAt ?? null,
+    pendingSync: true,
   };
   subs[assignmentId][studentId] = sub;
   try { saveSubmissions(subs); }
@@ -173,7 +236,9 @@ async function submitAssignment(assignmentId, studentId, payload) {
     subs[assignmentId][studentId] = sub;
     try { saveSubmissions(subs); } catch (e2) {}
   }
-  if (window.JUCUM_SYNC && window.JUCUM_SYNC.pushSubmission) window.JUCUM_SYNC.pushSubmission(assignmentId, studentId, { ...sub, attachments: atts });
+  const r = await pushSubSafe(assignmentId, studentId, { ...sub, attachments: atts });
+  if (r.ok) markSubSynced(assignmentId, studentId);
+  else sub.syncError = r.msg;
   // Avisar al profesor (solo si es una primera entrega)
   if (!prev && window.JUCUM_NOTIF) {
     window.JUCUM_NOTIF.pushNotif('teacher', {
@@ -194,8 +259,13 @@ function gradeSubmission(assignmentId, studentId, grade, feedback) {
   sub.grade = (typeof grade === 'number') ? grade : null;
   sub.feedback = feedback || '';
   sub.gradedAt = new Date().toISOString();
+  sub.pendingSync = true;
   saveSubmissions(subs);
-  if (window.JUCUM_SYNC && window.JUCUM_SYNC.gradeSubmissionDb) window.JUCUM_SYNC.gradeSubmissionDb(assignmentId, studentId, sub);
+  if (window.JUCUM_SYNC && window.JUCUM_SYNC.gradeSubmissionDb) {
+    Promise.resolve(window.JUCUM_SYNC.gradeSubmissionDb(assignmentId, studentId, sub))
+      .then(r => { if (!r || r.ok) markSubSynced(assignmentId, studentId); })
+      .catch(() => {});
+  }
   if (window.JUCUM_NOTIF) {
     window.JUCUM_NOTIF.pushNotif(studentId, {
       type: 'teacher-feedback',
@@ -209,4 +279,5 @@ function gradeSubmission(assignmentId, studentId, grade, feedback) {
 window.JUCUM_TASKS = {
   getAssignments, assignmentsForStudent, recipientsOf, createAssignment, updateAssignment, deleteAssignment,
   getSubmission, submissionsFor, submitAssignment, gradeSubmission,
+  markSynced, markSubSynced, pendingCount, retryPending,
 };

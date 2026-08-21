@@ -171,28 +171,8 @@
       if (!flagErr && flags) write(KEYS.flags, flags.map(f => ({ id: f.id, studentId: f.student_id, studentName: f.student_name || '', groupId: f.group_id, content: f.content || '', date: f.created_at })));
     } catch (e) {}
 
-    // tareas (assignments + submissions)
-    try {
-      const [{ data: assigns }, { data: subs }] = await Promise.all([
-        sb.from('assignments').select('*'),
-        sb.from('submissions').select('*'),
-      ]);
-      const aArr = (assigns || []).map(a => ({
-        id: a.id, groupId: a.group_id, targetStudentIds: a.target_student_ids || [],
-        title: a.title, description: a.description, dueAt: a.due_at, gradable: a.gradable,
-        attachments: a.attachments || [], xp: a.xp ?? 40, date: a.created_at,
-      }));
-      write('jucum_assignments_v1', aArr);
-      const sMap = {};
-      (subs || []).forEach(s => {
-        sMap[s.assignment_id] = sMap[s.assignment_id] || {};
-        sMap[s.assignment_id][s.student_id] = {
-          id: s.id, submittedAt: s.submitted_at, text: s.text, attachments: s.attachments || [],
-          status: s.status, grade: s.grade, feedback: s.feedback, gradedAt: s.graded_at,
-        };
-      });
-      write('jucum_submissions_v1', sMap);
-    } catch (e) { console.warn('hydrate tasks:', e.message); }
+    // tareas (assignments + submissions) · lectura CON FUSIÓN — ver pullTasks
+    await pullTasks();
 
     // exámenes (definiciones + ventanas)
     try {
@@ -224,6 +204,18 @@
 
   /* ── PUSH helpers (fire-and-forget; UI already updated localStorage) ── */
   const safe = (p) => p.then(({error}) => error && console.warn('sync:', error.message)).catch(e => console.warn('sync:', e.message));
+  /* Igual que safe(), pero DEVUELVE si se logró guardar. Lo usan las tareas:
+   * hasta ago-2026 la subida era a ciegas, así que una tarea que nunca llegó a
+   * la nube se veía igual que una subida (y los alumnos no la veían nunca). */
+  const safeR = (p) => p.then(r => ({ ok: !(r && r.error), error: r && r.error, data: r && r.data })).catch(e => ({ ok: false, error: e }));
+  /* La columna jsonb NUNCA lleva base64: un adjunto pesado hacía fallar el
+   * guardado ENTERO de la tarea (y entonces el alumno no la veía). El archivo
+   * ya viaja por Storage; si esa subida falló, va solo su ficha (pending). */
+  const dbAtts = (list) => (list || []).map(x => {
+    if (!x || !x.dataUrl) return x;
+    if (x.url) { const y = Object.assign({}, x); delete y.dataUrl; return y; }
+    return { kind: x.kind, name: x.name, size: x.size, linkType: x.linkType, pending: true };
+  });
 
   function pushSettings(groupId, s) {
     safe(SB().from('groups').update({
@@ -334,33 +326,105 @@
     }
     return out;
   }
+  /* ── Tareas · lectura BLINDADA y con FUSIÓN ───────────────────────────
+   * BUG (ago-2026 · "las tareas no se actualizan y desaparecen cada tanto"):
+   * hydrate y refreshTasks escribían SIEMPRE lo que devolvía la nube. Si la
+   * consulta fallaba (red, RLS, timeout) o si la subida de una tarea recién
+   * creada no había llegado, el caché local se sobreescribía con [] y la tarea
+   * DESAPARECÍA del panel de la profesora y de los alumnos — arrastrando
+   * también las anteriores. Ahora:
+   *   · si la lectura falla → NO se toca nada de lo local;
+   *   · se fusiona por id: la nube manda, pero lo local marcado pendingSync
+   *     (su subida nunca se confirmó) se conserva y se REINTENTA solo;
+   *   · los borrados viajan como lápida para que la nube no los resucite. */
+  const TOMB_KEY = 'jucum_tasks_tomb_v1';
+  const _tombs = () => { try { const o = JSON.parse(localStorage.getItem(TOMB_KEY) || '{}'); return (o && typeof o === 'object') ? o : {}; } catch (e) { return {}; } };
+  const _arrOf = (k) => { try { const a = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+  const _when = (s) => { const t = Date.parse(s || ''); return isNaN(t) ? 0 : t; };
+  const rowToAssign = (a) => ({
+    id: a.id, groupId: a.group_id, targetStudentIds: a.target_student_ids || [],
+    title: a.title, description: a.description, dueAt: a.due_at, gradable: a.gradable,
+    attachments: a.attachments || [], xp: a.xp ?? 40, date: a.created_at,
+  });
+  const rowToSub = (s) => ({
+    id: s.id, submittedAt: s.submitted_at, text: s.text, attachments: s.attachments || [],
+    status: s.status, grade: s.grade, feedback: s.feedback, gradedAt: s.graded_at,
+  });
+  const _okSynced = (id) => { try { if (window.JUCUM_TASKS && window.JUCUM_TASKS.markSynced) window.JUCUM_TASKS.markSynced(id); } catch (e) {} };
+  const _okSubSynced = (aid, sid) => { try { if (window.JUCUM_TASKS && window.JUCUM_TASKS.markSubSynced) window.JUCUM_TASKS.markSubSynced(aid, sid); } catch (e) {} };
+
+  async function pullTasks() {
+    const tomb = _tombs();
+    let enNube = null, bien = true;
+    try {
+      const [ra, rs] = await Promise.all([
+        selectAll('assignments', '*', ['id']),
+        selectAll('submissions', '*', ['id']),
+      ]);
+      // ── Tareas ──
+      if (ra.error || !ra.data) {
+        bien = false;
+        console.warn('tareas: la nube no respondió; se conserva lo de este equipo', ra.error && ra.error.message);
+      } else {
+        enNube = {};
+        const byId = {};
+        ra.data.forEach(r => { enNube[r.id] = 1; if (!tomb[r.id]) byId[r.id] = rowToAssign(r); });
+        _arrOf('jucum_assignments_v1').forEach(a => {
+          if (!a || !a.id || tomb[a.id]) return;
+          const enLaNube = !!enNube[a.id];
+          // RESCATE (ago-2026): las tareas creadas ANTES de este arreglo no
+          // llevan marca de subida. Si la nube no las tiene y son recientes es
+          // que su subida se perdió — no que alguien las borró — así que se
+          // conservan y se suben en vez de desaparecer.
+          const t = Date.parse(a.date || '');
+          const rescate = !a.pendingSync && !a.savedAt && !enLaNube && !isNaN(t) && (Date.now() - t < 30 * 86400000);
+          if (!a.pendingSync && !rescate) return;
+          byId[a.id] = a;                                    // su subida (o su edición) nunca se confirmó
+          Promise.resolve(pushAssignment(a)).then(r => { if (!r || r.ok) _okSynced(a.id); });
+        });
+        write('jucum_assignments_v1', Object.keys(byId).map(k => byId[k])
+          .sort((x, y) => String(y.date || '').localeCompare(String(x.date || ''))));
+      }
+      // ── Entregas ──
+      if (rs.error || !rs.data) {
+        bien = false;
+        console.warn('entregas: la nube no respondió; se conserva lo de este equipo', rs.error && rs.error.message);
+      } else {
+        const sMap = {};
+        rs.data.forEach(s => { if (tomb[s.assignment_id]) return; (sMap[s.assignment_id] = sMap[s.assignment_id] || {})[s.student_id] = rowToSub(s); });
+        const local = read('jucum_submissions_v1');
+        Object.keys(local || {}).forEach(aid => {
+          if (tomb[aid]) return;
+          Object.keys(local[aid] || {}).forEach(sid => {
+            const lo = local[aid][sid]; if (!lo) return;
+            const cl = (sMap[aid] || {})[sid];
+            const gana = !cl || lo.pendingSync || _when(lo.gradedAt || lo.submittedAt) > _when(cl.gradedAt || cl.submittedAt);
+            if (!gana) return;
+            (sMap[aid] = sMap[aid] || {})[sid] = lo;
+            if (lo.pendingSync || !cl) Promise.resolve(pushSubmission(aid, sid, lo)).then(r => {
+              if (r && !r.ok) return;
+              if (lo.status === 'graded') gradeSubmissionDb(aid, sid, lo);
+              _okSubSynced(aid, sid);
+            });
+          });
+        });
+        write('jucum_submissions_v1', sMap);
+      }
+      // Lápidas: reintenta el borrado si la nube todavía tiene la tarea; purga
+      // las de más de 60 días.
+      const ahora = Date.now(), quedan = {};
+      Object.keys(tomb).forEach(id => {
+        if (ahora - (tomb[id] || 0) > 60 * 86400000) return;
+        quedan[id] = tomb[id];
+        if (enNube && enNube[id]) deleteAssignmentDb(id);
+      });
+      try { localStorage.setItem(TOMB_KEY, JSON.stringify(quedan)); } catch (e) {}
+      return bien;
+    } catch (e) { console.warn('pullTasks:', e && e.message); return false; }
+  }
   /* Relee tareas+entregas de la nube y actualiza el caché local (para ver
    * tareas nuevas sin tener que cerrar y volver a entrar). */
-  async function refreshTasks() {
-    try {
-      const sb = SB();
-      const [{ data: assigns }, { data: subs }] = await Promise.all([
-        sb.from('assignments').select('*'),
-        sb.from('submissions').select('*'),
-      ]);
-      const aArr = (assigns || []).map(a => ({
-        id: a.id, groupId: a.group_id, targetStudentIds: a.target_student_ids || [],
-        title: a.title, description: a.description, dueAt: a.due_at, gradable: a.gradable,
-        attachments: a.attachments || [], xp: a.xp ?? 40, date: a.created_at,
-      }));
-      write('jucum_assignments_v1', aArr);
-      const sMap = {};
-      (subs || []).forEach(s => {
-        sMap[s.assignment_id] = sMap[s.assignment_id] || {};
-        sMap[s.assignment_id][s.student_id] = {
-          id: s.id, submittedAt: s.submitted_at, text: s.text, attachments: s.attachments || [],
-          status: s.status, grade: s.grade, feedback: s.feedback, gradedAt: s.graded_at,
-        };
-      });
-      write('jucum_submissions_v1', sMap);
-      return true;
-    } catch (e) { console.warn('refreshTasks:', e && e.message); return false; }
-  }
+  async function refreshTasks() { return pullTasks(); }
   /* Relee SOLO el avance (tabla progress) de la nube y actualiza el caché +
    * recalcula los puntos/estadísticas. Ligero: una sola consulta. Sirve para
    * que los materiales que el alumno acaba de hacer aparezcan como completados
@@ -435,26 +499,36 @@
     } catch (e) { console.warn('refreshProgress:', e && e.message); return false; }
   }
   function pushAssignment(a) {
-    safe(SB().from('assignments').upsert({
+    return safeR(SB().from('assignments').upsert({
       id: a.id, group_id: a.groupId || null, target_student_ids: a.targetStudentIds || [],
       title: a.title, description: a.description || null, due_at: a.dueAt || null,
-      gradable: !!a.gradable, attachments: a.attachments || [], xp: a.xp ?? 40,
-    }, { onConflict: 'id' }));
+      gradable: !!a.gradable, attachments: dbAtts(a.attachments), xp: a.xp ?? 40,
+    }, { onConflict: 'id' })).then(r => { if (!r.ok) console.warn('sync tarea:', r.error && r.error.message); return r; });
   }
-  function deleteAssignmentDb(id) { safe(SB().from('assignments').delete().eq('id', id)); }
+  function deleteAssignmentDb(id) { return safeR(SB().from('assignments').delete().eq('id', id)); }
   async function pushSubmission(assignmentId, studentId, sub) {
     const uploaded = await uploadAttachments(`tareas/${studentId}`, sub.attachments);
-    safe(SB().from('submissions').upsert({
+    return safeR(SB().from('submissions').upsert({
       id: sub.id, assignment_id: assignmentId, student_id: studentId,
-      submitted_at: sub.submittedAt, text: sub.text || null, attachments: uploaded,
+      submitted_at: sub.submittedAt, text: sub.text || null, attachments: dbAtts(uploaded),
       status: sub.status || 'submitted',
-    }, { onConflict: 'assignment_id,student_id' }));
+    }, { onConflict: 'assignment_id,student_id' })).then(r => { if (!r.ok) console.warn('sync entrega:', r.error && r.error.message); return r; });
   }
-  function gradeSubmissionDb(assignmentId, studentId, sub) {
-    safe(SB().from('submissions').update({
+  async function gradeSubmissionDb(assignmentId, studentId, sub) {
+    const nota = {
       status: 'graded', grade: (typeof sub.grade === 'number' ? sub.grade : null),
       feedback: sub.feedback || null, graded_at: sub.gradedAt,
-    }).eq('assignment_id', assignmentId).eq('student_id', studentId));
+    };
+    const r = await safeR(SB().from('submissions').update(nota).eq('assignment_id', assignmentId).eq('student_id', studentId).select('id'));
+    if (!r.ok) { console.warn('sync nota de tarea:', r.error && r.error.message); return r; }
+    if (r.data && r.data.length) return r;
+    // La entrega no existía en la nube (su subida se había perdido): se sube
+    // completa CON la nota, en vez de dejar la calificación solo en un equipo.
+    return safeR(SB().from('submissions').upsert(Object.assign({
+      id: sub.id || ('sub-' + Date.now()), assignment_id: assignmentId, student_id: studentId,
+      submitted_at: sub.submittedAt || new Date().toISOString(), text: sub.text || null,
+      attachments: dbAtts(sub.attachments),
+    }, nota), { onConflict: 'assignment_id,student_id' }));
   }
 
   /* ── Exámenes ── */

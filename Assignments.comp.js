@@ -311,6 +311,7 @@ function TeacherAssignments({ onBack, embedded }) {
   const [editing, setEditing] = tUseState(null);
   const [viewing, setViewing] = tUseState(null); // assignment
   const [tick, setTick] = tUseState(0);
+  const [retrying, setRetrying] = tUseState(false);
   const refresh = () => setTick(t => t + 1);
   React.useEffect(() => {
     if (window.JUCUM_SYNC && window.JUCUM_SYNC.refreshTasks) {
@@ -319,6 +320,13 @@ function TeacherAssignments({ onBack, embedded }) {
   }, []);
 
   const assignments = T.getAssignments();
+  // Tareas que quedaron guardadas solo en este equipo (su subida no se confirmó)
+  const pend = assignments.filter(a => a && a.pendingSync);
+  const reintentar = async () => {
+    setRetrying(true);
+    try { if (T.retryPending) await T.retryPending(); } catch (e) {}
+    setRetrying(false); refresh();
+  };
 
   if (viewing) return <TeacherSubmissions assignment={viewing} onBack={() => { setViewing(null); refresh(); }} />;
 
@@ -342,6 +350,15 @@ function TeacherAssignments({ onBack, embedded }) {
         </div>
       )}
 
+      {pend.length > 0 && (
+        <div className="scard" style={{marginTop:14, background:'#FFF8E1', borderColor:'#F0C66B', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap'}}>
+          <div style={{flex:1, minWidth:230, fontSize:13.5, fontWeight:700, color:'#7A4E00', lineHeight:1.55}}>
+            ⏳ {pend.length === 1 ? 'Hay 1 tarea guardada' : `Hay ${pend.length} tareas guardadas`} solo en este equipo: <b>tus alumnos todavía no {pend.length === 1 ? 'la ven' : 'las ven'}</b>. Revisa tu internet y súbe{pend.length === 1 ? 'la' : 'las'} — también se reintenta solo cada vez que abres Tareas.
+          </div>
+          <button className="att-btn" disabled={retrying} onClick={reintentar} style={{borderColor:'#F0C66B', color:'#7A4E00', fontWeight:800, flexShrink:0}}>{retrying ? 'Subiendo…' : '🔄 Reintentar subida'}</button>
+        </div>
+      )}
+
       {assignments.length === 0 ? (
         <div className="scard" style={{marginTop:18}}><div className="empty-state"><div className="icon">📝</div>Aún no has creado tareas. Crea la primera.</div></div>
       ) : (
@@ -357,7 +374,7 @@ function TeacherAssignments({ onBack, embedded }) {
               <div key={a.id} className="scard mm-card" style={{cursor:'pointer'}} onClick={() => setViewing(a)}>
                 <div className="mm-emoji">📝</div>
                 <div className="mm-info">
-                  <div className="mm-name">{a.title} {a.gradable && <span className="mm-chip" style={{background:'#E3E9F8',color:'#1F3A8A'}}>calificable</span>}</div>
+                  <div className="mm-name">{a.title} {a.gradable && <span className="mm-chip" style={{background:'#E3E9F8',color:'#1F3A8A'}}>calificable</span>} {a.pendingSync && <span className="mm-chip" style={{background:'#FFF8E1',color:'#7A4E00'}}>⏳ sin subir</span>}</div>
                   <div className="mm-meta">
                     {targeted ? `${recips.length} alumno${recips.length===1?'':'s'} puntual${recips.length===1?'':'es'}` : (group ? `${LEVELS[group.level]?.emoji||''} ${group.name}` : 'grupo')}
                     {' · '}<b>{nSub}/{recips.length}</b> entregada{nSub===1?'':'s'}
@@ -401,6 +418,15 @@ function AssignmentForm({ onClose, onSaved, initial }) {
   const [linkUrl, setLinkUrl] = tUseState(initLink?.url || '');
   const [linkType, setLinkType] = tUseState(initLink?.linkType || 'jucum');
   const [err, setErr] = tUseState('');
+  const [warn, setWarn] = tUseState('');
+  const [retry, setRetry] = tUseState(false);
+  const reintentar = async () => {
+    setRetry(true);
+    let quedan = 1;
+    try { quedan = window.JUCUM_TASKS.retryPending ? await window.JUCUM_TASKS.retryPending() : 1; } catch (e) {}
+    setRetry(false);
+    if (!quedan) { setWarn(''); onSaved(); }
+  };
 
   const groupStudents = STUDENTS.filter(s => s.group === groupId);
   const togglePick = (id) => setPicked(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
@@ -420,10 +446,13 @@ function AssignmentForm({ onClose, onSaved, initial }) {
       attachments: finalAtt,
     };
     setErr('');
+    let r;
     try {
-      if (initial) await window.JUCUM_TASKS.updateAssignment(initial.id, data);
-      else await window.JUCUM_TASKS.createAssignment(data);
+      r = initial ? await window.JUCUM_TASKS.updateAssignment(initial.id, data)
+                  : await window.JUCUM_TASKS.createAssignment(data);
     } catch (e) { setErr('No se pudo guardar: ' + (e && e.message ? e.message : 'inténtalo de nuevo')); return; }
+    // La nube no confirmó → NO cerramos en silencio: los alumnos no la verían.
+    if (r && r.synced === false) { setWarn(r.error || 'la nube no respondió'); return; }
     onSaved();
   };
 
@@ -513,9 +542,23 @@ function AssignmentForm({ onClose, onSaved, initial }) {
             <TaskFilePicker attachments={attachments} setAttachments={setAttachments} allowRecord={false} />
           </div>
 
+          {warn && (
+            <div style={{background:'#FFF8E1', border:'1.5px solid #F0C66B', borderRadius:12, padding:'12px 15px', fontSize:13, color:'#7A4E00', fontWeight:700, lineHeight:1.6, marginBottom:12}}>
+              ⏳ La tarea quedó guardada en este equipo, pero <b>no llegó a la nube</b> ({warn}): tus alumnos aún no la ven.<br />Revisa tu internet y toca “Reintentar subida”. Si cierras, la plataforma lo reintenta sola cada vez que abras Tareas.
+            </div>
+          )}
           <div className="modal-actions">
-            <button className="btn-cancel" onClick={onClose}>Cancelar</button>
-            <button className="btn-save" onClick={save}>{initial ? '💾 Guardar cambios' : '📨 Asignar tarea'}</button>
+            {warn ? (
+              <>
+                <button className="btn-cancel" onClick={onSaved}>Cerrar</button>
+                <button className="btn-save" disabled={retry} onClick={reintentar}>{retry ? 'Subiendo…' : '🔄 Reintentar subida'}</button>
+              </>
+            ) : (
+              <>
+                <button className="btn-cancel" onClick={onClose}>Cancelar</button>
+                <button className="btn-save" onClick={save}>{initial ? '💾 Guardar cambios' : '📨 Asignar tarea'}</button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -776,9 +819,11 @@ function StudentTaskCard({ a, student, onChange }) {
   const linkAtt = (a.attachments || []).find(x => x.kind === 'link');
   const fileAtts = (a.attachments || []).filter(x => x.kind !== 'link');
 
-  const onActivityDone = (score) => {
+  const onActivityDone = async (score) => {
     if (closed) { onChange(); return; }
-    window.JUCUM_TASKS.submitAssignment(a.id, student.id, { text: typeof score === 'number' ? `Actividad completada (${score}%).` : 'Actividad completada.', attachments: [] });
+    // OJO: hay que ESPERAR la entrega antes de calificar. Sin el await, la nota
+    // automática del material se perdía (la entrega todavía no existía).
+    try { await window.JUCUM_TASKS.submitAssignment(a.id, student.id, { text: typeof score === 'number' ? `Actividad completada (${score}%).` : 'Actividad completada.', attachments: [] }); } catch (e) {}
     if (typeof score === 'number') window.JUCUM_TASKS.gradeSubmission(a.id, student.id, Math.round(score), 'Nota registrada automáticamente por el material.');
     if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(student.id, { type:'achievement', title:'✅ Actividad completada', body:`Terminaste "${a.title}".` });
     onChange();
@@ -806,7 +851,10 @@ function StudentTaskCard({ a, student, onChange }) {
     <div className="scard">
       <div className="sec-head" style={{cursor:'pointer'}} onClick={() => setOpen(o => !o)}>
         <div className="sec-title" style={{fontSize:15}}>📝 {a.title}</div>
-        <span className="mm-chip" style={{background:statusPill.bg, color:statusPill.c}}>{statusPill.t}</span>
+        <div style={{display:'flex', alignItems:'center', gap:6, flexWrap:'wrap'}}>
+          {sub && sub.pendingSync && <span className="mm-chip" style={{background:'#FFF8E1', color:'#7A4E00'}}>⏳ sin enviar</span>}
+          <span className="mm-chip" style={{background:statusPill.bg, color:statusPill.c}}>{statusPill.t}</span>
+        </div>
       </div>
       {due && <div className="mm-meta" style={{marginTop:-6, marginBottom:8, color: due.late ? '#C62828' : '#E65100', fontWeight:800}}>⏰ {due.txt}</div>}
       {(plain || hasStructured(structured)) && (

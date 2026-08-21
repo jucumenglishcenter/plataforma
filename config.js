@@ -73,6 +73,7 @@ if (window.JUCUM_CONFIG.SUPABASE_ANON_KEY === 'PEGA_TU_PUBLISHABLE_KEY_AQUI') {
   var mem = Object.create(null);     // clave → string | null (null = borrada)
   var have = Object.create(null);    // la memoria manda para esta clave
   var dirty = Object.create(null), db = null, listo = false, timer = null, resolver;
+  var pre = Object.create(null);      // claves escritas ANTES de que IndexedDB estuviera listo
   var ready = new Promise(function (r) { resolver = r; });
 
   var DB = 'jucum_big', ST = 'kv';
@@ -122,7 +123,7 @@ if (window.JUCUM_CONFIG.SUPABASE_ANON_KEY === 'PEGA_TU_PUBLISHABLE_KEY_AQUI') {
       mem[k] = String(v); have[k] = 1; queue(k);
       // Antes de que IndexedDB esté listo también dejamos la copia de siempre,
       // por si el navegador cierra la pestaña en ese primer segundo.
-      if (!listo) { try { nSet.call(this, k, mem[k]); } catch (e) {} }
+      if (!listo) { pre[k] = 1; try { nSet.call(this, k, mem[k]); } catch (e) {} }
       return;
     }
     return nSet.call(this, k, v);
@@ -136,13 +137,48 @@ if (window.JUCUM_CONFIG.SUPABASE_ANON_KEY === 'PEGA_TU_PUBLISHABLE_KEY_AQUI') {
     return nClear.call(this);
   };
 
+  /* 🛟 Fusión de rescate ───────────────────────────────────────────────
+   * Durante el primer segundo (mientras IndexedDB abre) las lecturas de una
+   * clave pesada devuelven vacío. Si en ese instante el código lee-modifica-
+   * escribe (crear una tarea, entregar, calificar), guardaba una lista con UN
+   * solo elemento y borraba todo lo anterior: así "desaparecía la tarea de
+   * antes". Aquí recuperamos lo que faltaba: lo NUEVO siempre manda, y solo
+   * se devuelven las entradas que ese guardado a medias se dejó fuera. */
+  function mezcla(v, n, nivel) {
+    nivel = nivel || 0;
+    if (Array.isArray(v) && Array.isArray(n)) {
+      var conId = function (x) { return x && typeof x === 'object' && x.id; };
+      if (!v.every(conId) || !n.every(conId)) return n;
+      var vistos = Object.create(null);
+      n.forEach(function (x) { vistos[x.id] = 1; });
+      return n.concat(v.filter(function (x) { return !vistos[x.id]; }));
+    }
+    if (v && n && typeof v === 'object' && typeof n === 'object' && !Array.isArray(v) && !Array.isArray(n)) {
+      var out = {};
+      Object.keys(v).forEach(function (k) { out[k] = v[k]; });
+      Object.keys(n).forEach(function (k) { out[k] = (nivel < 2 && Object.prototype.hasOwnProperty.call(out, k)) ? mezcla(out[k], n[k], nivel + 1) : n[k]; });
+      return out;
+    }
+    return n;
+  }
+  function fusiona(viejoStr, nuevoStr) {
+    try { return JSON.stringify(mezcla(JSON.parse(viejoStr), JSON.parse(nuevoStr))); }
+    catch (e) { return nuevoStr; }
+  }
+
   open().then(function (d) {
     db = d;
     return readAll(d);
   }).then(function (rec) {
     var migradas = 0;
     Object.keys(HEAVY).forEach(function (k) {
-      if (have[k]) { queue(k); return; }                    // ya se escribió en esta sesión → memoria manda
+      if (have[k]) {
+        // Se escribió antes de que IndexedDB estuviera listo: ese guardado pudo
+        // salir INCOMPLETO (la lectura devolvía vacío). Se fusiona con lo que
+        // ya estaba guardado en vez de reemplazarlo.
+        if (pre[k] && typeof rec[k] === 'string' && rec[k] !== mem[k]) mem[k] = fusiona(rec[k], mem[k]);
+        queue(k); return;                                   // memoria manda, pero sin perder lo anterior
+      }
       if (typeof rec[k] === 'string') { mem[k] = rec[k]; have[k] = 1; return; }
       var viejo = null; try { viejo = nGet.call(LS, k); } catch (e) {}
       if (viejo != null) { mem[k] = viejo; have[k] = 1; queue(k); migradas++; }
