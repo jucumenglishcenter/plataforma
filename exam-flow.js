@@ -218,7 +218,9 @@
   function infoForModule(student, mod) {
     const D = window.JUCUM_DATA, X = window.JUCUM_EXAMS;
     if (!D || !X || !student || !mod) return { phase: 'none' };
-    const exam = X.examForModule(mod.id, student.level);
+    /* mod.id 'exam:<id>' = examen suelto (final), no atado a un módulo del catálogo */
+    const solo = String(mod.id).indexOf('exam:') === 0;
+    const exam = solo ? X.getExam(String(mod.id).slice(5)) : X.examForModule(mod.id, student.level);
     if (!exam) return { phase: 'none' };
     const isForms = /^ex-m1forms-/.test(exam.id);
     const win = X.windowForExamGroup(exam.id, student.group);
@@ -228,7 +230,7 @@
     if (isForms) return { phase: 'none' };                       // Forms sin nota propia: nada que mostrar
     const r = D.getStudentReadiness(student);
     const overridden = !!(win && (win.allowOverrides || []).includes(student.id));
-    const canTake = r.apt || overridden;
+    const canTake = r.apt || overridden || !!(ann && ann.free);
     const open = winEffectiveOpen(win);
     const link = (function () {
       const p = (exam.parts || []).find(function (x) { return x.url; });
@@ -332,7 +334,23 @@
     } catch (e) {}
   }
 
+  /* Exámenes del nivel que NO pertenecen a ningún módulo del catálogo (el final, por ejemplo):
+   * se programan igual que los de módulo, con su propia fila. */
+  function standaloneExams(level) {
+    try {
+      const D = window.JUCUM_DATA, X = window.JUCUM_EXAMS;
+      const ids = (D.MODULE_CATALOG[level] || []).map(function (m) { return m.id; });
+      return (X.getExams() || []).filter(function (e) {
+        if (e.level !== level) return false;
+        if (/^ex-m1forms-/.test(e.id)) return false;
+        const mine = e.moduleIds || [];
+        return !mine.length || !mine.some(function (m) { return ids.indexOf(m) >= 0; });
+      });
+    } catch (e) { return []; }
+  }
+
   window.JUCUM_EXAMFLOW = {
+    standaloneExams: standaloneExams,
     pDay: pDay, pMin: pMin, fmtHora: fmtHora, fmtFecha: fmtFecha, daysTo: daysTo, runDue: runDue,
     getAnn: getAnn, setAnn: setAnn, getPre: getPre, setPre: setPre,
     isPreexamActivity: isPreexamActivity, preOpenNow: preOpenNow, preexamVisibleFor: preexamVisibleFor,

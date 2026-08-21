@@ -140,9 +140,12 @@ function ExamCountdownCard({ student, onGo }) {
   const X = window.JUCUM_EXAMS;
   if (!X || !X.getAnnouncement) return null;
   const mods = D.MODULE_CATALOG[student.level] || [];
+  const F1 = window.JUCUM_EXAMFLOW;
+  const solos = (F1 && F1.standaloneExams ? F1.standaloneExams(student.level) : [])
+    .map(e => ({ id: 'exam:' + e.id, name: e.title, emoji: '🎓', activities: [] }));
   const today = peruDayKey();
   let best = null;
-  mods.forEach(m => {
+  mods.concat(solos).forEach(m => {
     const F0 = window.JUCUM_EXAMFLOW;
     const a = (F0 && F0.getAnn && F0.getAnn(student.group, m.id)) || X.getAnnouncement(student.group, m.id);
     if (a && a.date && a.date >= today && (!best || a.date < best.date)) best = { ...a, mod: m };
@@ -1737,6 +1740,11 @@ function StudentPractice({ student, settings, onBack }) {
       {/* ── 2) Tu práctica de hoy ── */}
       <PracHead emoji="🎯" title="Tu práctica de hoy" color="#1B3B6F" tint="#E4EDFB" line="#D2E0F5" />
       <div style={{marginTop:10}}><TodayPracticeCard student={student} /></div>
+      {(() => {
+        const F2 = window.JUCUM_EXAMFLOW;
+        const solos = (F2 && F2.standaloneExams ? F2.standaloneExams(student.level) : []);
+        return (solos.length && window.ModuleExamBanner) ? <div style={{marginTop:12}}>{solos.map(e => <ModuleExamBanner key={e.id} mod={{ id: 'exam:' + e.id, name: e.title, emoji: '🎓', activities: [] }} studentId={student.id} />)}</div> : null;
+      })()}
       {(() => {
         const dps = window.JUCUM_TT ? window.JUCUM_TT.getActiveDirectedForStudent(student) : [];
         return dps.length ? <div style={{marginTop:14, display:'flex', flexDirection:'column', gap:12}}>{dps.map(dp => <DirectedPracticeCard key={dp.id} dp={dp} student={student} />)}</div> : null;

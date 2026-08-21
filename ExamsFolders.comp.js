@@ -105,7 +105,8 @@ function GroupExamFolder({ group, onChange }) {
   const members = STUDENTS.filter(s => s.group === group.id);
   const apts = members.filter(s => getStudentReadiness(s).apt).length;
   let next = null;
-  mods.forEach(m => { const a = F.getAnn(group.id, m.id); if (a && a.date && F.daysTo(a.date) >= 0 && (!next || a.date < next.date)) next = { ...a, mod: m }; });
+  const solosHdr = (F.standaloneExams ? F.standaloneExams(group.level) : []).map(e => ({ id: 'exam:' + e.id, name: e.title, emoji: '🎓' }));
+  mods.concat(solosHdr).forEach(m => { const a = F.getAnn(group.id, m.id); if (a && a.date && F.daysTo(a.date) >= 0 && (!next || a.date < next.date)) next = { ...a, mod: m }; });
   return (
     <div style={{background:'#fff', border:'1.5px solid #D5CDBB', borderRadius:14, padding:18, position:'relative', zIndex:1, boxShadow:'0 2px 4px rgba(0,0,0,.06),0 8px 20px rgba(0,0,0,.08)'}}>
       <div style={{display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', paddingBottom:13, borderBottom:'1px dashed var(--border)', marginBottom:13}}>
@@ -122,6 +123,10 @@ function GroupExamFolder({ group, onChange }) {
       {showApt && <AptRoster members={members} />}
       {mods.length === 0 && <div className="settings-hint">Este nivel no tiene módulos.</div>}
       {mods.map(m => <ModuleFolderRow key={m.id} group={group} module={m} members={members} onChange={onChange} />)}
+      {(F.standaloneExams ? F.standaloneExams(group.level) : []).map(e => (
+        <ModuleFolderRow key={'solo-' + e.id} group={group} members={members} onChange={onChange}
+          module={{ id: 'exam:' + e.id, name: e.title, emoji: '🎓', activities: [] }} />
+      ))}
       {mods.map(m => {
         const act = (m.activities || []).find(a => F.isPreexamActivity(a));
         return act ? <PreexamFolderRow key={'pre-' + m.id} group={group} module={m} act={act} onChange={onChange} /> : null;
@@ -161,12 +166,13 @@ function AptRoster({ members }) {
 /* ── Una fila por módulo: estado + camino de 4 pasos ── */
 function ModuleFolderRow({ group, module, members, onChange }) {
   const D = window.JUCUM_DATA, X = window.JUCUM_EXAMS, F = window.JUCUM_EXAMFLOW;
-  const exam = X.examForModule(module.id, group.level);
+  const solo = String(module.id).indexOf('exam:') === 0;
+  const exam = solo ? X.getExam(String(module.id).slice(5)) : X.examForModule(module.id, group.level);
   const isForms = exam && /^ex-m1forms-/.test(exam.id);
   const win = exam ? X.windowForExamGroup(exam.id, group.id) : null;
   const formsWin = F.formsWindowFor(group);
   const formsExam = formsWin ? X.getExam(formsWin.examId) : null;
-  const isM1 = (D.MODULE_CATALOG[group.level] || [])[0]?.id === module.id;
+  const isM1 = !solo && (D.MODULE_CATALOG[group.level] || [])[0]?.id === module.id;
   const ann = F.getAnn(group.id, module.id);
   const today = F.pDay();
   const open = F.winEffectiveOpen(win);
@@ -177,6 +183,7 @@ function ModuleFolderRow({ group, module, members, onChange }) {
   const [from, setFrom] = exfUS(ann?.from || '');
   const [to, setTo] = exfUS(ann?.to || '');
   const [variant, setVariant] = exfUS(ann?.variant || (group.level === 'pre-a1' ? 'kids' : 'adults'));
+  const [libre, setLibre] = exfUS(ann?.free != null ? !!ann.free : solo);
 
   /* — M1 rendido por Google Forms (registro y vista) — */
   const formsForThisModule = isM1 && formsWin && formsExam && (formsExam.moduleIds || []).includes(module.id);
@@ -312,7 +319,7 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
     if (!date) { alert('Elige la fecha del examen.'); return; }
     const schedNotif = aviso === 'fecha' && avisoDate && avisoDate > F.pDay();
     F.setAnn(group.id, module.id, {
-      date, from: from || null, to: to || null, variant, auto: true, forceClosed: false, examId: exam.id,
+      date, from: from || null, to: to || null, variant, auto: true, forceClosed: false, examId: exam.id, free: !!libre,
       retakeDays: retakeDays ? Math.max(1, parseInt(retakeDays, 10) || 1) : null,
       programmedAt: new Date().toISOString(),
       notifyDate: schedNotif ? avisoDate : F.pDay(), notified: !schedNotif,
@@ -355,6 +362,10 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
             <span style={{fontSize:12}}>día(s) · vacío = sin repetición automática</span>
           </div>
           <div className="row-flex" style={{gap:7, marginTop:7, flexWrap:'wrap', alignItems:'center'}}>
+            <span style={{fontSize:11.5, fontWeight:800, color:'#1F3A8A', width:72}}>🔓 Acceso</span>
+            <label className="check-row" style={{margin:0}} title="Sin requisitos previos: no necesitan ser aptos ni haber cerrado los módulos anteriores"><input type="checkbox" checked={libre} onChange={e => setLibre(e.target.checked)} /><span style={{fontSize:12}}>{libre ? 'Libre — todo el grupo puede rendirlo' : 'Solo aptos (≥75%) y habilitados'}</span></label>
+          </div>
+          <div className="row-flex" style={{gap:7, marginTop:7, flexWrap:'wrap', alignItems:'center'}}>
             <span style={{fontSize:11.5, fontWeight:800, color:'#1F3A8A', width:72}}>📣 Aviso</span>
             <label className="check-row" style={{margin:0}}><input type="radio" name={'aviso-' + group.id + '-' + module.id} checked={aviso === 'ahora'} onChange={() => setAviso('ahora')} /><span style={{fontSize:12}}>enviarlo ahora</span></label>
             <label className="check-row" style={{margin:0}}><input type="radio" name={'aviso-' + group.id + '-' + module.id} checked={aviso === 'fecha'} onChange={() => setAviso('fecha')} /><span style={{fontSize:12}}>se envía solo el</span></label>
@@ -364,7 +375,7 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
           </div>
           {announced && (
             <div className="settings-hint" style={{margin:'6px 0 0'}}>
-              ✓ Programado: 📣 aviso {ann.notified ? 'ya enviado' : 'se enviará solo el ' + F.fmtFecha(ann.notifyDate)} · 🎓 examen {F.fmtFecha(ann.date)}{ann.from ? ', ' + F.fmtHora(ann.from) : ''}{ann.to ? ' – ' + F.fmtHora(ann.to) : ''}{ann.retakeDays ? ' · 🔁 no aprobados repiten a los ' + ann.retakeDays + ' día(s)' : ''} · se abre y se cierra solo · los alumnos ven su cuenta regresiva en el módulo.
+              ✓ Programado: 📣 aviso {ann.notified ? 'ya enviado' : 'se enviará solo el ' + F.fmtFecha(ann.notifyDate)} · 🎓 examen {F.fmtFecha(ann.date)}{ann.from ? ', ' + F.fmtHora(ann.from) : ''}{ann.to ? ' – ' + F.fmtHora(ann.to) : ''}{ann.free ? ' · 🔓 acceso libre (sin requisitos)' : ''}{ann.retakeDays ? ' · 🔁 no aprobados repiten a los ' + ann.retakeDays + ' día(s)' : ''} · se abre y se cierra solo · los alumnos ven su cuenta regresiva en el módulo.
             </div>
           )}
         </div>
@@ -393,8 +404,12 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
             {win && <button className="att-btn" onClick={() => loadLive(false)} disabled={liveBusy}>🔎 {liveBusy ? 'Consultando…' : 'Actualizar avance en vivo'}</button>}
           </div>
           <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap', margin:'5px 0 3px'}}>
-            {exfPill('#E8F5E9', '#2E7D32', <>✅ {members.filter(s => getStudentReadiness(s).apt).length} apto(s)</>, 'ca')}
-            {exfPill('#FFF8E1', '#E65100', <>⚠ {members.filter(s => !getStudentReadiness(s).apt).length} aún no — habilítalos aquí abajo</>, 'cb')}
+            {ann && ann.free
+              ? exfPill('#E8F5E9', '#2E7D32', <>🔓 Acceso libre: los {members.length} alumnos pueden entrar</>, 'ca')
+              : <>
+                  {exfPill('#E8F5E9', '#2E7D32', <>✅ {members.filter(s => getStudentReadiness(s).apt).length} apto(s)</>, 'ca')}
+                  {exfPill('#FFF8E1', '#E65100', <>⚠ {members.filter(s => !getStudentReadiness(s).apt).length} aún no — habilítalos aquí abajo</>, 'cb')}
+                </>}
             <button className="att-btn" onClick={() => {
               if (!confirm('¿Habilitar el examen para TODO el grupo (' + members.length + ' alumnos), sin importar su porcentaje?')) return;
               const w = win || (X.createWindow({ examId: exam.id, groupId: group.id, isOpen: false }), X.windowForExamGroup(exam.id, group.id));
@@ -408,7 +423,9 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
               onChange();
             }}>✕ Quitar habilitaciones ({(win.allowOverrides || []).length})</button>}
           </div>
-          <div className="settings-hint" style={{margin:'0 0 8px'}}>El % es la preparación en el <b>módulo activo del grupo</b> (por eso baja al abrir un módulo nuevo: la cobertura empieza de cero). Si este examen es de un módulo anterior, ignora el % y <b>habilítalos tú</b> — al hacerlo, si el examen estaba cerrado te ofrece <b>abrirlo ahora</b>. Tienes la última palabra.</div>
+          <div className="settings-hint" style={{margin:'0 0 8px'}}>{ann && ann.free
+            ? <>Con <b>🔓 acceso libre</b> no hace falta habilitar a nadie: todo el grupo entra el día programado, sin importar su porcentaje ni los módulos anteriores. Si lo cambias a «solo aptos» en el paso 1, aquí eliges alumno por alumno.</>
+            : <>El % es la preparación en el <b>módulo activo del grupo</b> (por eso baja al abrir un módulo nuevo: la cobertura empieza de cero). Si este examen es de un módulo anterior, ignora el % y <b>habilítalos tú</b> — al hacerlo, si el examen estaba cerrado te ofrece <b>abrirlo ahora</b>. Tienes la última palabra.</>}</div>
           <ExamResultsPanel exam={exam} members={members} />
           <div className="sm-list">
             {[...members].sort((a, b) => getStudentReadiness(b).overall - getStudentReadiness(a).overall).map(s => {
