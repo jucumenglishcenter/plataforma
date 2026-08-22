@@ -10,6 +10,20 @@ const exfUS = React.useState, exfUE = React.useEffect;
 
 function exfPill(bg, color, text, key) { return <span key={key} className="mm-chip" style={{background:bg, color:color, whiteSpace:'nowrap'}}>{text}</span>; }
 
+/* ⚠ 22-ago-2026 · Ser Apto son DOS requisitos (llegar al 75% Y tener cubierto el
+ * 60% del módulo) y hasta hoy solo se mostraba el primero: un alumno con 81% y
+ * el módulo a medias leía «falta 0% para ser Apto» y su examen seguía cerrado.
+ * Este texto dice CUÁL de los dos es el que falta. */
+function exfFalta(r, largo) {
+  if (!r || r.apt) return '';
+  const cov = r.needCoverage || 60, thr = r.threshold || 75;
+  const covBloq = r.blocker ? r.blocker === 'coverage' : (r.overall >= thr && (r.coverage || 0) < cov);
+  if (covBloq) return largo
+    ? `le falta terminar el módulo: lleva ${r.coverage || 0}% de prácticas aprobadas y necesita ${cov}%`
+    : `falta módulo ${r.coverage || 0}/${cov}%`;
+  return largo ? `le falta ${Math.max(0, thr - r.overall)}% de preparación` : `falta ${Math.max(0, thr - r.overall)}%`;
+}
+
 /* Botón de registro de las notas del M1 (Google Forms) — visible mientras el grupo no las tenga */
 function M1FormsButton({ group, onChange }) {
   const F = window.JUCUM_EXAMFLOW;
@@ -156,7 +170,7 @@ function AptRoster({ members }) {
             <i style={{position:'absolute', top:-1, bottom:-1, left:'75%', width:2, background:'#1F3A8A', display:'block'}}></i>
           </span>
           <b style={{width:44, textAlign:'right', color: r.apt ? '#2E7D32' : '#8A5100'}}>{r.overall}%</b>
-          {r.apt ? exfPill('#E8F5E9', '#2E7D32', '✅ apto', 'p') : exfPill('#FFF8E1', '#E65100', 'falta ' + Math.max(0, (r.threshold || 75) - r.overall) + '%', 'p')}
+          {r.apt ? exfPill('#E8F5E9', '#2E7D32', '✅ apto', 'p') : exfPill('#FFF8E1', '#E65100', exfFalta(r), 'p')}
         </div>
       ))}
     </div>
@@ -439,7 +453,7 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
                   <div className="st-ava" style={{background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>{s.fullName.split(' ').map(n => n[0]).slice(0, 2).join('')}</div>
                   <div className="sm-info">
                     <div className="sm-name">{s.fullName}</div>
-                    <div className="sm-meta">Preparación {r.overall}% · {r.apt ? '✅ apto' : '⚠ le falta ' + Math.max(0, r.threshold - r.overall) + '%'}</div>
+                    <div className="sm-meta">Preparación {r.overall}% · {r.apt ? '✅ apto' : '⚠ ' + exfFalta(r, true)}</div>
                     {lv2 && (
                       <div className="sm-meta" style={{color:'#1B5E20', fontWeight:700}}>
                         🎓 rendido {(() => { const e2 = Object.values(lv2.parts)[0]; return e2 && typeof e2.score === 'number' ? '· ' + e2.score + '%' : ''; })()}
@@ -814,13 +828,16 @@ function ModuleExamBanner({ mod, studentId }) {
           <b style={{fontSize:13, color}}>{r.overall}%</b>
           {habil
             ? exfPill('#E8F5E9', '#2E7D32', '✅ Habilitada por tu profesora', 'apt')
-            : exfPill(r.apt ? '#E8F5E9' : '#FFF8E1', r.apt ? '#2E7D32' : '#E65100', r.apt ? '✓ Apto' : 'Falta ' + Math.max(0, (r.threshold || 75) - r.overall) + '% para ser Apto', 'apt')}
+            : exfPill(r.apt ? '#E8F5E9' : '#FFF8E1', r.apt ? '#2E7D32' : '#E65100', r.apt ? '✓ Apto'
+                : r.blocker === 'coverage' ? '📚 Te falta terminar el módulo' : 'Falta ' + Math.max(0, (r.threshold || 75) - r.overall) + '% para ser Apto', 'apt')}
         </div>
         <div style={{fontSize:12.5, lineHeight:1.6, color:'#4A4A44', fontWeight:600}}>
           {habil
             ? <>✅ <b>Tu profesora te habilitó</b> para rendir este examen: no necesitas llegar al 75%. El botón para entrar aparecerá <b>aquí mismo</b> {info.ann && info.ann.date ? <>el <b>{F.fmtFecha(info.ann.date)}</b>{horario ? <> a la hora indicada ({horario})</> : null}</> : 'el día del examen'}. Mientras tanto, repasa con calma. 💪</>
             : r.apt
             ? <>¡Eres Apto! 🎉 Pero ojo: tu preparación es una <b>foto viva</b> — si dejas de practicar puede <b>bajar del 75%</b> y quedarías sin rendir tu examen. Mantén tu Apto con <b>{minDia} min cada día</b>. El botón para dar tu examen aparecerá <b>aquí mismo</b> ese día.</>
+            : r.blocker === 'coverage'
+            ? <>Ya pasaste el <b>75%</b> ({r.overall}%) 🎉, pero para ser Apto también hay que tener <b>terminado el módulo</b>: llevas <b>{r.coverage || 0}%</b> de tus prácticas aprobadas y necesitas <b>{r.needCoverage || 60}%</b>. Termina (o mejora) las prácticas que te faltan y tu examen se abre solo. 💪</>
             : <>El examen se abre solo para alumnos <b>Aptos (75%)</b>. Aún estás a tiempo: tu preparación sube con la <b>práctica de cada día</b> — <b>{minDia} min diarios</b>, no todo de golpe. 💪</>}
         </div>
         {!r.apt && !habil && <button type="button" onClick={() => setPlan(true)} style={{marginTop:10, width:'100%', border:'none', borderRadius:24, padding:'11px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14, cursor:'pointer', color:'#fff', background:'linear-gradient(135deg,#F4A02C,#E07A12)'}}>🎯 ¿Qué hago para dar mi examen?</button>}

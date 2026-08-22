@@ -697,7 +697,14 @@
       var pkey = (partId == null ? 'all' : 'p' + partId);
       var sc = (score == null) ? null : Math.max(0, Math.min(100, Math.round(Number(score))));
       var visto = sessionReg[pkey];
-      if (visto !== undefined && (sc == null || (visto != null && sc <= visto))) return; // nada nuevo
+      if (visto !== undefined && (sc == null || (visto != null && sc <= visto))) {
+        /* Nada nuevo que registrar. Antes se sal\u00eda EN SILENCIO: el alumno
+         * terminaba el ejercicio, no aparec\u00eda ninguna tarjeta y parec\u00eda que
+         * "no se registr\u00f3". Ahora siempre recibe respuesta. (22-ago-2026) */
+        if (sc != null) showResultCard(sc, '\ud83d\udc4d Practicaste de nuevo. Tu pr\u00e1ctica de hoy ya qued\u00f3 registrada'
+          + (visto != null ? ' y tu mejor nota (' + visto + '%) se mantiene' : '') + '.', true, lowStakes);
+        return;
+      }
       sessionReg[pkey] = sc;
       done = true;
       updateChip();

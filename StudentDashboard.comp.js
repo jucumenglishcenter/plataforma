@@ -1650,11 +1650,16 @@ function PracHead({ emoji, title, color, tint, line }) {
 function NeuroCoach({ student }) {
   const [open, setOpen] = React.useState(false);
   const [topic, setTopic] = React.useState(null);
+  /* 🎯 El mínimo para aprobar NO es 75% en todos los niveles (Pre-A1 73 · A1 78 ·
+   * A2 85). Decirle 75% al alumno hacía que un 80% en A2 se sintiera un error de
+   * la plataforma: «la hice y no me sale terminada». (22-ago-2026) */
+  const thrN = (() => { try { return window.JUCUM_DATA.passThreshold(student.level, student.group); } catch (e) { return 75; } })();
   const QA = [
-    { q:'⚡ ¿Cómo subo mi XP?', a:<span>Cada práctica que <b>apruebas (≥75%)</b> te da XP. Las <b>stories</b> dan XP por tiempo de lectura (10 min +5 · 20 min +10 · 30 min +15). Tu <b>racha</b> también suma: <b>+30 XP por cada día seguido</b> (hasta 14). ¡Mientras más constante, más XP! 💪</span> },
+    { q:'⚡ ¿Cómo subo mi XP?', a:<span>Cada práctica que <b>apruebas (≥{thrN}%)</b> te da XP. Las <b>stories</b> dan XP por tiempo de lectura (10 min +5 · 20 min +10 · 30 min +15). Tu <b>racha</b> también suma: <b>+30 XP por cada día seguido</b> (hasta 14). ¡Mientras más constante, más XP! 💪</span> },
     { q:'📚 ¿Cómo funcionan las prácticas?', a:<span>Se abren <b>en orden</b>: completa una para desbloquear la siguiente. Lee o escucha <b>sin traducir</b>, responde, y si fallas traduce <b>solo esa parte</b>. Vuelve al día siguiente para afianzar lo aprendido ✨</span> },
     { q:'🔁 ¿Por qué me vuelve a salir algo que ya hice?', a:<span>¡No es un error! Es el <b>repaso espaciado</b>: tu cerebro guarda mejor lo que repasa después de unos días de descanso. Cuando veas 🔁 en un módulo, esa práctica <b>toca repasarla</b> — hacerla de nuevo te da XP y fija lo aprendido para siempre 🧠</span> },
-    { q:'📊 ¿Qué significan los porcentajes?', a:<span>Cada material muestra <b>tu mejor nota</b> en él (ej. 85%). Necesitas <b>≥75%</b> para aprobar y desbloquear lo siguiente. Y el % del <b>módulo</b> en tu ruta es cuánto llevas completado de él. Si repites y subes tu nota, ¡el porcentaje sube contigo!</span> },
+    { q:'📊 ¿Qué significan los porcentajes?', a:<span>Cada material muestra <b>tu mejor nota</b> en él. En tu nivel necesitas <b>≥{thrN}%</b> para aprobarlo y desbloquear lo siguiente (si sacas menos queda con ↻, o sea «puedes mejorarla»). Y el % del <b>módulo</b> en tu ruta es cuánto llevas completado de él. Si repites y subes tu nota, ¡el porcentaje sube contigo!</span> },
+    { q:'⏳ Repetí la práctica y mi nota no cambió', a:<span>Es a propósito: en el <b>mismo ejercicio</b> tu nota nueva se guarda <b>media hora después</b> del intento anterior, para que muestre lo que aprendiste y no lo que acabas de memorizar. ¡Tu práctica, tu tiempo, tu racha y tu XP <b>sí</b> se registran al toque! Al abrir el material te sale una <b>cuenta regresiva</b>: cuando llegue a cero, repite y tu nota sube. Mientras tanto, avanza con otra actividad 😉</span> },
     { q:'🏁 Ya terminé todo, ¿y ahora?', a:<span>¡Bravo! Pero ojo: terminar todo en un día <b>no termina tu camino</b> 😉 Cada día tendrás tu <b>práctica diaria</b> y <b>refuerzos ✨</b> (repasar lo aprobado): dan <b>XP extra</b> y mantienen tu racha viva. El que practica a diario le gana al que hace todo de golpe 🔥</span> },
     { q:'💛 ¿Cómo hago que Neuro se sienta mejor?', a:<span>¡Fácil! Practica <b>un poquito cada día</b>. Mi energía sube con tu constancia y subo de etapa (¡hasta <b>imparable</b> 🚀!). Si dejas de practicar pierdo energía y tú pierdes XP… ¡no me dejes solito! 🧠</span> },
   ];
@@ -1986,7 +1991,7 @@ function ExplainerBody() {
       <div style={{display:'grid', gap:8}}>
         <div style={{display:'flex', gap:10, alignItems:'flex-start'}}><span style={{fontSize:18}}>📈</span><div><b>Sube</b> cuando practicas seguido, avanzas en los temas del módulo y entregas tus tareas.</div></div>
         <div style={{display:'flex', gap:10, alignItems:'flex-start'}}><span style={{fontSize:18}}>📉</span><div><b>Baja</b> si dejas de practicar varios días: a los 4 días empieza a bajar, y más aún a los 7 o más.</div></div>
-        <div style={{display:'flex', gap:10, alignItems:'flex-start'}}><span style={{fontSize:18}}>🎯</span><div>Para estar <b>listo para tu examen</b> necesitas llegar al <b>75%</b> y haber cubierto la mayoría de los temas — no solo unas pocas actividades.</div></div>
+        <div style={{display:'flex', gap:10, alignItems:'flex-start'}}><span style={{fontSize:18}}>🎯</span><div>Para estar <b>listo para tu examen</b> necesitas <b>dos cosas</b>: llegar al <b>75%</b> de preparación <b>y</b> tener aprobadas al menos el <b>60%</b> de las prácticas del módulo — no solo unas pocas actividades.</div></div>
         <div style={{display:'flex', gap:10, alignItems:'flex-start'}}><span style={{fontSize:18}}>🌱</span><div>Empezar un hábito cuesta. Si te cuesta arrancar, hazlo <b>fácil</b>: 10 minutos al día, siempre a la misma hora. ¡Tú puedes!</div></div>
       </div>
     </div>

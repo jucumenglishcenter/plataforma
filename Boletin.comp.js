@@ -46,6 +46,16 @@ function boModulo(student, mod, examAtt, partis) {
     const e = completed[k]; if (!e || !e.date) return;
     const d = boPeruDay(e.date); dias.add(d); if (!last || d > last) last = d;
   });
+  /* 🔥 FIX 22-ago-2026 · `completed[k].date` se sobreescribe en cada reintento:
+   * repasar hoy un material borraba el día en que se hizo y el 🔥 BAJABA por
+   * practicar. Los días reales viven en daily_sessions (nube, nunca se pisan). */
+  try {
+    const cd = (window.__JEC_DAYACT || {})[student.id] || {};
+    Object.keys(cd).forEach(d => {
+      if (!Object.keys(cd[d]).some(k => k.indexOf(mod.id + ':') === 0)) return;
+      dias.add(d); if (!last || d > last) last = d;
+    });
+  } catch (e) {}
   const man = D.getModuleExamResult ? D.getModuleExamResult(student, mod.id) : null;
   const att = examAtt ? examAtt[mod.id] : null;
   const examNota = (man && typeof man.grade === 'number') ? (att && (att.score || 0) > man.grade ? att.score : man.grade) : (att ? att.score : null);

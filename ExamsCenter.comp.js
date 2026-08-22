@@ -541,6 +541,20 @@ function EcFBBox({ x, group, exam, win, min, onChange }) {
   );
 }
 
+/* Link a la revisión del examen de UN alumno (abre el examen en modo profesor, directo a sus respuestas) */
+function ecReviewUrl(exam, student, group) {
+  const p = ((exam && exam.parts) || []).filter(x => x && x.url)[0];
+  if (!p) return null;
+  const sep = p.url.includes('?') ? '&' : '?';
+  return p.url + sep + 'jucum_teacher=1&jucum_student=' + encodeURIComponent(student.id) + (group ? '&jucum_group=' + encodeURIComponent(group.id) : '');
+}
+function EcVerExamen({ exam, student, group, rindio }) {
+  const url = ecReviewUrl(exam, student, group);
+  if (!url) return null;
+  if (!rindio) return <span className="settings-hint" style={{margin:0}}>Cuando rinda, aquí aparecerá el botón para ver su examen.</span>;
+  return <a className="att-btn" href={url} target="_blank" rel="noreferrer" style={{textDecoration:'none'}} title="Abre su examen con sus respuestas, lo correcto y la explicación de cada pregunta">📝 Ver su examen (en qué se equivocó)</a>;
+}
+
 function EcApRow({ x, group, exam, win, min, onChange }) {
   const [open, setOpen] = ecUS(false);
   const weak = ecWeakKeys(x.best);
@@ -558,6 +572,7 @@ function EcApRow({ x, group, exam, win, min, onChange }) {
       {open && (
         <div style={{borderTop:'1px dashed var(--border)', background:'#FBFAF5', padding:'12px 15px'}}>
           <EcSecBars att={x.best} />
+          <div style={{marginBottom:10}}><EcVerExamen exam={exam} student={x.s} group={group} rindio={x.rindio} /></div>
           <EcFBBox x={x} group={group} exam={exam} win={win} min={min} onChange={onChange} />
         </div>
       )}
@@ -648,6 +663,7 @@ function EcRetRow({ x, group, module, exam, win, min, pendiente, onChange }) {
       {open && (
         <div style={{borderTop:'1px dashed var(--border)', background:'#FBFAF5', padding:'12px 15px'}}>
           {!pendiente && <EcSecBars att={x.best} />}
+          <div style={{marginBottom:8}}><EcVerExamen exam={exam} student={x.s} group={group} rindio={!pendiente} /></div>
           <div style={{background:'#FFF5F5', border:'1.5px solid #F2B8B5', borderRadius:11, padding:'10px 13px', marginBottom:8}}>
             <div style={{fontSize:11.5, fontWeight:800, color:'#C62828', marginBottom:6}}>🔎 Qué le falta para rendir <span className="settings-hint" style={{margin:0, display:'inline'}}>· por si te pregunta directamente</span></div>
             <div className="row-flex" style={{gap:6, flexWrap:'wrap'}}>

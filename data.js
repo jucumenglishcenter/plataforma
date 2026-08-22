@@ -244,23 +244,39 @@ function dailyDataReal(student) {
   };
   const blank = (dStr) => ({ date: dStr, reading:0, listening:0, grammar:0, story:0, total:0, details:{reading:[],listening:[],grammar:[],story:[]} });
   const byDay = {};
-  Object.entries(completed).forEach(([key, e]) => {
-    if (!e || !e.date) return;
-    const dStr = String(e.date).slice(0, 10);
+  const put = (dStr, key, min, score) => {
+    if (!dStr || !(min > 0)) return;
     byDay[dStr] = byDay[dStr] || blank(dStr);
     const info = idx[key] || { module: '', item: key, type: '' };
     const cat = catOf(info.type);
-    const min = Math.max(1, Math.round(e.minutes || 0));
-    byDay[dStr][cat] += min;
-    byDay[dStr].total += min;
-    const row = { module: info.module, item: info.item, minutes: min };
-    if (typeof e.score === 'number') { row.score = scorePct(e.score); row.max = 100; }
+    const m = Math.max(1, Math.round(min));
+    byDay[dStr][cat] += m;
+    byDay[dStr].total += m;
+    const row = { module: info.module, item: info.item, minutes: m };
+    if (typeof score === 'number') { row.score = scorePct(score); row.max = 100; }
     byDay[dStr].details[cat].push(row);
+  };
+  /* 🔥 FIX 22-ago-2026 · EL HISTORIAL REAL VIENE DE LA NUBE (daily_sessions):
+   * una fila por alumno/día/material que NUNCA se pisa. El caché local
+   * `completed` guarda UNA sola fecha por material y se sobreescribe en cada
+   * reintento: repasar hoy un material de la semana pasada MOVÍA sus minutos a
+   * hoy y vaciaba aquel día → la constancia diaria (25% de la preparación) y el
+   * 🔥 del boletín BAJABAN justo por practicar más. Igual que la racha, esto se
+   * reconstruye desde daily_sessions y el caché local queda como respaldo. */
+  const cloud = (window.__JEC_DAYACT || {})[student.id] || null;
+  if (cloud) Object.keys(cloud).forEach(d => Object.keys(cloud[d]).forEach(k => {
+    const e = completed[k];
+    put(d, k, cloud[d][k], e ? e.score : null);
+  }));
+  Object.entries(completed).forEach(([key, e]) => {
+    if (!e || !e.date) return;
+    const dStr = peruDayStr(e.date);          // día PERÚ (antes se cortaba el ISO = día UTC)
+    if (cloud && cloud[dStr] && cloud[dStr][key] != null) return;   // ya vino de la nube
+    put(dStr, key, e.minutes || 1, e.score);
   });
   const days = [];
   for (let i = 13; i >= 0; i--) {
-    const date = new Date(); date.setDate(date.getDate() - i);
-    const dStr = date.toISOString().slice(0, 10);
+    const dStr = peruDayStr(Date.now() - i * 86400000);
     days.push(byDay[dStr] || blank(dStr));
   }
   return days;
@@ -1334,7 +1350,7 @@ function getStudentMastery(student) {
     const active = mods.filter(m => activeIds.includes(m.id));
     if (active.length) scope = active;
   }
-  let total = 0, done = 0, scoreSum = 0, scoreN = 0;
+  let total = 0, done = 0, scoreSum = 0, scoreN = 0, partN = 0;
   scope.forEach(m => (m.activities || []).forEach(a => {
     total++;
     const e = completed[`${m.id}:${a.id}`];
@@ -1345,11 +1361,16 @@ function getStudentMastery(student) {
       if (typeof e.score === 'number' && !low && a.type !== 'story') {
         const pct = scorePct(e.score);
         scoreSum += pct; scoreN++;
-      } else { scoreSum += 70; scoreN++; } // participación (story / resumen / quizlet / sin nota)
+      } else partN++;   // participación (story / resumen / quizlet / sin nota)
     }
   }));
   const coverage = total ? done / total : 0;
-  const quality = scoreN ? (scoreSum / scoreN) / 100 : 0;
+  /* 🎯 FIX 22-ago-2026 · El "nivel de acierto" promedia SOLO lo que tiene nota.
+   * Antes la participación (story / resumen / quizlet) entraba como un 70 fijo
+   * y ARRASTRABA el promedio hacia abajo: leer una historia podía BAJARLE el
+   * porcentaje al alumno el mismo día en que practicó. Si todavía no hay
+   * ninguna nota registrada se usa ese 70, para no dejarlo en cero. */
+  const quality = scoreN ? (scoreSum / scoreN) / 100 : (partN ? 0.7 : 0);
   // constancia: días activos de los últimos 7 (meta ~5/7 días)
   // Día en horario de Perú (UTC−5), consistente con la racha de supabase-sync.
   const peruDay = t => new Date((typeof t === 'number' ? t : Date.parse(t)) - 5 * 3600000).toISOString().slice(0, 10);
@@ -1442,7 +1463,7 @@ function getStudentReadiness(student) {
 
   const comp = {};
   COMPETENCIES.forEach(c => {
-    let total = 0, done = 0, sSum = 0, sN = 0;
+    let total = 0, done = 0, sSum = 0, sN = 0, pN = 0;
     mods.forEach(mod => (mod.activities || []).forEach(a => {
       if (!c.types.includes(a.type)) return;
       total++;
@@ -1450,11 +1471,11 @@ function getStudentReadiness(student) {
       if (e && entryPassed(e, student.level, student.group)) {
         done++;
         if (typeof e.score === 'number' && a.type !== 'story' && !isLowStakesType(a.type)) { const pct = scorePct(e.score); sSum += pct; sN++; }
-        else { sSum += 70; sN++; }
+        else pN++;
       }
     }));
     const coverage = total ? done / total : 0;
-    const quality = sN ? (sSum / sN) / 100 : 0;
+    const quality = sN ? (sSum / sN) / 100 : (pN ? 0.7 : 0);   // la participación ya no baja el promedio
     comp[c.key] = total === 0 ? null : Math.round(coverage * quality * 100 * constancyFactor);
   });
 
@@ -1525,9 +1546,15 @@ function getStudentReadiness(student) {
 
   overall = Math.max(0, Math.min(100, overall));
   // tope de seguridad: sin cubrir la mayoría del módulo no se puede ser "apto"
-  const apt = overall >= 75 && coverageAll >= 0.6;
+  const needCoverage = 60;
+  const apt = overall >= 75 && coverageAll >= needCoverage / 100;
+  /* 🔎 QUÉ le falta exactamente (22-ago-2026). El candado de cobertura era
+   * INVISIBLE: un alumno con 81% veía "falta 0% para ser Apto" y su examen
+   * seguía cerrado porque le faltaba terminar el módulo. Ahora las pantallas
+   * dicen cuál de los dos requisitos es el que falta. */
+  const blocker = apt ? null : (overall < 75 ? 'overall' : 'coverage');
   return { competencies: comp, practiceAvg, taskCompliance, taskDone, taskTotal, pillars, daily,
-           overall, apt, threshold: 75,
+           overall, apt, threshold: 75, needCoverage, blocker,
            coverage: m.coverage, quality: m.quality, daysInactive: inactive };
 }
 
@@ -1657,14 +1684,14 @@ function setModuleExamWeight(moduleId, w) {
 }
 function getModuleStats(student, module) {
   const completed = (getStudentProgress(student.id) || {}).completed || {};
-  let total = 0, done = 0, sSum = 0, sN = 0;
+  let total = 0, done = 0, sSum = 0, sN = 0, pN = 0;
   (module.activities || []).forEach(a => {
     total++;
     const e = completed[`${module.id}:${a.id}`];
-    if (e && entryPassed(e, student.level, student.group)) { done++; if (typeof e.score === 'number' && a.type !== 'story' && !isLowStakesType(a.type)) { const pct = scorePct(e.score); sSum += pct; sN++; } else { sSum += 70; sN++; } }
+    if (e && entryPassed(e, student.level, student.group)) { done++; if (typeof e.score === 'number' && a.type !== 'story' && !isLowStakesType(a.type)) { const pct = scorePct(e.score); sSum += pct; sN++; } else pN++; }
   });
   const coverage = total ? done / total : 0;
-  const quality = sN ? (sSum / sN) / 100 : 0;
+  const quality = sN ? (sSum / sN) / 100 : (pN ? 0.7 : 0);   // la participación ya no baja el promedio
   const cumplimiento = Math.round(coverage * (0.6 + 0.4 * quality) * 100);
   return { total, done, coverage: Math.round(coverage * 100), quality: Math.round(quality * 100), cumplimiento };
 }
@@ -2254,16 +2281,23 @@ function jecPagedDaily(cols, applyFilter, done) {
     try {
       if (!window.JUCUM_SB || !window.JUCUM_SB.getClient) return;
       var since = new Date(Date.now() - 5 * 3600000 - 42 * 86400000).toISOString().slice(0, 10); // ~6 semanas (Perú)
-      jecPagedDaily('user_id,day,module_id,activity_id', function (q) { return q.gte('day', since); }, function (rows) {
-        var map = {};
+      jecPagedDaily('user_id,day,module_id,activity_id,minutes', function (q) { return q.gte('day', since); }, function (rows) {
+        var map = {}, dmin = {};
         rows.forEach(function (x) {
           var wk = mondayOf(x.day);
           var key = x.module_id + ':' + x.activity_id;
           map[x.user_id] = map[x.user_id] || {};
           map[x.user_id][wk] = map[x.user_id][wk] || {};
           map[x.user_id][wk][key] = true;
+          /* 📅 Historial REAL por día (minutos por material): lo usa dailyDataReal
+           * para que repasar un material viejo no borre el día en que se hizo. */
+          if (!x.day) return;
+          dmin[x.user_id] = dmin[x.user_id] || {};
+          dmin[x.user_id][x.day] = dmin[x.user_id][x.day] || {};
+          dmin[x.user_id][x.day][key] = Math.max(dmin[x.user_id][x.day][key] || 0, x.minutes || 0);
         });
         window.__JEC_WEEKS = map;
+        window.__JEC_DAYACT = dmin;
       });
       /* 🔥 Racha multi-equipo: días REALES con práctica según daily_sessions (una fila
        * por alumno/día/material, nunca se sobreescribe — a diferencia de entry.date).

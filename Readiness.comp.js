@@ -91,10 +91,14 @@ function ReadinessCard({ student, forTeacher }) {
         {forTeacher
           ? (apt
               ? 'El alumno alcanza el mínimo. Aun así, tú tienes la última palabra para habilitar el examen.'
-              : 'Por debajo del 75%. La plataforma lo marca como no apto, pero puedes habilitarle el examen igual si lo decides.')
+              : r.blocker === 'coverage'
+                ? `Ya pasó el 75% (${r.overall}%), pero le falta terminar el módulo: lleva ${r.coverage || 0}% de prácticas aprobadas y se pide ${r.needCoverage || 60}%. Puedes habilitarle el examen igual si lo decides.`
+                : 'Por debajo del 75%. La plataforma lo marca como no apto, pero puedes habilitarle el examen igual si lo decides.')
           : (apt
               ? '¡Vas listo! 🎉 Mantén tu constancia. Tu profesor habilitará tu examen cuando corresponda.'
-              : 'Aún no llegas al 75% para rendir tu examen de avance. Sube completando las prácticas del módulo, practicando un poco CADA día y entregando tus tareas. 💪')}
+              : r.blocker === 'coverage'
+                ? `¡Ya pasaste el 75% (${r.overall}%)! 🎉 Ahora te falta terminar el módulo: llevas ${r.coverage || 0}% de tus prácticas aprobadas y se pide ${r.needCoverage || 60}%. Completa (o mejora) las que te faltan y tu examen se abre solo. 💪`
+                : 'Aún no llegas al 75% para rendir tu examen de avance. Sube completando las prácticas del módulo, practicando un poco CADA día y entregando tus tareas. 💪')}
       </div>
     </div>
   );
