@@ -92,6 +92,15 @@ function pendingCount() {
 }
 /* Reintenta TODO lo pendiente. Devuelve cuántas quedaron sin subir. */
 async function retryPending() {
+  /* 🪦 23-ago-2026: los BORRADOS también se reintentan. Antes el borrado a la nube se
+   * disparaba una sola vez; si fallaba, la tarea desaparecía de ESTE equipo (lápida local)
+   * pero seguía viva en la nube y en los equipos de los alumnos, contándoles en contra
+   * (caso “Que Story Leíste”). Repetir el borrado es inofensivo si ya no existe. */
+  try {
+    for (const id of Object.keys(taskTombs())) {
+      if (window.JUCUM_SYNC && window.JUCUM_SYNC.deleteAssignmentDb) window.JUCUM_SYNC.deleteAssignmentDb(id);
+    }
+  } catch (e) {}
   for (const a of loadAssignments().filter(x => x && x.pendingSync)) {
     const r = await pushTaskSafe(a);
     if (r.ok) { markSynced(a.id); notifyRecipients(a, !!a.editedAt); }

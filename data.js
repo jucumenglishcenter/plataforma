@@ -1431,7 +1431,10 @@ function getDailyConstancy(student) {
   const target = settings.dailyTargetMin || 15;
   const activeIds = (settings.activeModuleIds && settings.activeModuleIds.length)
     ? settings.activeModuleIds : (settings.activeModuleId ? [settings.activeModuleId] : []);
-  const modId = activeIds[0] || null;
+  /* 🎯 23-ago-2026: la constancia se mide desde la apertura del ÚLTIMO módulo aperturado (el
+   * actual), no del más viejo — antes usaba activeIds[0] (p.ej. el M1 de hace meses) y la
+   * ventana se estiraba a los 14 días completos, exigiendo más días de los justos. */
+  const modId = activeIds.length ? activeIds[activeIds.length - 1] : null;
   let since = modId ? getModuleOpenedAt(student.group, modId) : null;
   if (!since && modId) {   // módulo abierto antes de registrar la fecha: su 1.ª práctica
     const completed = (getStudentProgress(student.id) || {}).completed || {};
@@ -1505,10 +1508,23 @@ function getStudentReadiness(student) {
       const targeted = Array.isArray(a.targetStudentIds) && a.targetStudentIds.length > 0;
       return targeted ? a.targetStudentIds.includes(student.id) : a.groupId === student.group;
     });
-    if (mine.length) {
-      const sub = mine.filter(a => (subs[a.id] || {})[student.id]).length;
-      taskDone = sub; taskTotal = mine.length;
-      taskCompliance = Math.round(sub / mine.length * 100);
+    /* 🧮 23-ago-2026: una tarea AÚN A TIEMPO no baja el porcentaje. Antes, crear una tarea
+     * hacía caer el % de TODO el grupo en el acto (caso Valeria: 73→63 el mismo día que se
+     * crearon 2 tareas nuevas). Regla: una tarea entregada siempre suma; una pendiente solo
+     * cuenta en contra cuando su fecha límite ya pasó (o, si no tiene fecha, a los 7 días). */
+    const hoyP = peruDayStr();
+    const limiteSinFecha = peruDayStr(Date.now() - 7 * 86400000);
+    const cuentan = mine.filter(a => {
+      if ((subs[a.id] || {})[student.id]) return true;
+      const due = String(a.dueAt || '').slice(0, 10);
+      if (due) return due < hoyP;
+      const creada = String(a.date || '').slice(0, 10);
+      return !!creada && creada < limiteSinFecha;
+    });
+    if (cuentan.length) {
+      const sub = cuentan.filter(a => (subs[a.id] || {})[student.id]).length;
+      taskDone = sub; taskTotal = cuentan.length;
+      taskCompliance = Math.round(sub / cuentan.length * 100);
     }
   } catch {}
 
