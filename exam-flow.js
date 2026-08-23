@@ -227,7 +227,10 @@
     if (ann && ann.forceClosed) return false;
     if (w.isOpen) { if (w.closesAt && new Date(w.closesAt) < new Date()) return false; return true; }
     if (ann && ann.auto !== false && ann.date) {
-      if (pDay() !== ann.date) return false;
+      /* 📅 23-ago-2026: el examen puede durar VARIOS días (ann.dateTo). Cada día del rango se
+       * abre en el mismo horario; sin dateTo se comporta igual que antes (un solo día). */
+      const hoy = pDay(), fin = ann.dateTo || ann.date;
+      if (hoy < ann.date || hoy > fin) return false;
       const min = pMin();
       return min >= hm(ann.from, 0) && min <= hm(ann.to, 1439);
     }
@@ -277,9 +280,11 @@
     if (open && canTake) return { phase: 'today', exam: exam, win: win, ann: ann, r: r, canTake: true, link: link, days: 0 };
     if (ann && ann.date) {
       const d = daysTo(ann.date);
+      const dFin = daysTo(ann.dateTo || ann.date);
       if (d >= 0 && !open) return { phase: 'announced', exam: exam, win: win, ann: ann, r: r, canTake: canTake, days: d, isToday: d === 0 };
       if (open && !canTake) return { phase: 'announced', exam: exam, win: win, ann: ann, r: r, canTake: false, days: 0, isToday: true };
-      if (d < 0) return { phase: 'waitgrade', exam: exam, win: win, ann: ann, r: r };   // ya pasó: sin recordatorios
+      if (dFin >= 0 && !open) return { phase: 'announced', exam: exam, win: win, ann: ann, r: r, canTake: canTake, days: 0, isToday: true };   // dentro del rango, fuera del horario de hoy
+      if (dFin < 0) return { phase: 'waitgrade', exam: exam, win: win, ann: ann, r: r };   // ya pasó: sin recordatorios
     }
     if (open && !canTake) return { phase: 'announced', exam: exam, win: win, ann: null, r: r, canTake: false, days: null };
     return { phase: 'ready', exam: exam, win: win, ann: ann, r: r };
@@ -335,7 +340,7 @@
     const out = [];
     mods.forEach(function (m) {
       const a = getAnn(groupId, m.id);
-      if (a && a.date === dstr) out.push({ kind: 'exam', icon: '🎓', moduleId: m.id, title: 'Examen · ' + m.name, sub: (a.from ? fmtHora(a.from) : '') + (a.to ? ' – ' + fmtHora(a.to) : '') + (a.auto === false ? ' · apertura manual' : ' · se abre solo') + (a.variant ? ' · versión ' + (a.variant === 'kids' ? 'niños' : 'adultos') : '') });
+      if (a && a.date && dstr >= a.date && dstr <= (a.dateTo || a.date)) out.push({ kind: 'exam', icon: '🎓', moduleId: m.id, title: 'Examen · ' + m.name, sub: (a.from ? fmtHora(a.from) : '') + (a.to ? ' – ' + fmtHora(a.to) : '') + (a.dateTo && a.dateTo !== a.date ? ' · ventana del ' + fmtFecha(a.date) + ' al ' + fmtFecha(a.dateTo) : '') + (a.auto === false ? ' · apertura manual' : ' · se abre solo') + (a.variant ? ' · versión ' + (a.variant === 'kids' ? 'niños' : 'adultos') : '') });
       const p = getPre(groupId, m.id);
       if (p && p.open) {
         if (p.fromDate === dstr) out.push({ kind: 'preexam', icon: '🧭', moduleId: m.id, title: 'Abre pre-examen · ' + m.name, sub: (p.from ? fmtHora(p.from) : '') });

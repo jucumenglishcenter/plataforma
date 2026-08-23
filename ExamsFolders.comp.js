@@ -194,6 +194,7 @@ function ModuleFolderRow({ group, module, members, onChange }) {
   const [expand, setExpand] = exfUS(!!ann && !past && !(win && win.published));
   const [showNotes, setShowNotes] = exfUS(false);
   const [date, setDate] = exfUS(ann?.date || '');
+  const [dateTo, setDateTo] = exfUS(ann?.dateTo || '');
   const [from, setFrom] = exfUS(ann?.from || '');
   const [to, setTo] = exfUS(ann?.to || '');
   const [variant, setVariant] = exfUS(ann?.variant || (group.level === 'pre-a1' ? 'kids' : 'adults'));
@@ -319,7 +320,7 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
       const a = F.getAnn(group.id, module.id) || {};
       const hoy = F.pDay();
       const abierta = w.isOpen && !a.forceClosed;
-      const abriráSola = !a.forceClosed && a.auto !== false && a.date && a.date >= hoy;
+      const abriráSola = !a.forceClosed && a.auto !== false && a.date && (a.dateTo || a.date) >= hoy;
       if (abierta || abriráSola) return;
       const msg = a.date && a.date < hoy
         ? 'La fecha programada (' + F.fmtFecha(a.date) + ') ya pasó, así que el examen está cerrado y nadie puede entrar.\n\n¿Abrirlo AHORA para los habilitados?'
@@ -331,19 +332,20 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
   };
   const doProgram = () => {
     if (!date) { alert('Elige la fecha del examen.'); return; }
+    if (dateTo && dateTo < date) { alert('La fecha de cierre no puede ser anterior a la de apertura.'); return; }
     const schedNotif = aviso === 'fecha' && avisoDate && avisoDate > F.pDay();
     F.setAnn(group.id, module.id, {
-      date, from: from || null, to: to || null, variant, auto: true, forceClosed: false, examId: exam.id, free: !!libre,
+      date, dateTo: dateTo || null, from: from || null, to: to || null, variant, auto: true, forceClosed: false, examId: exam.id, free: !!libre,
       retakeDays: retakeDays ? Math.max(1, parseInt(retakeDays, 10) || 1) : null,
       programmedAt: new Date().toISOString(),
       notifyDate: schedNotif ? avisoDate : F.pDay(), notified: !schedNotif,
     });
     if (!win) X.createWindow({ examId: exam.id, groupId: group.id, isOpen: false });
-    const horarioTxt = (from ? ', ' + F.fmtHora(from) : '') + (to ? ' – ' + F.fmtHora(to) : '');
+    const horarioTxt = (dateTo && dateTo !== date ? ' al ' + F.fmtFecha(dateTo) : '') + (from ? ', ' + F.fmtHora(from) : '') + (to ? ' – ' + F.fmtHora(to) : '');
     if (schedNotif) {
       alert('🗓️ Todo programado para ' + group.name + ':\n📣 El aviso se enviará SOLO el ' + F.fmtFecha(avisoDate) + '.\n🎓 Examen: ' + F.fmtFecha(date) + horarioTxt + ' — se abre y se cierra solo (hora de Perú).\nLos alumnos ya ven la cuenta regresiva en su módulo; sale en tu calendario de Planificar.');
     } else {
-      const n = X.announceExam(group.id, module.id, exam.id, date);
+      const n = X.announceExam(group.id, module.id, exam.id, date, dateTo || null);
       alert('📣 Aviso enviado AHORA a ' + n + ' alumno(s) de ' + group.name + '.\n🎓 Examen: ' + F.fmtFecha(date) + horarioTxt + ' — se abre y se cierra solo (hora de Perú). Sale en tu calendario de Planificar.');
     }
     onChange();
@@ -360,6 +362,8 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
           <div className="row-flex" style={{gap:7, marginTop:7, flexWrap:'wrap', alignItems:'center'}}>
             <span style={{fontSize:11.5, fontWeight:800, color:'#1F3A8A', width:72}}>🎓 Examen</span>
             <input type="date" className="input-text" style={{width:150}} value={date} onChange={e => setDate(e.target.value)} />
+            <span style={{fontSize:11.5, fontWeight:800, color:'#777'}}>hasta</span>
+            <input type="date" className="input-text" style={{width:150}} value={dateTo} min={date || undefined} onChange={e => setDateTo(e.target.value)} title="Opcional: déjalo vacío si el examen es de un solo día. Con fecha, el examen se abre TODOS los días del rango en el mismo horario." />
             <span style={{fontSize:11.5, fontWeight:800, color:'#777'}}>abre</span>
             <input type="time" className="input-text" style={{width:110}} value={from} onChange={e => setFrom(e.target.value)} />
             <span style={{fontSize:11.5, fontWeight:800, color:'#777'}}>cierra</span>
@@ -387,7 +391,7 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
           </div>
           {announced && (
             <div className="settings-hint" style={{margin:'6px 0 0'}}>
-              ✓ Programado: 📣 aviso {ann.notified ? 'ya enviado' : 'se enviará solo el ' + F.fmtFecha(ann.notifyDate)} · 🎓 examen {F.fmtFecha(ann.date)}{ann.from ? ', ' + F.fmtHora(ann.from) : ''}{ann.to ? ' – ' + F.fmtHora(ann.to) : ''}{ann.free ? ' · 🔓 acceso libre (sin requisitos)' : ''}{ann.retakeDays ? ' · 🔁 no aprobados repiten a los ' + ann.retakeDays + ' día(s)' : ''} · se abre y se cierra solo · los alumnos ven su cuenta regresiva en el módulo.
+              ✓ Programado: 📣 aviso {ann.notified ? 'ya enviado' : 'se enviará solo el ' + F.fmtFecha(ann.notifyDate)} · 🎓 examen {F.fmtFecha(ann.date)}{ann.dateTo && ann.dateTo !== ann.date ? ' al ' + F.fmtFecha(ann.dateTo) : ''}{ann.from ? ', ' + F.fmtHora(ann.from) : ''}{ann.to ? ' – ' + F.fmtHora(ann.to) : ''}{ann.dateTo && ann.dateTo !== ann.date ? ' (cada día del rango)' : ''}{ann.free ? ' · 🔓 acceso libre (sin requisitos)' : ''} · se abre y se cierra solo · los alumnos ven su cuenta regresiva en el módulo.
             </div>
           )}
         </div>
@@ -702,7 +706,7 @@ function ModuleExamBanner({ mod, studentId }) {
     </div>
   );
   const box = (borderColor, children) => <div style={{borderRadius:13, marginTop:12, overflow:'hidden', width:'100%', border:'1.5px solid ' + borderColor}}>{children}</div>;
-  const horario = info.ann ? (info.ann.from ? F.fmtHora(info.ann.from) + (info.ann.to ? ' – ' + F.fmtHora(info.ann.to) : '') : 'todo el día') : '';
+  const horario = info.ann ? ((info.ann.from ? F.fmtHora(info.ann.from) + (info.ann.to ? ' – ' + F.fmtHora(info.ann.to) : '') : 'todo el día') + (info.ann.dateTo && info.ann.dateTo !== info.ann.date ? ' · disponible hasta el ' + F.fmtFecha(info.ann.dateTo) : '')) : '';
 
   /* Ya rindió (nota automática instantánea): resultado + retroalimentación por parte */
   if (att && info.phase !== 'done') {

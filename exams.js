@@ -309,15 +309,16 @@ function repairDuplicateWindows() {
 setTimeout(function () { try { const n = repairDuplicateWindows(); if (n) console.log('🚑 Exámenes: ' + n + ' ventana(s) duplicada(s) fusionada(s) — notas restauradas a la vista.'); } catch (e) {} }, 12000);
 
 /* ETAPA 1 · Anunciar: avisa a los alumnos del grupo cuándo será su examen */
-function announceExam(groupId, moduleId, examId, dateStr) {
+function announceExam(groupId, moduleId, examId, dateStr, dateToStr) {
   const D = window.JUCUM_DATA; if (!D) return 0;
   const ann = loadAnn();
-  ann[groupId + ':' + moduleId] = { date: dateStr || null, examId: examId || null, announcedAt: new Date().toISOString() };
+  ann[groupId + ':' + moduleId] = { date: dateStr || null, dateTo: dateToStr || null, examId: examId || null, announcedAt: new Date().toISOString() };
   saveAnn(ann);
   const group = D.GROUPS.find(g => g.id === groupId);
   const mod = (D.MODULE_CATALOG[group?.level] || []).find(m => m.id === moduleId);
   const modName = mod?.name || 'tu módulo';
   const fecha = dateStr ? new Date(dateStr + 'T00:00:00').toLocaleDateString('es-PE', { weekday:'long', day:'numeric', month:'long' }) : null;
+  const fechaFin = (dateToStr && dateToStr !== dateStr) ? new Date(dateToStr + 'T00:00:00').toLocaleDateString('es-PE', { weekday:'long', day:'numeric', month:'long' }) : null;
   const members = D.STUDENTS.filter(s => s.group === groupId);
   members.forEach(s => {
     const r = D.getStudentReadiness(s);
@@ -325,7 +326,7 @@ function announceExam(groupId, moduleId, examId, dateStr) {
     if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(s.id, {
       type: 'assignment',
       title: '📣 Examen programado',
-      body: `Tu examen de "${modName}"${fecha ? ` será el ${fecha}` : ' se acerca'}. ` +
+      body: `Tu examen de "${modName}"${fecha ? (fechaFin ? ` estará disponible del ${fecha} al ${fechaFin}` : ` será el ${fecha}`) : ' se acerca'}. ` +
         (apt ? '¡Vas listo! Repasa y prepárate. 💪' : `Recuerda: necesitas 75% de cumplimiento para rendirlo (vas en ${r.overall}%). Practica con constancia esta semana.`),
       link: 'exam',
     });
