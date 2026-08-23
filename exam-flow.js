@@ -91,7 +91,28 @@
   function pDayOf(t) { return new Date((typeof t === 'number' ? t : Date.parse(t)) - 5 * 3600000).toISOString().slice(0, 10); }
   function getCfg(groupId) { return load().cfg[groupId] || {}; }
   function setCfg(groupId, patch) { const flow = load(); flow.cfg[groupId] = Object.assign({}, flow.cfg[groupId] || {}, patch); save(flow); return flow.cfg[groupId]; }
+  /* 🔒 Un examen NO puede haberse rendido antes de existir (23-ago-2026). Con esta fecha se
+   * descartan notas heredadas de OTRO examen cuando un equipo arrastra un mapeo viejo en su
+   * caché (bug real: la nota del M2 del 22-jul salía como "examen rendido" del M3). */
+  function examDesde(exam) {
+    try { const t = Date.parse((exam && exam.date) || ''); if (!t) return null; return new Date(t - 86400000).toISOString().slice(0, 10); } catch (e) { return null; }
+  }
   function minGradeFor(groupId) { const n = Number((load().cfg[groupId] || {}).minGrade); return (n >= 1 && n <= 100) ? n : 75; }
+  /* 🎓 NOTA OFICIAL del examen (23-ago-2026) · regla fija, no volver a promediar ni "la mejor":
+   * vale el PRIMER intento. Un intento posterior solo cuenta si cayó DENTRO de la ventana de
+   * recuperación que abrió la profesora (la única repetición autorizada). Devuelve además
+   * cuántos intentos hay y cuántos fueron sin permiso, para poder avisarlo en pantalla.
+   * list = [{score, date}] (de diagnostic_attempts o del registro de práctica). */
+  function notaOficial(list, ret, desde) {
+    const rows = (list || []).filter(r => r && typeof r.score === 'number' && (!desde || String(r.date || '').slice(0, 10) >= desde))
+      .slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+    if (!rows.length) return null;
+    const first = rows[0];
+    let rec = null;
+    if (ret && ret.from && ret.to) rows.slice(1).forEach(r => { const d = String(r.date || '').slice(0, 10); if (d >= ret.from && d <= ret.to) rec = r; });
+    const use = rec || first;
+    return { score: use.score, date: use.date, isRecovery: !!rec, intentos: rows.length, primera: first.score, sinPermiso: rows.length - 1 - (rec ? 1 : 0) };
+  }
   function getRet(groupId, moduleId) { return load().ret[groupId + ':' + moduleId] || null; }
   function setRet(groupId, moduleId, patch) {
     const flow = load(); const k = groupId + ':' + moduleId;
@@ -215,6 +236,19 @@
 
   /* ── Info completa del examen de UN módulo para UN alumno (alimenta el banner) ──
    * phase: none | ready | announced | today | waitgrade | done */
+  /* 🔒 Coherencia examen↔módulo (23-ago-2026): el examen de un módulo debe apuntar a la MISMA
+   * carpeta de materiales del módulo (/m3/ con /m3/examen/). Si no coincide, este equipo trae
+   * un mapeo viejo en su caché y NO se muestra nada: así la nota de un examen no aparece en
+   * la tarjeta de otro módulo (bug real: el 91 del M2 salía como "examen rendido" del M3). */
+  function carpetaDe(urls) { for (let i = 0; i < (urls || []).length; i++) { const m = String(urls[i] || '').match(/\/(m\d+)\//); if (m) return m[1]; } return null; }
+  function mismaCarpeta(mod, exam) {
+    try {
+      const f = carpetaDe(((mod && mod.activities) || []).map(a => a.url));
+      const g = carpetaDe(((exam && exam.parts) || []).map(p => p.url));
+      if (!f || !g) return true;
+      return f === g;
+    } catch (e) { return true; }
+  }
   function infoForModule(student, mod) {
     const D = window.JUCUM_DATA, X = window.JUCUM_EXAMS;
     if (!D || !X || !student || !mod) return { phase: 'none' };
@@ -222,6 +256,7 @@
     const solo = String(mod.id).indexOf('exam:') === 0;
     const exam = solo ? X.getExam(String(mod.id).slice(5)) : X.examForModule(mod.id, student.level);
     if (!exam) return { phase: 'none' };
+    if (!solo && !mismaCarpeta(mod, exam)) { try { console.warn('examen↔módulo incoherente (caché viejo): ' + mod.id + ' ≠ ' + exam.id); } catch (e) {} return { phase: 'none' }; }
     const isForms = /^ex-m1forms-/.test(exam.id);
     const win = X.windowForExamGroup(exam.id, student.group);
     const ann = getAnn(student.group, mod.id);
@@ -356,7 +391,7 @@
     isPreexamActivity: isPreexamActivity, preOpenNow: preOpenNow, preexamVisibleFor: preexamVisibleFor,
     annForWindow: annForWindow, winEffectiveOpen: winEffectiveOpen, infoForModule: infoForModule,
     registerM1Forms: registerM1Forms, formsWindowFor: formsWindowFor, eventsForDay: eventsForDay, hydrate: hydrate,
-    getCfg: getCfg, setCfg: setCfg, minGradeFor: minGradeFor,
+    getCfg: getCfg, setCfg: setCfg, minGradeFor: minGradeFor, notaOficial: notaOficial, examDesde: examDesde,
     getRet: getRet, setRet: setRet, retActive: retActive, retReqsFor: retReqsFor, retOpenFor: retOpenFor,
     retDias: retDias, retPlan: retPlan, retPlanDone: retPlanDone, retAvanceMin: RET_AVANCE_MIN,
     retMin: RET_MIN_DIAS, retDe: RET_DE_DIAS,

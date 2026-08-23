@@ -246,7 +246,10 @@ function WindowCard({ w, onChange }) {
 function ExamGradeModal({ w, student, suggested, draft, onClose }) {
   const res = (w.results||{})[student.id] || {};
   const [grade, setGrade] = exUseState(typeof res.grade==='number' ? res.grade : (typeof suggested==='number' ? suggested : 75));
-  const [withGrade, setWithGrade] = exUseState(typeof res.grade==='number' || true);
+  /* ⚠️ 23-ago-2026: antes esto era `|| true` — siempre quedaba marcado "con nota", así que
+   * guardar SOLO un comentario registraba una nota de 75 y el alumno aparecía como rendido.
+   * Ahora arranca marcado solo si ya tiene nota o si el examen dio una nota automática. */
+  const [withGrade, setWithGrade] = exUseState(typeof res.grade==='number' || typeof suggested==='number');
   const [passed, setPassed] = exUseState(res.passed ?? (typeof suggested==='number' ? suggested >= ((window.JUCUM_EXAMFLOW && window.JUCUM_EXAMFLOW.minGradeFor) ? window.JUCUM_EXAMFLOW.minGradeFor(w.groupId) : 75) : true));
   const [feedback, setFeedback] = exUseState(res.feedback || draft || '');
   const save = () => { window.JUCUM_EXAMS.gradeExam(w.id, student.id, withGrade?grade:null, passed, feedback.trim()); onClose(); };

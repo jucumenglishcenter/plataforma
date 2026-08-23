@@ -238,7 +238,26 @@ function getAnnouncement(groupId, moduleId) { return loadAnn()[groupId + ':' + m
 function examForModule(moduleId, level) {
   const list = loadExams().filter(e => (e.moduleIds || []).includes(moduleId) && (!level || e.level === level));
   if (!list.length) return null;
-  const rank = e => /^ex-m1forms-/.test(e.id) ? 1 : /🧪/.test(e.title || '') ? 0 : 2;
+  /* 🔒 23-ago-2026: si el módulo tiene materiales en una carpeta /m#/, gana el examen cuyas
+   * partes apuntan a ESA carpeta. Así un examen con el mapeo viejo (otro módulo) no se
+   * queda con la carpeta equivocada y no arrastra su nota. */
+  const folder = (function () {
+    try {
+      const D = window.JUCUM_DATA; if (!D || !D.MODULE_CATALOG) return null;
+      let mod = null;
+      Object.keys(D.MODULE_CATALOG).forEach(lv => (D.MODULE_CATALOG[lv] || []).forEach(m => { if (m.id === moduleId) mod = m; }));
+      const urls = ((mod && mod.activities) || []).map(a => a.url || '').filter(Boolean);
+      for (let i = 0; i < urls.length; i++) { const m = urls[i].match(/\/(m\d+)\//); if (m) return m[1]; }
+      return null;
+    } catch (e) { return null; }
+  })();
+  const sameFolder = e => {
+    if (!folder) return true;
+    const urls = (e.parts || []).map(p => p.url || '').filter(Boolean);
+    if (!urls.length) return true;
+    return urls.some(u => u.indexOf('/' + folder + '/') > -1);
+  };
+  const rank = e => (sameFolder(e) ? 10 : 0) + (/^ex-m1forms-/.test(e.id) ? 1 : /🧪/.test(e.title || '') ? 0 : 2);
   return list.sort((a, b) => (rank(b) - rank(a)) || String(b.date || '').localeCompare(String(a.date || '')))[0];
 }
 /* Ventana de examen (grupo completo) para un examen + grupo.

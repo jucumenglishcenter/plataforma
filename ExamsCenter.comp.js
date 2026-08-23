@@ -391,7 +391,7 @@ function EcModResults({ group, module, members, onChange }) {
       const res = await sb.from('diagnostic_attempts').select('user_id,score,correct,total,sections,attempt_no,created_at,module_id,activity_id')
         .in('user_id', members.map(s => s.id)).order('created_at', { ascending: true }).limit(1000);
       if (res && res.error) { setErr(res.error.message); setRows([]); }
-      else setRows(((res && res.data) || []).filter(r => r.module_id === 'exam-' + exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl)));
+      else setRows(((res && res.data) || []).filter(r => (r.module_id === 'exam-' + exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl)) && (!F.examDesde || !F.examDesde(exam) || String(r.created_at || '').slice(0, 10) >= F.examDesde(exam))));
     } catch (e) { setErr(String(e && e.message || e)); setRows([]); }
     setBusy(false);
   };
@@ -416,21 +416,26 @@ function EcModResults({ group, module, members, onChange }) {
   /* 🚑 Respaldo (06-ago): la nota del examen también queda en el registro de práctica
    * (progress → 'exam-<examId>:<parte>'), hidratado en ESTE equipo. Si la nube de
    * intentos no responde (RLS/anon), el panel igual muestra las notas — nunca un falso 0. */
+  const retW = F.getRet ? F.getRet(group.id, module.id) : null;
+  const desdeW = F.examDesde ? F.examDesde(exam) : null;
   const progOf = s => { try {
     const comp = (D.getStudentProgress(s.id) || {}).completed || {};
     const ks = Object.keys(comp).filter(k => k.indexOf('exam-' + exam.id + ':') === 0);
-    if (!ks.length) return null;
-    let sum = 0, n = 0, last = null;
-    ks.forEach(k => { const e = comp[k] || {}; if (typeof e.score === 'number') { sum += e.score; n++; } if (e.date && (!last || e.date > last)) last = e.date; });
-    return n ? { score: Math.round(sum / n), created_at: last, fromProgress: true } : null;
+    const rws = ks.map(k => ({ score: (comp[k] || {}).score, date: (comp[k] || {}).date })).filter(r => typeof r.score === 'number');
+    if (!rws.length) return null;
+    const of = F.notaOficial ? F.notaOficial(rws, retW, desdeW) : { score: rws[0].score, date: rws[0].date, intentos: rws.length };
+    return of ? { score: of.score, created_at: of.date, fromProgress: true, _n: of.intentos, _recu: of.isRecovery } : null;
   } catch (e) { return null; } };
   const list = members.map(s => {
     const rs = by[s.id] || [];
-    let best = rs.length ? rs.reduce((a, b) => ((b.score || 0) > (a.score || 0) ? b : a), rs[0]) : null;
+    /* Nota oficial: su PRIMER intento (o el de su recuperación autorizada). Nunca la mejor
+     * ni el promedio de dos intentos — 23-ago-2026. */
+    const of = (rs.length && F.notaOficial) ? F.notaOficial(rs.map(r => ({ score: r.score, date: r.created_at })), retW, desdeW) : null;
+    let best = of ? Object.assign({}, rs.find(r => r.created_at === of.date) || rs[0], { score: of.score, _n: of.intentos, _recu: of.isRecovery, _sinPermiso: of.sinPermiso }) : null;
     const pr = progOf(s);
-    if (!best && pr) best = pr; else if (best && pr && (pr.score || 0) > (best.score || 0)) best = Object.assign({}, best, { score: pr.score });
+    if (!best && pr) best = pr;
     const man = manual[s.id] || null;
-    const nota = man && typeof man.grade === 'number' ? Math.max(man.grade, best ? (best.score || 0) : 0) : (best ? best.score : null);
+    const nota = man && typeof man.grade === 'number' ? man.grade : (best ? best.score : null);
     const rindio = !!(best || man);
     const aprob = rindio && (typeof nota === 'number' ? nota >= min : !!(man && man.passed));
     return { s, rs, best, man, nota, rindio, aprob };
@@ -528,7 +533,7 @@ function EcFBBox({ x, group, exam, win, min, onChange }) {
         <b style={{color:'#1F3A8A'}}>🧩 Mi lectura (solo tú):</b> {x.best
           ? (weak.length ? <>Le costaron <b>{weak.map(k => EC_PARTES[k]).join(' · ')}</b> — recomiéndale esas prácticas.</> : (x.best && x.best.fromProgress ? 'Nota tomada de su registro de práctica; el detalle por partes aparecerá cuando la nube de intentos responda.' : 'Dominó todas las partes del examen.'))
           : 'Nota registrada a mano (sin detalle por partes).'}
-        {x.rs.length > 1 ? <> Rindió {x.rs.length} veces — vale la mejor.</> : null}
+        {x.rs.length > 1 ? <> Rindió <b>{x.rs.length}</b> veces — vale su <b>primer intento</b>{x.best && x.best._recu ? ' (reemplazado por su recuperación autorizada)' : ''}.{x.best && x.best._sinPermiso > 0 ? <> ⚠️ {x.best._sinPermiso} intento(s) fuera de una ventana de recuperación: no cuentan.</> : null}</> : null}
       </div>
       <div style={{background:'#fff', border:'1px solid var(--border)', borderRadius:11, padding:'9px 12px', fontSize:12.5, lineHeight:1.6}}>
         <b style={{color:'#1F3A8A'}}>📝 Mensaje para {nombre}:</b> {fbGuardado ? <>{x.man.feedback} <span className="mm-chip" style={{background:'#E8F5E9', color:'#2E7D32'}}>✏️ tuyo</span></> : <>{draft} <span className="mm-chip" style={{background:'#F3E5F5', color:'#7B1FA2'}}>🪄 borrador automático — envíalo o edítalo</span></>}

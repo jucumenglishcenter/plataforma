@@ -371,9 +371,7 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
           </div>
           <div className="row-flex" style={{gap:7, marginTop:7, flexWrap:'wrap', alignItems:'center'}}>
             <span style={{fontSize:11.5, fontWeight:800, color:'#1F3A8A', width:72}}>🔁 Repetir</span>
-            <span style={{fontSize:12}}>todos pueden volver a intentarlo (mejorar nota · no aprobados) a los</span>
-            <input type="number" min="1" max="60" className="input-text" style={{width:70}} value={retakeDays} onChange={e => setRetakeDays(e.target.value)} placeholder="—" />
-            <span style={{fontSize:12}}>día(s) · vacío = sin repetición automática</span>
+            <span style={{fontSize:12}}>solo los <b>desaprobados</b>, y solo dentro de la <b>ventana de recuperación</b> que abras en 🎓 Exámenes → Resultados. La repetición automática "a los N días" se retiró el 23-ago (la veían todos y la nota nueva tapaba la primera).</span>
           </div>
           <div className="row-flex" style={{gap:7, marginTop:7, flexWrap:'wrap', alignItems:'center'}}>
             <span style={{fontSize:11.5, fontWeight:800, color:'#1F3A8A', width:72}}>🔓 Acceso</span>
@@ -535,7 +533,7 @@ function ExamResultsPanel({ exam, members }) {
   const list = members.map(s => {
     const rs = by[s.id] || []; if (!rs.length) return { s };
     did++;
-    const best = rs.reduce((a, b) => ((b.score || 0) > (a.score || 0) ? b : a), rs[0]);
+    const best = rs[0];   /* vale su primer intento (23-ago-2026) */
     const weak = Object.keys(PL).filter(k => { const x = (best.sections || {})[k]; return x && x.t && (x.h / x.t) < 0.75; });
     weak.forEach(k => { failCount[k] = (failCount[k] || 0) + 1; });
     return { s, rs, best, weak };
@@ -554,7 +552,7 @@ function ExamResultsPanel({ exam, members }) {
           <span style={{fontWeight:800, flex:'1 1 150px', minWidth:150}}>{s.fullName}</span>
           {!best ? exfPill('#F0F0EA', '#888', '— aún no rinde', 'x') : <>
             {exfPill(best.score >= 75 ? '#E8F5E9' : '#FFEBEE', best.score >= 75 ? '#2E7D32' : '#C62828', <><b>{best.score}</b>/100</>, 'n')}
-            <span style={{fontSize:11, color:'#666', fontWeight:700}}>{rs.length} intento{rs.length === 1 ? '' : 's'}{rs.length > 1 ? ' · mejor: int. ' + (best.attempt_no || '?') : ''} · {new Date(best.created_at).toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })}</span>
+            <span style={{fontSize:11, color:'#666', fontWeight:700}}>{rs.length} intento{rs.length === 1 ? '' : 's'}{rs.length > 1 ? ' · vale el 1.º' : ''} · {new Date(best.created_at).toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })}</span>
             {weak.length
               ? <span style={{display:'flex', gap:4, flexWrap:'wrap'}}>{weak.map(k => <span key={k} style={{background:'#FFF3E0', border:'1px solid #FFB74D', color:'#8A5100', borderRadius:14, padding:'2px 8px', fontSize:10.5, fontWeight:800}}>{PL[k]}</span>)}</span>
               : exfPill('#E8F5E9', '#2E7D32', '✓ dominó todas las partes', 'w')}
@@ -645,19 +643,26 @@ function ModuleExamBanner({ mod, studentId }) {
           .eq('user_id', studentId).order('created_at', { ascending: true }).limit(100);
         const data = res && res.data;
         if (dead) return;
-        const rows = (data || []).filter(r => r.module_id === 'exam-' + inf.exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl));
+        const rows = (data || []).filter(r => (r.module_id === 'exam-' + inf.exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl)) && (!F0.examDesde || !F0.examDesde(inf.exam) || String(r.created_at || '').slice(0, 10) >= F0.examDesde(inf.exam)));
         if (rows.length) {
-          const best = rows.reduce((a, b) => ((b.score || 0) > (a.score || 0) ? b : a), rows[0]);
-          best._last = rows[rows.length - 1].created_at; best._n = rows.length;
+          /* Vale el PRIMER intento; solo lo reemplaza una repetición hecha DENTRO de la ventana
+             de recuperación que abrió la profesora (23-ago-2026). Antes se mostraba la mejor. */
+          const ret0 = F0.getRet ? F0.getRet(st.group, mod.id) : null;
+          const of0 = F0.notaOficial ? F0.notaOficial(rows.map(r => ({ score: r.score, date: r.created_at })), ret0, F0.examDesde ? F0.examDesde(inf.exam) : null) : null;
+          const src = (of0 && rows.find(r => r.created_at === of0.date)) || rows[0];
+          const best = Object.assign({}, src, of0 ? { score: of0.score } : {});
+          best._last = rows[rows.length - 1].created_at; best._n = rows.length; best._recu = !!(of0 && of0.isRecovery);
           setAtt(prev => (prev && prev.created_at === best.created_at && prev._n === best._n) ? prev : best);
         } else {
           /* 🚑 respaldo (06-ago): la nube de intentos no respondió — su nota vive también en su registro de práctica */
           const comp = (D0.getStudentProgress(studentId) || {}).completed || {};
           const ks = Object.keys(comp).filter(k => k.indexOf('exam-' + inf.exam.id + ':') === 0);
           if (ks.length) {
-            let sum = 0, n = 0, last = null;
-            ks.forEach(k => { const e = comp[k] || {}; if (typeof e.score === 'number') { sum += e.score; n++; } if (e.date && (!last || e.date > last)) last = e.date; });
-            if (n) { const best = { score: Math.round(sum / n), created_at: last, _last: last, _n: 1, sections: null, fromProgress: true }; setAtt(prev => prev || best); }
+            /* Sin promediar (23-ago-2026): vale el PRIMER registro, o el de su recuperación autorizada */
+            const rws = ks.map(k => ({ score: (comp[k] || {}).score, date: (comp[k] || {}).date })).filter(r => typeof r.score === 'number');
+            const ret1 = F0.getRet ? F0.getRet(st.group, mod.id) : null;
+            const of1 = (rws.length && F0.notaOficial) ? F0.notaOficial(rws, ret1, F0.examDesde ? F0.examDesde(inf.exam) : null) : null;
+            if (of1) { const best = { score: of1.score, created_at: of1.date, _last: of1.date, _n: of1.intentos, sections: null, fromProgress: true, _recu: of1.isRecovery }; setAtt(prev => prev || best); }
           }
         }
       } catch (e) {}
@@ -695,9 +700,10 @@ function ModuleExamBanner({ mod, studentId }) {
   if (att && info.phase !== 'done') {
     const minG = (F.minGradeFor ? F.minGradeFor(student.group) : 75);
     const passed = (att.score || 0) >= minG;
-    const rd = (info.ann && info.ann.retakeDays) ? Number(info.ann.retakeDays) : null;
-    const availT = rd ? Date.parse(att._last || att.created_at) + rd * 86400000 : null;
-    const canRetry = availT != null && Date.now() >= availT;
+    /* 🔁 Repetir SOLO con permiso (23-ago-2026): se quitó la repetición automática "a los N
+       días" (la veían todos, aprobados incluidos, y la nota buena tapaba la primera).
+       Ahora solo repiten los DESAPROBADOS dentro de la ventana de recuperación. */
+    const rd = null, availT = null, canRetry = false;
     const part0 = ((info.exam && info.exam.parts) || []).find(p => p.url);
     const retryLink = part0 ? part0.url + (part0.url.includes('?') ? '&' : '?') + 'jucum_exam=1&jucum_retry=1&jucum_uid=' + encodeURIComponent(studentId) + '&jucum_mod=' + encodeURIComponent('exam-' + info.exam.id) + '&jucum_act=' + encodeURIComponent(part0.competency || '') + (info.ann && info.ann.variant ? '&jucum_variant=' + encodeURIComponent(info.ann.variant) : '') : null;
     const PL = { L: '🎧 Listening', R: '📖 Comprensión lectora', X: '🧩 ¿Qué regla uso?', G: '📝 Gramática', V: '🔤 Vocabulario' };
@@ -713,7 +719,7 @@ function ModuleExamBanner({ mod, studentId }) {
             ? <>🏁 <b>¡Felicitaciones!</b> Terminaste <b>{mod.name}</b> con éxito — tu constancia se nota.{(att.attempt_no || 1) === 1 ? <> ¡Y a tu <b>primer intento</b>! 🏅</> : <> Aprobado en tu intento <b>{att.attempt_no}</b> — la perseverancia paga. 🙌</>}{weak.length ? <> Para dominarlo del todo, dale un repaso extra a: <b>{weak.join(' · ')}</b>.</> : <> Dominaste todas las partes del examen. 🌟</>}</>
             : <>Terminaste el examen de <b>{mod.name}</b> y tu nota quedó registrada automáticamente. Aún hay temas que necesitas seguir repasando: <b>{weak.length ? weak.join(' · ') : 'las prácticas del módulo'}</b>. Cada minuto de práctica cuenta — síguele con tus repasos diarios. 💪</>}
           <br/>Tu profesora ya ve tu resultado con el detalle pregunta por pregunta. La <b>nota final del módulo</b> combina examen + práctica diaria — mírala en <b>Mi avance</b>.
-          {att._n > 1 ? <><br/>🔁 Llevas <b>{att._n}</b> intentos — se muestra tu <b>mejor nota</b>.</> : null}
+          {att._n > 1 ? <><br/>🔁 Llevas <b>{att._n}</b> intentos — vale tu <b>{att._recu ? 'recuperación autorizada' : 'primer intento'}</b>.</> : null}
           {(() => {
             /* 🔁 Nueva oportunidad tipo VENTANA (nuevo orden): abierta N días; rinde apenas cumple requisitos */
             const rs = F.retOpenFor ? F.retOpenFor(student, mod.id, !passed) : { has: false };
@@ -721,13 +727,14 @@ function ModuleExamBanner({ mod, studentId }) {
               const R = rs.ret, q = rs.reqs || {};
               if (!rs.inScope) return null;
               const planBlk = !rs.blocked ? <RetPlanBlock student={student} mod={mod} att={att} /> : null;
-              if (rs.open && retryLink) return (
+              if (rs.open && retryLink && !passed) return (
                 <>
-                  <a href={retryLink} target="_blank" rel="noreferrer" style={{display:'block', textAlign:'center', marginTop:10, borderRadius:24, padding:'12px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15, color:'#fff', textDecoration:'none', background:'linear-gradient(135deg,#F4A02C,#E07A12)'}}>{passed ? '💪 Mejorar mi nota (opcional)' : '🔁 Rendir mi recuperación ahora'}</a>
-                  <div style={{marginTop:6, fontSize:11.5, fontWeight:800, color:'#8A5100', textAlign:'center'}}>Ventana abierta hasta el <b>{F.fmtFecha(R.to)}</b> · vale tu mejor nota.</div>
+                  <a href={retryLink} target="_blank" rel="noreferrer" style={{display:'block', textAlign:'center', marginTop:10, borderRadius:24, padding:'12px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15, color:'#fff', textDecoration:'none', background:'linear-gradient(135deg,#F4A02C,#E07A12)'}}>🔁 Rendir mi recuperación ahora</a>
+                  <div style={{marginTop:6, fontSize:11.5, fontWeight:800, color:'#8A5100', textAlign:'center'}}>Ventana abierta hasta el <b>{F.fmtFecha(R.to)}</b> · esta nota reemplaza la anterior.</div>
                   {planBlk}
                 </>
               );
+              if (rs.open && passed) return null;
               if (rs.blocked) return <div style={{marginTop:9, background:'#F7F5EF', border:'1.5px solid var(--border)', borderRadius:10, padding:'8px 11px', fontSize:12, color:'#777', fontWeight:700}}>⏸ Tu profesora habilitará tu nueva oportunidad — sigue practicando tu plan y consulta con ella. 💬</div>;
               if (!rs.active) return F.pDay() < R.from ? (
                 <>
@@ -744,12 +751,8 @@ function ModuleExamBanner({ mod, studentId }) {
                 </>
               );
             }
-            /* Modo clásico (retakeDays): se conserva si no hay ventana configurada */
-            return rd != null && (canRetry && retryLink
-              ? <a href={retryLink} target="_blank" rel="noreferrer" style={{display:'block', textAlign:'center', marginTop:10, borderRadius:24, padding:'12px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15, color:'#fff', textDecoration:'none', background:'linear-gradient(135deg,#F4A02C,#E07A12)'}}>{passed ? '💪 Mejorar mi nota (opcional)' : '🔁 Volver a intentar el examen y mejorar mi nota'}</a>
-              : !canRetry ? <div style={{marginTop:9, background:'#FFF3E0', border:'1.5px solid #FFB74D', borderRadius:10, padding:'8px 11px', fontSize:12, color:'#8A5100', fontWeight:700}}>{passed
-                  ? <>💪 <b>¿Quieres mejorar tu nota?</b> Podrás repetir el examen desde el <b>{new Date(availT).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })}</b> — es opcional: tu nota ya está registrada y siempre vale la mejor.</>
-                  : <>🔁 Podrás volver a intentarlo el <b>{new Date(availT).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })}</b>. Tu plan hasta ese día: repite las prácticas de los temas marcados arriba y entrena con el 🧭 <b>pre-examen</b> de tu módulo — cada intento te deja más listo. 💪</>}</div> : null);
+            /* Sin ventana configurada NO hay repetición automática: la profesora la abre (23-ago-2026) */
+            return passed ? null : <div style={{marginTop:9, background:'#F7F5EF', border:'1.5px solid var(--border)', borderRadius:10, padding:'8px 11px', fontSize:12, color:'#777', fontWeight:700, lineHeight:1.55}}>🔁 Si tu profesora te abre una <b>nueva oportunidad</b>, aparecerá aquí con su fecha. Mientras tanto, repite las prácticas de los temas marcados arriba y entrena con el 🧭 <b>pre-examen</b> de tu módulo. 💪</div>;
           })()}
         </div>
       </>
