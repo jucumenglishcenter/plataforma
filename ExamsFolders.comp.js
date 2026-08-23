@@ -521,8 +521,11 @@ function ExamResultsPanel({ exam, members }) {
     try {
       const slugs = ((exam && exam.parts) || []).map(p => (((p.url || '').match(/\/(m\d+)\/examen/) || [])[1])).filter(Boolean);
       const sb = SBW.getClient();
-      const res = await sb.from('diagnostic_attempts').select('user_id,score,correct,total,sections,attempt_no,created_at,module_id,activity_id')
-        .in('user_id', members.map(s => s.id)).order('created_at', { ascending: true }).limit(1000);
+      const res = await Promise.race([
+        sb.from('diagnostic_attempts').select('user_id,score,correct,total,sections,attempt_no,created_at,module_id,activity_id')
+          .in('user_id', members.map(s => s.id)).order('created_at', { ascending: true }).limit(1000),
+        new Promise(r => setTimeout(() => r({ data: [] }), 12000)),
+      ]);
       setRows(((res && res.data) || []).filter(r => r.module_id === 'exam-' + exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl)));
     } catch (e) {}
     setBusy(false);
@@ -639,8 +642,13 @@ function ModuleExamBanner({ mod, studentId }) {
         if (!inf.exam || inf.isForms || inf.phase === 'none') return;
         const slugs = (inf.exam.parts || []).map(p => (((p.url || '').match(/\/(m\d+)\/examen/) || [])[1])).filter(Boolean);
         const sb = SBW.getClient();
-        const res = await sb.from('diagnostic_attempts').select('score,correct,total,sections,created_at,activity_id,module_id,attempt_no')
-          .eq('user_id', studentId).order('created_at', { ascending: true }).limit(100);
+        /* ⏱️ 12 s de espera máxima (23-ago-2026): si la nube va lenta, seguimos con la nota
+           del registro de práctica en vez de dejar al alumno sin su tarjeta. */
+        const res = await Promise.race([
+          sb.from('diagnostic_attempts').select('score,correct,total,sections,created_at,activity_id,module_id,attempt_no')
+            .eq('user_id', studentId).order('created_at', { ascending: true }).limit(100),
+          new Promise(r => setTimeout(() => r({ data: [] }), 12000)),
+        ]);
         const data = res && res.data;
         if (dead) return;
         const rows = (data || []).filter(r => (r.module_id === 'exam-' + inf.exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl)) && (!F0.examDesde || !F0.examDesde(inf.exam) || String(r.created_at || '').slice(0, 10) >= F0.examDesde(inf.exam)));

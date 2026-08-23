@@ -388,9 +388,13 @@ function EcModResults({ group, module, members, onChange }) {
     try {
       const slugs = (exam.parts || []).map(p => (((p.url || '').match(/\/(m\d+)\/examen/) || [])[1])).filter(Boolean);
       const sb = SBW.getClient();
-      const res = await sb.from('diagnostic_attempts').select('user_id,score,correct,total,sections,attempt_no,created_at,module_id,activity_id')
+      /* ⏱️ 23-ago-2026: cuando el navegador está bajando el historial completo al entrar, esta
+       * consulta se queda en cola y el panel se congelaba en “Leyendo resultados de la nube…”
+       * para siempre. Ahora a los 12 s seguimos con las notas guardadas en este equipo. */
+      const q = sb.from('diagnostic_attempts').select('user_id,score,correct,total,sections,attempt_no,created_at,module_id,activity_id')
         .in('user_id', members.map(s => s.id)).order('created_at', { ascending: true }).limit(1000);
-      if (res && res.error) { setErr(res.error.message); setRows([]); }
+      const res = await Promise.race([q, new Promise(r => setTimeout(() => r({ data: null, error: { message: '__lento__' } }), 12000))]);
+      if (res && res.error) { setErr(res.error.message === '__lento__' ? 'La nube tardó demasiado en responder — te muestro las notas guardadas en este equipo. Vuelve a entrar a esta pestaña para reintentar.' : res.error.message); setRows([]); }
       else setRows(((res && res.data) || []).filter(r => (r.module_id === 'exam-' + exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl)) && (!F.examDesde || !F.examDesde(exam) || String(r.created_at || '').slice(0, 10) >= F.examDesde(exam))));
     } catch (e) { setErr(String(e && e.message || e)); setRows([]); }
     setBusy(false);
