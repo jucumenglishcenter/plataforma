@@ -1515,7 +1515,10 @@ function Podium({ student, onSeeTop }) {
 function ModuleRoute({ student, selectedId, onSelect }) {
   const route = window.JUCUM_DATA.getModuleRoute(student);
   let lastCur = -1;
-  route.forEach((x, i) => { if (x.state === 'cur') lastCur = i; });
+  /* “Aquí vas” = el último módulo APERTURADO por la profesora, aunque ya esté completo
+     (23-ago-2026) — antes se regresaba a un módulo anterior con pendientes. */
+  route.forEach((x, i) => { if (!x.placeholder && x.active) lastCur = i; });
+  if (lastCur < 0) route.forEach((x, i) => { if (x.state === 'cur') lastCur = i; });
   if (lastCur < 0) lastCur = 0;
   const useEmoji = student.level === 'a1' || student.level === 'a2';
   return (
@@ -1526,7 +1529,7 @@ function ModuleRoute({ student, selectedId, onSelect }) {
           const sel = x.mod.id === selectedId;
           const done = x.state === 'done';
           const lock = x.state === 'lock';
-          const isCur = i === lastCur && !done && !lock;
+          const isCur = i === lastCur && !lock;
           const pct = x.total ? Math.round(((x.doneCount || 0) / x.total) * 100) : 0;
           const face = done ? '✓' : lock ? '🔒' : (useEmoji && x.mod.emoji ? x.mod.emoji : (i + 1));
           const ring = done ? '#2EA84B' : lock ? '#EDE9DE' : `conic-gradient(#2EA84B ${pct * 3.6}deg, #E3E9F8 0deg)`;

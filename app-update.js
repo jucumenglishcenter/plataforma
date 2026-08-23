@@ -179,6 +179,15 @@
     b.setAttribute('aria-label', 'Actualizar la plataforma');
     b.onmouseenter = function () { b.style.background = 'rgba(31,58,138,.30)'; b.style.transform = 'scale(1.08)'; };
     b.onmouseleave = function () { b.style.background = 'rgba(31,58,138,.16)'; b.style.transform = 'none'; };
+    /* 🏷️ Versión visible (23-ago-2026): para saber de un vistazo (o en una captura) si un
+       equipo ya tiene la última versión, sin abrir la consola. */
+    var v = el('div', [
+      'position:fixed', 'left:8px', 'bottom:1px', 'z-index:2147483630',
+      'font-size:9px', 'font-weight:700', 'color:#1F3A8A', 'opacity:.45',
+      "font-family:'Nunito',system-ui,sans-serif", 'pointer-events:none', 'letter-spacing:.02em'
+    ].join(';'), 'v.' + (running || readRunningVersion() || '?'));
+    v.id = 'jucum-version-tag';
+    document.body.appendChild(v);
     b.onclick = function () {
       b.style.pointerEvents = 'none'; b.textContent = '⏳';
       check(true);

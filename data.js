@@ -2052,10 +2052,13 @@ function getModuleRoute(student) {
  * abría seleccionando un módulo viejo en vez del que el profesor acaba de activar. */
 function getFocusModuleId(student) {
   const route = getModuleRoute(student);
-  const curs = route.filter(x => x.state === 'cur');
-  if (curs.length) return curs[curs.length - 1].mod.id;            // último activo con contenido
-  const actives = route.filter(x => !x.placeholder && x.active);   // activos ya completados ('done')
+  /* 🎯 23-ago-2026: si la profesora APERTURÓ un módulo, ESE es el actual — aunque el alumno
+   * ya lo tenga 100% completado. Antes un módulo activo completo pasaba a 'done' y “Aquí vas”
+   * se regresaba a un módulo anterior con pendientes (el nuevo quedaba abajo). */
+  const actives = route.filter(x => !x.placeholder && x.active);
   if (actives.length) return actives[actives.length - 1].mod.id;
+  const curs = route.filter(x => x.state === 'cur');
+  if (curs.length) return curs[curs.length - 1].mod.id;
   const dones = route.filter(x => x.state === 'done');
   if (dones.length) return dones[dones.length - 1].mod.id;
   return route[0] ? route[0].mod.id : null;
