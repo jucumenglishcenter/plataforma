@@ -130,14 +130,25 @@
     const ps = ((exam && exam.parts) || []).filter(p => p && p.url);
     return ps.map((p, i) => {
       const key = (p.competency || 'p') + (i > 0 ? '-p' + (i + 1) : '');
-      const m = String(p.url || '').match(/examen-dia(\d)/);
-      return { key: key, label: m ? 'Día ' + m[1] : 'Parte ' + (i + 1) };
+      return { key: key, label: 'Parte ' + (i + 1) };   /* pedido 24-ago: siempre Parte 1/2, no “Día” */
     });
   }
   function lblParte(exam, key) { const p = partesDeExamen(exam).find(x => x.key === key); return p ? p.label : String(key); }
   function faltanPartes(exam, detalle) {
     const falta = partesDeExamen(exam).filter(p => !(detalle || []).some(d => d.part === p.key));
     return falta.length ? falta.map(p => p.label).join(' y ') : null;
+  }
+  /* 🧮 Nota mostrada de un examen en partes (24-ago-2026): mientras falte una parte, la nota
+   * es PROPORCIONAL (la pendiente cuenta 0) — un 91 en la mitad del examen NO es 91, es 46
+   * parcial que sube al completar. Evita “aprobados” con medio examen rendido. */
+  function notaExamen(exam, of) {
+    if (!of) return null;
+    const total = Math.max(partesDeExamen(exam).length, of.totalPartes || 0) || 1;
+    const det = of.detalle || [];
+    const falta = total > 1 ? faltanPartes(exam, det) : null;
+    if (!falta || !det.length) return { score: of.score, parcial: false, falta: null, total: total };
+    const sum = det.reduce((a, d) => a + (d.score || 0), 0);
+    return { score: Math.round(sum / total), parcial: true, falta: falta, total: total };
   }
   function notaOficial(list, ret, desde) {
     const rows = (list || []).filter(r => r && typeof r.score === 'number' && (!desde || String(r.date || '').slice(0, 10) >= desde))
@@ -441,7 +452,7 @@
     isPreexamActivity: isPreexamActivity, preOpenNow: preOpenNow, preexamVisibleFor: preexamVisibleFor,
     annForWindow: annForWindow, winEffectiveOpen: winEffectiveOpen, infoForModule: infoForModule,
     registerM1Forms: registerM1Forms, formsWindowFor: formsWindowFor, eventsForDay: eventsForDay, hydrate: hydrate,
-    getCfg: getCfg, setCfg: setCfg, minGradeFor: minGradeFor, notaOficial: notaOficial, notaOficialPartes: notaOficialPartes, examDesde: examDesde, partesDeExamen: partesDeExamen, lblParte: lblParte, faltanPartes: faltanPartes,
+    getCfg: getCfg, setCfg: setCfg, minGradeFor: minGradeFor, notaOficial: notaOficial, notaOficialPartes: notaOficialPartes, examDesde: examDesde, partesDeExamen: partesDeExamen, lblParte: lblParte, faltanPartes: faltanPartes, notaExamen: notaExamen,
     getRet: getRet, setRet: setRet, retActive: retActive, retReqsFor: retReqsFor, retOpenFor: retOpenFor,
     retDias: retDias, retPlan: retPlan, retPlanDone: retPlanDone, retAvanceMin: RET_AVANCE_MIN,
     retMin: RET_MIN_DIAS, retDe: RET_DE_DIAS,

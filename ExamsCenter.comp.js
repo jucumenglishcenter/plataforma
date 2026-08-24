@@ -395,7 +395,7 @@ function EcPartes({ exam, best }) {
     <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center', margin:'5px 0 2px'}}>
       {det.map(d => <span key={d.part} className="mm-chip" style={{background:'#EEF2FB', color:'#1F3A8A'}}>📅 {F.lblParte ? F.lblParte(exam, d.part) : d.part}: <b>&nbsp;{d.score}</b></span>)}
       {falta
-        ? <span className="mm-chip" style={{background:'#FFF3E0', color:'#8A5100'}}>⚠ falta {falta} — promedio parcial: {best.score}</span>
+        ? <span className="mm-chip" style={{background:'#FFF3E0', color:'#8A5100'}}>⚠ falta {falta} — nota parcial: {best.score} (sube al completarla)</span>
         : <span className="mm-chip" style={{background:'#E8F5E9', color:'#2E7D32'}}>promedio final: <b>&nbsp;{best.score}</b></span>}
     </div>
   );
@@ -469,6 +469,8 @@ function EcModResults({ group, module, members, onChange }) {
     let best = of ? Object.assign({}, rs.find(r => r.created_at === of.date) || rs[0], { score: of.score, _n: of.intentos, _recu: of.isRecovery, _sinPermiso: of.sinPermiso, _detalle: of.detalle, _totalPartes: of.totalPartes }) : null;
     const pr = progOf(s);
     if (!best && pr) best = pr;
+    /* 🧮 Con una parte pendiente, la nota mostrada es proporcional (24-ago) */
+    if (best && F.notaExamen) { const adj = F.notaExamen(exam, { score: best.score, detalle: best._detalle, totalPartes: best._totalPartes }); if (adj && adj.parcial) best = Object.assign({}, best, { score: adj.score, _parcial: true, _falta: adj.falta }); }
     const man = manual[s.id] || null;
     const nota = man && typeof man.grade === 'number' ? man.grade : (best ? best.score : null);
     const rindio = !!(best || man);
@@ -695,7 +697,7 @@ function EcRetRow({ x, group, module, exam, win, min, pendiente, onChange }) {
         <div className="st-ava" style={{background: pendiente ? 'linear-gradient(135deg,#B0A99A,#6B6455)' : 'linear-gradient(135deg,#B3261E,#8C1D18)'}}>{x.s.fullName.split(' ').map(n => n[0]).slice(0, 2).join('')}</div>
         <div style={{flex:1, minWidth:0}}>
           <div style={{fontWeight:800, fontSize:13}}>{x.s.fullName}</div>
-          <div className="settings-hint" style={{margin:0}}>{pendiente ? 'No rindió el examen · misma ventana y apoyo' : 'Desaprobó (' + x.nota + '/' + 100 + ' · mínima ' + min + ')'}</div>
+          <div className="settings-hint" style={{margin:0}}>{x.best && x.best._parcial ? 'Le falta la ' + x.best._falta + ' · nota parcial ' + x.nota + '/100' : pendiente ? 'No rindió el examen · misma ventana y apoyo' : 'Desaprobó (' + x.nota + '/' + 100 + ' · mínima ' + min + ')'}</div>
           <EcPartes exam={exam} best={x.best} />
         </div>
         {pendiente ? ecPill('#FFF8E1', '#8A5100', '⏳ por rendir', 'n') : ecPill('#FFEBEE', '#C62828', <><b>{x.nota}</b>/100</>, 'n')}

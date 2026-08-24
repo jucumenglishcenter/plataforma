@@ -686,6 +686,7 @@ function ModuleExamBanner({ mod, studentId }) {
           const best = Object.assign({}, src, of0 ? { score: of0.score } : {});
           best._last = rows[rows.length - 1].created_at; best._n = rows.length; best._recu = !!(of0 && of0.isRecovery);
           if (of0) { best._detalle = of0.detalle; best._totalPartes = of0.totalPartes; }
+          if (of0 && F0.notaExamen) { const adj = F0.notaExamen(inf.exam, of0); if (adj && adj.parcial) { best.score = adj.score; best._parcial = true; best._falta = adj.falta; } }
           setAtt(prev => (prev && prev.created_at === best.created_at && prev._n === best._n) ? prev : best);
         } else {
           /* 🚑 respaldo (06-ago): la nube de intentos no respondió — su nota vive también en su registro de práctica */
@@ -696,7 +697,7 @@ function ModuleExamBanner({ mod, studentId }) {
             const rws = ks.map(k => ({ score: (comp[k] || {}).score, date: (comp[k] || {}).date, part: k.split(':').slice(1).join(':') })).filter(r => typeof r.score === 'number');
             const ret1 = F0.getRet ? F0.getRet(st.group, mod.id) : null;
             const of1 = (rws.length && F0.notaOficialPartes) ? F0.notaOficialPartes(rws, ret1, F0.examDesde ? F0.examDesde(inf.exam) : null) : null;
-            if (of1) { const best = { score: of1.score, created_at: of1.date, _last: of1.date, _n: of1.intentos, sections: null, fromProgress: true, _recu: of1.isRecovery, _detalle: of1.detalle, _totalPartes: of1.totalPartes }; setAtt(prev => prev || best); }
+            if (of1) { const best = { score: of1.score, created_at: of1.date, _last: of1.date, _n: of1.intentos, sections: null, fromProgress: true, _recu: of1.isRecovery, _detalle: of1.detalle, _totalPartes: of1.totalPartes }; if (F0.notaExamen) { const adj = F0.notaExamen(inf.exam, of1); if (adj && adj.parcial) { best.score = adj.score; best._parcial = true; best._falta = adj.falta; } } setAtt(prev => prev || best); }
           }
         }
       } catch (e) {}
@@ -745,7 +746,7 @@ function ModuleExamBanner({ mod, studentId }) {
     return box(passed ? '#A5D6A7' : '#F0C46C', (
       <>
         {head(passed ? 'linear-gradient(135deg,#1B5E20,#2E7D32)' : 'linear-gradient(135deg,#8A5100,#B26A00)', passed ? '🎉' : '🌱',
-          'Examen rendido · nota automática', mod.name + ' · ' + (passed ? '¡Módulo completado!' : 'Módulo terminado — sigue repasando'),
+          att._parcial ? 'Examen a medias · nota parcial' : 'Examen rendido · nota automática', mod.name + ' · ' + (att._parcial ? 'Te falta la ' + att._falta : passed ? '¡Módulo completado!' : 'Módulo terminado — sigue repasando'),
           '✔ ' + (att.correct != null ? att.correct : '–') + '/' + (att.total != null ? att.total : '–') + ' aciertos · intento ' + (att.attempt_no || 1) + ' · rendido el ' + new Date(att.created_at).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' }),
           cd(att.score, '/100'))}
         <div style={{background:'#fff', padding:'12px 15px', fontSize:12.5, lineHeight:1.65, color:'#4A4A44', fontWeight:600}}>
@@ -756,7 +757,7 @@ function ModuleExamBanner({ mod, studentId }) {
           {att._detalle && att._detalle.length && (att._totalPartes > 1 || (F.partesDeExamen && info.exam && F.partesDeExamen(info.exam).length > 1)) ? (() => {
             const falta = F.faltanPartes && info.exam ? F.faltanPartes(info.exam, att._detalle) : null;
             return <><br/>🧩 {att._detalle.map(d => (F.lblParte ? F.lblParte(info.exam, d.part) : d.part) + ': ' + d.score).join(' · ')}{falta
-              ? <> · <b style={{color:'#8A5100'}}>te falta rendir el {falta}</b> — tu promedio de {att.score} es parcial.</>
+              ? <> · <b style={{color:'#8A5100'}}>te falta rendir la {falta}</b> — tu nota parcial es <b>{att.score}</b> y sube al completar lo que falta.{info.link ? <> <a href={info.link} target="_blank" rel="noreferrer" style={{fontWeight:900, color:'#1F3A8A'}}>▶ Entrar a la {falta} ahora</a></> : <> Tu profesora te dirá cuándo se abre.</>}</>
               : <> → tu nota final es el <b>promedio: {att.score}</b>.</>}</>;
           })() : null}
           {att._n > 1 ? <><br/>🔁 Llevas <b>{att._n}</b> intentos — vale tu <b>{att._recu ? 'recuperación autorizada' : 'primer intento'}</b>.</> : null}
