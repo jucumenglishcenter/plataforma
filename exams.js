@@ -181,11 +181,15 @@ function partWeight(exam, idx) {
   return Math.round((explicit[idx] || 0) / sum * 100);
 }
 
-/* Link de una parte del examen (modo examen: sin cooldown, no registra práctica) */
-function examPartLink(part, examId, studentId) {
+/* Link de una parte del examen (modo examen: sin cooldown, no registra práctica).
+ * partIdx (23-ago-2026): con varias partes de la MISMA competencia (final día 1/día 2), cada
+ * parte registra con identidad propia — antes ambas escribían 'grammar' y el día 2 se
+ * descartaba como "repetición" del día 1. */
+function examPartLink(part, examId, studentId, partIdx) {
   if (!part.url) return null;
   const sep = part.url.includes('?') ? '&' : '?';
-  return `${part.url}${sep}jucum_exam=1&jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent('exam-' + examId)}&jucum_act=${encodeURIComponent(part.competency)}`;
+  const act = (part.competency || 'p') + (partIdx > 0 ? '-p' + (partIdx + 1) : '');
+  return `${part.url}${sep}jucum_exam=1&jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent('exam-' + examId)}&jucum_act=${encodeURIComponent(act)}`;
 }
 
 /* Grupos cuyo promedio de cumplimiento cruzó el 75% → listos para examen.

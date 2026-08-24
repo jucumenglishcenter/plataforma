@@ -103,6 +103,26 @@
    * recuperación que abrió la profesora (la única repetición autorizada). Devuelve además
    * cuántos intentos hay y cuántos fueron sin permiso, para poder avisarlo en pantalla.
    * list = [{score, date}] (de diagnostic_attempts o del registro de práctica). */
+  /* 🧩 Exámenes de VARIAS partes (el final: día 1 + día 2). Cada parte lleva su propia nota
+   * oficial (primer intento de ESA parte) y la nota del examen es el promedio de las partes
+   * rendidas — sin esto, el día 2 se tomaba como “repetición” del día 1 y se descartaba.
+   * list = [{score, date, part}] · 23-ago-2026. */
+  function notaOficialPartes(list, ret, desde) {
+    const by = {};
+    (list || []).forEach(r => { if (r && typeof r.score === 'number') { const k = String(r.part || 'p1'); (by[k] = by[k] || []).push(r); } });
+    const parts = Object.keys(by);
+    if (!parts.length) return null;
+    if (parts.length === 1) return notaOficial(by[parts[0]], ret, desde);
+    let sum = 0, n = 0, date = '', intentos = 0, sinPermiso = 0, recu = false;
+    parts.forEach(k => {
+      const of = notaOficial(by[k], ret, desde); if (!of) return;
+      sum += of.score; n++; intentos += of.intentos; sinPermiso += of.sinPermiso || 0;
+      if (of.isRecovery) recu = true;
+      if (String(of.date || '') > date) date = of.date;
+    });
+    if (!n) return null;
+    return { score: Math.round(sum / n), date: date, isRecovery: recu, intentos: intentos, primera: null, sinPermiso: sinPermiso, partes: n, totalPartes: parts.length };
+  }
   function notaOficial(list, ret, desde) {
     const rows = (list || []).filter(r => r && typeof r.score === 'number' && (!desde || String(r.date || '').slice(0, 10) >= desde))
       .slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
@@ -271,9 +291,18 @@
     const canTake = r.apt || overridden || !!(ann && ann.free);
     const open = winEffectiveOpen(win);
     const link = (function () {
-      const p = (exam.parts || []).find(function (x) { return x.url; });
-      if (!p) return null;
-      let href = X.examPartLink(p, exam.id, student.id);
+      /* 🧩 23-ago-2026: con examen de varias partes (final día 1/día 2), el botón lleva a la
+       * PRIMERA parte que el alumno aún no rindió — antes siempre abría el día 1. */
+      const ps = (exam.parts || []).filter(function (x) { return x.url; });
+      if (!ps.length) return null;
+      const comp = ((D.getStudentProgress && D.getStudentProgress(student.id)) || {}).completed || {};
+      let p = null, pi = 0;
+      for (let i = 0; i < ps.length; i++) {
+        const act = (ps[i].competency || 'p') + (i > 0 ? '-p' + (i + 1) : '');
+        if (!comp['exam-' + exam.id + ':' + act]) { p = ps[i]; pi = i; break; }
+      }
+      if (!p) { p = ps[ps.length - 1]; pi = ps.length - 1; }
+      let href = X.examPartLink(p, exam.id, student.id, pi);
       if (ann && ann.variant) href += '&jucum_variant=' + encodeURIComponent(ann.variant);
       return href;
     })();
@@ -396,7 +425,7 @@
     isPreexamActivity: isPreexamActivity, preOpenNow: preOpenNow, preexamVisibleFor: preexamVisibleFor,
     annForWindow: annForWindow, winEffectiveOpen: winEffectiveOpen, infoForModule: infoForModule,
     registerM1Forms: registerM1Forms, formsWindowFor: formsWindowFor, eventsForDay: eventsForDay, hydrate: hydrate,
-    getCfg: getCfg, setCfg: setCfg, minGradeFor: minGradeFor, notaOficial: notaOficial, examDesde: examDesde,
+    getCfg: getCfg, setCfg: setCfg, minGradeFor: minGradeFor, notaOficial: notaOficial, notaOficialPartes: notaOficialPartes, examDesde: examDesde,
     getRet: getRet, setRet: setRet, retActive: retActive, retReqsFor: retReqsFor, retOpenFor: retOpenFor,
     retDias: retDias, retPlan: retPlan, retPlanDone: retPlanDone, retAvanceMin: RET_AVANCE_MIN,
     retMin: RET_MIN_DIAS, retDe: RET_DE_DIAS,

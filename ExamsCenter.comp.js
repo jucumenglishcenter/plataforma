@@ -438,16 +438,16 @@ function EcModResults({ group, module, members, onChange }) {
   const progOf = s => { try {
     const comp = (D.getStudentProgress(s.id) || {}).completed || {};
     const ks = Object.keys(comp).filter(k => k.indexOf('exam-' + exam.id + ':') === 0);
-    const rws = ks.map(k => ({ score: (comp[k] || {}).score, date: (comp[k] || {}).date })).filter(r => typeof r.score === 'number');
+    const rws = ks.map(k => ({ score: (comp[k] || {}).score, date: (comp[k] || {}).date, part: k.split(':').slice(1).join(':') })).filter(r => typeof r.score === 'number');
     if (!rws.length) return null;
-    const of = F.notaOficial ? F.notaOficial(rws, retW, desdeW) : { score: rws[0].score, date: rws[0].date, intentos: rws.length };
-    return of ? { score: of.score, created_at: of.date, fromProgress: true, _n: of.intentos, _recu: of.isRecovery } : null;
+    const of = F.notaOficialPartes ? F.notaOficialPartes(rws, retW, desdeW) : F.notaOficial(rws, retW, desdeW);
+    return of ? { score: of.score, created_at: of.date, fromProgress: true, _n: of.intentos, _recu: of.isRecovery, _partes: of.partes, _totalPartes: of.totalPartes } : null;
   } catch (e) { return null; } };
   const list = members.map(s => {
     const rs = by[s.id] || [];
     /* Nota oficial: su PRIMER intento (o el de su recuperación autorizada). Nunca la mejor
      * ni el promedio de dos intentos — 23-ago-2026. */
-    const of = (rs.length && F.notaOficial) ? F.notaOficial(rs.map(r => ({ score: r.score, date: r.created_at })), retW, desdeW) : null;
+    const of = (rs.length && F.notaOficialPartes) ? F.notaOficialPartes(rs.map(r => ({ score: r.score, date: r.created_at, part: r.activity_id })), retW, desdeW) : null;
     let best = of ? Object.assign({}, rs.find(r => r.created_at === of.date) || rs[0], { score: of.score, _n: of.intentos, _recu: of.isRecovery, _sinPermiso: of.sinPermiso }) : null;
     const pr = progOf(s);
     if (!best && pr) best = pr;

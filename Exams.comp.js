@@ -486,7 +486,7 @@ function StudentExamCard({ w, student, onChange }) {
 
       <div className="al-items">
         {(exam.parts||[]).map((p,i) => {
-          const href = X.examPartLink(p, exam.id, student.id);
+          const href = X.examPartLink(p, exam.id, student.id, i);
           return (
             <a key={i} className={`al-item ${href?'open':'locked'}`} href={href||undefined} target={href?'_blank':undefined} rel="noreferrer">
               <span className="al-num">{i+1}</span>
