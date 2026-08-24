@@ -134,6 +134,19 @@
     });
   }
   function lblParte(exam, key) { const p = partesDeExamen(exam).find(x => x.key === key); return p ? p.label : String(key); }
+  /* 🔑 Canoniza la identidad de una parte (24-ago-2026, bug real): los intentos detallados
+   * guardan 'examen-final-d1/d2' (identidad del archivo del examen) y el respaldo de progreso
+   * guarda 'grammar/grammar-p2' (identidad de la plataforma). Sin canonizar, faltanPartes
+   * creía que TODO estaba pendiente (“falta Parte 1 y Parte 2” con las dos rendidas). */
+  function canonPart(exam, raw) {
+    const ps = partesDeExamen(exam);
+    const r = String(raw || '');
+    if (!ps.length) return r || 'p1';
+    if (ps.some(p => p.key === r)) return r;
+    const m = r.match(/-(?:d|p|parte|dia)(\d+)$/i);
+    if (m && ps[Number(m[1]) - 1]) return ps[Number(m[1]) - 1].key;
+    return ps[0].key;
+  }
   function faltanPartes(exam, detalle) {
     const falta = partesDeExamen(exam).filter(p => !(detalle || []).some(d => d.part === p.key));
     return falta.length ? falta.map(p => p.label).join(' y ') : null;
@@ -452,7 +465,7 @@
     isPreexamActivity: isPreexamActivity, preOpenNow: preOpenNow, preexamVisibleFor: preexamVisibleFor,
     annForWindow: annForWindow, winEffectiveOpen: winEffectiveOpen, infoForModule: infoForModule,
     registerM1Forms: registerM1Forms, formsWindowFor: formsWindowFor, eventsForDay: eventsForDay, hydrate: hydrate,
-    getCfg: getCfg, setCfg: setCfg, minGradeFor: minGradeFor, notaOficial: notaOficial, notaOficialPartes: notaOficialPartes, examDesde: examDesde, partesDeExamen: partesDeExamen, lblParte: lblParte, faltanPartes: faltanPartes, notaExamen: notaExamen,
+    getCfg: getCfg, setCfg: setCfg, minGradeFor: minGradeFor, notaOficial: notaOficial, notaOficialPartes: notaOficialPartes, examDesde: examDesde, partesDeExamen: partesDeExamen, lblParte: lblParte, faltanPartes: faltanPartes, notaExamen: notaExamen, canonPart: canonPart,
     getRet: getRet, setRet: setRet, retActive: retActive, retReqsFor: retReqsFor, retOpenFor: retOpenFor,
     retDias: retDias, retPlan: retPlan, retPlanDone: retPlanDone, retAvanceMin: RET_AVANCE_MIN,
     retMin: RET_MIN_DIAS, retDe: RET_DE_DIAS,

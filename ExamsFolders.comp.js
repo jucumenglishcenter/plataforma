@@ -681,7 +681,7 @@ function ModuleExamBanner({ mod, studentId }) {
           /* Vale el PRIMER intento; solo lo reemplaza una repetición hecha DENTRO de la ventana
              de recuperación que abrió la profesora (23-ago-2026). Antes se mostraba la mejor. */
           const ret0 = F0.getRet ? F0.getRet(st.group, mod.id) : null;
-          const of0 = F0.notaOficialPartes ? F0.notaOficialPartes(rows.map(r => ({ score: r.score, date: r.created_at, part: r.activity_id })), ret0, F0.examDesde ? F0.examDesde(inf.exam) : null) : null;
+          const of0 = F0.notaOficialPartes ? F0.notaOficialPartes(rows.map(r => ({ score: r.score, date: r.created_at, part: F0.canonPart ? F0.canonPart(inf.exam, r.activity_id) : r.activity_id })), ret0, F0.examDesde ? F0.examDesde(inf.exam) : null) : null;
           const src = (of0 && rows.find(r => r.created_at === of0.date)) || rows[0];
           const best = Object.assign({}, src, of0 ? { score: of0.score } : {});
           best._last = rows[rows.length - 1].created_at; best._n = rows.length; best._recu = !!(of0 && of0.isRecovery);
@@ -694,7 +694,7 @@ function ModuleExamBanner({ mod, studentId }) {
           const ks = Object.keys(comp).filter(k => k.indexOf('exam-' + inf.exam.id + ':') === 0);
           if (ks.length) {
             /* Sin promediar (23-ago-2026): vale el PRIMER registro, o el de su recuperación autorizada */
-            const rws = ks.map(k => ({ score: (comp[k] || {}).score, date: (comp[k] || {}).date, part: k.split(':').slice(1).join(':') })).filter(r => typeof r.score === 'number');
+            const rws = ks.map(k => ({ score: (comp[k] || {}).score, date: (comp[k] || {}).date, part: F0.canonPart ? F0.canonPart(inf.exam, k.split(':').slice(1).join(':')) : k.split(':').slice(1).join(':') })).filter(r => typeof r.score === 'number');
             const ret1 = F0.getRet ? F0.getRet(st.group, mod.id) : null;
             const of1 = (rws.length && F0.notaOficialPartes) ? F0.notaOficialPartes(rws, ret1, F0.examDesde ? F0.examDesde(inf.exam) : null) : null;
             if (of1) { const best = { score: of1.score, created_at: of1.date, _last: of1.date, _n: of1.intentos, sections: null, fromProgress: true, _recu: of1.isRecovery, _detalle: of1.detalle, _totalPartes: of1.totalPartes }; if (F0.notaExamen) { const adj = F0.notaExamen(inf.exam, of1); if (adj && adj.parcial) { best.score = adj.score; best._parcial = true; best._falta = adj.falta; } } setAtt(prev => prev || best); }

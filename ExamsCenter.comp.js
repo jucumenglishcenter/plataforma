@@ -456,7 +456,7 @@ function EcModResults({ group, module, members, onChange }) {
   const progOf = s => { try {
     const comp = (D.getStudentProgress(s.id) || {}).completed || {};
     const ks = Object.keys(comp).filter(k => k.indexOf('exam-' + exam.id + ':') === 0);
-    const rws = ks.map(k => ({ score: (comp[k] || {}).score, date: (comp[k] || {}).date, part: k.split(':').slice(1).join(':') })).filter(r => typeof r.score === 'number');
+    const rws = ks.map(k => ({ score: (comp[k] || {}).score, date: (comp[k] || {}).date, part: F.canonPart ? F.canonPart(exam, k.split(':').slice(1).join(':')) : k.split(':').slice(1).join(':') })).filter(r => typeof r.score === 'number');
     if (!rws.length) return null;
     const of = F.notaOficialPartes ? F.notaOficialPartes(rws, retW, desdeW) : F.notaOficial(rws, retW, desdeW);
     return of ? { score: of.score, created_at: of.date, fromProgress: true, _n: of.intentos, _recu: of.isRecovery, _partes: of.partes, _totalPartes: of.totalPartes, _detalle: of.detalle } : null;
@@ -465,7 +465,7 @@ function EcModResults({ group, module, members, onChange }) {
     const rs = by[s.id] || [];
     /* Nota oficial: su PRIMER intento (o el de su recuperación autorizada). Nunca la mejor
      * ni el promedio de dos intentos — 23-ago-2026. */
-    const of = (rs.length && F.notaOficialPartes) ? F.notaOficialPartes(rs.map(r => ({ score: r.score, date: r.created_at, part: r.activity_id })), retW, desdeW) : null;
+    const of = (rs.length && F.notaOficialPartes) ? F.notaOficialPartes(rs.map(r => ({ score: r.score, date: r.created_at, part: F.canonPart ? F.canonPart(exam, r.activity_id) : r.activity_id })), retW, desdeW) : null;
     let best = of ? Object.assign({}, rs.find(r => r.created_at === of.date) || rs[0], { score: of.score, _n: of.intentos, _recu: of.isRecovery, _sinPermiso: of.sinPermiso, _detalle: of.detalle, _totalPartes: of.totalPartes }) : null;
     const pr = progOf(s);
     if (!best && pr) best = pr;
