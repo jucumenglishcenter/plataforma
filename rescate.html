@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🚑 Rescate de exámenes guardados en esta computadora</title>
+<style>
+body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#FAF7EF;color:#33322D;margin:0;padding:24px 16px 60px;font-size:14.5px;line-height:1.6;display:flex;justify-content:center}
+.w{width:100%;max-width:760px}
+h1{font-size:20px;margin:0 0 4px}
+p.n{color:#77746B;font-size:12.5px;font-weight:600;margin:0 0 16px}
+.card{background:#fff;border:1.5px solid #E3DDCD;border-radius:14px;padding:13px 16px;margin-bottom:12px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+b.ex{font-size:15px}
+.ok{color:#2E7D32;font-weight:800}.bad{color:#C62828;font-weight:800}.warn{color:#8A5100;font-weight:800}
+button{font-family:inherit;font-weight:800;font-size:13px;border:none;border-radius:20px;padding:9px 16px;cursor:pointer;background:#1F3A8A;color:#fff}
+button.sec{background:#fff;color:#1F3A8A;border:1.5px solid #C9D6F5}
+button:disabled{opacity:.5;cursor:default}
+select{font-family:inherit;font-size:12.5px;padding:6px 8px;border-radius:9px;border:1.5px solid #E3DDCD;max-width:260px}
+#log{white-space:pre-wrap;background:#20242C;color:#B8E0B8;border-radius:10px;padding:11px;font-family:ui-monospace,monospace;font-size:11.5px;margin-top:14px;max-height:200px;overflow:auto}
+.big{background:#E8F5E9;border:2px solid #A5D6A7;border-radius:14px;padding:14px 16px;font-weight:800;color:#1B5E20;margin-bottom:12px}
+</style>
+</head>
+<body>
+<div class="w">
+<h1>🚑 Rescate de exámenes guardados en esta computadora</h1>
+<p class="n">Abre esta página <b>en la computadora donde el alumno rindió</b>. Busca todos los exámenes guardados aquí, compara con la nube y envía lo que falte. No borra nada.</p>
+<div id="top"></div>
+<div id="out">⏳ Buscando…</div>
+<div id="log"></div>
+<script>
+var SB_URL='https://dwwzkzuonltaavzhvilu.supabase.co';
+var SB_KEY='sb_publishable_6pruJuV5P2cMVWqd8Wt8gg_UAtuEj_m';
+var H={apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'};
+var USERS={},LOCAL=[],OUTBOX=[];
+function L(m){var l=document.getElementById('log');l.textContent+=m+'\n';l.scrollTop=1e9;}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function fPeru(iso){if(!iso)return '—';var d=new Date(iso);return isNaN(d)?String(iso):d.toLocaleString('es-PE',{timeZone:'America/Lima',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});}
+function nombreExamen(a){var m=/^examen-m(\d+)$/.exec(a);if(m)return 'Examen del módulo '+m[1];var f=/^examen-final-d(\d)$/.exec(a);if(f)return 'Examen final · Parte '+f[1];return a;}
+async function sb(q,opt){var r=await fetch(SB_URL+'/rest/v1/'+q,Object.assign({headers:H},opt||{}));if(!r.ok)throw new Error('HTTP '+r.status+' '+(await r.text()).slice(0,140));var t=await r.text();return t?JSON.parse(t):null;}
+async function main(){
+  try{
+    (await sb('users?select=id,full_name,role&limit=2000')||[]).forEach(function(u){USERS[u.id]=u;});
+    L('✓ '+Object.keys(USERS).length+' usuarios leídos');
+  }catch(e){L('⚠ no pude leer usuarios: '+e.message);}
+  for(var i=0;i<localStorage.length;i++){
+    var k=localStorage.key(i);if(!k||k.indexOf('jucum_exam_')!==0)continue;
+    if(k==='jucum_exam_outbox_v1'){try{OUTBOX=JSON.parse(localStorage.getItem(k)||'[]')||[];}catch(e){}continue;}
+    if(k.indexOf('_void_')>-1||/_prog$/.test(k)||k.indexOf('jucum_exam_min_')===0)continue;
+    var v;try{v=JSON.parse(localStorage.getItem(k)||'[]');}catch(e){continue;}
+    if(!Array.isArray(v))continue;
+    v.forEach(function(r){if(r&&r.id&&r.activity_id!=null&&typeof r.score==='number')LOCAL.push({key:k,row:r});});
+  }
+  L('✓ registros locales hallados: '+LOCAL.length+' · en bandeja: '+OUTBOX.length);
+  var ids=LOCAL.map(function(x){return x.row.id;}).concat(OUTBOX.map(function(r){return r.id;})).filter(Boolean);
+  var have={};
+  if(ids.length){try{(await sb('diagnostic_attempts?select=id&id=in.('+ids.map(function(x){return '"'+x+'"';}).join(',')+')')||[]).forEach(function(r){have[r.id]=1;});}catch(e){L('⚠ chequeo nube: '+e.message);}}
+  render(have);
+}
+function render(have){
+  var out=document.getElementById('out');
+  if(!LOCAL.length&&!OUTBOX.length){out.innerHTML='<div class="card">😕 En esta computadora no hay ningún examen guardado. Prueba en la otra computadora que usó el alumno, o en otro navegador (Chrome/Edge) de esta misma.</div>';return;}
+  var h='';
+  var faltan=0;
+  LOCAL.forEach(function(x,i){
+    var r=x.row,en=have[r.id];
+    var dueno=r.user_id==='demo'||!r.user_id?null:(USERS[r.user_id]?USERS[r.user_id].full_name:r.user_id);
+    if(!en)faltan++;
+    h+='<div class="card"><div class="row"><b class="ex">'+esc(nombreExamen(r.activity_id))+'</b>'
+      +'<span>nota <b>'+r.score+'</b>/100</span><span>'+fPeru(r.created_at)+'</span>'
+      +(en?'<span class="ok">✓ ya está en la nube</span>':'<span class="bad">FALTA en la nube</span>')+'</div>'
+      +'<div class="row" style="margin-top:7px">'
+      +(dueno?'<span>Dueño: <b>'+esc(dueno)+'</b></span>'
+        +(!en?'<button onclick="enviar('+i+')">📤 Enviar a la nube</button>':'')
+        :'<span class="warn">⚠ sin dueño (se rindió sin iniciar sesión)</span>'
+        +(!en?'<select id="as'+i+'"><option value="">— elegir alumno —</option>'+Object.values(USERS).filter(function(u){return u.role==='student';}).sort(function(a,b){return (a.full_name||'').localeCompare(b.full_name||'');}).map(function(u){return '<option value="'+u.id+'">'+esc(u.full_name)+'</option>';}).join('')+'</select><button onclick="asignar('+i+')">📤 Asignar y enviar</button>':''))
+      +'</div></div>';
+  });
+  if(OUTBOX.length)h+='<div class="card"><div class="row"><b class="ex">📮 Bandeja de envíos pendientes</b><span>'+OUTBOX.length+' nota(s)</span><button onclick="flushOutbox()">📤 Enviar bandeja</button></div></div>';
+  document.getElementById('top').innerHTML=faltan?'<div class="big">Hay <b>'+faltan+'</b> nota(s) guardadas aquí que NO están en la nube. Envíalas con los botones de abajo. 👇</div>':'<div class="big">✓ Todo lo de esta computadora ya está en la nube.</div>';
+  out.innerHTML=h;
+}
+async function postRow(r){
+  await sb('diagnostic_attempts',{method:'POST',headers:Object.assign({},H,{Prefer:'resolution=merge-duplicates,return=minimal'}),body:JSON.stringify([r])});
+}
+async function enviar(i){
+  var r=LOCAL[i].row;
+  try{await postRow(r);L('✓ enviado: '+r.activity_id+' · '+r.score+' · '+(USERS[r.user_id]||{}).full_name);alert('✓ Nota enviada. Refresca tu panel de Resultados.');location.reload();}
+  catch(e){L('✗ '+e.message);alert('No se pudo enviar: '+e.message);}
+}
+async function asignar(i){
+  var sel=document.getElementById('as'+i);var uid=sel&&sel.value;
+  if(!uid){alert('Elige primero al alumno dueño de esta nota.');return;}
+  if(!confirm('¿Asignar esta nota a '+(USERS[uid]||{}).full_name+' y enviarla?\n\nHazlo solo si estás segura de que ese alumno rindió en esta computadora.'))return;
+  var r=Object.assign({},LOCAL[i].row,{user_id:uid});
+  try{await postRow(r);L('✓ asignado y enviado a '+(USERS[uid]||{}).full_name);alert('✓ Enviado. Refresca tu panel de Resultados.');location.reload();}
+  catch(e){L('✗ '+e.message);alert('No se pudo: '+e.message);}
+}
+async function flushOutbox(){
+  var quedan=[];
+  for(var i=0;i<OUTBOX.length;i++){try{await postRow(OUTBOX[i]);}catch(e){quedan.push(OUTBOX[i]);}}
+  try{localStorage.setItem('jucum_exam_outbox_v1',JSON.stringify(quedan));}catch(e){}
+  alert(quedan.length?('Se enviaron '+(OUTBOX.length-quedan.length)+' y quedaron '+quedan.length+' (sin conexión?)'):'✓ Bandeja enviada completa.');
+  location.reload();
+}
+main();
+</script>
+</div>
+</body>
+</html>
