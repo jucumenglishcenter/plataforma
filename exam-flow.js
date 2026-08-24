@@ -112,16 +112,32 @@
     (list || []).forEach(r => { if (r && typeof r.score === 'number') { const k = String(r.part || 'p1'); (by[k] = by[k] || []).push(r); } });
     const parts = Object.keys(by);
     if (!parts.length) return null;
-    if (parts.length === 1) return notaOficial(by[parts[0]], ret, desde);
+    if (parts.length === 1) { const u = notaOficial(by[parts[0]], ret, desde); if (u) { u.detalle = [{ part: parts[0], score: u.score, date: u.date }]; u.totalPartes = 1; u.partes = 1; } return u; }
     let sum = 0, n = 0, date = '', intentos = 0, sinPermiso = 0, recu = false;
+    const det = [];
     parts.forEach(k => {
       const of = notaOficial(by[k], ret, desde); if (!of) return;
       sum += of.score; n++; intentos += of.intentos; sinPermiso += of.sinPermiso || 0;
+      det.push({ part: k, score: of.score, date: of.date });
       if (of.isRecovery) recu = true;
       if (String(of.date || '') > date) date = of.date;
     });
     if (!n) return null;
-    return { score: Math.round(sum / n), date: date, isRecovery: recu, intentos: intentos, primera: null, sinPermiso: sinPermiso, partes: n, totalPartes: parts.length };
+    return { score: Math.round(sum / n), date: date, isRecovery: recu, intentos: intentos, primera: null, sinPermiso: sinPermiso, partes: n, totalPartes: parts.length, detalle: det };
+  }
+  /* 🧩 Etiquetas de las partes de un examen (final: Día 1 / Día 2) · 24-ago-2026 */
+  function partesDeExamen(exam) {
+    const ps = ((exam && exam.parts) || []).filter(p => p && p.url);
+    return ps.map((p, i) => {
+      const key = (p.competency || 'p') + (i > 0 ? '-p' + (i + 1) : '');
+      const m = String(p.url || '').match(/examen-dia(\d)/);
+      return { key: key, label: m ? 'Día ' + m[1] : 'Parte ' + (i + 1) };
+    });
+  }
+  function lblParte(exam, key) { const p = partesDeExamen(exam).find(x => x.key === key); return p ? p.label : String(key); }
+  function faltanPartes(exam, detalle) {
+    const falta = partesDeExamen(exam).filter(p => !(detalle || []).some(d => d.part === p.key));
+    return falta.length ? falta.map(p => p.label).join(' y ') : null;
   }
   function notaOficial(list, ret, desde) {
     const rows = (list || []).filter(r => r && typeof r.score === 'number' && (!desde || String(r.date || '').slice(0, 10) >= desde))
@@ -425,7 +441,7 @@
     isPreexamActivity: isPreexamActivity, preOpenNow: preOpenNow, preexamVisibleFor: preexamVisibleFor,
     annForWindow: annForWindow, winEffectiveOpen: winEffectiveOpen, infoForModule: infoForModule,
     registerM1Forms: registerM1Forms, formsWindowFor: formsWindowFor, eventsForDay: eventsForDay, hydrate: hydrate,
-    getCfg: getCfg, setCfg: setCfg, minGradeFor: minGradeFor, notaOficial: notaOficial, notaOficialPartes: notaOficialPartes, examDesde: examDesde,
+    getCfg: getCfg, setCfg: setCfg, minGradeFor: minGradeFor, notaOficial: notaOficial, notaOficialPartes: notaOficialPartes, examDesde: examDesde, partesDeExamen: partesDeExamen, lblParte: lblParte, faltanPartes: faltanPartes,
     getRet: getRet, setRet: setRet, retActive: retActive, retReqsFor: retReqsFor, retOpenFor: retOpenFor,
     retDias: retDias, retPlan: retPlan, retPlanDone: retPlanDone, retAvanceMin: RET_AVANCE_MIN,
     retMin: RET_MIN_DIAS, retDe: RET_DE_DIAS,

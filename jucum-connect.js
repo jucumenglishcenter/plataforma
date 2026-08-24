@@ -362,7 +362,7 @@
           },
           body: JSON.stringify({
             user_id: uid, group_id: groupId || '', module_id: modId, activity_id: actId,
-            kind: KIND || '', material_name: matName || '',
+            kind: KIND || '', material_name: (matName || '') + ((window.__JEC_LIVE_EXTRA && window.__JEC_LIVE_EXTRA.name) ? ((matName ? ' · ' : '') + window.__JEC_LIVE_EXTRA.name) : ''),
             part: (typeof activePart !== 'undefined' && activePart != null) ? Number(activePart) : null,
             state: state, minutes: Math.round(activeSec / 60),
             score: (extra && extra.score != null) ? extra.score : null,

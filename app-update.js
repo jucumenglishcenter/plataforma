@@ -221,7 +221,30 @@
     document.addEventListener('focusout', function () { setTimeout(maybeApply, 200); });
   }
 
-  window.JUCUM_UPDATE = { check: function () { check(true); }, reload: hardReload, running: function () { return running; } };
+  /* 🧹 Limpieza automática (24-ago-2026): una vez por versión se borran del equipo los
+   * residuos que ya no sirven — anclas de nota de hace >30 días y marcas de examen anulado
+   * de hace >60 — y se reporta en consola cuánto se liberó. Lo pesado (fotos, adjuntos) ya
+   * vive en IndexedDB vía JUCUM_BIG; el caché de código lo gobierna fast-loader. */
+  function limpiar() {
+    try {
+      var ver = running || readRunningVersion() || '';
+      if (!ver || localStorage.getItem('jucum_clean_done') === ver) return;
+      var mide = function () { var t = 0; for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); t += (localStorage.getItem(k) || '').length + (k || '').length; } return t; };
+      var antes = mide(), borrar = [], i, k;
+      for (i = 0; i < localStorage.length; i++) {
+        k = localStorage.key(i); if (!k) continue;
+        if (k.indexOf('jucum_grade_') === 0) { try { var g = JSON.parse(localStorage.getItem(k) || '{}'); if (!g.ts || Date.now() - g.ts > 30 * 86400000) borrar.push(k); } catch (e) { borrar.push(k); } }
+        else if (k.indexOf('jucum_exam_void_') === 0) { var t = Date.parse(localStorage.getItem(k) || ''); if (!t || Date.now() - t > 60 * 86400000) borrar.push(k); }
+      }
+      for (i = 0; i < borrar.length; i++) { try { localStorage.removeItem(borrar[i]); } catch (e) {} }
+      localStorage.setItem('jucum_clean_done', ver);
+      var despues = mide();
+      window.JUCUM_UPDATE_CLEAN = { claves: borrar.length, liberadoKB: Math.round((antes - despues) / 1024), usoKB: Math.round(despues / 1024) };
+      try { console.log('🧹 limpieza v' + ver + ': ' + borrar.length + ' clave(s) viejas fuera · ' + Math.round((antes - despues) / 1024) + ' KB liberados · uso actual ' + Math.round(despues / 1024) + ' KB'); } catch (e) {}
+    } catch (e) {}
+  }
+  window.JUCUM_UPDATE = { check: function () { check(true); }, reload: hardReload, running: function () { return running; }, clean: limpiar };
+  limpiar();
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();

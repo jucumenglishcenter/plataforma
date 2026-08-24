@@ -383,6 +383,24 @@ function EcResTab({ group, onChange }) {
   );
 }
 
+/* 🧩 Exámenes de 2+ partes (final: Día 1 + Día 2): chips con la nota de cada parte y el
+ * promedio — o el aviso de qué parte falta (promedio parcial) · 24-ago-2026 */
+function EcPartes({ exam, best }) {
+  const F = window.JUCUM_EXAMFLOW;
+  const det = best && best._detalle;
+  const total = (best && best._totalPartes) || 0;
+  if (!det || !det.length || (total < 2 && (F.partesDeExamen ? F.partesDeExamen(exam).length : 0) < 2)) return null;
+  const falta = F.faltanPartes ? F.faltanPartes(exam, det) : null;
+  return (
+    <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center', margin:'5px 0 2px'}}>
+      {det.map(d => <span key={d.part} className="mm-chip" style={{background:'#EEF2FB', color:'#1F3A8A'}}>📅 {F.lblParte ? F.lblParte(exam, d.part) : d.part}: <b>&nbsp;{d.score}</b></span>)}
+      {falta
+        ? <span className="mm-chip" style={{background:'#FFF3E0', color:'#8A5100'}}>⚠ falta {falta} — promedio parcial: {best.score}</span>
+        : <span className="mm-chip" style={{background:'#E8F5E9', color:'#2E7D32'}}>promedio final: <b>&nbsp;{best.score}</b></span>}
+    </div>
+  );
+}
+
 function EcModResults({ group, module, members, onChange }) {
   const D = window.JUCUM_DATA, X = window.JUCUM_EXAMS, F = window.JUCUM_EXAMFLOW;
   const soloEx = String(module.id).indexOf('exam:') === 0;   /* examen final u otro sin módulo */
@@ -441,14 +459,14 @@ function EcModResults({ group, module, members, onChange }) {
     const rws = ks.map(k => ({ score: (comp[k] || {}).score, date: (comp[k] || {}).date, part: k.split(':').slice(1).join(':') })).filter(r => typeof r.score === 'number');
     if (!rws.length) return null;
     const of = F.notaOficialPartes ? F.notaOficialPartes(rws, retW, desdeW) : F.notaOficial(rws, retW, desdeW);
-    return of ? { score: of.score, created_at: of.date, fromProgress: true, _n: of.intentos, _recu: of.isRecovery, _partes: of.partes, _totalPartes: of.totalPartes } : null;
+    return of ? { score: of.score, created_at: of.date, fromProgress: true, _n: of.intentos, _recu: of.isRecovery, _partes: of.partes, _totalPartes: of.totalPartes, _detalle: of.detalle } : null;
   } catch (e) { return null; } };
   const list = members.map(s => {
     const rs = by[s.id] || [];
     /* Nota oficial: su PRIMER intento (o el de su recuperación autorizada). Nunca la mejor
      * ni el promedio de dos intentos — 23-ago-2026. */
     const of = (rs.length && F.notaOficialPartes) ? F.notaOficialPartes(rs.map(r => ({ score: r.score, date: r.created_at, part: r.activity_id })), retW, desdeW) : null;
-    let best = of ? Object.assign({}, rs.find(r => r.created_at === of.date) || rs[0], { score: of.score, _n: of.intentos, _recu: of.isRecovery, _sinPermiso: of.sinPermiso }) : null;
+    let best = of ? Object.assign({}, rs.find(r => r.created_at === of.date) || rs[0], { score: of.score, _n: of.intentos, _recu: of.isRecovery, _sinPermiso: of.sinPermiso, _detalle: of.detalle, _totalPartes: of.totalPartes }) : null;
     const pr = progOf(s);
     if (!best && pr) best = pr;
     const man = manual[s.id] || null;
@@ -550,6 +568,7 @@ function EcFBBox({ x, group, exam, win, min, onChange }) {
         <b style={{color:'#1F3A8A'}}>🧩 Mi lectura (solo tú):</b> {x.best
           ? (weak.length ? <>Le costaron <b>{weak.map(k => EC_PARTES[k]).join(' · ')}</b> — recomiéndale esas prácticas.</> : (x.best && x.best.fromProgress ? 'Nota tomada de su registro de práctica; el detalle por partes aparecerá cuando la nube de intentos responda.' : 'Dominó todas las partes del examen.'))
           : 'Nota registrada a mano (sin detalle por partes).'}
+        <EcPartes exam={exam} best={x.best} />
         {x.rs.length > 1 ? <> Rindió <b>{x.rs.length}</b> veces — vale su <b>primer intento</b>{x.best && x.best._recu ? ' (reemplazado por su recuperación autorizada)' : ''}.{x.best && x.best._sinPermiso > 0 ? <> ⚠️ {x.best._sinPermiso} intento(s) fuera de una ventana de recuperación: no cuentan.</> : null}</> : null}
       </div>
       <div style={{background:'#fff', border:'1px solid var(--border)', borderRadius:11, padding:'9px 12px', fontSize:12.5, lineHeight:1.6}}>
@@ -677,6 +696,7 @@ function EcRetRow({ x, group, module, exam, win, min, pendiente, onChange }) {
         <div style={{flex:1, minWidth:0}}>
           <div style={{fontWeight:800, fontSize:13}}>{x.s.fullName}</div>
           <div className="settings-hint" style={{margin:0}}>{pendiente ? 'No rindió el examen · misma ventana y apoyo' : 'Desaprobó (' + x.nota + '/' + 100 + ' · mínima ' + min + ')'}</div>
+          <EcPartes exam={exam} best={x.best} />
         </div>
         {pendiente ? ecPill('#FFF8E1', '#8A5100', '⏳ por rendir', 'n') : ecPill('#FFEBEE', '#C62828', <><b>{x.nota}</b>/100</>, 'n')}
         {estado}

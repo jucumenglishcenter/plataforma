@@ -117,6 +117,24 @@ function toggleOverride(windowId, studentId) {
   w.allowOverrides = Array.from(set);
   saveWindow(w);
 }
+/* 🔓 24-ago-2026: el equipo del ALUMNO se trae de la nube la ventana fresca de su examen
+ * (isOpen + habilitados) sin esperar a recargar la app — antes “Habilitar”/“Abrir AHORA”
+ * solo llegaba al alumno tras cerrar y volver a entrar, y parecía que seguía exigiendo el 75%. */
+function mergeCloudWindows(rows) {
+  if (!Array.isArray(rows)) return false;
+  const arr = loadWindows(); let changed = false;
+  rows.forEach(r => {
+    if (!r || !r.id) return;
+    const w = { id: r.id, examId: r.exam_id, groupId: r.group_id, targetStudentIds: r.target_student_ids || [],
+      isOpen: r.is_open, closesAt: r.closes_at, allowOverrides: r.allow_overrides || [],
+      results: r.results || {}, submissions: r.submissions || {}, published: r.published || false, date: r.created_at };
+    const i = arr.findIndex(x => x.id === w.id);
+    if (i >= 0) { if (JSON.stringify(arr[i]) !== JSON.stringify(w)) { arr[i] = w; changed = true; } }
+    else { arr.unshift(w); changed = true; }
+  });
+  if (changed) saveWindows(arr);
+  return changed;
+}
 function setWindowOpen(windowId, isOpen) {
   const w = loadWindows().find(x => x.id === windowId);
   if (!w) return;
@@ -387,7 +405,7 @@ function createDemoExam(groupId) {
 window.JUCUM_EXAMS = {
   getExams, getExam, createExam, updateExam, deleteExam,
   getWindows, createWindow, saveWindow, deleteWindow, recipientsOfWindow,
-  openWindowsForStudent, canTakeWindow, toggleOverride, setWindowOpen,
+  openWindowsForStudent, canTakeWindow, toggleOverride, setWindowOpen, mergeCloudWindows,
   submitExam, gradeExam, publishResults, unpublishResults, partWeight, suggestedGrade, createDemoExam,
   groupsReadyForExam, notifyExamSoon, examPartLink,
   examForModule, windowForExamGroup, getAnnouncement, announceExam, cancelAnnouncement, repairDuplicateWindows,

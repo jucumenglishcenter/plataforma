@@ -326,6 +326,8 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
         ? 'La fecha programada (' + F.fmtFecha(a.date) + ') ya pasó, así que el examen está cerrado y nadie puede entrar.\n\n¿Abrirlo AHORA para los habilitados?'
         : 'Este examen todavía no está abierto, así que el alumno aún no podrá entrar.\n\n¿Abrirlo AHORA para los habilitados?';
       if (!confirm(msg)) return;
+      /* Si en algún momento se cerró a mano, ese cierre manda sobre todo: hay que levantarlo */
+      try { F.setAnn(group.id, module.id, { forceClosed: false }); } catch (e) {}
       X.setWindowOpen(w.id, true);
       F.setAnn(group.id, module.id, { forceClosed: false });
     } catch (e) {}
@@ -634,6 +636,25 @@ function ModuleExamBanner({ mod, studentId }) {
     window.addEventListener('focus', f);                        // volvió de la pestaña del examen
     return () => { clearInterval(id); window.removeEventListener('jucum:examflow', f); window.removeEventListener('focus', f); };
   }, []);
+  /* 🔓 24-ago-2026: lo que la profesora acaba de tocar (✅ Habilitar · Abrir AHORA) llega al
+   * alumno SIN recargar: cada 30 s este banner trae de la nube la ventana de su examen y,
+   * si algo cambió, se repinta. Antes el equipo del alumno usaba su copia local hasta
+   * reentrar a la app — por eso “abrirle el examen” parecía seguir exigiendo el 75%. */
+  React.useEffect(() => {
+    let dead = false;
+    (async () => {
+      try {
+        const D0 = window.JUCUM_DATA, F0 = window.JUCUM_EXAMFLOW, X0 = window.JUCUM_EXAMS, SBW = window.JUCUM_SB;
+        if (!D0 || !F0 || !X0 || !SBW || !X0.mergeCloudWindows) return;
+        const st = (D0.STUDENTS || []).find(s => s.id === studentId); if (!st) return;
+        const inf = F0.infoForModule(st, mod); if (!inf || !inf.exam || inf.phase === 'done') return;
+        const sb = SBW.getClient(); if (!sb) return;
+        const w = await sb.from('exam_windows').select('*').eq('exam_id', inf.exam.id).eq('group_id', st.group);
+        if (!dead && !w.error && Array.isArray(w.data) && X0.mergeCloudWindows(w.data)) setTick(t => t + 1);
+      } catch (e) {}
+    })();
+    return () => { dead = true; };
+  }, [studentId, mod.id, tick]);
   /* Nota automática del examen (diagnostic_attempts) — vale el primer intento */
   React.useEffect(() => {
     let dead = false;
@@ -664,6 +685,7 @@ function ModuleExamBanner({ mod, studentId }) {
           const src = (of0 && rows.find(r => r.created_at === of0.date)) || rows[0];
           const best = Object.assign({}, src, of0 ? { score: of0.score } : {});
           best._last = rows[rows.length - 1].created_at; best._n = rows.length; best._recu = !!(of0 && of0.isRecovery);
+          if (of0) { best._detalle = of0.detalle; best._totalPartes = of0.totalPartes; }
           setAtt(prev => (prev && prev.created_at === best.created_at && prev._n === best._n) ? prev : best);
         } else {
           /* 🚑 respaldo (06-ago): la nube de intentos no respondió — su nota vive también en su registro de práctica */
@@ -674,7 +696,7 @@ function ModuleExamBanner({ mod, studentId }) {
             const rws = ks.map(k => ({ score: (comp[k] || {}).score, date: (comp[k] || {}).date, part: k.split(':').slice(1).join(':') })).filter(r => typeof r.score === 'number');
             const ret1 = F0.getRet ? F0.getRet(st.group, mod.id) : null;
             const of1 = (rws.length && F0.notaOficialPartes) ? F0.notaOficialPartes(rws, ret1, F0.examDesde ? F0.examDesde(inf.exam) : null) : null;
-            if (of1) { const best = { score: of1.score, created_at: of1.date, _last: of1.date, _n: of1.intentos, sections: null, fromProgress: true, _recu: of1.isRecovery }; setAtt(prev => prev || best); }
+            if (of1) { const best = { score: of1.score, created_at: of1.date, _last: of1.date, _n: of1.intentos, sections: null, fromProgress: true, _recu: of1.isRecovery, _detalle: of1.detalle, _totalPartes: of1.totalPartes }; setAtt(prev => prev || best); }
           }
         }
       } catch (e) {}
@@ -731,6 +753,12 @@ function ModuleExamBanner({ mod, studentId }) {
             ? <>🏁 <b>¡Felicitaciones!</b> Terminaste <b>{mod.name}</b> con éxito — tu constancia se nota.{(att.attempt_no || 1) === 1 ? <> ¡Y a tu <b>primer intento</b>! 🏅</> : <> Aprobado en tu intento <b>{att.attempt_no}</b> — la perseverancia paga. 🙌</>}{weak.length ? <> Para dominarlo del todo, dale un repaso extra a: <b>{weak.join(' · ')}</b>.</> : <> Dominaste todas las partes del examen. 🌟</>}</>
             : <>Terminaste el examen de <b>{mod.name}</b> y tu nota quedó registrada automáticamente. Aún hay temas que necesitas seguir repasando: <b>{weak.length ? weak.join(' · ') : 'las prácticas del módulo'}</b>. Cada minuto de práctica cuenta — síguele con tus repasos diarios. 💪</>}
           <br/>Tu profesora ya ve tu resultado con el detalle pregunta por pregunta. La <b>nota final del módulo</b> combina examen + práctica diaria — mírala en <b>Mi avance</b>.
+          {att._detalle && att._detalle.length && (att._totalPartes > 1 || (F.partesDeExamen && info.exam && F.partesDeExamen(info.exam).length > 1)) ? (() => {
+            const falta = F.faltanPartes && info.exam ? F.faltanPartes(info.exam, att._detalle) : null;
+            return <><br/>🧩 {att._detalle.map(d => (F.lblParte ? F.lblParte(info.exam, d.part) : d.part) + ': ' + d.score).join(' · ')}{falta
+              ? <> · <b style={{color:'#8A5100'}}>te falta rendir el {falta}</b> — tu promedio de {att.score} es parcial.</>
+              : <> → tu nota final es el <b>promedio: {att.score}</b>.</>}</>;
+          })() : null}
           {att._n > 1 ? <><br/>🔁 Llevas <b>{att._n}</b> intentos — vale tu <b>{att._recu ? 'recuperación autorizada' : 'primer intento'}</b>.</> : null}
           {(() => {
             /* 🔁 Nueva oportunidad tipo VENTANA (nuevo orden): abierta N días; rinde apenas cumple requisitos */
