@@ -125,7 +125,8 @@ function EcReglas({ group, onChange }) {
 
 function EcModRow({ group, module, onChange, goRes }) {
   const D = window.JUCUM_DATA, X = window.JUCUM_EXAMS, F = window.JUCUM_EXAMFLOW;
-  const exam = X.examForModule(module.id, group.level);
+  const soloRow = String(module.id).indexOf('exam:') === 0;   /* examen final u otro sin módulo */
+  const exam = soloRow ? X.getExam(String(module.id).slice(5)) : X.examForModule(module.id, group.level);
   const isForms = exam && /^ex-m1forms-/.test(exam.id);
   const formsWin = F.formsWindowFor(group);
   const isM1 = (D.MODULE_CATALOG[group.level] || [])[0]?.id === module.id;
@@ -327,13 +328,19 @@ function EcConfigTab({ group, goRes, onChange }) {
           </EcRutaItem>
         ); })}
         <EcRutaItem emoji="🏁" color="#B9A8E3" bg="#FDFCFF">
+        {(() => {
+          /* 🏁 Con examen final ya creado, esta fila es REAL: se programa y se ven sus notas aquí */
+          const fin = (F.standaloneExams ? F.standaloneExams(group.level) : [])[0];
+          if (!fin) return (
           <div style={{border:'1.5px dashed #B9A8E3', borderRadius:13, background:'#FDFCFF', padding:'12px 15px', display:'flex', alignItems:'center', gap:11, flexWrap:'wrap'}}>
             <div style={{flex:1, minWidth:200}}>
               <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14.5}}>Examen final · Nivel {(D.LEVELS[group.level] || {}).code || group.level}</div>
               <div className="settings-hint" style={{margin:0}}>El ensayo general del nivel: se arma con los {mods.length} módulos cuando el grupo los cierre — aquí mismo lo programarás como cualquier módulo.</div>
             </div>
             {ecPill('#EDE7F6', '#5B3FA0', '🔒 Se desbloquea al cerrar los módulos', 'f')}
-          </div>
+          </div>);
+          return <EcModRow group={group} module={{ id: 'exam:' + fin.id, name: fin.title, emoji: '🎓', activities: [] }} onChange={onChange} goRes={goRes} />;
+        })()}
         </EcRutaItem>
         <EcRutaItem emoji="🌐" color="#C9C2B2" last>
           <div className="settings-hint" style={{margin:'9px 0 0', lineHeight:1.6}}><b>Examen internacional</b> — cada alumno lo rinde en su plataforma externa; el examen final del nivel es su preparación.</div>
@@ -352,19 +359,24 @@ function EcResTab({ group, onChange }) {
   const D = window.JUCUM_DATA, X = window.JUCUM_EXAMS, F = window.JUCUM_EXAMFLOW;
   const mods = D.MODULE_CATALOG[group.level] || [];
   const members = D.STUDENTS.filter(s => s.group === group.id);
-  const conAlgo = mods.filter(m => {
-    const exam = X.examForModule(m.id, group.level);
+  /* 🎓 23-ago-2026: el examen FINAL (sin módulo propio) también tiene su botón en Resultados —
+     antes solo se listaban los módulos y no había dónde ver sus notas. */
+  const solos = (F.standaloneExams ? F.standaloneExams(group.level) : []).map(e => ({ id: 'exam:' + e.id, name: e.title, emoji: '🎓' }));
+  const todos = mods.concat(solos);
+  const conAlgo = todos.filter(m => {
+    const solo = String(m.id).indexOf('exam:') === 0;
+    const exam = solo ? X.getExam(String(m.id).slice(5)) : X.examForModule(m.id, group.level);
     if (!exam) return false;
     const ann = F.getAnn(group.id, m.id);
     const win = X.windowForExamGroup(exam.id, group.id);
     return (win && Object.keys(win.results || {}).length) || (ann && ann.date && ann.date <= F.pDay()) || F.formsWindowFor(group);
   });
-  const [modId, setModId] = ecUS((conAlgo[conAlgo.length - 1] || mods[0] || {}).id || null);
-  const mod = mods.find(m => m.id === modId);
+  const [modId, setModId] = ecUS((conAlgo[conAlgo.length - 1] || todos[0] || {}).id || null);
+  const mod = todos.find(m => m.id === modId);
   return (
     <div>
       <div className="preset-row" style={{flexWrap:'wrap', marginBottom:14}}>
-        {mods.map(m => <button key={m.id} className={`preset ${modId === m.id ? 'on' : ''}`} onClick={() => setModId(m.id)}>{m.emoji} {m.name}</button>)}
+        {todos.map(m => <button key={m.id} className={`preset ${modId === m.id ? 'on' : ''}`} onClick={() => setModId(m.id)}>{m.emoji} {m.name}</button>)}
       </div>
       {mod ? <EcModResults key={mod.id} group={group} module={mod} members={members} onChange={onChange} /> : <div className="scard"><div className="empty-state"><div className="icon">📚</div>Este nivel no tiene módulos.</div></div>}
     </div>
@@ -373,7 +385,8 @@ function EcResTab({ group, onChange }) {
 
 function EcModResults({ group, module, members, onChange }) {
   const D = window.JUCUM_DATA, X = window.JUCUM_EXAMS, F = window.JUCUM_EXAMFLOW;
-  const exam = X.examForModule(module.id, group.level);
+  const soloEx = String(module.id).indexOf('exam:') === 0;   /* examen final u otro sin módulo */
+  const exam = soloEx ? X.getExam(String(module.id).slice(5)) : X.examForModule(module.id, group.level);
   const isForms = exam && /^ex-m1forms-/.test(exam.id);
   const formsWin = F.formsWindowFor(group);
   const isM1 = (D.MODULE_CATALOG[group.level] || [])[0]?.id === module.id;
