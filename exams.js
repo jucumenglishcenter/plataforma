@@ -102,9 +102,20 @@ function openWindowsForStudent(student) {
   });
 }
 
-/* ¿Puede rendir? apto (≥75%) o habilitado por el profesor */
+/* ¿Puede rendir? apto (≥75%) o habilitado por el profesor.
+ * 🧩 28-ago-2026: quien YA rindió una parte de un examen de varias partes puede entrar a las
+ * que le faltan sin volver a pasar el filtro de apto — un examen empezado se termina. */
 function canTakeWindow(student, w) {
   if ((w.allowOverrides || []).includes(student.id)) return true;
+  try {
+    const ex = getExam(w.examId);
+    const nParts = ((ex && ex.parts) || []).filter(p => p.url).length;
+    if (nParts > 1 && window.JUCUM_DATA) {
+      const comp = (window.JUCUM_DATA.getStudentProgress(student.id) || {}).completed || {};
+      const hechas = Object.keys(comp).filter(k => k.indexOf('exam-' + w.examId + ':') === 0 && typeof (comp[k] || {}).score === 'number').length;
+      if (hechas > 0 && hechas < nParts) return true;
+    }
+  } catch (e) {}
   const r = window.JUCUM_DATA ? window.JUCUM_DATA.getStudentReadiness(student) : { apt: false };
   return !!r.apt;
 }

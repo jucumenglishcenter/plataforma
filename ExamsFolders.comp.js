@@ -747,18 +747,37 @@ function ModuleExamBanner({ mod, studentId }) {
       <>
         {head(passed ? 'linear-gradient(135deg,#1B5E20,#2E7D32)' : 'linear-gradient(135deg,#8A5100,#B26A00)', passed ? '🎉' : '🌱',
           att._parcial ? 'Examen a medias · nota parcial' : 'Examen rendido · nota automática', mod.name + ' · ' + (att._parcial ? 'Te falta la ' + att._falta : passed ? '¡Módulo completado!' : 'Módulo terminado — sigue repasando'),
-          '✔ ' + (att.correct != null ? att.correct : '–') + '/' + (att.total != null ? att.total : '–') + ' aciertos · intento ' + (att.attempt_no || 1) + ' · rendido el ' + new Date(att.created_at).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' }),
+          att._parcial ? '🧩 ' + (att._detalle || []).map(d => (F.lblParte ? F.lblParte(info.exam, d.part) : d.part) + ': ' + d.score).join(' · ') + ' · ' + att._falta + ' pendiente' : '✔ ' + (att.correct != null ? att.correct : '–') + '/' + (att.total != null ? att.total : '–') + ' aciertos · intento ' + (att.attempt_no || 1) + ' · rendido el ' + new Date(att.created_at).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' }),
           cd(att.score, '/100'))}
         <div style={{background:'#fff', padding:'12px 15px', fontSize:12.5, lineHeight:1.65, color:'#4A4A44', fontWeight:600}}>
-          {passed
+          {att._parcial
+            ? <>🧩 <b>¡Vas muy bien!</b> Ya rendiste la {(att._detalle || []).map(d => F.lblParte ? F.lblParte(info.exam, d.part) : d.part).join(' y ')}{(att._detalle || []).length === 1 ? <> con <b>{att._detalle[0].score}</b></> : null} — te falta solo la <b>{att._falta}</b>. Tu nota parcial sube apenas la completes: tus partes se promedian. 💪</>
+            : passed
             ? <>🏁 <b>¡Felicitaciones!</b> Terminaste <b>{mod.name}</b> con éxito — tu constancia se nota.{(att.attempt_no || 1) === 1 ? <> ¡Y a tu <b>primer intento</b>! 🏅</> : <> Aprobado en tu intento <b>{att.attempt_no}</b> — la perseverancia paga. 🙌</>}{weak.length ? <> Para dominarlo del todo, dale un repaso extra a: <b>{weak.join(' · ')}</b>.</> : <> Dominaste todas las partes del examen. 🌟</>}</>
             : <>Terminaste el examen de <b>{mod.name}</b> y tu nota quedó registrada automáticamente. Aún hay temas que necesitas seguir repasando: <b>{weak.length ? weak.join(' · ') : 'las prácticas del módulo'}</b>. Cada minuto de práctica cuenta — síguele con tus repasos diarios. 💪</>}
           <br/>Tu profesora ya ve tu resultado con el detalle pregunta por pregunta. La <b>nota final del módulo</b> combina examen + práctica diaria — mírala en <b>Mi avance</b>.
           {att._detalle && att._detalle.length && (att._totalPartes > 1 || (F.partesDeExamen && info.exam && F.partesDeExamen(info.exam).length > 1)) ? (() => {
             const falta = F.faltanPartes && info.exam ? F.faltanPartes(info.exam, att._detalle) : null;
-            return <><br/>🧩 {att._detalle.map(d => (F.lblParte ? F.lblParte(info.exam, d.part) : d.part) + ': ' + d.score).join(' · ')}{falta
-              ? <> · <b style={{color:'#8A5100'}}>te falta rendir la {falta}</b> — tu nota parcial es <b>{att.score}</b> y sube al completar lo que falta.{info.link ? <> <a href={info.link} target="_blank" rel="noreferrer" style={{fontWeight:900, color:'#1F3A8A'}}>▶ Entrar a la {falta} ahora</a></> : <> Tu profesora te dirá cuándo se abre.</>}</>
-              : <> → tu nota final es el <b>promedio: {att.score}</b>.</>}</>;
+            if (!falta) return <><br/>🧩 {att._detalle.map(d => (F.lblParte ? F.lblParte(info.exam, d.part) : d.part) + ': ' + d.score).join(' · ')} → tu nota final es el <b>promedio: {att.score}</b>.</>;
+            /* 🧩 28-ago-2026: una fila por parte — la rendida sale ✅ completada con su nota; la
+             * pendiente tiene su PROPIO botón mientras la ventana esté abierta (antes, quien ya
+             * tenía una parte no veía ningún botón y no podía entrar a la otra). */
+            const ps = F.partesDeExamen ? F.partesDeExamen(info.exam) : [];
+            const urls = (info.exam.parts || []).filter(x => x.url);
+            const abierto = !!info.link || (info.win && F.winEffectiveOpen && F.winEffectiveOpen(info.win));
+            return (
+              <div style={{display:'grid', gap:7, marginTop:10}}>
+                {ps.map((p, i) => {
+                  const d = (att._detalle || []).find(x => x.part === p.key);
+                  if (d) return <div key={p.key} style={{display:'flex', alignItems:'center', gap:9, border:'1.5px solid #A5D6A7', background:'#F4FBF4', borderRadius:11, padding:'9px 13px', fontWeight:800, color:'#1B5E20', fontSize:12.5}}>✅ {p.label} · completada<span style={{marginLeft:'auto', fontFamily:"'Fredoka',sans-serif", fontSize:16}}>{d.score}<small style={{fontSize:10, color:'#77746B'}}>/100</small></span></div>;
+                  const u = urls[i];
+                  const link = u ? u.url + (u.url.includes('?') ? '&' : '?') + 'jucum_exam=1&jucum_uid=' + encodeURIComponent(studentId) + '&jucum_mod=' + encodeURIComponent('exam-' + info.exam.id) + '&jucum_act=' + encodeURIComponent(p.key) + (info.ann && info.ann.variant ? '&jucum_variant=' + encodeURIComponent(info.ann.variant) : '') : null;
+                  return abierto && link
+                    ? <a key={p.key} href={link} target="_blank" rel="noreferrer" style={{display:'flex', alignItems:'center', justifyContent:'center', gap:8, borderRadius:24, padding:'12px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15, color:'#fff', textDecoration:'none', background:'linear-gradient(135deg,#1F3A8A,#0D1B5A)'}}>▶ Rendir la {p.label} ahora</a>
+                    : <div key={p.key} style={{display:'flex', alignItems:'center', gap:9, border:'1.5px dashed #E3DDCD', background:'#FBFAF5', borderRadius:11, padding:'9px 13px', fontWeight:800, color:'#8A5100', fontSize:12.5}}>🕒 {p.label} · pendiente — {info.ann && info.ann.date && F.pDay() < info.ann.date ? 'se abre el ' + F.fmtFecha(info.ann.date) : 'tu profesora te dirá cuándo se abre'}</div>;
+                })}
+              </div>
+            );
           })() : null}
           {att._n > 1 ? <><br/>🔁 Llevas <b>{att._n}</b> intentos — vale tu <b>{att._recu ? 'recuperación autorizada' : 'primer intento'}</b>.</> : null}
           {(() => {
