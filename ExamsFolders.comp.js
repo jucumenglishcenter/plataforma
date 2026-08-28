@@ -764,7 +764,10 @@ function ModuleExamBanner({ mod, studentId }) {
              * tenía una parte no veía ningún botón y no podía entrar a la otra). */
             const ps = F.partesDeExamen ? F.partesDeExamen(info.exam) : [];
             const urls = (info.exam.parts || []).filter(x => x.url);
-            const abierto = !!info.link || (info.win && F.winEffectiveOpen && F.winEffectiveOpen(info.win));
+            /* 🔓 28-ago (pedido): las partes se abren DE FRENTE — con una parte ya rendida, la
+             * que falta queda disponible al instante (pueden hacer ambas el mismo día). Solo
+             * se muestra 🕒 si el examen tiene fecha futura (aún no empieza). */
+            const abierto = !(info.ann && info.ann.date && F.pDay() < info.ann.date);
             return (
               <div style={{display:'grid', gap:7, marginTop:10}}>
                 {ps.map((p, i) => {
@@ -774,7 +777,7 @@ function ModuleExamBanner({ mod, studentId }) {
                   const link = u ? u.url + (u.url.includes('?') ? '&' : '?') + 'jucum_exam=1&jucum_uid=' + encodeURIComponent(studentId) + '&jucum_mod=' + encodeURIComponent('exam-' + info.exam.id) + '&jucum_act=' + encodeURIComponent(p.key) + (info.ann && info.ann.variant ? '&jucum_variant=' + encodeURIComponent(info.ann.variant) : '') : null;
                   return abierto && link
                     ? <a key={p.key} href={link} target="_blank" rel="noreferrer" style={{display:'flex', alignItems:'center', justifyContent:'center', gap:8, borderRadius:24, padding:'12px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15, color:'#fff', textDecoration:'none', background:'linear-gradient(135deg,#1F3A8A,#0D1B5A)'}}>▶ Rendir la {p.label} ahora</a>
-                    : <div key={p.key} style={{display:'flex', alignItems:'center', gap:9, border:'1.5px dashed #E3DDCD', background:'#FBFAF5', borderRadius:11, padding:'9px 13px', fontWeight:800, color:'#8A5100', fontSize:12.5}}>🕒 {p.label} · pendiente — {info.ann && info.ann.date && F.pDay() < info.ann.date ? 'se abre el ' + F.fmtFecha(info.ann.date) : 'tu profesora te dirá cuándo se abre'}</div>;
+                    : <div key={p.key} style={{display:'flex', alignItems:'center', gap:9, border:'1.5px dashed #E3DDCD', background:'#FBFAF5', borderRadius:11, padding:'9px 13px', fontWeight:800, color:'#8A5100', fontSize:12.5}}>🕒 {p.label} · pendiente — se abre el {F.fmtFecha(info.ann.date)}</div>;
                 })}
               </div>
             );
