@@ -369,7 +369,10 @@ function EcResTab({ group, onChange }) {
     if (!exam) return false;
     const ann = F.getAnn(group.id, m.id);
     const win = X.windowForExamGroup(exam.id, group.id);
-    return (win && Object.keys(win.results || {}).length) || (ann && ann.date && ann.date <= F.pDay()) || F.formsWindowFor(group);
+    /* 🎯 14-sep-2026 (caso real Turno Noche): el examen rendido anoche se abrió A MANO (ventana sin
+     * aviso) y Resultados caía en el último módulo AVISADO (el M3 de agosto) — la profesora veía
+     * notas viejas y "por rendir" falsos. Cualquier ventana creada ya cuenta como examen con historia. */
+    return !!win || (ann && ann.date && ann.date <= F.pDay()) || !!F.formsWindowFor(group);
   });
   const [modId, setModId] = ecUS((conAlgo[conAlgo.length - 1] || todos[0] || {}).id || null);
   const mod = todos.find(m => m.id === modId);
@@ -483,6 +486,8 @@ function EcModResults({ group, module, members, onChange }) {
   const ann = F.getAnn(group.id, module.id);
   const yaFue = (ann && ann.date && ann.date <= F.pDay()) || (rows || []).length > 0 || Object.keys(manual).length > 0 || list.some(x => x.rindio);
   const prom = (() => { const con = list.filter(x => typeof x.nota === 'number'); return con.length ? Math.round(con.reduce((a, x) => a + x.nota, 0) / con.length) : null; })();
+  /* 🗓️ Día Perú del último intento — para que se VEA qué examen se está mirando (14-sep-2026) */
+  const ultimoDia = (() => { const m = (rows || []).reduce((a, r) => String(r.created_at || '') > a ? String(r.created_at || '') : a, ''); if (!m) return null; try { return new Date(Date.parse(m) - 5 * 3600000).toISOString().slice(0, 10); } catch (e) { return null; } })();
 
   if (rows === null) return <div className="scard"><div className="empty-state"><div className="icon">⏳</div>Leyendo resultados de la nube…</div></div>;
   if (!yaFue) return <div className="scard"><div className="empty-state"><div className="icon">🗓️</div>{ann && ann.date ? 'Aún sin resultados — el examen está programado para el ' + F.fmtFecha(ann.date) + '.' : 'Este examen todavía no se programa. Hazlo en Configurar.'}</div></div>;
@@ -498,6 +503,7 @@ function EcModResults({ group, module, members, onChange }) {
 
   return (
     <div>
+      <div style={{display:'flex', alignItems:'center', gap:9, flexWrap:'wrap', margin:'0 0 10px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15}}>🎓 {exam.title || module.name}{ultimoDia ? <span className="mm-chip" style={{background:'#EEF2FB', color:'#1F3A8A'}}>último rendido: {F.fmtFecha(ultimoDia)}</span> : ecPill('#FFF8E1', '#8A5100', 'nadie lo ha rendido aún', 'u')}</div>
       <div className="scard" style={{marginBottom:12, background:'#E8F5E9', borderColor:'#A5D6A7'}}>
         <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', fontSize:12.5, color:'#1B5E20', fontWeight:700}}>
           <span style={{flex:1, minWidth:220}}>📤 <b>Publicación automática:</b> cada alumno ya ve su nota y sus partes flojas apenas termina. Aquí supervisas, escribes mensajes y manejas la recuperación.</span>
