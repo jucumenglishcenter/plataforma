@@ -99,6 +99,16 @@ function monthMatrix(year, month) {        // month 0-11 → array of {date, inM
 }
 const todayYMD = () => ymd(new Date());
 
+/* 👥 Opciones de grupo: SIEMPRE ordenadas y con el horario al lado. Dos clases
+ * llamadas igual (“Pre-A1 tarde” vieja y nueva) se veían idénticas en los menús y
+ * era facilísimo dirigir la práctica a la equivocada; además la nube devuelve
+ * los grupos sin orden, así que “el primero de la lista” cambiaba solo. */
+function groupsSorted() {
+  return ((window.JUCUM_DATA && window.JUCUM_DATA.GROUPS) || []).slice()
+    .sort((a, b) => String(a.level).localeCompare(String(b.level)) || String(a.name).localeCompare(String(b.name)));
+}
+function groupOptionLabel(g) { return (g.name || '') + (g.schedule ? ' · ' + g.schedule : ''); }
+
 /* ════════ HUB principal (export ClassPlanner — el nombre que usa el menú) ════════ */
 function ClassPlanner({ onBack, onGoExams }) {
   const { MODULE_CATALOG, GROUPS } = window.JUCUM_DATA;
@@ -184,7 +194,7 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
         <div style={{display:'flex', alignItems:'center', gap:9, marginBottom:12, flexWrap:'wrap'}}>
           <span style={{fontSize:12, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'0.03em'}}>👥 Grupo</span>
           <select value={groupId || ''} onChange={e => setGroupId(e.target.value)} style={{...selStyle, width:'auto', minWidth:180, flex:'0 1 auto'}}>
-            {GROUPS.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+            {groupsSorted().map(g => <option key={g.id} value={g.id}>{groupOptionLabel(g)}</option>)}
           </select>
           <span style={{fontSize:11.5, color:'#A8A8A8', fontWeight:700}}>Este calendario es de este grupo</span>
         </div>
@@ -655,7 +665,7 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
         )}
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:14, marginTop:6}}>
           <Field label="Fecha"><input type="date" value={cfg.date || date} onChange={e => setCfg(c => ({ ...c, date: e.target.value }))} style={selStyle} /></Field>
-          <Field label="Grupo"><select value={cfg.groupId || ''} onChange={e => { const g = GROUPS.find(x => x.id === e.target.value); const lvl = g ? g.level : cfg.level; const m = (MODULE_CATALOG[lvl] || [])[0]; setCfg(c => ({ ...c, groupId: e.target.value, level: lvl, moduleId: m ? m.id : c.moduleId, themeGroup: '' })); }} style={selStyle}>{GROUPS.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></Field>
+          <Field label="Grupo"><select value={cfg.groupId || ''} onChange={e => { const g = GROUPS.find(x => x.id === e.target.value); const lvl = g ? g.level : cfg.level; const m = (MODULE_CATALOG[lvl] || [])[0]; setCfg(c => ({ ...c, groupId: e.target.value, level: lvl, moduleId: m ? m.id : c.moduleId, themeGroup: '' })); }} style={selStyle}>{groupsSorted().map(g => <option key={g.id} value={g.id}>{groupOptionLabel(g)}</option>)}</select></Field>
           <Field label="Nivel"><select value={cfg.level} onChange={e => { const lvl = e.target.value; const m = (MODULE_CATALOG[lvl] || [])[0]; setCfg(c => ({ ...c, level: lvl, moduleId: m ? m.id : null, themeGroup: '' })); }} style={selStyle}>{Object.keys(MODULE_CATALOG).map(lv => <option key={lv} value={lv}>{lv.toUpperCase()}</option>)}</select></Field>
           <Field label="Módulo"><select value={cfg.moduleId || ''} onChange={e => setCfg(c => ({ ...c, moduleId: e.target.value, themeGroup: '' }))} style={selStyle}>{mods.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
           <Field label="Tema / foco (opcional)"><select value={cfg.themeGroup} onChange={e => setCfg(c => ({ ...c, themeGroup: e.target.value }))} style={selStyle}><option value="">— Todo el módulo —</option>{themes.map(t => <option key={t} value={t}>{t}</option>)}</select></Field>
@@ -756,8 +766,16 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
   const TT = window.JUCUM_TT;
   const g0 = GROUPS.find(g => g.id === defaultGroupId) || GROUPS[0] || {};
   const [groupId, setGroupId] = React.useState(initial ? initial.groupId : (g0.id || null));
-  const group = GROUPS.find(x => x.id === groupId) || g0;
-  const [level, setLevel] = React.useState(initial && initial.level ? initial.level : (group.level || 'pre-a1'));
+  /* 19-sep-2026 · NUNCA caer en otro grupo: si el id guardado no existe (grupo
+   * borrado, o creado sin nube), groupReal = null y se avisa en pantalla. Antes
+   * caía en GROUPS[0] — el primer grupo que devolvía la nube, sin orden — y por
+   * eso un set de la clase nueva de la tarde se mostraba/guardaba en la antigua. */
+  const GSORT = GROUPS.slice().sort((a, b) => String(a.level).localeCompare(String(b.level)) || String(a.name).localeCompare(String(b.name)));
+  const gLabel = (g) => g ? (g.name + (g.schedule ? ' · ' + g.schedule : '')) : '';
+  const groupReal = GROUPS.find(x => x.id === groupId) || null;
+  const group = groupReal || {};
+  const nAlumnos = groupReal ? (window.JUCUM_DATA.STUDENTS || []).filter(s => s.group === groupReal.id).length : 0;
+  const [level, setLevel] = React.useState(initial && initial.level ? initial.level : ((groupReal || g0).level || 'pre-a1'));
   const mods = MODULE_CATALOG[level] || [];
   const [moduleId, setModuleId] = React.useState(initial && initial.activities[0] ? initial.activities[0].moduleId : (mods[0] ? mods[0].id : null));
   const [themeGroup, setThemeGroup] = React.useState(initial && initial.themeGroup ? initial.themeGroup : '');
@@ -811,12 +829,14 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
   const addWeek = (offset) => { const base = parseYMD(date || todayYMD()); const out = new Set(dates); for (let i = 0; i < 7; i++) { const d = new Date(base); d.setDate(base.getDate() + offset * 7 + i); out.add(ymd(d)); } setDates(Array.from(out).sort()); };
 
   const save = () => {
+    if (!groupReal) { alert('⚠️ Primero elige la clase destino en “👥 Grupo destino”.\n\nEl grupo que tenía este set ya no existe en la nube, así que nadie lo recibiría.'); return; }
     if (!picked.length) { alert('Elige al menos una actividad.'); return; }
     if (!dates.length) { alert('Elige al menos un día en el calendario.'); return; }
     const finalGuide = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang });
     const rec = { groupId, level, themeGroup, title, activities: picked, dates, assignToStudents: assign, note, guide: finalGuide };
-    if (initial && !initial._tpl) { TT.updatePracticePlan(initial.id, rec); alert('✅ Set de práctica actualizado'); }
-    else { TT.addPracticePlan(rec); alert(assign ? '✅ Set guardado y asignado a los alumnos en esos días' : '✅ Set guardado (solo para ti)'); }
+    const destino = '“' + groupReal.name + '”' + (groupReal.schedule ? ' (' + groupReal.schedule + ')' : '') + ' · ' + nAlumnos + ' alumno' + (nAlumnos === 1 ? '' : 's');
+    if (initial && !initial._tpl) { TT.updatePracticePlan(initial.id, rec); alert('✅ Set actualizado para ' + destino); }
+    else { TT.addPracticePlan(rec); alert(assign ? '✅ Set guardado y asignado a ' + destino + ' en ' + dates.length + ' día(s)' : '✅ Set guardado (solo para ti) · ' + destino); }
     onSaved();
   };
   const saveAsTemplate = () => {
@@ -847,9 +867,14 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
             ⭐ Partiste de una <b>plantilla</b>. Elige los <b>días</b> y guárdalo para asignarlo.
           </div>
         )}
+        <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', background: groupReal ? '#EEF2FC' : '#FFEBEE', border:'1.5px solid ' + (groupReal ? '#B4C1E0' : '#EF9A9A'), borderRadius:11, padding:'10px 14px', margin:'4px 0 2px', fontSize:13, fontWeight:800, color: groupReal ? '#1F3A8A' : '#8E1F1F'}}>
+          {groupReal
+            ? <span>👥 Este set va a: <b>{groupReal.name}</b>{groupReal.schedule ? ' · ' + groupReal.schedule : ''} · {nAlumnos} alumno{nAlumnos === 1 ? '' : 's'}{nAlumnos === 0 ? ' — ⚠ esta clase todavía no tiene alumnos asignados' : ''}</span>
+            : <span>⚠ El grupo de este set <b>ya no existe en la nube</b>. Elige abajo la clase correcta: mientras no lo hagas, nadie recibe este set.</span>}
+        </div>
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:14, marginTop:6}}>
           <Field label="Título"><input value={title} onChange={e => setTitle(e.target.value)} style={selStyle} /></Field>
-          <Field label="Grupo"><select value={groupId || ''} onChange={e => { const g = GROUPS.find(x => x.id === e.target.value); const lv = g ? g.level : level; setGroupId(e.target.value); setLevel(lv); const m = (MODULE_CATALOG[lv] || [])[0]; setModuleId(m ? m.id : null); setThemeGroup(''); setPicked([]); setGuide(null); }} style={selStyle}>{GROUPS.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></Field>
+          <Field label="👥 Grupo destino"><select value={groupId || ''} onChange={e => { const g = GROUPS.find(x => x.id === e.target.value); const lv = g ? g.level : level; setGroupId(e.target.value); if (lv !== level) { setLevel(lv); const m = (MODULE_CATALOG[lv] || [])[0]; setModuleId(m ? m.id : null); setThemeGroup(''); setPicked([]); setGuide(null); } }} style={{...selStyle, borderColor: groupReal ? '#B4C1E0' : '#EF9A9A'}}>{!groupReal && <option value="">— elige la clase —</option>}{GSORT.map(g => <option key={g.id} value={g.id}>{gLabel(g)}</option>)}</select></Field>
           <Field label="Nivel"><select value={level} onChange={e => { const lv = e.target.value; setLevel(lv); const m = (MODULE_CATALOG[lv] || [])[0]; setModuleId(m ? m.id : null); setThemeGroup(''); setPicked([]); setGuide(null); }} style={selStyle}>{Object.keys(MODULE_CATALOG).map(lv => <option key={lv} value={lv}>{lv.toUpperCase()}</option>)}</select></Field>
           <Field label="Módulo (puedes elegir uno pasado)"><select value={moduleId || ''} onChange={e => { setModuleId(e.target.value); setThemeGroup(''); }} style={selStyle}>{mods.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
           <Field label="Tema / foco (opcional)"><select value={themeGroup} onChange={e => setThemeGroup(e.target.value)} style={selStyle}><option value="">— Todo el módulo —</option>{themes.map(t => <option key={t} value={t}>{t}</option>)}</select></Field>
@@ -1380,7 +1405,8 @@ function SavedItems({ onOpenClass, onOpenPractice, onChange, refreshKey }) {
   const { GROUPS, MODULE_CATALOG } = window.JUCUM_DATA;
   const [fGroup, setFGroup] = React.useState('all');
   const [fLevel, setFLevel] = React.useState('all');
-  const gName = (id) => { const g = GROUPS.find(x => x.id === id); return g ? g.name : (id === 'g1' ? 'Grupo' : '—'); };
+  /* Un set cuyo grupo ya no existe se avisa en claro: antes dec\u00eda \u201c\u2014\u201d y parec\u00eda\n   * normal, mientras el alumno nunca lo recib\u00eda. \u201cAbrir\u201d permite reasignarlo. */
+  const gName = (id) => { const g = GROUPS.find(x => x.id === id); return g ? groupOptionLabel(g) : '\u26a0 grupo inexistente \u2014 \u00e1brelo y elige la clase'; };
   const gLevel = (id) => { const g = GROUPS.find(x => x.id === id); return g ? g.level : null; };
   const levels = Object.keys(MODULE_CATALOG);
 
@@ -1420,7 +1446,7 @@ function SavedItems({ onOpenClass, onOpenPractice, onChange, refreshKey }) {
           <span style={{fontSize:12, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'.03em'}}>🔎 Filtrar</span>
           <select value={fGroup} onChange={e => setFGroup(e.target.value)} style={{...selStyle, width:'auto', minWidth:150}}>
             <option value="all">Todos los grupos</option>
-            {GROUPS.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+            {groupsSorted().map(g => <option key={g.id} value={g.id}>{groupOptionLabel(g)}</option>)}
           </select>
           <select value={fLevel} onChange={e => setFLevel(e.target.value)} style={{...selStyle, width:'auto', minWidth:120}}>
             <option value="all">Todos los niveles</option>

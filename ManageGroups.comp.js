@@ -11,6 +11,7 @@ function ManageGroups({ onBack }) {
   const { GROUPS, STUDENTS, LEVELS, addGroup, updateGroup, removeGroup } = window.JUCUM_DATA;
   const [editing, setEditing] = mgUseState(null); // null | 'new' | groupId
   const [tick, setTick] = mgUseState(0);
+  const [aviso, setAviso] = mgUseState(null);      // resultado del guardado en la nube
 
   const refresh = () => setTick(t => t + 1);
 
@@ -38,9 +39,19 @@ function ManageGroups({ onBack }) {
         <button className="btn-settings" onClick={() => setEditing('new')}>+ Nuevo grupo</button>
       </div>
 
+      {aviso && (
+        <div style={{margin:'0 0 14px', padding:'12px 16px', borderRadius:12, fontWeight:700, fontSize:13.5, lineHeight:1.55, whiteSpace:'pre-line',
+          background: aviso.kind === 'ok' ? '#E8F5E9' : aviso.kind === 'bad' ? '#FFEBEE' : '#F0EDE4',
+          border: '1.5px solid ' + (aviso.kind === 'ok' ? '#A5D6A7' : aviso.kind === 'bad' ? '#EF9A9A' : '#E3DCC9'),
+          color: aviso.kind === 'bad' ? '#8E1F1F' : '#2A2A2A'}}>
+          {aviso.msg}
+          {aviso.kind !== 'wait' && <button className="att-btn" style={{marginLeft:10}} onClick={() => setAviso(null)}>Entendido</button>}
+        </div>
+      )}
+
       <div className="mg-list">
         {GROUPS.map(g => {
-          const level = LEVELS[g.level];
+          const level = LEVELS[g.level] || { color:'#B0AC9E', dark:'#5b5648', emoji:'❓', code:String(g.level || '?') };
           const members = STUDENTS.filter(s => s.group === g.id);
           return (
             <div key={g.id} className="mg-card" style={{borderTopColor:level.color}}>
@@ -51,6 +62,10 @@ function ManageGroups({ onBack }) {
                 <span className="mg-card-count">{members.length} alumno{members.length === 1 ? '' : 's'}</span>
               </div>
               <div className="mg-card-name">{g.name}</div>
+              {g._localOnly && <div className="mg-card-meta" style={{color:'#C62828', fontWeight:800}}>⚠ Solo en este equipo (no llegó a la nube)</div>}
+              {GROUPS.filter(x => String(x.name).trim().toLowerCase() === String(g.name).trim().toLowerCase()).length > 1 && (
+                <div className="mg-card-meta" style={{color:'#8A5100', fontWeight:800}}>⚠ Otro grupo tiene el mismo nombre — renombra uno para no confundirlos al asignar prácticas</div>
+              )}
               <div className="mg-card-meta">⏰ {g.schedule}</div>
               <div className="mg-card-meta">📅 Inicio: {g.startDate}</div>
               <div className="mg-actions">
@@ -72,8 +87,17 @@ function ManageGroups({ onBack }) {
           group={editing === 'new' ? null : GROUPS.find(g => g.id === editing)}
           onClose={() => setEditing(null)}
           onSave={(data) => {
-            if (editing === 'new') addGroup(data);
-            else updateGroup(editing, data);
+            if (editing === 'new') {
+              /* 19-sep-2026 · el grupo tiene que quedar en la NUBE, si no vive
+               * solo en este equipo y las prácticas que le asignes se pierden. */
+              setAviso({ kind: 'wait', msg: '⏳ Guardando “' + data.name + '” en la nube…' });
+              addGroup(data, (ok, msg) => {
+                setAviso(ok
+                  ? { kind: 'ok', msg: '✅ Grupo “' + data.name + '” creado y guardado en la nube. Ya puedes asignarle alumnos y sets de práctica.' }
+                  : { kind: 'bad', msg: '⚠️ El grupo “' + data.name + '” quedó SOLO en este equipo: ' + (msg || 'la nube no respondió') + '\nNo le asignes prácticas todavía: revisa tu internet, recarga la página y créalo de nuevo — si no, los sets se irán a otro grupo.' });
+                refresh();
+              });
+            } else { updateGroup(editing, data); setAviso(null); }
             setEditing(null);
             refresh();
           }}

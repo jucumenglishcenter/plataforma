@@ -89,18 +89,69 @@ const DEFAULT_GROUPS = _DEMO_ON ? DEMO_GROUPS : [];
 
 const GROUPS = loadGroups(DEFAULT_GROUPS);
 
-function addGroup(g) {
+/* ➕ Nuevo grupo — CON VERIFICACIÓN DE LA NUBE (19-sep-2026).
+ * Antes era "dispara y olvida": el grupo nacía con un id temporal ('g<hora>')
+ * y el id real de la nube se pegaba SOLO en memoria (ni se guardaba, ni se
+ * avisaba si la nube lo rechazaba). Consecuencia real (clase nueva de la
+ * tarde): el grupo vivía solo en ese equipo, al recargar desaparecía de la
+ * lista, y todo lo que apuntaba a él (sets de práctica, alumnos) quedaba
+ * huérfano; los menús y los resúmenes caían entonces en el PRIMER grupo de la
+ * lista — el grupo antiguo de la tarde. Ahora: si la nube no lo acepta se
+ * AVISA, y cuando lo acepta el id real se guarda y todas las referencias
+ * locales se reapuntan (remapGroupId). */
+function addGroup(g, done) {
   const id = 'g' + Date.now();
-  GROUPS.push({ ...g, id });
+  GROUPS.push({ ...g, id, _localOnly: true });
   saveGroups(GROUPS);
-  if (window.JUCUM_SB) {
-    window.JUCUM_SB.insert('groups', {
-      level: g.level, name: g.name, schedule: g.schedule, start_date: g.startDate,
-      daily_target_min: 15, is_paused: false,
-    }).then(row => { if (row) { const i = GROUPS.findIndex(x => x.id === id); if (i>=0) GROUPS[i].id = row.id; } })
-      .catch(e => console.warn('addGroup:', e.message));
-  }
+  const cb = (typeof done === 'function') ? done : function () {};
+  if (!window.JUCUM_SB) { cb(false, 'Este equipo no está conectado a la nube: el grupo quedó guardado solo aquí y tus alumnos no lo verán.', id); return id; }
+  window.JUCUM_SB.insert('groups', {
+    level: g.level, name: g.name, schedule: g.schedule, start_date: g.startDate,
+    daily_target_min: 15, is_paused: false,
+  }).then(row => {
+    if (!row || !row.id) { cb(false, 'La nube no confirmó el grupo. Quedó solo en este equipo: vuelve a crearlo con internet antes de asignarle prácticas.', id); return; }
+    const i = GROUPS.findIndex(x => x.id === id);
+    if (i >= 0) { GROUPS[i] = { ...GROUPS[i], id: row.id }; delete GROUPS[i]._localOnly; }
+    saveGroups(GROUPS);
+    remapGroupId(id, row.id);
+    cb(true, '', row.id);
+  }).catch(e => { console.warn('addGroup:', e.message); cb(false, e.message, id); });
   return id;
+}
+/* Reapunta TODA referencia local de un grupo viejo/temporal al id definitivo.
+ * Sin esto, un set de práctica guardado en los primeros segundos de vida del
+ * grupo se queda apuntando a un id que ya no existe = nadie lo recibe. */
+function remapGroupId(oldId, newId) {
+  if (!oldId || !newId || oldId === newId) return;
+  const rd = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch { return d; } };
+  const wr = (k, v) => { try { if (window.JUCUM_STORE) return window.JUCUM_STORE.setJSON(k, v); localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+  const cloud = (key, value) => { try { if (window.JUCUM_SB) window.JUCUM_SB.getClient().from('app_settings').upsert({ key, value }, { onConflict: 'key' }).then(() => {}, () => {}); } catch (e) {} };
+  const stamp = new Date().toISOString();
+  /* arreglos con groupId (+ copia a la nube donde corresponde) */
+  [['jucum_practice_plans_v1', 'practice_plans'], ['jucum_class_plans_v1', 'class_plans'],
+   ['jucum_directed_practice_v1', 'directed_practice'], ['jucum_teacher_notes_v1', null],
+   ['jucum_teacher_reminders_v1', null]].forEach(([k, cloudKey]) => {
+    const arr = rd(k, []); if (!Array.isArray(arr)) return;
+    let hit = false;
+    const out = arr.map(r => (r && r.groupId === oldId) ? (hit = true, { ...r, groupId: newId, savedAt: stamp }) : r);
+    if (hit) { wr(k, out); if (cloudKey) cloud(cloudKey, out); }
+  });
+  /* objetos indexados por grupo */
+  [SETTINGS_KEY, 'jucum_daily_practice_v1'].forEach(k => {
+    const o = rd(k, {}); if (!o || typeof o !== 'object' || o[oldId] === undefined) return;
+    o[newId] = o[oldId]; delete o[oldId]; wr(k, o);
+  });
+  /* "<grupo>:<modulo>" → fecha de apertura del módulo */
+  const op = rd(MODULE_OPENED_KEY, {});
+  if (op && typeof op === 'object') {
+    let hit = false;
+    Object.keys(op).forEach(kk => { if (kk.indexOf(oldId + ':') === 0) { op[newId + kk.slice(oldId.length)] = op[kk]; delete op[kk]; hit = true; } });
+    if (hit) wr(MODULE_OPENED_KEY, op);
+  }
+  /* alumnos ya creados con el id temporal */
+  let moved = 0;
+  STUDENTS.forEach(s => { if (s.group === oldId) { s.group = newId; moved++; } });
+  if (moved) { saveStudents(STUDENTS); STUDENTS.forEach(s => { if (s.group === newId && window.JUCUM_SB) window.JUCUM_SB.update('users', s.id, { group_id: newId }).catch(() => {}); }); }
 }
 function updateGroup(id, partial) {
   const idx = GROUPS.findIndex(g => g.id === id);
@@ -2147,7 +2198,7 @@ function latentGate(mod, a, i, progress, level) {
   return { latent: true, ready: now >= avail, daysLeft: Math.max(0, daysLeft), availableOn: avail.toISOString().slice(0, 10) };
 }
 
-window.JUCUM_DATA = { getDailyConstancy, getModuleOpenedAt, LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getAchievementAlert, achievementDecayFactor, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness, getStudentGrades, getStudentMonthlyPractice, getStudentTrends,
+window.JUCUM_DATA = { getDailyConstancy, getModuleOpenedAt, LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, remapGroupId, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getAchievementAlert, achievementDecayFactor, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness, getStudentGrades, getStudentMonthlyPractice, getStudentTrends,
   /* PASO 2 · umbral + anti-farmeo */
   passThreshold, getPassThresholds, setPassThreshold, setGroupThreshold, getGroupThreshold, loadPassThresholdsFromCloud, scorePct, entryPassed, getDirectedBonusXP, getFarmingFlag, getActivitiesToImprove,
   /* Modo mantenimiento (rol dev) */
