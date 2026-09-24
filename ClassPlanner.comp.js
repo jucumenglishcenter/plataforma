@@ -72,7 +72,7 @@ function defaultMaterials(mod, themeGroup) {
   };
   return acts.filter(pick).map(a => {
     const base = { moduleId: mod.id, activityId: a.id, name: a.name, type: a.type, group: a.group || null, url: a.url || null };
-    if (a.type === 'quizlet') { base.quizLinks = { vocabulario: a.quizVocabulario || '', traducir: a.quizTraducir || '', ordenar: a.quizOrdenar || '' }; }
+    if (a.type === 'quizlet') { base.quizLinks = { vocabulario: a.quizVocabulario || '', vocabulario2: a.quizVocabulario2 || '', traducir: a.quizTraducir || '', ordenar: a.quizOrdenar || '' }; }
     return base;
   }).sort((a, b) => matRank(a.type) - matRank(b.type));
 }
@@ -734,9 +734,9 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
                     {a.type === 'quizlet' && on && (
                       <div style={{padding:'4px 11px 10px 40px', display:'flex', flexDirection:'column', gap:6, borderTop:'1px dashed #C9D6F5'}}>
                         <div style={{fontSize:11, fontWeight:800, color:'#6C4FB0'}}>Pega los 3 links de Quizlet (los que uses):</div>
-                        {['vocabulario', 'traducir', 'ordenar'].map(k => (
+                        {['vocabulario', 'vocabulario2', 'traducir', 'ordenar'].map(k => (
                           <div key={k} style={{display:'flex', alignItems:'center', gap:7}}>
-                            <span style={{fontSize:11, fontWeight:800, color:'#8a7f6a', minWidth:78, textTransform:'capitalize'}}>{k}</span>
+                            <span style={{fontSize:11, fontWeight:800, color:'#8a7f6a', minWidth:78, textTransform:'capitalize'}}>{k === 'vocabulario2' ? 'vocab. 2' : k}</span>
                             <input value={(mo.quizLinks || {})[k] || ''} onChange={e => updateMat(a, { quizLinks: { ...(mo.quizLinks || {}), [k]: e.target.value } })} placeholder="https://quizlet.com/…" style={{flex:1, border:'1px solid #D9CEEC', borderRadius:7, padding:'5px 8px', fontSize:11.5}} />
                           </div>
                         ))}
@@ -1185,7 +1185,7 @@ function ClassMode({ plan, onBack }) {
   const [evalOn, setEvalOn] = React.useState(false);
   const focusKeys = (plan.materials || []).filter(m => m.moduleId && m.activityId).map(m => m.moduleId + ':' + m.activityId);
   const open = (m) => {
-    if (m.type === 'quizlet') { setQuizPick(m); return; }
+    if (m.type === 'quizlet') { setQuizPick({ ...m, quizLinks: cpQuizLinks(m, MODULE_CATALOG) }); return; }
     askTimer();
     const link = matLink(m, MODULE_CATALOG, plan.groupId); if (link) window.open(link, '_blank'); else alert('Ese material aún no tiene archivo disponible.');
   };
@@ -1290,7 +1290,7 @@ function ClassMode({ plan, onBack }) {
             <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18}}>🗂️ Quizlet · elige el juego</div>
             <div style={{fontSize:12.5, color:'#8a7f6a', margin:'2px 0 16px', fontWeight:700}}>{quizPick.name}</div>
             <div style={{display:'flex', flexDirection:'column', gap:10}}>
-              {[['vocabulario', '📚', 'Vocabulario'], ['traducir', '🔁', 'Traducir'], ['ordenar', '🔢', 'Ordenar']].map(([k, ico, label]) => {
+              {[['vocabulario', '📚', (quizPick.quizLinks || {}).vocabulario2 ? 'Vocabulario · Parte 1' : 'Vocabulario'], ['vocabulario2', '📒', 'Vocabulario · Parte 2'], ['traducir', '🔁', 'Traducir'], ['ordenar', '🔢', 'Ordenar']].filter(([k]) => k !== 'vocabulario2' || (quizPick.quizLinks || {}).vocabulario2).map(([k, ico, label]) => {
                 const url = (quizPick.quizLinks || {})[k];
                 return (
                   <button key={k} onClick={() => openQuiz(quizPick, k)} style={{display:'flex', alignItems:'center', gap:12, textAlign:'left', cursor: url ? 'pointer' : 'not-allowed', border:'1.5px solid ' + (url ? '#6C4FB0' : '#E3DCC9'), background: url ? '#F4EEFB' : '#F7F5EF', borderRadius:12, padding:'13px 15px', font:'inherit', width:'100%', opacity: url ? 1 : 0.6}}>
@@ -1556,6 +1556,20 @@ function typeIcon(t) { return ({ story:'📖', reading:'📕', listening:'🎧',
 function typeIconTxt(t) { return typeIcon(t); }
 /* Link directo a un material en MODO PROFESOR (abre sin restricción y registra
  * el uso de clase → alimenta la bitácora automática). */
+/* Links de Quizlet de un material del plan. Los planes guardan una COPIA de los
+ * links al crearse (los viejos no traen vocabulario2): se completan con lo que
+ * diga el catálogo vivo, sin pisar un link pegado a mano en el plan. */
+function cpQuizLinks(m, catalog) {
+  const own = { ...(m.quizLinks || {}) };
+  let act = null;
+  for (const lv of Object.keys(catalog || {})) { const mm = (catalog[lv] || []).find(x => x.id === m.moduleId); if (mm) { act = (mm.activities || []).find(a => a.id === m.activityId); break; } }
+  if (act) {
+    const cat = { vocabulario: act.quizVocabulario || act.url, vocabulario2: act.quizVocabulario2, traducir: act.quizTraducir, ordenar: act.quizOrdenar };
+    for (const k of Object.keys(cat)) if (!own[k] && cat[k]) own[k] = cat[k];
+  }
+  return own;
+}
+
 function matLink(m, catalog, groupId) {
   let modObj = null, act = null;
   for (const lv of Object.keys(catalog)) { const mm = (catalog[lv] || []).find(x => x.id === m.moduleId); if (mm) { modObj = mm; act = (mm.activities || []).find(a => a.id === m.activityId); break; } }

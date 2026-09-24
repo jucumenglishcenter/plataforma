@@ -4,6 +4,36 @@
  * with live data instead of the local demo seed.
  */
 
+/* Vuelca el roster de la nube (groups + users) en window.JUCUM_DATA.
+ * Se usa al arrancar y en cada refresco: así un cambio de grupo o de nivel
+ * hecho por la profesora llega al alumno sin que tenga que volver a entrar. */
+function applyRoster(groups, users) {
+  window.JUCUM_DATA.GROUPS.length = 0;
+  groups.forEach(g => window.JUCUM_DATA.GROUPS.push({
+    id: g.id, level: g.level, name: g.name, schedule: g.schedule,
+    startDate: g.start_date, _settings: {
+      activeModuleId: g.active_module_id, deadline: g.deadline,
+      dailyTargetMin: g.daily_target_min ?? 15, isPaused: g.is_paused,
+      unlockMode: g.unlock_mode || 'sequential',
+      unlockedActivities: g.unlocked_activities || [],
+      activeModuleIds: g.active_module_ids || (g.active_module_id ? [g.active_module_id] : []),
+    },
+  }));
+  const students = users.filter(u => u.role === 'student').map(u => ({
+    id: u.id, username: u.username, fullName: u.full_name,
+    level: u.level, group: u.group_id, starred: u.starred || false,
+    email: u.email || null, age: u.age ?? null, dni: u.dni || null,
+    guardianName: u.guardian_name || null, guardianDni: u.guardian_dni || null,
+    phone: u.phone || null, payMode: u.pay_mode || null,
+    source: u.source || null, createdAt: u.created_at || null, status: u.status || null,
+    completedModules: 0, avgScore: 0, streak: 0,
+    lastActiveDays: 0, totalMinutes: 0, achievements: [],
+    lastSeenAt: u.last_seen_at || null,   // 📶 último ingreso real (script 22)
+  }));
+  window.JUCUM_DATA.STUDENTS.length = 0;
+  students.forEach(s => window.JUCUM_DATA.STUDENTS.push(s));
+}
+
 function App() {
   const [user, setUser] = React.useState(() => {
     try { return JSON.parse(localStorage.getItem('jucum_user') || 'null'); }
@@ -54,33 +84,8 @@ function App() {
         ]);
         if (gE) throw gE; if (uE) throw uE;
 
-        // Map groups → expected shape, keep settings inline
-        window.JUCUM_DATA.GROUPS.length = 0;
-        groups.forEach(g => window.JUCUM_DATA.GROUPS.push({
-          id: g.id, level: g.level, name: g.name, schedule: g.schedule,
-          startDate: g.start_date, _settings: {
-            activeModuleId: g.active_module_id, deadline: g.deadline,
-            dailyTargetMin: g.daily_target_min ?? 15, isPaused: g.is_paused,
-            unlockMode: g.unlock_mode || 'sequential',
-            unlockedActivities: g.unlocked_activities || [],
-            activeModuleIds: g.active_module_ids || (g.active_module_id ? [g.active_module_id] : []),
-          },
-        }));
-
-        // Map student users → expected shape
-        const students = users.filter(u => u.role === 'student').map(u => ({
-          id: u.id, username: u.username, fullName: u.full_name,
-          level: u.level, group: u.group_id, starred: u.starred || false,
-          email: u.email || null, age: u.age ?? null, dni: u.dni || null,
-          guardianName: u.guardian_name || null, guardianDni: u.guardian_dni || null,
-          phone: u.phone || null, payMode: u.pay_mode || null,
-          source: u.source || null, createdAt: u.created_at || null, status: u.status || null,
-          completedModules: 0, avgScore: 0, streak: 0,
-          lastActiveDays: 0, totalMinutes: 0, achievements: [],
-          lastSeenAt: u.last_seen_at || null,   // 📶 último ingreso real (script 22)
-        }));
-        window.JUCUM_DATA.STUDENTS.length = 0;
-        students.forEach(s => window.JUCUM_DATA.STUDENTS.push(s));
+        // Roster (grupos + alumnos) → window.JUCUM_DATA
+        applyRoster(groups, users);
 
         // Hydrate localStorage cache from cloud (settings, progress, notifs, evals, forum)
         if (window.JUCUM_SYNC) {
@@ -154,6 +159,49 @@ function App() {
       }
     })();
   }, []);
+
+  /* 🔄 22-sep-2026 · Cambio de grupo o de nivel SIN volver a entrar.
+   * El roster se leía UNA sola vez al arrancar y la sesión (jucum_user) guarda
+   * el nivel y el grupo del momento del ingreso: si la profesora movía a un
+   * alumno de grupo/nivel, él seguía viendo el anterior hasta cerrar sesión.
+   * Ahora volvemos a leer groups+users al volver a la pestaña (máximo una vez
+   * por minuto, y cada 5 min con la pestaña visible) y si su fila cambió,
+   * actualizamos también la sesión. */
+  const [, setRosterTick] = React.useState(0);
+  React.useEffect(() => {
+    if (!window.JUCUM_SB || DEMO || !ready) return;
+    let alive = true, last = Date.now(), busy = false;
+    const refresh = async () => {
+      if (!alive || busy || document.visibilityState !== 'visible') return;
+      if (Date.now() - last < 60000) return;
+      busy = true; last = Date.now();
+      try {
+        const sb = window.JUCUM_SB.getClient();
+        const [{ data: groups, error: gE }, { data: users, error: uE }] = await Promise.all([
+          sb.from('groups').select('*'),
+          sb.from('users').select('*'),
+        ]);
+        if (!alive || gE || uE || !groups || !users) return;
+        applyRoster(groups, users);
+        if (window.JUCUM_SYNC) { try { window.JUCUM_SYNC.computeStats(); } catch (e) {} }
+        setUser(u => {
+          if (!u || u.role !== 'student' || !u.studentId) return u;
+          const row = users.find(x => x.id === u.studentId);
+          if (!row || (row.level === u.level && row.group_id === u.groupId)) return u;
+          const next = { ...u, level: row.level, groupId: row.group_id };
+          try { localStorage.setItem('jucum_user', JSON.stringify(next)); } catch (e) {}
+          return next;
+        });
+        setRosterTick(t => t + 1);
+      } catch (e) { /* sin conexión: se queda con lo que ya tenía */ }
+      finally { busy = false; }
+    };
+    const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('focus', refresh);
+    const iv = setInterval(refresh, 5 * 60000);
+    return () => { alive = false; clearInterval(iv); document.removeEventListener('visibilitychange', onVis); window.removeEventListener('focus', refresh); };
+  }, [ready]);
 
   const onLogin = (u) => { setUser(u); localStorage.setItem('jucum_user', JSON.stringify(u)); };
   const onLogout = () => {
