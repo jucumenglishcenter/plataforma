@@ -236,6 +236,7 @@
   var demo = !uid || teacher || exam; // sin uid / profesor / examen → no registra avance
   var groupId = q.get('jucum_group') || '';
   var matName = q.get('jucum_name') || '';
+  var MTAG = String(q.get('jucum_mtag') || '').replace(/[^\wÀ-ÿ ·.-]/g, '').slice(0, 24);
   if (teacher) WARN_AFTER_SEC = 60 * 60; // el profesor da su clase libremente, sin avisos de inactividad
 
   function load(cb) {
@@ -388,7 +389,10 @@
     chip.innerHTML = '<span>⏱</span><span id="jec-conn-time" style="font-family:monospace;font-size:14px;">0:00</span>' +
       (teacher ? '<span style="background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:800;">PROFESOR · libre</span>'
                : exam ? '<span style="background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:800;">EXAMEN</span>'
-               : (demo ? '<span style="background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:800;">PRUEBA · no registra</span>' : ''));
+               : (demo ? '<span style="background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:800;">PRUEBA · no registra</span>' : '')) +
+      /* 📦 25-sep: módulo del material (M1, M3 · repaso…) — así alumno y profesora ven de un
+       * vistazo si abrió un repaso de otro módulo (caso Lesli: listening del M1 en clase del M3). */
+      (MTAG && !teacher && !exam ? '<span style="background:' + (/repaso/.test(MTAG) ? '#F9A825;color:#3A2600' : 'rgba(255,255,255,0.22)') + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:800;">' + MTAG + '</span>' : '');
     chip.title = demo
       ? 'Modo prueba: abriste el material fuera de la plataforma, el tiempo NO se registra.'
       : 'Tiempo activo de práctica (se registra en tu progreso).';

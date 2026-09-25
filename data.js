@@ -928,6 +928,19 @@ function markActivityComplete(studentId, moduleId, activityId, score, minutes, m
       localStorage.setItem(ACTIVE_DAYS_KEY, JSON.stringify(adAll));
     }
   } catch (e) {}
+  /* 🔥 25-sep-2026 · Racha multi-equipo con Quizlet: el Quizlet se abre en quizlet.com
+   * (sin jucum-connect), así que ese día NO quedaba en daily_sessions y en otro equipo
+   * la racha se cortaba en cuanto el alumno repetía el Quizlet otro día (entry.date se
+   * pisa). Dejamos la evidencia del día en la nube. ignoreDuplicates = nunca pisa una
+   * fila existente (jamás baja minutos escritos por los materiales). */
+  try {
+    if (meta && meta.quizlet && window.JUCUM_SB && window.JUCUM_SB.getClient && !/^preview-/.test(String(studentId))) {
+      window.JUCUM_SB.getClient().from('daily_sessions').upsert({
+        user_id: studentId, day: today, module_id: moduleId, activity_id: activityId,
+        kind: 'quizlet', minutes: 0, updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id,day,module_id,activity_id', ignoreDuplicates: true }).then(() => {}, () => {});
+    }
+  } catch (e) {}
   // PASO 3 · alimenta el motor de repaso espaciado con ESTE intento (no la mejor nota)
   try { recordReviewAttempt(studentId, moduleId, activityId, score, _stu.group, _stu.level, meta && meta.total); } catch {}
   if (window.JUCUM_SYNC) window.JUCUM_SYNC.pushProgress(studentId, moduleId, activityId, finalScore, finalMin);
@@ -1831,7 +1844,11 @@ function getActivitiesToImprove(student) {
       const [moduleId, activityId] = k.split(':');
       const mod = (MODULE_CATALOG[student.level] || []).find(m => m.id === moduleId);
       const act = mod && (mod.activities || []).find(a => a.id === activityId);
-      if (act && isLowStakesType(act.type)) return;   // resúmenes/quizlet no se exigen a umbral
+      /* 25-sep-2026 · Notas de módulos/actividades que YA NO existen en el catálogo (se
+       * reimportaron con otro id: p. ej. a1-m1, a1-mmqr1zw5o) salían con su id crudo
+       * ("reading", "t2-id") y al tocar "Repetir" no pasaba nada (caso Fabrizio). */
+      if (!act) return;
+      if (isLowStakesType(act.type)) return;   // resúmenes/quizlet no se exigen a umbral
       out.push({ moduleId, activityId, pct, name: act ? act.name : activityId, type: act ? act.type : '', moduleName: mod ? mod.name : '' });
     }
   });
@@ -2292,6 +2309,18 @@ window.JUCUM_DATA.getBonusXPWeek = getBonusXPWeek;
 window.JUCUM_DATA.loadBonusXPFromCloud = loadBonusXPFromCloud;
 window.JUCUM_DATA.isNewWeekFor = isNewWeekFor;
 window.JUCUM_DATA.markWeekSeen = markWeekSeen;
+/* Número del módulo tal como lo ve el alumno en su ruta (M1, M2…): posición en el
+ * currículo del nivel (por nombre), o en el catálogo si no está en el currículo. */
+function getModuleNumber(level, moduleId) {
+  const mods = MODULE_CATALOG[level] || [];
+  const m = mods.find(x => x.id === moduleId);
+  if (!m) return null;
+  const outline = CURRICULUM[level];
+  if (outline) { const i = outline.findIndex(o => o.name === m.name); if (i >= 0) return i + 1; }
+  const j = mods.indexOf(m);
+  return j >= 0 ? j + 1 : null;
+}
+window.JUCUM_DATA.getModuleNumber = getModuleNumber;
 
 
 /* ── Meta diaria multi-equipo: hidratar minutos de HOY desde la nube ──

@@ -1,7 +1,12 @@
-# Fix · Quizlet "Vocabulario Parte 2" en Modo clase (24-sep-2026) · v=20260924a
+# Entrega fix-modulo-racha-2026-09-25 · repo `plataforma` · v=20260925a
 
-Subir los 3 archivos a la RAÍZ del repo `plataforma` (reemplazar).
+Subir los 5 archivos a la RAÍZ del repo `plataforma` (reemplazar): `index.html`, `App.comp.js`, `StudentDashboard.comp.js`, `data.js`, `jucum-connect.js`.
 
-- **ClassPlanner.comp.js** — el plan de clase y el Modo clase solo conocían 3 juegos (vocabulario · traducir · ordenar): el link `quizVocabulario2` del catálogo se perdía al armar el plan. Ahora se copia, se puede editar ("vocab. 2") y, en planes YA creados, se completa solo desde el catálogo vivo al abrir el Quizlet (no pisa links pegados a mano).
-- **index.html** — versión `v=20260924a` (invalida el caché).
-- **App.comp.js** — incluye el fix de grupo/nivel del 22-sep que aún no estaba en el repo (esta entrega REEMPLAZA a `fix-grupo-nivel-2026-09-22`).
+## Qué arregla
+1. **Caso Lesli (resultado en M1 estando en M3).** Confirmado en la nube: a las 9:09 p. m. abrió el *Listening del M1* desde 🔁 Repaso / “por mejorar” (mismo nombre que el del M3, sin decir el módulo). Ahora cada tarjeta de repaso, por mejorar y refuerzo lleva la etiqueta **M1 · repaso** (ámbar) o **M3**, y el chip ⏱ del material también muestra **M1 · repaso**. Así lo ven el alumno y la profesora cuando mira la pantalla.
+2. **Racha en peligro falsa.** La alarma roja con sonido y el aviso de meta se calculaban antes de que llegaran de la nube los minutos de hoy → quien ya practicó en casa recibía “tu racha está en peligro” en la clase de la noche. Ahora esperan a la nube. También usaban el día UTC (después de las 7 p. m. se repetía el aviso): ahora es día Perú.
+3. **Racha cortada por Quizlet.** Un día con solo Quizlet no quedaba en `daily_sessions` y se perdía al repetirlo otro día. Ahora deja constancia del día en la nube (sin pisar filas).
+4. **Blindaje:** si el alumno de la sesión no está en la lista, ya no se muestra otro alumno (antes caía en el primero de la lista).
+
+5. **Caso Fabrizio (“por mejorar” que no abre).** Salían notas de módulos que ya no existen (a1-m1, a1-mmqr1zw5o, reimportados con otro id) con el id crudo (“reading”, “t2-id”) y al tocar Repetir no pasaba nada. Ahora esas notas viejas no se listan.
+6. **Caso Yoel → “perfil de Dylan”.** Al pasarlo de Pre-A1 a A1 se le creó una cuenta nueva (22-sep); un equipo que seguía con la sesión de la cuenta vieja mostraba al primer alumno de la lista. Ahora, si la cuenta de la sesión ya no existe, se cierra sola y pide volver a entrar con un aviso.

@@ -42,6 +42,7 @@ function App() {
   const DEMO = !!(window.JUCUM_DEMO && window.JUCUM_DEMO.isDemo());
   const [ready, setReady] = React.useState(!window.JUCUM_SB || DEMO); // local/demo = ready immediately
   const [bootErr, setBootErr] = React.useState('');
+  const [staleMsg, setStaleMsg] = React.useState(false); // sesión de una cuenta que ya no existe
   // Modo mantenimiento (lo activa el dev). Se consulta a la nube y se sondea.
   const [maint, setMaint] = React.useState(() => (window.JUCUM_DATA.getMaintenance ? window.JUCUM_DATA.getMaintenance() : { active:false }));
   const [staffAccess, setStaffAccess] = React.useState(false); // “acceso del equipo” desde la pantalla de mantenimiento
@@ -86,6 +87,18 @@ function App() {
 
         // Roster (grupos + alumnos) → window.JUCUM_DATA
         applyRoster(groups, users);
+        /* 🔐 25-sep-2026 · Sesión de una cuenta BORRADA (p. ej. al pasar a un alumno de
+         * Pre-A1 a A1 se le creó una cuenta nueva): el equipo seguía con el id viejo y el
+         * panel mostraba al PRIMER alumno de la lista (caso Yoel → “perfil de Dylan”).
+         * Si la cuenta ya no existe, se cierra la sesión y se pide entrar de nuevo. */
+        try {
+          const cur = JSON.parse(localStorage.getItem('jucum_user') || 'null');
+          if (cur && cur.role === 'student' && cur.studentId && users.length && !users.some(x => x.id === cur.studentId)) {
+            localStorage.removeItem('jucum_user');
+            if (window.JUCUM_NAV) window.JUCUM_NAV.clearAll();
+            setUser(null); setStaleMsg(true);
+          }
+        } catch (e) {}
 
         // Hydrate localStorage cache from cloud (settings, progress, notifs, evals, forum)
         if (window.JUCUM_SYNC) {
@@ -187,6 +200,11 @@ function App() {
         setUser(u => {
           if (!u || u.role !== 'student' || !u.studentId) return u;
           const row = users.find(x => x.id === u.studentId);
+          if (!row && users.length) {   // la cuenta fue borrada/migrada → fuera la sesión vieja
+            try { localStorage.removeItem('jucum_user'); if (window.JUCUM_NAV) window.JUCUM_NAV.clearAll(); } catch (e) {}
+            setStaleMsg(true);
+            return null;
+          }
           if (!row || (row.level === u.level && row.group_id === u.groupId)) return u;
           const next = { ...u, level: row.level, groupId: row.group_id };
           try { localStorage.setItem('jucum_user', JSON.stringify(next)); } catch (e) {}
@@ -228,6 +246,14 @@ function App() {
     // El equipo entra por un acceso discreto que revela el login (para que el
     // dev pueda iniciar sesión y desactivarlo).
     if (maint.active && !staffAccess) return <MaintenanceScreen maint={maint} onStaff={() => setStaffAccess(true)} />;
+    if (staleMsg) return (
+      <>
+        <div style={{background:'#FFF4D6', borderBottom:'1px solid #F0C66B', color:'#6B4200', fontFamily:'Nunito,sans-serif', fontWeight:800, fontSize:14, textAlign:'center', padding:'12px 16px'}}>
+          Tu cuenta se actualizó (nuevo nivel o grupo). Vuelve a entrar con tu usuario y contraseña.
+        </div>
+        <Login onLogin={(u) => { setStaleMsg(false); onLogin(u); }} />
+      </>
+    );
     return <Login onLogin={onLogin} />;
   }
   // Con sesión iniciada: el dev SIEMPRE pasa (puede trabajar y apagar el modo).

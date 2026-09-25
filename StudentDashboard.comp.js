@@ -13,7 +13,7 @@ const peruHour = () => new Date(Date.now() - PERU_MS).getUTCHours();
 
 function VocabReminder({ student, settings, onGo }) {
   const D = window.JUCUM_DATA;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = peruDayKey();
   const dismissKey = `jucum_vocab_dismiss_${student.id}_${today}`;
   const [hidden, setHidden] = React.useState(() => { try { return localStorage.getItem(dismissKey) === '1'; } catch { return false; } });
   if (hidden) return null;
@@ -199,9 +199,33 @@ function ExamCountdownCard({ student, onGo }) {
   );
 }
 
+/* 🔥 25-sep-2026 · Las alarmas de racha/meta se evaluaban al MONTAR el panel, antes de
+ * que llegaran de la nube los minutos de hoy (__JEC_DAILY, ~2.5 s) y los días reales
+ * (__JEC_DAYS, ~3 s). Quien ya había practicado hoy en OTRO equipo (casa → clase de
+ * las 9 PM) recibía “🔥 Tu racha está en peligro” con sonido. Ahora esperan a la nube:
+ * 'ready' = datos listos · 'timeout' = no llegaron (no se avisa: mejor callar que mentir). */
+function useCloudDaysReady() {
+  const ok = () => !window.JUCUM_SB || !!(window.__JEC_DAILY && window.__JEC_DAYS);
+  const [st, setSt] = React.useState(() => ok() ? 'ready' : 'wait');
+  React.useEffect(() => {
+    if (st !== 'wait') return;
+    let n = 0;
+    const iv = setInterval(() => {
+      n++;
+      if (ok()) {
+        try { if (window.JUCUM_SYNC && window.JUCUM_SYNC.computeStats) window.JUCUM_SYNC.computeStats(); } catch (e) {}
+        clearInterval(iv); setSt('ready');
+      } else if (n >= 20) { clearInterval(iv); setSt('timeout'); }
+    }, 750);
+    return () => clearInterval(iv);
+  }, [st]);
+  return st;
+}
+
 function StudentDashboard({ user, onLogout }) {
   const { STUDENTS, GROUPS, LEVELS, MODULE_CATALOG, ACHIEVEMENT_DEFS, getGroupSettings, getStudentProgress, getStudentXP, getStudentLevel, MEDAL_RARITY, RARITY_STYLE, earnedMedals, entryPassed } = window.JUCUM_DATA;
-  const student = STUDENTS.find(s => s.id === user.studentId) || STUDENTS[0];
+  // Jamás mostrar a OTRO alumno si el suyo no está en la lista (antes caía en STUDENTS[0]).
+  const student = STUDENTS.find(s => s.id === user.studentId) || null;
   const group = student ? GROUPS.find(g => g.id === student.group) : null;
   const level = student ? LEVELS[student.level] : null;
   // Blindaje: si el alumno no tiene grupo/nivel válido, mensaje amable (no pantalla en blanco).
@@ -234,12 +258,13 @@ function StudentDashboard({ user, onLogout }) {
     try { if (window.JUCUM_SURVEY) setSurveyDue(window.JUCUM_SURVEY.isSurveyDue(student)); } catch {}
   }, [student && student.id]);
   const [alertKind, setAlertKind] = React.useState(null);
+  const cloudReady = useCloudDaysReady();
   // Cartel flotante: tarea que vence en ≤3 días (una vez al día, hasta vencer o entregar)
   const [taskDue, setTaskDue] = React.useState(null);
   React.useEffect(() => {
     try {
       const T = window.JUCUM_TASKS; if (!T) return;
-      const today = new Date().toISOString().slice(0, 10);
+      const today = peruDayKey();
       const soon = (T.assignmentsForStudent(student) || []).filter(a => {
         if (!a.dueAt) return false;
         if (T.getSubmission(a.id, student.id)) return false;          // ya entregada
@@ -345,7 +370,8 @@ function StudentDashboard({ user, onLogout }) {
   // Practice reminder — fires once per day if behind on daily target
   React.useEffect(() => {
     if (!window.JUCUM_NOTIF) return;
-    const todayKey = `jucum_reminded_${student.id}_${new Date().toISOString().slice(0,10)}`;
+    if (cloudReady !== 'ready') return;   // sin los minutos de hoy de la nube, no se avisa
+    const todayKey = `jucum_reminded_${student.id}_${peruDayKey()}`;
     if (localStorage.getItem(todayKey)) return;
     const todayMin = progress.todayMinutes || 0;
     const targetMin = settings.dailyTargetMin || 15;
@@ -374,7 +400,7 @@ function StudentDashboard({ user, onLogout }) {
         localStorage.setItem(streakKey, '1');
       }
     }
-  }, [student.id, progress.todayMinutes, settings.dailyTargetMin]);
+  }, [student.id, progress.todayMinutes, settings.dailyTargetMin, cloudReady]);
 
   // 🔥 Bono de racha al cumplir la meta diaria + 📉 aviso honesto de XP por inactividad
   React.useEffect(() => {
@@ -424,6 +450,7 @@ function StudentDashboard({ user, onLogout }) {
 
   // Alarma visual + sonora (1 vez al día): inactividad o racha en peligro
   React.useEffect(() => {
+    if (cloudReady !== 'ready') return;   // espera racha/días/minutos reales de la nube
     const today = peruDayKey();
     const key = `jucum_alert_${student.id}_${today}`;
     if (localStorage.getItem(key)) return;
@@ -434,7 +461,7 @@ function StudentDashboard({ user, onLogout }) {
     setAlertKind(kind);
     localStorage.setItem(key, '1');
     if (window.JUCUM_SOUND) window.JUCUM_SOUND.alert();
-  }, [student.id]);
+  }, [student.id, cloudReady]);
 
   const activities = activeModule?.activities || [];
   const doneCount = activities.filter(a => entryPassed(progress.completed[`${activeModule?.id}:${a.id}`], student.level, student.group)).length;
@@ -966,6 +993,27 @@ function PreexamChecklistRow({ it, mod, studentId }) {
     </>
   );
 }
+/* 📦 25-sep-2026 · De qué módulo es un material (caso Lesli: el 🔁 repaso le ofreció
+ * “Comprensión auditiva” del M1 con el MISMO nombre que la del M3 y la hizo en plena
+ * clase del M3). review = el módulo no está activo para su grupo. */
+function modTagFor(moduleId, student) {
+  try {
+    const D = window.JUCUM_DATA;
+    if (!student || !moduleId || !D.getModuleNumber) return null;
+    const n = D.getModuleNumber(student.level, moduleId);
+    if (!n) return null;
+    const gs = D.getGroupSettings(student.group) || {};
+    const act = (gs.activeModuleIds && gs.activeModuleIds.length) ? gs.activeModuleIds : (gs.activeModuleId ? [gs.activeModuleId] : []);
+    return { n, review: act.length > 0 && !act.includes(moduleId) };
+  } catch (e) { return null; }
+}
+function ModChip({ student, moduleId, onlyReview }) {
+  const t = modTagFor(moduleId, student);
+  if (!t || (onlyReview && !t.review)) return null;
+  return t.review
+    ? <span style={{display:'inline-flex', alignItems:'center', gap:3, fontSize:10.5, fontWeight:800, color:'#6B4200', background:'#FFE9B8', border:'1px solid #EFC46A', borderRadius:9, padding:'1px 7px', marginLeft:6, verticalAlign:'middle', whiteSpace:'nowrap'}}>M{t.n} · repaso</span>
+    : <span style={{display:'inline-flex', alignItems:'center', fontSize:10.5, fontWeight:800, color:'#1B3B6F', background:'#E4EDFB', border:'1px solid #C5D6F2', borderRadius:9, padding:'1px 7px', marginLeft:6, verticalAlign:'middle', whiteSpace:'nowrap'}}>M{t.n}</span>;
+}
 function linkFor(a, mod, studentId) {
   // a.url = la URL real del material en GitHub Pages (se configura por actividad
   // al importar el catálogo). Sin url, el material aún NO está disponible: no
@@ -980,6 +1028,8 @@ function linkFor(a, mod, studentId) {
     const stu = (window.JUCUM_DATA.STUDENTS || []).find(s => s.id === studentId);
     const gs = stu && window.JUCUM_DATA.getGroupSettings(stu.group);
     if (gs && gs.unlockMode === 'free') free = '&jucum_free=1';
+    const t = modTagFor(mod.id, stu);
+    if (t) free += '&jucum_mtag=' + encodeURIComponent('M' + t.n + (t.review ? ' · repaso' : ''));
   } catch (e) {}
   return `${base}${sep}jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent(mod.id)}&jucum_act=${encodeURIComponent(a.id)}&jucum_kind=${encodeURIComponent(a.type||'')}${free}`;
 }
@@ -1098,7 +1148,7 @@ function ImproveBanner({ student, onGo }) {
           <button key={i} type="button" onClick={() => onGo && onGo(it)}
             style={{display:'flex', alignItems:'center', gap:10, textAlign:'left', cursor:'pointer', background:'#fff', border:'1px solid #F0C66B', borderRadius:10, padding:'9px 12px', fontFamily:'inherit'}}>
             <span style={{fontSize:16}}>{typeIcon(it.type)}</span>
-            <span style={{flex:1, fontWeight:700, fontSize:13, color:'var(--text)'}}>{it.name}</span>
+            <span style={{flex:1, fontWeight:700, fontSize:13, color:'var(--text)'}}>{it.name}<ModChip student={student} moduleId={it.moduleId} /></span>
             <span style={{fontSize:11, fontWeight:800, color:'#C0392B', background:'#FDEBEA', padding:'2px 8px', borderRadius:9}}>{it.pct}%</span>
             <span style={{fontSize:11, fontWeight:800, color:'#fff', background:'#F9A825', padding:'3px 10px', borderRadius:13}}>Repetir</span>
           </button>
@@ -1172,7 +1222,7 @@ function ReviewSection({ student }) {
           <button key={i} type="button" onClick={() => goReview(it)} className="al-item open" style={{width:'100%', textAlign:'left', font:'inherit', cursor:'pointer'}}>
             <span className="al-num" style={{background:'#EEE7F9', color:'#6C4FB0', borderColor:'#D6C9EC'}}>🔁</span>
             <span className="al-ico">{typeIcon(it.type)}</span>
-            <span className="al-name">{it.name}<span style={{display:'block', fontSize:11, fontWeight:700, color:'var(--text-soft)', marginTop:1}}>{it.daysAgo != null ? `Hace ${it.daysAgo} día${it.daysAgo===1?'':'s'}` : 'Toca repasar'} · {it.refTotal ? Math.round(it.refPct/100*it.refTotal)+'/'+it.refTotal : it.refPct+'%'} · a ver si lo mantienes</span></span>
+            <span className="al-name">{it.name}<ModChip student={student} moduleId={it.moduleId} /><span style={{display:'block', fontSize:11, fontWeight:700, color:'var(--text-soft)', marginTop:1}}>{it.daysAgo != null ? `Hace ${it.daysAgo} día${it.daysAgo===1?'':'s'}` : 'Toca repasar'} · {it.refTotal ? Math.round(it.refPct/100*it.refTotal)+'/'+it.refTotal : it.refPct+'%'} · a ver si lo mantienes</span></span>
             <span className="al-score" style={{background:'#EEE7F9', color:'#6C4FB0'}}>{it.overdue > 1 ? `Hace ${it.overdue}d` : 'Hoy'}</span>
             <span className="al-arr">→</span>
           </button>
@@ -1627,7 +1677,7 @@ function RefuerzoSection({ student, highlight }) {
             <button key={i} type="button" onClick={() => go(it)} className="al-item open" style={{width:'100%', textAlign:'left', font:'inherit', cursor:'pointer', ...(doneToday[i] ? {background:'#F2FAF3', borderColor:'#BFE3C3'} : {})}}>
               <span className="al-num" style={doneToday[i] ? {background:'#2EA84B', color:'#fff', borderColor:'#2EA84B'} : {background:'#EFE7F7', color:'#6C4FB0', borderColor:'#D6C9EC'}}>{doneToday[i] ? '✓' : '↻'}</span>
               <span className="al-ico">{typeIcon(it.type)}</span>
-              <span className="al-name">{it.name}<span style={{display:'block', fontSize:11, fontWeight:700, color: doneToday[i] ? '#2E7D32' : 'var(--text-soft)', marginTop:1}}>{doneToday[i] ? '✓ Refuerzo hecho hoy — ¡bien ahí!' : it.moduleName + (it.group ? ' · ' + it.group : '')}</span></span>
+              <span className="al-name">{it.name}<ModChip student={student} moduleId={it.moduleId} /><span style={{display:'block', fontSize:11, fontWeight:700, color: doneToday[i] ? '#2E7D32' : 'var(--text-soft)', marginTop:1}}>{doneToday[i] ? '✓ Refuerzo hecho hoy — ¡bien ahí!' : it.moduleName + (it.group ? ' · ' + it.group : '')}</span></span>
               <span className="al-score" style={{background:'#F0ECE0', color:'#8A7F6A'}}>{it.pct}%</span>
               <span className="al-arr">→</span>
             </button>
@@ -1809,7 +1859,7 @@ function AchievementWarning({ student }) {
   if (alert && window.JUCUM_DATA.getRealInactiveDays) alert.days = window.JUCUM_DATA.getRealInactiveDays(student);
   React.useEffect(() => {
     if (!alert || alert.days < 2 || !window.JUCUM_NOTIF) return;
-    const today = new Date().toISOString().slice(0,10);
+    const today = peruDayKey();
     const key = 'jucum_ach_warn_' + student.id;
     if (localStorage.getItem(key) === today) return;
     localStorage.setItem(key, today);
@@ -2089,7 +2139,7 @@ function TodayPracticeCard({ student }) {
           const inner = (<>
             {badge(st)}
             <span className="next-ico">{typeIcon(it.type)}</span>
-            <div className="next-info"><b>{it.label}</b>{sub}</div>
+            <div className="next-info"><b>{it.label}<ModChip student={student} moduleId={it.moduleId} onlyReview /></b>{sub}</div>
             {href && <span className="next-arr">→</span>}
           </>);
           return href
