@@ -222,6 +222,80 @@ function useCloudDaysReady() {
   return st;
 }
 
+/* 🧭 26-sep-2026 · Navegación del alumno = opción C elegida por la usuaria
+ * (`Propuesta - Barra superior alumno.html`): barra LATERAL con Aprender + Comunidad
+ * (se oculta/muestra con ☰ en web y en celular) y todo “Mi cuenta” (avance, boletín,
+ * perfil, pagos, cerrar sesión) en el botón con el NOMBRE del alumno. Antes eran 11
+ * elementos en la barra superior y en el celular “Salir” quedaba perdido (caso Arturo). */
+const ST_NAV_KEY = 'jucum_st_nav_v1';
+function useIsNarrow(q) {
+  const mq = () => (window.matchMedia ? window.matchMedia(q).matches : false);
+  const [v, setV] = React.useState(mq);
+  React.useEffect(() => {
+    if (!window.matchMedia) return;
+    const m = window.matchMedia(q); const on = () => setV(m.matches);
+    if (m.addEventListener) m.addEventListener('change', on); else m.addListener(on);
+    return () => { if (m.removeEventListener) m.removeEventListener('change', on); else m.removeListener(on); };
+  }, [q]);
+  return v;
+}
+function StudentUserMenu({ student, level, group, view, setView, onLogout, payAlert }) {
+  const [open, setOpen] = React.useState(false);
+  const [confirm, setConfirm] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const out = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', out); document.addEventListener('touchstart', out);
+    return () => { document.removeEventListener('mousedown', out); document.removeEventListener('touchstart', out); };
+  }, [open]);
+  const go = (v) => { setOpen(false); setView(v); };
+  const first = student.fullName.split(' ')[0];
+  const items = [
+    { k:'avance', e:'📈', t:'Mi avance', on: view==='avance'||view==='report'||view==='diagnosis' },
+    window.StudentBoletin ? { k:'boletin', e:'📔', t:'Boletín', on: view==='boletin' } : null,
+    { k:'profile', e:'👤', t:'Mi perfil', on: view==='profile' },
+    { k:'payments', e:'💳', t:'Pagos', on: view==='payments', alert: payAlert },
+  ].filter(Boolean);
+  return (
+    <div className="st-um" ref={ref}>
+      <button type="button" className={`user-pill st-um-btn ${open ? 'on' : ''}`} onClick={() => setOpen(o => !o)} aria-haspopup="menu" aria-expanded={open} title="Mi cuenta">
+        <div className="ava" style={{background:`linear-gradient(135deg,${level.color}80,${level.dark})`}}>
+          {student.fullName.split(' ').map(n=>n[0]).slice(0,2).join('')}
+        </div>
+        <span className="st-um-name">{first}</span>
+        <span className="st-um-caret">▾</span>
+        {payAlert && <span className="nav-dot st-um-dot">!</span>}
+      </button>
+      {open && (
+        <div className="st-um-pop" role="menu">
+          <div className="st-um-who"><b>{student.fullName}</b>{level.code} · {group.name}</div>
+          <div className="st-um-grp">Mi cuenta</div>
+          {items.map(it => (
+            <button key={it.k} type="button" role="menuitem" className={`st-um-it ${it.on ? 'on' : ''}`} onClick={() => go(it.k)} style={it.alert ? {color:'#C62828'} : undefined}>
+              <span className="st-ico">{it.e}</span>{it.t}{it.alert && <span className="nav-dot" style={{marginLeft:'auto'}}>!</span>}
+            </button>
+          ))}
+          <div className="st-um-sep"></div>
+          <button type="button" role="menuitem" className="st-um-it st-um-out" onClick={() => { setOpen(false); setConfirm(true); }}><span className="st-ico">⎋</span>Cerrar sesión</button>
+        </div>
+      )}
+      {confirm && (
+        <div className="st-confirm" onClick={() => setConfirm(false)}>
+          <div className="st-confirm-box" onClick={(e) => e.stopPropagation()}>
+            <h3>¿Cerrar sesión?</h3>
+            <p>Tu avance ya está guardado.</p>
+            <div className="st-confirm-btns">
+              <button type="button" className="st-bt" onClick={() => setConfirm(false)}>Quedarme</button>
+              <button type="button" className="st-bt red" onClick={() => { setConfirm(false); onLogout(); }}>Salir</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StudentDashboard({ user, onLogout }) {
   const { STUDENTS, GROUPS, LEVELS, MODULE_CATALOG, ACHIEVEMENT_DEFS, getGroupSettings, getStudentProgress, getStudentXP, getStudentLevel, MEDAL_RARITY, RARITY_STYLE, earnedMedals, entryPassed } = window.JUCUM_DATA;
   // Jamás mostrar a OTRO alumno si el suyo no está en la lista (antes caía en STUDENTS[0]).
@@ -240,8 +314,18 @@ function StudentDashboard({ user, onLogout }) {
     : (settings.activeModuleId ? [settings.activeModuleId] : []);
   const activeModules = allModules.filter(m => activeIds.includes(m.id));
   const activeModule = activeModules[0] || allModules[0];
-  const [view, setView] = React.useState(() => (window.JUCUM_NAV ? window.JUCUM_NAV.load('student', 'dashboard') : 'dashboard'));
+  const [view, setViewRaw] = React.useState(() => (window.JUCUM_NAV ? window.JUCUM_NAV.load('student', 'dashboard') : 'dashboard'));
   React.useEffect(() => { if (window.JUCUM_NAV) window.JUCUM_NAV.save('student', view); }, [view]);
+  const narrow = useIsNarrow('(max-width: 820px)');
+  // Web: el menú lateral se recuerda abierto/cerrado (clave chiquita). Celular: siempre empieza cerrado.
+  const [sideDesk, setSideDesk] = React.useState(() => { try { return localStorage.getItem(ST_NAV_KEY) !== '0'; } catch (e) { return true; } });
+  const [sideMob, setSideMob] = React.useState(false);
+  const sideOpen = narrow ? sideMob : sideDesk;
+  const toggleSide = () => {
+    if (narrow) { setSideMob(o => !o); return; }
+    setSideDesk(o => { const v = !o; try { if (window.JUCUM_STORE) window.JUCUM_STORE.set(ST_NAV_KEY, v ? '1' : '0'); else localStorage.setItem(ST_NAV_KEY, v ? '1' : '0'); } catch (e) {} return v; });
+  };
+  const setView = (v) => { setViewRaw(v); setSideMob(false); try { window.scrollTo(0, 0); } catch (e) {} };
   const [showOnb, setShowOnb] = React.useState(() => {
     if (localStorage.getItem(`jucum_onboarded_${user.studentId}`)) return false;
     // Perfil con uso real → no volver a mostrar la bienvenida (y dejarlo marcado)
@@ -486,32 +570,35 @@ function StudentDashboard({ user, onLogout }) {
       {!showOnb && !celebrate && !alertKind && dropExp && <DropExplainModal exp={dropExp} student={student} onClose={() => { try { window.JUCUM_DATA.ackDropExplanation(student); } catch {} setDropExp(null); }} onGo={() => { setDropExp(null); setView('dashboard'); }} />}
       {!showOnb && !celebrate && !alertKind && !dropExp && taskDue && <TaskDueCartel assignment={taskDue} onGo={() => { setTaskDue(null); setView('tasks'); }} onClose={() => setTaskDue(null)} />}
       {!showOnb && !celebrate && !alertKind && !dropExp && !taskDue && muteModal && <ForumMuteModal info={muteModal} onClose={() => setMuteModal(null)} />}
-      <header className="app-header">
-        <div className="app-logo">
+      <header className="app-header st-hdr">
+        <button type="button" className={`st-burger ${sideOpen ? 'on' : ''}`} data-tut="nav" onClick={toggleSide} aria-label={sideOpen ? 'Ocultar menú' : 'Mostrar menú'} title={sideOpen ? 'Ocultar menú' : 'Mostrar menú'}>
+          <span className="st-burger-ico">{sideOpen && !narrow ? '«' : '☰'}</span>
+          {!sideOpen && (msgUnread > 0 || forumUnread > 0) && <span className="nav-dot st-burger-dot">{Math.min(9, msgUnread + forumUnread)}</span>}
+        </button>
+        <div className="app-logo" onClick={() => setView('dashboard')} style={{cursor:'pointer'}} title="Ir a mi panel">
           <img src={window.JUCUM_LOGO || 'logo-jucum.png'} alt="JUCUM EC" />
           <div className="pgtitle">Mi panel de aprendizaje</div>
         </div>
-        <div className="app-right" data-tut="nav">
-          <span className="role-pill s">🎓 Alumno</span>
-          <a className={`nav-link ${view==='practica'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('practica');}}>📚 Mi práctica</a>
-          <a className={`nav-link ${view==='profile'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('profile');}}>👤 Mi perfil</a>
-          <a className={`nav-link ${view==='forum'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();openForum();}} style={{position:'relative'}}>💬 Foro{forumUnread > 0 && <span className="nav-dot">{forumUnread > 9 ? '9+' : forumUnread}</span>}</a>
-          <a className={`nav-link ${view==='mensajes'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('mensajes');}} style={{position:'relative'}}><span className="jwave" style={{marginRight:5}}>👨‍🏫</span>Hablemos{msgUnread > 0 && <span className="nav-dot">{msgUnread > 9 ? '9+' : msgUnread}</span>}</a>
-          <a className={`nav-link ${view==='tasks'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('tasks');}}>📝 Tareas</a>
-          <a className={`nav-link ${view==='exam'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('exam');}}>🎓 Examen</a>
-          <a className={`nav-link ${(view==='diagnosis'||view==='report'||view==='avance')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('avance');}}>📈 Mi avance</a>
-          {window.StudentBoletin && <a className={`nav-link ${view==='boletin'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('boletin');}}>📔 Boletín</a>}
-          <a className={`nav-link ${view==='payments'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView('payments');}} style={{position:'relative', color:(acct.blocked||acct.state==='por_vencer')?'#C62828':undefined}}>💳 Pagos{(acct.blocked||acct.state==='por_vencer') && <span className="nav-dot">!</span>}</a>
+        <div className="app-right st-hdr-right">
           <span data-tut="bell" style={{display:'inline-flex'}}><NotifBell userId={student.id} onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); else if (n.link === 'tasks') setView('tasks'); else if (n.link === 'exam') setView('exam'); else if (n.link === 'messages') setView('mensajes'); else if (n.link === 'practica' || n.type === 'daily-reminder' || n.type === 'streak' || n.type === 'achievement') setView('practica'); }} /></span>
-          <div className="user-pill">
-            <div className="ava" style={{background:`linear-gradient(135deg,${level.color}80,${level.dark})`}}>
-              {student.fullName.split(' ').map(n=>n[0]).slice(0,2).join('')}
-            </div>
-            <span>{student.fullName.split(' ')[0]}</span>
-          </div>
-          <button className="logout-btn" onClick={onLogout} title="Cerrar sesión">⎋ Salir</button>
+          <StudentUserMenu student={student} level={level} group={group} view={view} setView={setView} onLogout={onLogout} payAlert={!!(acct.blocked || acct.state==='por_vencer')} />
         </div>
       </header>
+
+      <div className={`st-shell ${sideOpen ? 'side-open' : 'side-closed'} ${narrow ? 'is-narrow' : ''}`}>
+      {narrow && sideOpen && <div className="st-shade" onClick={() => setSideMob(false)}></div>}
+      <aside className="st-side" aria-hidden={!sideOpen}>
+        <button type="button" className={`st-it ${view==='dashboard'?'on':''}`} onClick={() => setView('dashboard')}><span className="st-ico">🏠</span>Inicio</button>
+        <div className="st-grp">Aprender</div>
+        <button type="button" className={`st-it ${view==='practica'?'on':''}`} onClick={() => setView('practica')}><span className="st-ico">📚</span>Mi práctica</button>
+        <button type="button" className={`st-it ${view==='tasks'?'on':''}`} onClick={() => setView('tasks')}><span className="st-ico">📝</span>Tareas</button>
+        <button type="button" className={`st-it ${view==='exam'?'on':''}`} onClick={() => setView('exam')}><span className="st-ico">🎓</span>Examen</button>
+        <div className="st-grp">Comunidad</div>
+        <button type="button" className={`st-it ${view==='mensajes'?'on':''}`} onClick={() => setView('mensajes')}><span className="st-ico jwave">👨‍🏫</span>Hablemos{msgUnread > 0 && <span className="nav-dot">{msgUnread > 9 ? '9+' : msgUnread}</span>}</button>
+        <button type="button" className={`st-it ${view==='forum'?'on':''}`} onClick={() => { openForum(); setSideMob(false); }}><span className="st-ico">💬</span>Foro{forumUnread > 0 && <span className="nav-dot">{forumUnread > 9 ? '9+' : forumUnread}</span>}</button>
+        <div className="st-side-foot">Tu perfil, avance, boletín, pagos y <b>cerrar sesión</b> están en el botón con tu nombre ↗</div>
+      </aside>
+      <div className="st-main">
 
       {window.StudentTutorial && <StudentTutorial student={student} onGoHome={() => setView('dashboard')} />}
 
@@ -607,6 +694,8 @@ function StudentDashboard({ user, onLogout }) {
         </div>
       </main>
       )}
+      </div>
+      </div>
     </>
   );
 }

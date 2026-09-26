@@ -1,16 +1,10 @@
-# Examen: el alumno elige niños/adultos (26-sep-2026 · v=20260926a)
+# Entrega nav-alumno-campanita-2026-09-26 · repo `plataforma` · v=20260926a
 
-Repo destino: **plataforma** (raíz). Subir los 4 archivos: exam-flow.js, ExamsFolders.comp.js, ExamsCenter.comp.js, index.html.
+Subir los 3 archivos a la RAÍZ del repo `plataforma` (reemplazar): `index.html`, `StudentDashboard.comp.js`, `Notifications.comp.js`.
 
-## Qué pasaba
-Al PROGRAMAR un examen con fecha, la plataforma guardaba una "versión" para el grupo aunque nadie la tocara
-(por defecto 🧒 niños en Pre-A1, 🧑 adultos en A1/A2) y la mandaba en el enlace. El examen, al recibirla,
-se salta la pantalla "¿niños o adultos?". Si el examen se abría sin programar fecha, no se mandaba nada y sí preguntaba.
+(La entrega anterior fix-modulo-racha-2026-09-25 ya está en el repo — verificado 26-sep.)
 
 ## Qué cambia
-- Nueva opción (y ahora la de fábrica): **👥 Que el alumno elija (grupo mixto)** → el enlace ya no fuerza versión.
-- Cambiar la versión en el desplegable se guarda al instante si el examen ya estaba programado.
-
-## Qué hacer después de subir
-Los exámenes YA programados guardaron "niños": en 🎓 Exámenes → Configurar, en cada grupo, cambia el
-desplegable a **👥 Que el alumno elija**. (Solo hace falta una vez.)
+1. **Navegación del alumno (opción C elegida).** Barra lateral con 🏠 Inicio · Aprender (Mi práctica, Tareas, Examen) · Comunidad (Hablemos, Foro). Se oculta/muestra con el botón ☰ / « en la web (se recuerda en cada equipo) y en el celular se abre como panel deslizable que se cierra solo al elegir una sección.
+2. **Botón con el nombre del alumno** → Mi avance, Boletín, Mi perfil, Pagos y ⎋ Cerrar sesión (con confirmación). Resuelve el caso Arturo: "Salir" ya no se pierde en el celular.
+3. **Campanita.** Al abrirla, el globo rojo desaparece (antes solo se marcaba la notificación que se tocaba, y las recién creadas ni siquiera llegaban marcadas a la nube). Las nuevas se resaltan mientras el panel está abierto.
