@@ -158,6 +158,21 @@
   function idbPut(db, k, v) { try { db.transaction(STORE, 'readwrite').objectStore(STORE).put(v, k); } catch (e) {} }
   function idbDel(db, k) { try { db.transaction(STORE, 'readwrite').objectStore(STORE).delete(k); } catch (e) {} }
 
+  function verifyFresh(db, etags) {
+    var stale = 0, pend = 0;
+    Object.keys(etags).forEach(function (src) {
+      if (LIST.indexOf(src) < 0) return;
+      pend++;
+      fetch(src, { method: 'HEAD', cache: 'no-cache' }).then(function (r) {
+        var e = r.ok ? (r.headers.get('etag') || '') : null;
+        if (e === null) return;
+        if (!etags[src] || (e && e.replace(/^W\//, '') !== etags[src].replace(/^W\//, ''))) { idbDel(db, src); stale++; }
+      }).catch(function () {}).then(function () {
+        if (--pend === 0 && stale) { try { console.info('fast-loader: ' + stale + ' archivo(s) desactualizado(s) → se recompilan en la próxima carga'); } catch (e) {} }
+      });
+    });
+  }
+
   var arrancado = false;
   function boot() {
     prune();                                  // limpia claves viejas del modo anterior
@@ -172,7 +187,20 @@
       return idbAll(db).then(function (all) {
         clearCompiledCache();                 // migración: libera los ~3 MB de localStorage
         Object.keys(all).forEach(function (k) { if (LIST.indexOf(k) < 0) { idbDel(db, k); delete all[k]; } });
-        run(all, function (src, code) { idbPut(db, src, code); });
+        /* 🩹 26-sep-2026 · Entradas con marca {c:código, e:ETag}. Si un despliegue se
+         * sube en VARIOS commits, el index nuevo puede compilar un .comp.js VIEJO y
+         * dejarlo cacheado bajo la versión nueva para siempre (caso: barra lateral del
+         * alumno que “no aparecía”). Tras arrancar se compara el ETag de cada archivo
+         * con el del servidor (HEAD, liviano) y se descarta lo desactualizado → la
+         * siguiente carga recompila. Entradas antiguas sin ETag se descartan una vez. */
+        var etags = {}, codes = {};
+        Object.keys(all).forEach(function (k) {
+          var v = all[k];
+          if (v && typeof v === 'object' && typeof v.c === 'string') { codes[k] = v.c; etags[k] = v.e || ''; }
+          else if (typeof v === 'string') { codes[k] = v; etags[k] = ''; }
+        });
+        run(codes, function (src, code, etag) { idbPut(db, src, { c: code, e: etag || '' }); });
+        setTimeout(function () { verifyFresh(db, etags); }, 6000);
       });
     }).catch(function () {
       var cached = {};
@@ -199,21 +227,22 @@
     // Primera visita (o versión nueva): compila una vez y guarda
     var fetches = LIST.map(function (src, i) {
       if (cached[i]) return Promise.resolve(null);
-      return fetch(src).then(function (r) {
+      return fetch(src, { cache: 'no-cache' }).then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status + ' en ' + src);
-        return r.text();
+        var et = r.headers.get('etag') || '';
+        return r.text().then(function (t) { return { t: t, e: et }; });
       });
     });
     Promise.all([loadBabel(), Promise.all(fetches)]).then(function (rs) {
       var sources = rs[1];
       var codes = LIST.map(function (src, i) {
         if (cached[i]) return cached[i];
-        var out = window.Babel.transform(sources[i], {
+        var out = window.Babel.transform(sources[i].t, {
           presets: ['react'],
           sourceType: 'script',
           filename: src.split('?')[0],
         }).code;
-        try { put(src, out); } catch (e) {}
+        try { put(src, out, sources[i].e); } catch (e) {}
         return out;
       });
       codes.forEach(function (code, i) { exec(code, LIST[i]); });

@@ -31,8 +31,10 @@ function TeacherDashboard({ onLogout, user }) {
   const teacherName = (user && user.name && user.name !== 'Profesor' && user.name !== 'Profesor JUCUM') ? user.name : 'Joe Miller';
   React.useEffect(() => { window.JUCUM_TEACHER_NAME = teacherName; }, [teacherName]);
 
-  // Reset palette
-  React.useEffect(() => { document.body.removeAttribute('data-level'); }, []);
+  // Reset palette — 26-sep-2026: SOLO fuera de grupo/alumno. Los efectos del padre corren
+  // DESPUÉS que los del hijo: al recargar dentro de un grupo A1 (vista restaurada), este
+  // reset borraba el data-level que acababa de poner GroupDetail → cabecera naranja (Pre-A1).
+  React.useEffect(() => { if (view.kind !== 'group' && view.kind !== 'student') document.body.removeAttribute('data-level'); }, [view.kind]);
 
   const totalStudents = STUDENTS.length;
   const activeToday = STUDENTS.filter(s => s.lastActiveDays === 0).length;
