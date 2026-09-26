@@ -343,7 +343,7 @@
       }
       if (!p) { p = ps[ps.length - 1]; pi = ps.length - 1; }
       let href = X.examPartLink(p, exam.id, student.id, pi);
-      if (ann && ann.variant) href += '&jucum_variant=' + encodeURIComponent(ann.variant);
+      if (ann && /^(kids|adults)$/.test(ann.variant || '')) href += '&jucum_variant=' + encodeURIComponent(ann.variant);
       return href;
     })();
     if (open && canTake) return { phase: 'today', exam: exam, win: win, ann: ann, r: r, canTake: true, link: link, days: 0 };
@@ -409,7 +409,7 @@
     const out = [];
     mods.forEach(function (m) {
       const a = getAnn(groupId, m.id);
-      if (a && a.date && dstr >= a.date && dstr <= (a.dateTo || a.date)) out.push({ kind: 'exam', icon: '🎓', moduleId: m.id, title: 'Examen · ' + m.name, sub: (a.from ? fmtHora(a.from) : '') + (a.to ? ' – ' + fmtHora(a.to) : '') + (a.dateTo && a.dateTo !== a.date ? ' · ventana del ' + fmtFecha(a.date) + ' al ' + fmtFecha(a.dateTo) : '') + (a.auto === false ? ' · apertura manual' : ' · se abre solo') + (a.variant ? ' · versión ' + (a.variant === 'kids' ? 'niños' : 'adultos') : '') });
+      if (a && a.date && dstr >= a.date && dstr <= (a.dateTo || a.date)) out.push({ kind: 'exam', icon: '🎓', moduleId: m.id, title: 'Examen · ' + m.name, sub: (a.from ? fmtHora(a.from) : '') + (a.to ? ' – ' + fmtHora(a.to) : '') + (a.dateTo && a.dateTo !== a.date ? ' · ventana del ' + fmtFecha(a.date) + ' al ' + fmtFecha(a.dateTo) : '') + (a.auto === false ? ' · apertura manual' : ' · se abre solo') + (a.variant ? ' · versión ' + (a.variant === 'kids' ? 'niños' : a.variant === 'adults' ? 'adultos' : 'la elige el alumno') : '') });
       const p = getPre(groupId, m.id);
       if (p && p.open) {
         if (p.fromDate === dstr) out.push({ kind: 'preexam', icon: '🧭', moduleId: m.id, title: 'Abre pre-examen · ' + m.name, sub: (p.from ? fmtHora(p.from) : '') });

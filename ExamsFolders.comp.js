@@ -197,7 +197,7 @@ function ModuleFolderRow({ group, module, members, onChange }) {
   const [dateTo, setDateTo] = exfUS(ann?.dateTo || '');
   const [from, setFrom] = exfUS(ann?.from || '');
   const [to, setTo] = exfUS(ann?.to || '');
-  const [variant, setVariant] = exfUS(ann?.variant || (group.level === 'pre-a1' ? 'kids' : 'adults'));
+  const [variant, setVariant] = exfUS(ann?.variant || 'mixed');
   const [libre, setLibre] = exfUS(ann?.free != null ? !!ann.free : solo);
 
   /* — M1 rendido por Google Forms (registro y vista) — */
@@ -251,7 +251,7 @@ function ModuleFolderRow({ group, module, members, onChange }) {
         <div style={{flex:1, minWidth:0}}>
           <div style={rowName()}>{module.name}</div>
           <div className="settings-hint" style={{margin:0}}>
-            Examen: <b>{exam.title}</b>{ann && ann.date ? <> · 📅 <b>{F.fmtFecha(ann.date)}</b>{ann.from ? ', ' + F.fmtHora(ann.from) + (ann.to ? ' – ' + F.fmtHora(ann.to) : '') : ''} · versión {ann.variant === 'kids' ? '🧒 niños' : '🧑 adultos'}</> : null}
+            Examen: <b>{exam.title}</b>{ann && ann.date ? <> · 📅 <b>{F.fmtFecha(ann.date)}</b>{ann.from ? ', ' + F.fmtHora(ann.from) + (ann.to ? ' – ' + F.fmtHora(ann.to) : '') : ''} · versión {ann.variant === 'kids' ? '🧒 niños' : ann.variant === 'adults' ? '🧑 adultos' : '👥 la elige el alumno'}</> : null}
           </div>
         </div>
         {exfPill(chip[0], chip[1], chip[2], 'st')}
@@ -370,7 +370,8 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
             <input type="time" className="input-text" style={{width:110}} value={from} onChange={e => setFrom(e.target.value)} />
             <span style={{fontSize:11.5, fontWeight:800, color:'#777'}}>cierra</span>
             <input type="time" className="input-text" style={{width:110}} value={to} onChange={e => setTo(e.target.value)} />
-            <select className="input-text" value={variant} onChange={e => setVariant(e.target.value)} title="Versión del examen para este grupo">
+            <select className="input-text" value={variant} onChange={e => { const v = e.target.value; setVariant(v); if (ann) { F.setAnn(group.id, module.id, { variant: v }); onChange && onChange(); } }} title="Versión del examen para este grupo">
+              <option value="mixed">👥 Que el alumno elija (grupo mixto)</option>
               <option value="kids">🧒 Versión niños</option>
               <option value="adults">🧑 Versión adultos</option>
             </select>
@@ -740,7 +741,7 @@ function ModuleExamBanner({ mod, studentId }) {
        Ahora solo repiten los DESAPROBADOS dentro de la ventana de recuperación. */
     const rd = null, availT = null, canRetry = false;
     const part0 = ((info.exam && info.exam.parts) || []).find(p => p.url);
-    const retryLink = part0 ? part0.url + (part0.url.includes('?') ? '&' : '?') + 'jucum_exam=1&jucum_retry=1&jucum_uid=' + encodeURIComponent(studentId) + '&jucum_mod=' + encodeURIComponent('exam-' + info.exam.id) + '&jucum_act=' + encodeURIComponent(part0.competency || '') + (info.ann && info.ann.variant ? '&jucum_variant=' + encodeURIComponent(info.ann.variant) : '') : null;
+    const retryLink = part0 ? part0.url + (part0.url.includes('?') ? '&' : '?') + 'jucum_exam=1&jucum_retry=1&jucum_uid=' + encodeURIComponent(studentId) + '&jucum_mod=' + encodeURIComponent('exam-' + info.exam.id) + '&jucum_act=' + encodeURIComponent(part0.competency || '') + (info.ann && /^(kids|adults)$/.test(info.ann.variant || '') ? '&jucum_variant=' + encodeURIComponent(info.ann.variant) : '') : null;
     const PL = { L: '🎧 Listening', R: '📖 Comprensión lectora', X: '🧩 ¿Qué regla uso?', G: '📝 Gramática', V: '🔤 Vocabulario' };
     const weak = Object.keys(PL).filter(k => { const s = (att.sections || {})[k]; return s && s.t && (s.h / s.t) < 0.75; }).map(k => PL[k]);
     return box(passed ? '#A5D6A7' : '#F0C46C', (
@@ -774,7 +775,7 @@ function ModuleExamBanner({ mod, studentId }) {
                   const d = (att._detalle || []).find(x => x.part === p.key);
                   if (d) return <div key={p.key} style={{display:'flex', alignItems:'center', gap:9, border:'1.5px solid #A5D6A7', background:'#F4FBF4', borderRadius:11, padding:'9px 13px', fontWeight:800, color:'#1B5E20', fontSize:12.5}}>✅ {p.label} · completada<span style={{marginLeft:'auto', fontFamily:"'Fredoka',sans-serif", fontSize:16}}>{d.score}<small style={{fontSize:10, color:'#77746B'}}>/100</small></span></div>;
                   const u = urls[i];
-                  const link = u ? u.url + (u.url.includes('?') ? '&' : '?') + 'jucum_exam=1&jucum_uid=' + encodeURIComponent(studentId) + '&jucum_mod=' + encodeURIComponent('exam-' + info.exam.id) + '&jucum_act=' + encodeURIComponent(p.key) + (info.ann && info.ann.variant ? '&jucum_variant=' + encodeURIComponent(info.ann.variant) : '') : null;
+                  const link = u ? u.url + (u.url.includes('?') ? '&' : '?') + 'jucum_exam=1&jucum_uid=' + encodeURIComponent(studentId) + '&jucum_mod=' + encodeURIComponent('exam-' + info.exam.id) + '&jucum_act=' + encodeURIComponent(p.key) + (info.ann && /^(kids|adults)$/.test(info.ann.variant || '') ? '&jucum_variant=' + encodeURIComponent(info.ann.variant) : '') : null;
                   return abierto && link
                     ? <a key={p.key} href={link} target="_blank" rel="noreferrer" style={{display:'flex', alignItems:'center', justifyContent:'center', gap:8, borderRadius:24, padding:'12px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15, color:'#fff', textDecoration:'none', background:'linear-gradient(135deg,#1F3A8A,#0D1B5A)'}}>▶ Rendir la {p.label} ahora</a>
                     : <div key={p.key} style={{display:'flex', alignItems:'center', gap:9, border:'1.5px dashed #E3DDCD', background:'#FBFAF5', borderRadius:11, padding:'9px 13px', fontWeight:800, color:'#8A5100', fontSize:12.5}}>🕒 {p.label} · pendiente — se abre el {F.fmtFecha(info.ann.date)}</div>;
@@ -842,7 +843,7 @@ function ModuleExamBanner({ mod, studentId }) {
     if (rs.has && rs.inScope && (rs.active || F.pDay() < rs.ret.from) && !rs.blocked) {
       const R = rs.ret, q = rs.reqs || {};
       const part0 = ((info.exam && info.exam.parts) || []).find(p => p.url);
-      const link2 = part0 ? part0.url + (part0.url.includes('?') ? '&' : '?') + 'jucum_exam=1&jucum_uid=' + encodeURIComponent(studentId) + '&jucum_mod=' + encodeURIComponent('exam-' + info.exam.id) + '&jucum_act=' + encodeURIComponent(part0.competency || '') + (info.ann && info.ann.variant ? '&jucum_variant=' + encodeURIComponent(info.ann.variant) : '') : null;
+      const link2 = part0 ? part0.url + (part0.url.includes('?') ? '&' : '?') + 'jucum_exam=1&jucum_uid=' + encodeURIComponent(studentId) + '&jucum_mod=' + encodeURIComponent('exam-' + info.exam.id) + '&jucum_act=' + encodeURIComponent(part0.competency || '') + (info.ann && /^(kids|adults)$/.test(info.ann.variant || '') ? '&jucum_variant=' + encodeURIComponent(info.ann.variant) : '') : null;
       return box('#F0C46C', (
         <>
           {head('linear-gradient(135deg,#8A5100,#B26A00)', '🎓', 'Aún puedes rendirlo', mod.name + ' · nueva oportunidad', 'ventana del ' + F.fmtFecha(R.from) + ' al ' + F.fmtFecha(R.to), rs.active ? cd('🟢', 'abierta') : cd(F.daysTo(R.from), 'días'))}

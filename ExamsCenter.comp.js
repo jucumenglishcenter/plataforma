@@ -142,7 +142,7 @@ function EcModRow({ group, module, onChange, goRes }) {
   const [date, setDate] = ecUS(ann?.date || '');
   const [from, setFrom] = ecUS(ann?.from || '');
   const [to, setTo] = ecUS(ann?.to || '');
-  const [variant, setVariant] = ecUS(ann?.variant || (group.level === 'pre-a1' ? 'kids' : 'adults'));
+  const [variant, setVariant] = ecUS(ann?.variant || 'mixed');
   const [aviso, setAviso] = ecUS(ann && ann.notifyDate && !ann.notified ? 'fecha' : 'ahora');
   const [avisoDate, setAvisoDate] = ecUS((ann && ann.notifyDate && !ann.notified ? ann.notifyDate : '') || '');
   const graders = (ann && ann.graders) || [];
@@ -258,7 +258,8 @@ function EcModRow({ group, module, onChange, goRes }) {
                 <input type="time" className="input-text" style={{width:100}} value={to} onChange={e => setTo(e.target.value)} />
               </div>
               <div className="row-flex" style={{gap:7, marginTop:6, flexWrap:'wrap'}}>
-                <select className="input-text" value={variant} onChange={e => setVariant(e.target.value)}>
+                <select className="input-text" value={variant} onChange={e => { const v = e.target.value; setVariant(v); if (ann) { F.setAnn(group.id, module.id, { variant: v }); onChange(); } }} title="Versión del examen para este grupo">
+                  <option value="mixed">👥 Que el alumno elija (grupo mixto)</option>
                   <option value="kids">🧒 Versión niños</option>
                   <option value="adults">🧑 Versión adultos</option>
                 </select>
