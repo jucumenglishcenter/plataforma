@@ -585,4 +585,38 @@ function ClosedStudentsList({ list, onChanged, onOpen }) {
   );
 }
 
-Object.assign(window, { StudentGraduated, ExitSurveyForm, FinishGroupModal, FinishedGroupBanner, GradLeads, grdStatusFor, GrdMedal, BadgeMedal, BadgeShelf, BadgeCelebration, JourneyHome, CloseProgressModal, closeSuggestions, ClosedStudentsList });
+/* ⏸ Vista global: todos los alumnos con avance cerrado, agrupados por grupo (desde Mis grupos) */
+function ClosedAllView({ onBack, onOpen }) {
+  const D = window.JUCUM_DATA;
+  const [, setT] = React.useState(0);
+  const [q, setQ] = React.useState('');
+  const needle = q.trim().toLowerCase();
+  const closed = (D.STUDENTS || []).filter(s => s.closedAt && (!needle || s.fullName.toLowerCase().includes(needle)));
+  const byGroup = {};
+  closed.forEach(s => { (byGroup[s.group] = byGroup[s.group] || []).push(s); });
+  const groups = (D.GROUPS || []).filter(g => byGroup[g.id]);
+  const orphan = closed.filter(s => !(D.GROUPS || []).some(g => g.id === s.group));
+  return (
+    <main className="main">
+      <button className="back-btn" onClick={onBack}>← Volver a grupos</button>
+      <div className="welcome group">
+        <div className="welcome-text">
+          <div className="eyebrow">⏸ A1 · A2 · inscripción por módulo</div>
+          <h1>Alumnos con avance cerrado</h1>
+          <p>No se inscribieron al siguiente módulo o dejaron el programa. Al entrar ven “Mi recorrido”. Con ↩ Reabrir recuperan todo.</p>
+        </div>
+      </div>
+      <label className="tt-search" style={{margin:'12px 0',maxWidth:420}}><span aria-hidden="true">🔍</span><input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar alumno…" /></label>
+      {!closed.length && <div className="empty-state">{needle ? 'Sin resultados.' : 'No hay alumnos con avance cerrado.'}</div>}
+      {groups.map(g => (
+        <div key={g.id} style={{marginTop:12}}>
+          <div style={{fontFamily:GRD_FONT_T,fontWeight:600,fontSize:16,color:'#0D1B5A',margin:'0 0 -6px'}}>{((D.LEVELS[g.level] || {}).code || '')} · {g.name}</div>
+          <ClosedStudentsList list={byGroup[g.id]} onChanged={() => setT(t => t + 1)} onOpen={onOpen} />
+        </div>
+      ))}
+      {orphan.length > 0 && <div style={{marginTop:12}}><div style={{fontWeight:800,color:'#667'}}>Sin grupo</div><ClosedStudentsList list={orphan} onChanged={() => setT(t => t + 1)} onOpen={onOpen} /></div>}
+    </main>
+  );
+}
+
+Object.assign(window, { StudentGraduated, ExitSurveyForm, FinishGroupModal, FinishedGroupBanner, GradLeads, grdStatusFor, GrdMedal, BadgeMedal, BadgeShelf, BadgeCelebration, JourneyHome, CloseProgressModal, closeSuggestions, ClosedStudentsList, ClosedAllView });

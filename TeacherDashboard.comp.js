@@ -70,6 +70,8 @@ function TeacherDashboard({ onLogout, user }) {
 
       {view.kind === 'leads' && window.GradLeads ? (
         <GradLeads onBack={() => setView({kind:'groups'})} />
+      ) : view.kind === 'closed' && window.ClosedAllView ? (
+        <ClosedAllView onBack={() => setView({kind:'groups'})} onOpen={(id) => setView({kind:'student', id})} />
       ) : view.kind === 'assess' ? (
         <TeacherAssessment onBack={() => setView({kind:'groups'})} initialTab={view.tab} />
       ) : view.kind === 'messages' ? (
@@ -126,6 +128,7 @@ function TeacherDashboard({ onLogout, user }) {
             teacherName={teacherName}
             onSelectGroup={(id) => setView({kind:'group', id})}
             onLeads={() => setView({kind:'leads'})}
+            onClosed={() => setView({kind:'closed'})}
           />
         )}
         {view.kind === 'group' && (
@@ -253,7 +256,7 @@ function PrepNotas() {
   );
 }
 
-function GroupsView({ stats, onSelectGroup, onLeads, teacherName }) {
+function GroupsView({ stats, onSelectGroup, onLeads, onClosed, teacherName }) {
   const { GROUPS, STUDENTS, LEVELS, getStudentMastery } = window.JUCUM_DATA;
   // 🎓 Filtro Activos · Finalizados · Todos (se recuerda en este equipo — clave chiquita)
   const GR = window.JUCUM_GRAD;
@@ -294,6 +297,7 @@ function GroupsView({ stats, onSelectGroup, onLeads, teacherName }) {
         <div className="sec-title">Mis grupos</div>
         <span className="sec-meta">Click para ver los alumnos</span>
         <span style={{flex:1}}></span>
+        {GR && (() => { const nC = STUDENTS.filter(s => s.closedAt).length; return nC > 0 && onClosed ? <button type="button" onClick={onClosed} style={{display:'inline-flex',alignItems:'center',gap:6,border:'1.5px solid #C9D2E0',background:'#ECEFF4',color:'#4A5468',borderRadius:10,fontFamily:'inherit',fontWeight:800,fontSize:12.5,padding:'7px 12px',cursor:'pointer'}}>⏸ Avance cerrado <span style={{background:'#4A5468',color:'#fff',borderRadius:9,fontSize:10,padding:'1px 6px'}}>{nC}</span></button> : null; })()}
         {GR && <button type="button" onClick={onLeads} style={{display:'inline-flex',alignItems:'center',gap:6,border:'1.5px solid #A5D6A7',background:'#E8F5E9',color:'#1B5E20',borderRadius:10,fontFamily:'inherit',fontWeight:800,fontSize:12.5,padding:'7px 12px',cursor:'pointer'}}>🙋 Interesados en continuar{leadCount ? <span style={{background:'#1E8E4E',color:'#fff',borderRadius:9,fontSize:10,padding:'1px 6px'}}>{leadCount}</span> : null}</button>}
         {GR && <div style={{display:'flex',background:'#ECEFF4',borderRadius:10,padding:3,gap:2}}>{segBtn('act','Activos',actGroups.length)}{segBtn('fin','Finalizados',finGroups.length)}{segBtn('all','Todos')}</div>}
       </div>
@@ -542,7 +546,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
           </select>
         </div>
       </div>
-      <div className="tt-count">{shown.length} de {members.length} alumno{members.length===1?'':'s'}{q ? ` · filtrando «${q}»` : ''}</div>
+      <div className="tt-count">{shown.length} de {members.length} alumno{members.length===1?'':'s'}{q ? ` · filtrando «${q}»` : ''}{closedMembers.length > 0 && <> · <a href="#closed-list" onClick={(e) => { e.preventDefault(); const el = document.getElementById('closed-list'); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 80, behavior: 'smooth' }); }} style={{color:'#4A5468',fontWeight:800}}>⏸ {closedMembers.length} con avance cerrado ↓</a></>}</div>
 
       {sugg.length > 0 && window.CloseProgressModal && (
         <div style={{display:'flex',gap:10,alignItems:'center',background:'#FFF3E0',border:'1.5px solid #FFCC80',borderRadius:12,padding:'10px 12px',fontSize:13,color:'#6B3A00',flexWrap:'wrap',margin:'8px 0'}}>
@@ -573,7 +577,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
         {shown.length === 0 && <div style={{padding:'26px',textAlign:'center',color:'#999',fontWeight:700}}>Sin resultados para «{q}»</div>}
       </div>
 
-      {window.ClosedStudentsList && <ClosedStudentsList list={closedMembers} onChanged={() => setGrdTick(t => t + 1)} onOpen={onSelectStudent} />}
+      <div id="closed-list">{window.ClosedStudentsList && <ClosedStudentsList list={closedMembers} onChanged={() => setGrdTick(t => t + 1)} onOpen={onSelectStudent} />}</div>
       {closing && <CloseProgressModal student={closing} onClose={() => setClosing(null)} onDone={() => { setClosing(null); setGrdTick(t => t + 1); }} />}
 
       {deleting && window.TeacherPasswordGate && (
