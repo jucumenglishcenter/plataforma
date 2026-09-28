@@ -380,7 +380,7 @@ function LiveClassroom({ groupId, embedded, lockGroup, focusKeys, planId }) {
   const activeIds = (settings.activeModuleIds && settings.activeModuleIds.length)
     ? settings.activeModuleIds : (settings.activeModuleId ? [settings.activeModuleId] : []);
   const mods = (D.MODULE_CATALOG[group.level] || []).filter(m => activeIds.includes(m.id));
-  const members = (D.STUDENTS || []).filter(s => s.group === group.id);
+  const members = (D.STUDENTS || []).filter(s => s.group === group.id && !s.closedAt);
   const k = big ? 1.35 : 1;
   const now = Date.now();
 

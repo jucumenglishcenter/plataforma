@@ -47,6 +47,7 @@ function StudentGraduated({ user, onLogout }) {
   const first = student.fullName.split(' ')[0];
   const label = group.finishedLabel || ('Nivel ' + level.code);
   const failed = G.isFailed(student.id);
+  const closed = !!(G.isClosed && G.isClosed(student.id));
   const nx = G.nextLevel(student.level);
   const msg = failed
     ? (group.finishedMsgFail || 'Esta vez no alcanzaste la nota para aprobar, pero todo lo que practicaste queda guardado. Comunícate con nosotros para conocer los nuevos horarios y volver a llevar el nivel. ¡Cada día con esfuerzo mejorarás más!')
@@ -63,7 +64,7 @@ function StudentGraduated({ user, onLogout }) {
       <header className="app-header st-hdr">
         <div className="app-logo" onClick={() => go('home')} style={{cursor:'pointer'}}>
           <img src={window.JUCUM_LOGO || 'logo-jucum.png'} alt="JUCUM EC" />
-          <div className="pgtitle">Mi etapa completada</div>
+          <div className="pgtitle">{closed ? 'Mi recorrido' : 'Mi etapa completada'}</div>
         </div>
         <div className="app-right st-hdr-right">
           {window.NotifBell && <NotifBell userId={student.id} />}
@@ -75,7 +76,7 @@ function StudentGraduated({ user, onLogout }) {
             {menu && (
               <div className="st-um-pop" role="menu">
                 <div className="st-um-who"><b>{student.fullName}</b>{level.code} · {group.name}</div>
-                <button type="button" className={`st-um-it ${view==='home'?'on':''}`} onClick={() => go('home')}><span className="st-ico">🎓</span>Mi etapa</button>
+                <button type="button" className={`st-um-it ${view==='home'?'on':''}`} onClick={() => go('home')}><span className="st-ico">{closed ? '🗺️' : '🎓'}</span>{closed ? 'Mi recorrido' : 'Mi etapa'}</button>
                 {window.StudentAvance && <button type="button" className={`st-um-it ${view==='avance'?'on':''}`} onClick={() => go('avance')}><span className="st-ico">📈</span>Mi avance</button>}
                 {window.StudentBoletin && <button type="button" className={`st-um-it ${view==='boletin'?'on':''}`} onClick={() => go('boletin')}><span className="st-ico">📔</span>Boletín</button>}
                 {window.StudentProfile && <button type="button" className={`st-um-it ${view==='profile'?'on':''}`} onClick={() => go('profile')}><span className="st-ico">👤</span>Mi perfil</button>}
@@ -103,6 +104,8 @@ function StudentGraduated({ user, onLogout }) {
           {back}
           <ExitSurveyForm student={student} initial={survey} onDone={(row) => { setSurvey(row); setThanks(true); go('home'); }} />
         </main>
+      ) : closed ? (
+        <JourneyHome student={student} level={level} first={first} card={card} qi={qi} setQi={setQi} thanks={thanks} survey={survey} onSurvey={() => go('survey')} />
       ) : (
         <main className="main" style={{maxWidth:980,margin:'0 auto',display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,340px),1fr))',gap:16,alignItems:'start'}}>
           <div style={{display:'flex',flexDirection:'column',gap:14}}>
@@ -344,7 +347,7 @@ function GradLeads({ onBack }) {
   const csv = () => {
     const H = ['Alumno','Grupo','Terminó','Resultado','Opinión (1-5)','Le gustó','Mejorar','¿Continuar?','Horario','Estado','Respondió'];
     const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-    const lines = [H.map(esc).join(';')].concat(list.map(r => [r.student_name, r.group_name, r.finished_label, r.result === 'reprobo' ? 'Reprobó' : 'Aprobó', r.rating, (r.liked || []).join(', '), r.improve, r.wants, (r.schedule || []).join(', '), r.status, String(r.updated_at || '').slice(0, 10)].map(esc).join(';')));
+    const lines = [H.map(esc).join(';')].concat(list.map(r => [r.student_name, r.group_name, r.finished_label, r.result === 'reprobo' ? 'Reprobó' : r.result === 'cerrado' ? 'Avance cerrado' : 'Aprobó', r.rating, (r.liked || []).join(', '), r.improve, r.wants, (r.schedule || []).join(', '), r.status, String(r.updated_at || '').slice(0, 10)].map(esc).join(';')));
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\n')], { type:'text/csv;charset=utf-8' }));
     a.download = 'interesados-en-continuar.csv'; a.click();
   };
@@ -374,7 +377,7 @@ function GradLeads({ onBack }) {
               const ph = phoneOf(r);
               return (
                 <tr key={r.id}>
-                  <td style={td}><b>{r.student_name}</b><div style={{color:'#8A94A6',fontSize:11.5,fontWeight:600}}>{r.group_name}</div>{r.result === 'reprobo' && <span style={{display:'inline-block',marginTop:4,fontSize:10.5,fontWeight:800,borderRadius:10,padding:'2px 8px',background:'#FFEBEE',color:'#8E1B1B'}}>❌ Reprobó · repetir nivel</span>}</td>
+                  <td style={td}><b>{r.student_name}</b><div style={{color:'#8A94A6',fontSize:11.5,fontWeight:600}}>{r.group_name}</div>{r.result === 'reprobo' && <span style={{display:'inline-block',marginTop:4,fontSize:10.5,fontWeight:800,borderRadius:10,padding:'2px 8px',background:'#FFEBEE',color:'#8E1B1B'}}>❌ Reprobó · repetir nivel</span>}{r.result === 'cerrado' && <span style={{display:'inline-block',marginTop:4,fontSize:10.5,fontWeight:800,borderRadius:10,padding:'2px 8px',background:'#E4EDFB',color:'#1F3A8A'}}>⏸ {r.finished_label || 'Avance cerrado'}</span>}</td>
                   <td style={td}>{r.finished_label}<div style={{color:'#8A94A6',fontSize:11.5,fontWeight:600}}>respondió el {G.fmtDate(r.updated_at)}</div></td>
                   <td style={td}><span style={{fontSize:18}}>{(GRD_FACES[(r.rating || 0) - 1] || [''])[0]}</span><div style={{color:'#667',fontSize:11.5,fontWeight:600,maxWidth:220}}>{(r.liked || []).join(', ')}{r.improve ? <><br />💡 {r.improve}</> : null}</div></td>
                   <td style={td}><span style={{fontSize:11.5,fontWeight:800,borderRadius:12,padding:'3px 9px',background:r.wants === 'si' ? '#E8F5E9' : r.wants === 'tal_vez' ? '#FFF3E0' : '#F1F3F6',color:r.wants === 'si' ? '#1B5E20' : r.wants === 'tal_vez' ? '#8A4B00' : '#667'}}>{r.wants === 'si' ? '✅ Sí' : r.wants === 'tal_vez' ? '🤔 Tal vez' : '⏸️ No'}</span></td>
@@ -392,4 +395,194 @@ function GradLeads({ onBack }) {
   );
 }
 
-Object.assign(window, { StudentGraduated, ExitSurveyForm, FinishGroupModal, FinishedGroupBanner, GradLeads, grdStatusFor, GrdMedal });
+/* ─────────── 🏅 Insignias (A1/A2 · 29-sep) ─────────── */
+function BadgeMedal({ emoji, size = 52, off }) {
+  if (off) return <span style={{width:size,height:size,borderRadius:'50%',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:Math.round(size*.42),background:'#F1F3F6',border:'2.5px dashed #C9D2E0',filter:'grayscale(1)',opacity:.55,flexShrink:0}}>{emoji || '⭐'}</span>;
+  return <span style={{width:size,height:size,borderRadius:'50%',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:Math.round(size*.42),background:'radial-gradient(circle at 35% 30%,#FFF0B8,#E0AE1E 60%,#B8860B)',border:`${size > 70 ? 4 : 2.5}px solid #A67C00`,flexShrink:0}}>{emoji || '⭐'}</span>;
+}
+function BadgeShelf({ student, title, only }) {
+  const B = window.JUCUM_BADGES;
+  if (!B || !B.enabledFor(student)) return null;
+  const all = B.list(student);
+  if (!all.length) return null;
+  const list = only === 'earned' ? all.filter(b => b.earned) : only === 'missing' ? all.filter(b => !b.earned) : all;
+  const n = all.filter(b => b.earned).length;
+  const lv = (window.JUCUM_DATA.LEVELS[student.level] || {}).code || '';
+  const fmt = d => { try { return d ? new Date(String(d).slice(0, 10) + 'T12:00:00Z').toLocaleDateString('es-PE', { month:'short', year:'numeric', timeZone:'UTC' }) : ''; } catch (e) { return ''; } };
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:10}}>
+      <div style={{fontFamily:GRD_FONT_T,fontWeight:600,fontSize:16,color:'#0D1B5A',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>{title || '🏅 Mis insignias'}{!only && <span style={{fontSize:12,color:'#8A94A6',fontWeight:700,fontFamily:'Nunito,sans-serif'}}>{n} de {all.length} · {lv}</span>}</div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(96px,1fr))',gap:8}}>
+        {list.map(b => (
+          <div key={b.mod.id} title={b.earned ? `Aprobado${b.score != null ? ' con ' + b.score : ''}` : 'Por conseguir'} style={{borderRadius:14,padding:'12px 6px 10px',textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center',gap:6,border:`1px solid ${b.earned ? '#E9D9A6' : '#E8E5DC'}`,background:b.earned ? '#FFFCF3' : '#FAFBFD'}}>
+            <BadgeMedal emoji={b.mod.emoji} off={!b.earned} />
+            <b style={{fontSize:11.5,color:'#0D1B5A',lineHeight:1.2}}>{b.mod.name}</b>
+            <span style={{fontSize:10,color:b.earned ? '#9A7400' : '#8A94A6',fontWeight:700}}>M{b.index + 1}{b.earned ? (b.score != null ? ' · ' + b.score : '') + (b.date ? ' · ' + fmt(b.date) : '') : ' · por conseguir'}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+/* Celebra, una tras otra, las insignias ganadas que este equipo aún no mostró */
+function BadgeCelebration({ student, onDone }) {
+  const B = window.JUCUM_BADGES;
+  const [queue, setQueue] = React.useState(() => { try { return B ? B.pending(student) : []; } catch (e) { return []; } });
+  React.useEffect(() => { if (!queue.length && onDone) onDone(); }, [queue.length]);
+  if (!queue.length) return null;
+  const b = queue[0];
+  const next = () => { try { B.celebrated(student, b); } catch (e) {} setQueue(q => q.slice(1)); };
+  const more = queue.length - 1;
+  return (
+    <div className="modal-backdrop" style={{zIndex:1200}} onClick={next}>
+      <div onClick={e => e.stopPropagation()} style={{background:'#fff',borderRadius:22,padding:'26px 20px 20px',width:'min(92vw,380px)',textAlign:'center',display:'flex',flexDirection:'column',gap:10,alignItems:'center',boxShadow:'0 20px 50px rgba(0,0,0,.3)'}}>
+        <BadgeMedal emoji={b.mod.emoji} size={100} />
+        <div style={{fontSize:11,fontWeight:800,letterSpacing:'.14em',textTransform:'uppercase',color:'#9A7400'}}>Módulo conseguido</div>
+        <h3 style={{fontFamily:GRD_FONT_T,fontWeight:600,fontSize:22,color:'#0D1B5A',margin:0}}>¡Conseguiste {b.mod.name}!</h3>
+        <p style={{fontSize:13.5,color:'#555',lineHeight:1.5,margin:0}}>{b.via === 'exam' ? <>Aprobaste el examen del Módulo <b>{b.index + 1}</b>{b.score != null ? <> con <b>{b.score}</b></> : null}.</> : <>Completaste todo el Módulo <b>{b.index + 1}</b>.</>} Esta insignia queda en tu ruta para siempre.</p>
+        <button type="button" onClick={next} style={{width:'100%',minHeight:46,borderRadius:23,border:0,background:'#1F3A8A',color:'#fff',fontFamily:'inherit',fontWeight:800,fontSize:14.5,cursor:'pointer'}}>{more ? `Ver la siguiente (${more} más) →` : '¡Vamos por el siguiente! →'}</button>
+      </div>
+    </div>
+  );
+}
+
+/* ⏸ Alumno con avance cerrado → “Mi recorrido” */
+function JourneyHome({ student, level, first, card, qi, setQi, thanks, survey, onSurvey }) {
+  const G = window.JUCUM_GRAD, B = window.JUCUM_BADGES, D = window.JUCUM_DATA;
+  const mods = D.MODULE_CATALOG[student.level] || [];
+  const ci = mods.findIndex(m => m.id === student.closedModule);
+  const all = (B && B.enabledFor(student)) ? B.list(student) : mods.map((m, i) => ({ mod: m, index: i, earned: ci >= 0 && i <= ci }));
+  const got = all.filter(b => b.earned).length;
+  const nextIdx = (() => { const f = all.findIndex(b => !b.earned); return f >= 0 ? f : -1; })();
+  const nextName = nextIdx >= 0 ? `Módulo ${nextIdx + 1}` : '';
+  const msg = student.closedMsg || 'Gracias por ser parte de JUCUM. Tu avance quedó guardado: cuando quieras retomar, escríbenos y te contamos los horarios del siguiente módulo.';
+  const lastDone = got ? `Módulo ${all.filter(b => b.earned).slice(-1)[0].index + 1}` : '';
+  const waText = `Hola, soy ${student.fullName}. Llevé ${lastDone ? 'hasta el ' + lastDone : 'parte'} de ${level.code} y quiero retomar${nextName ? ' en el ' + nextName : ''}.`;
+  const Shelf = ({ list }) => (
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(96px,1fr))',gap:8}}>
+      {list.map(b => (
+        <div key={b.mod.id} style={{borderRadius:14,padding:'12px 6px 10px',textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center',gap:6,border:`1px solid ${b.earned ? '#E9D9A6' : '#E8E5DC'}`,background:b.earned ? '#FFFCF3' : '#FAFBFD'}}>
+          <BadgeMedal emoji={b.mod.emoji} off={!b.earned} />
+          <b style={{fontSize:11.5,color:'#0D1B5A',lineHeight:1.2}}>{b.mod.name}</b>
+          <span style={{fontSize:10,color:b.earned ? '#9A7400' : '#8A94A6',fontWeight:700}}>M{b.index + 1}{b.earned && b.score != null ? ' · ' + b.score : ''}</span>
+        </div>
+      ))}
+    </div>
+  );
+  const h3 = {fontFamily:GRD_FONT_T,fontWeight:600,fontSize:16,color:'#0D1B5A',margin:0};
+  return (
+    <main className="main" style={{maxWidth:980,margin:'0 auto',display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,340px),1fr))',gap:16,alignItems:'start'}}>
+      <div style={{display:'flex',flexDirection:'column',gap:14}}>
+        <div style={{...card,textAlign:'center',display:'flex',flexDirection:'column',gap:8,alignItems:'center',padding:'20px 16px'}}>
+          <div style={{fontSize:11,fontWeight:800,letterSpacing:'.14em',textTransform:'uppercase',color:level.dark}}>Mi recorrido · {level.code}</div>
+          <h1 style={{fontFamily:GRD_FONT_T,fontWeight:600,fontSize:25,color:'#0D1B5A',lineHeight:1.15,margin:0}}>¡Buen camino, {first}!</h1>
+          <p style={{fontSize:14,color:'#4A5468',lineHeight:1.5,margin:0,textWrap:'pretty'}}>Conseguiste <b>{got} de {all.length}</b> módulos del nivel {level.code}.{all.length - got > 0 ? ` Te falta${all.length - got === 1 ? '' : 'n'} ${all.length - got} para completar el nivel.` : ' ¡Completaste el nivel!'}</p>
+        </div>
+        <div style={{...card,display:'flex',flexDirection:'column',gap:10}}>
+          {got > 0 && <><h3 style={h3}>🏅 Módulos conseguidos</h3><Shelf list={all.filter(b => b.earned)} /></>}
+          {all.length - got > 0 && <><h3 style={{...h3,marginTop:got ? 4 : 0}}>🧭 Te faltan</h3><Shelf list={all.filter(b => !b.earned)} /></>}
+        </div>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:14}}>
+        <div style={{background:'#0D1B5A',color:'#fff',borderRadius:16,padding:16,display:'flex',flexDirection:'column',gap:8}}>
+          <div style={{fontFamily:GRD_FONT_T,fontWeight:500,fontSize:19,lineHeight:1.3}}>“{G.QUOTES[qi][0]}”</div>
+          <div style={{fontSize:13.5,color:'#D6E0FF',lineHeight:1.45}}>{G.QUOTES[qi][1]}{nextIdx >= 0 ? ' Tu siguiente insignia te está esperando.' : ''}</div>
+          <button type="button" onClick={() => setQi(i => (i + 1) % G.QUOTES.length)} style={{alignSelf:'flex-end',border:'1px solid rgba(255,255,255,.35)',background:'none',color:'#fff',fontFamily:'inherit',fontWeight:800,fontSize:11.5,borderRadius:14,padding:'5px 11px',cursor:'pointer'}}>Otra frase ↻</button>
+        </div>
+        <div style={{...card,display:'flex',flexDirection:'column',gap:10}}>
+          <h3 style={{...h3,fontSize:18}}>{nextName ? `¿Retomamos en el ${nextName}?` : '¿Seguimos aprendiendo?'}</h3>
+          <p style={{fontSize:13.5,color:'#555',lineHeight:1.5,margin:0,textWrap:'pretty'}}>{msg}</p>
+          <a href={G.waLink(waText)} target="_blank" rel="noopener" style={{minHeight:48,borderRadius:24,background:'#1E8E4E',color:'#fff',fontWeight:800,fontSize:14.5,display:'flex',alignItems:'center',justifyContent:'center',gap:8,textDecoration:'none'}}>💬 Quiero retomar · {G.CONTACT.phoneLabel}</a>
+          <div style={{display:'flex',gap:10,alignItems:'flex-start',background:'#F4F7FB',borderRadius:12,padding:'10px 12px',fontSize:13,color:'#33415C',lineHeight:1.45}}>
+            <span style={{fontSize:16}}>📍</span>
+            <div><b style={{display:'block',color:'#0D1B5A'}}>Atención presencial</b>{G.CONTACT.address} · <a href={G.CONTACT.mapUrl} target="_blank" rel="noopener" style={{color:'#1F3A8A',fontWeight:800}}>Ver en el mapa</a></div>
+          </div>
+        </div>
+        {thanks && <div style={{background:'#E8F5E9',border:'1px solid #A5D6A7',borderRadius:14,padding:12,fontSize:13.5,color:'#1B5E20',lineHeight:1.45}}><b>¡Gracias, {first}!</b> Recibimos tu opinión.{survey && (survey.wants === 'si' || survey.wants === 'tal_vez') ? ' Te escribiremos con los horarios disponibles.' : ''}</div>}
+        <button type="button" onClick={onSurvey} style={{minHeight:46,borderRadius:23,border:`1.5px solid ${GRD_GOLD.bd}`,background:'#FFF8E1',color:GRD_GOLD.ink,fontFamily:'inherit',fontWeight:800,fontSize:14,cursor:'pointer'}}>{survey ? '✏️ Editar mi opinión' : '⭐ Cuéntanos tu experiencia'}</button>
+      </div>
+    </main>
+  );
+}
+
+/* ─── Profesor · ⏸ cerrar avance (por alumno) ─── */
+function CloseProgressModal({ student, onClose, onDone }) {
+  const D = window.JUCUM_DATA, G = window.JUCUM_GRAD, B = window.JUCUM_BADGES;
+  const mods = D.MODULE_CATALOG[student.level] || [];
+  const earned = B ? B.earnedIds(student) : [];
+  const lastEarned = mods.map(m => m.id).filter(id => earned.includes(id)).slice(-1)[0];
+  const [mod, setMod] = React.useState(lastEarned || (mods[0] && mods[0].id) || '');
+  const [reason, setReason] = React.useState('No se inscribió al siguiente módulo');
+  const [msg, setMsg] = React.useState('Gracias por ser parte de JUCUM. Tu avance quedó guardado: cuando quieras retomar, escríbenos y te contamos los horarios del siguiente módulo.');
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState('');
+  const fld = {display:'flex',flexDirection:'column',gap:5,fontSize:12.5,fontWeight:800,color:'#33415C'};
+  const inp = {fontFamily:'inherit',fontSize:13.5,fontWeight:600,border:'1.5px solid #D6DEEA',borderRadius:10,padding:'9px 11px',color:'#222',background:'#fff'};
+  const go = async () => {
+    setBusy(true); setErr('');
+    const r = await G.closeStudent(student.id, { moduleId: mod, reason, msg: msg.trim() });
+    setBusy(false);
+    if (!r.ok) { setErr(r.error || 'No se pudo guardar.'); return; }
+    onDone();
+  };
+  return (
+    <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(13,27,90,.42)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'32px 14px',overflow:'auto'}}>
+      <div onClick={e => e.stopPropagation()} style={{background:'#fff',borderRadius:18,width:'100%',maxWidth:540,padding:20,display:'flex',flexDirection:'column',gap:12}}>
+        <h3 style={{fontFamily:GRD_FONT_T,fontWeight:600,fontSize:19,color:'#0D1B5A',margin:0}}>⏸ Cerrar avance · {student.fullName}</h3>
+        <label style={fld}>Último módulo que llevó<select value={mod} onChange={e => setMod(e.target.value)} style={inp}>{mods.map((m, i) => <option key={m.id} value={m.id}>M{i + 1} · {m.name}{earned.includes(m.id) ? ' (🏅 conseguido)' : ''}</option>)}</select></label>
+        <label style={fld}>Motivo (solo lo ves tú)<select value={reason} onChange={e => setReason(e.target.value)} style={inp}>{['No se inscribió al siguiente módulo','Se retiró del programa','Cambio de horario / viaje','Otro'].map(x => <option key={x}>{x}</option>)}</select></label>
+        <label style={fld}>Mensaje para el alumno<textarea value={msg} onChange={e => setMsg(e.target.value)} style={{...inp,minHeight:62,resize:'vertical'}}></textarea></label>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:10}}>
+          <div style={{borderRadius:12,padding:'10px 12px',fontSize:12.5,lineHeight:1.5,background:'#E8F5E9',color:'#1B5E20'}}><b style={{display:'block',fontSize:11,letterSpacing:'.08em',textTransform:'uppercase'}}>Se conserva</b>Insignias, notas, práctica, boletín. Misma cuenta y contraseña.</div>
+          <div style={{borderRadius:12,padding:'10px 12px',fontSize:12.5,lineHeight:1.5,background:'#FFEBEE',color:'#8E1B1B'}}><b style={{display:'block',fontSize:11,letterSpacing:'.08em',textTransform:'uppercase'}}>Se apaga</b>Materiales, Mi práctica, Tareas, Examen, Foro, Hablemos y alarmas. Reversible con ↩ Reabrir.</div>
+        </div>
+        {err && <div style={{color:'#C62828',fontWeight:800,fontSize:13}}>⚠ {err}</div>}
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end',flexWrap:'wrap'}}>
+          <button className="btn-settings" onClick={onClose}>Cancelar</button>
+          <button disabled={busy} onClick={go} style={{minHeight:40,borderRadius:10,border:0,background:'#4A5468',color:'#fff',fontFamily:'inherit',fontWeight:800,fontSize:13.5,padding:'0 16px',cursor:'pointer',opacity:busy ? .6 : 1}}>{busy ? 'Guardando…' : '⏸ Cerrar avance'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+/* Sugerencias (nunca cierra solo): aprobó algún módulo, NO el último activo del grupo, y lleva ≥14 días sin practicar */
+function closeSuggestions(members, group) {
+  const D = window.JUCUM_DATA, B = window.JUCUM_BADGES;
+  if (!B || !group || !(group.level === 'a1' || group.level === 'a2')) return [];
+  const st = D.getGroupSettings(group.id) || {};
+  const act = (st.activeModuleIds && st.activeModuleIds.length) ? st.activeModuleIds : (st.activeModuleId ? [st.activeModuleId] : []);
+  const cur = act[act.length - 1];
+  return members.filter(s => !s.closedAt && (s.lastActiveDays == null ? false : s.lastActiveDays >= 14)).filter(s => {
+    const e = B.earnedIds(s); return e.length > 0 && (!cur || !e.includes(cur));
+  });
+}
+function ClosedStudentsList({ list, onChanged, onOpen }) {
+  const G = window.JUCUM_GRAD, D = window.JUCUM_DATA;
+  const [busy, setBusy] = React.useState('');
+  if (!list.length) return null;
+  const reopen = async (s) => {
+    if (!window.confirm(`¿Reabrir el avance de ${s.fullName}? Vuelve a tener todas las herramientas.`)) return;
+    setBusy(s.id); const r = await G.reopenStudent(s.id); setBusy('');
+    if (!r.ok) { alert(r.error || 'No se pudo reabrir.'); return; }
+    onChanged && onChanged();
+  };
+  return (
+    <div style={{marginTop:16,background:'#F7F8FA',border:'1px solid #E1E6EE',borderRadius:12,padding:12,display:'flex',flexDirection:'column',gap:8}}>
+      <div style={{fontWeight:800,fontSize:13,color:'#4A5468'}}>⏸ Avance cerrado ({list.length}) · no cuentan en la Clase en vivo, alarmas, dominio ni campeones del grupo</div>
+      {list.map(s => {
+        const mods = D.MODULE_CATALOG[s.level] || [];
+        const i = mods.findIndex(m => m.id === s.closedModule);
+        return (
+          <div key={s.id} style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',background:'#fff',border:'1px solid #E8E5DC',borderRadius:10,padding:'8px 10px',fontSize:13}}>
+            <b style={{color:'#667',flex:1,minWidth:140}}>{s.fullName}</b>
+            <span style={{fontSize:11,fontWeight:800,borderRadius:12,padding:'3px 9px',background:'#ECEFF4',color:'#4A5468'}}>⏸ {i >= 0 ? 'Hasta M' + (i + 1) : 'Cerrado'} · {window.JUCUM_GRAD.fmtDate(s.closedAt)}{s.closedReason ? ' · ' + s.closedReason : ''}</span>
+            <button className="btn-settings" onClick={() => onOpen && onOpen(s.id)}>Ver ficha</button>
+            <button className="btn-settings" disabled={busy === s.id} onClick={() => reopen(s)}>↩ Reabrir</button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+Object.assign(window, { StudentGraduated, ExitSurveyForm, FinishGroupModal, FinishedGroupBanner, GradLeads, grdStatusFor, GrdMedal, BadgeMedal, BadgeShelf, BadgeCelebration, JourneyHome, CloseProgressModal, closeSuggestions, ClosedStudentsList });

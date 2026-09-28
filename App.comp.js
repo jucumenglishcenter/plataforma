@@ -34,6 +34,8 @@ function applyRoster(groups, users) {
     completedModules: 0, avgScore: 0, streak: 0,
     lastActiveDays: 0, totalMinutes: 0, achievements: [],
     lastSeenAt: u.last_seen_at || null,   // 📶 último ingreso real (script 22)
+    // ⏸ avance cerrado (script 29) — sin columnas → null → activo
+    closedAt: u.closed_at || null, closedModule: u.closed_module || '', closedMsg: u.closed_msg || '', closedReason: u.closed_reason || '',
   }));
   window.JUCUM_DATA.STUDENTS.length = 0;
   students.forEach(s => window.JUCUM_DATA.STUDENTS.push(s));
@@ -268,7 +270,7 @@ function App() {
   if (user.role === 'dev') return <DevDashboard user={user} onLogout={onLogout} />;
   if (user.role === 'teacher') return <TeacherDashboard onLogout={onLogout} user={user} />;
   // 🎓 Egresado (grupo finalizado y no marcado como “sigue activo”) → solo su pantalla de cierre
-  if (window.JUCUM_GRAD && window.StudentGraduated && window.JUCUM_GRAD.isGraduated(user.studentId)) return <StudentGraduated user={user} onLogout={onLogout} />;
+  if (window.JUCUM_GRAD && window.StudentGraduated && (window.JUCUM_GRAD.isGraduated(user.studentId) || (window.JUCUM_GRAD.isClosed && window.JUCUM_GRAD.isClosed(user.studentId)))) return <StudentGraduated user={user} onLogout={onLogout} />;
   return <StudentDashboard user={user} onLogout={onLogout} />;
 }
 

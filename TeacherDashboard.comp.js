@@ -38,7 +38,7 @@ function TeacherDashboard({ onLogout, user }) {
 
   // 🎓 Los números del panel cuentan solo grupos ACTIVOS (los finalizados no practican ni alarman)
   const grdFin = (gid) => !!(window.JUCUM_GRAD && window.JUCUM_GRAD.isFinished(gid));
-  const activeStudents = STUDENTS.filter(s => !grdFin(s.group));
+  const activeStudents = STUDENTS.filter(s => !grdFin(s.group) && !s.closedAt);
   const totalStudents = activeStudents.length;
   const activeToday = activeStudents.filter(s => s.lastActiveDays === 0).length;
   const avgMastery = activeStudents.length ? Math.round(activeStudents.reduce((s, x) => s + getStudentMastery(x).pct, 0) / activeStudents.length) : 0;
@@ -466,7 +466,13 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
   const { GROUPS, STUDENTS, LEVELS, getStudentMastery, getStudentReadiness } = window.JUCUM_DATA;
   const group = GROUPS.find(g => g.id === groupId);
   const level = LEVELS[group.level];
-  const members = STUDENTS.filter(s => s.group === groupId);
+  // ⏸ Los de avance cerrado salen de la tabla/estadísticas y van a su lista gris al final
+  const allMembers = STUDENTS.filter(s => s.group === groupId);
+  const members = allMembers.filter(s => !s.closedAt);
+  const closedMembers = allMembers.filter(s => s.closedAt);
+  const [closing, setClosing] = React.useState(null);
+  const [showSugg, setShowSugg] = React.useState(false);
+  const sugg = window.closeSuggestions ? window.closeSuggestions(members, group) : [];
   const [showSettings, setShowSettings] = React.useState(false);
   const [showReport, setShowReport] = React.useState(false);
   const [showFinish, setShowFinish] = React.useState(false);
@@ -538,6 +544,20 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
       </div>
       <div className="tt-count">{shown.length} de {members.length} alumno{members.length===1?'':'s'}{q ? ` · filtrando «${q}»` : ''}</div>
 
+      {sugg.length > 0 && window.CloseProgressModal && (
+        <div style={{display:'flex',gap:10,alignItems:'center',background:'#FFF3E0',border:'1.5px solid #FFCC80',borderRadius:12,padding:'10px 12px',fontSize:13,color:'#6B3A00',flexWrap:'wrap',margin:'8px 0'}}>
+          <span>⚠️ <b style={{color:'#8A4B00'}}>{sugg.length} alumno{sugg.length===1?'':'s'}</b> aprob{sugg.length===1?'ó':'aron'} un módulo anterior pero no practica{sugg.length===1?'':'n'} hace más de 14 días. ¿No se inscribi{sugg.length===1?'ó':'eron'} al módulo actual?</span>
+          <span style={{flex:1}}></span>
+          <button className="btn-settings" onClick={() => setShowSugg(v => !v)}>{showSugg ? 'Ocultar' : 'Revisar'}</button>
+          {showSugg && <div style={{flexBasis:'100%',display:'flex',flexDirection:'column',gap:6}}>{sugg.map(s => (
+            <div key={s.id} style={{display:'flex',alignItems:'center',gap:8,background:'#fff',borderRadius:10,padding:'7px 10px',flexWrap:'wrap'}}>
+              <b style={{flex:1,minWidth:140}}>{s.fullName}</b><span style={{fontSize:12,color:'#8A4B00'}}>sin practicar {s.lastActiveDays}d</span>
+              <button className="btn-settings" onClick={() => setClosing(s)}>⏸ Cerrar avance</button>
+            </div>
+          ))}</div>}
+        </div>
+      )}
+
       <div className="student-table">
         <div className="st-head">
           <div className="col-name">Alumno</div>
@@ -549,9 +569,12 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
           <div className="col-status">Última práctica</div>
           <div></div>
         </div>
-        {shown.map((s, i) => <StudentRow key={s.id} stu={s} rank={i+1} level={level} onClick={() => onSelectStudent(s.id)} onDelete={() => setDeleting(s)} />)}
+        {shown.map((s, i) => <StudentRow key={s.id} stu={s} rank={i+1} level={level} onClick={() => onSelectStudent(s.id)} onDelete={() => setDeleting(s)} onCloseProgress={(group.level === 'a1' || group.level === 'a2') && window.CloseProgressModal ? () => setClosing(s) : null} />)}
         {shown.length === 0 && <div style={{padding:'26px',textAlign:'center',color:'#999',fontWeight:700}}>Sin resultados para «{q}»</div>}
       </div>
+
+      {window.ClosedStudentsList && <ClosedStudentsList list={closedMembers} onChanged={() => setGrdTick(t => t + 1)} onOpen={onSelectStudent} />}
+      {closing && <CloseProgressModal student={closing} onClose={() => setClosing(null)} onDone={() => { setClosing(null); setGrdTick(t => t + 1); }} />}
 
       {deleting && window.TeacherPasswordGate && (
         <TeacherPasswordGate
@@ -763,7 +786,7 @@ function GroupSettingsModal({ groupId, level, onClose }) {
  * actual, agrupa por tema y marca en vivo la actividad que el alumno está
  * haciendo en este momento. */
 
-function StudentRow({ stu, rank, level, onClick, onDelete }) {
+function StudentRow({ stu, rank, level, onClick, onDelete, onCloseProgress }) {
   const m = window.JUCUM_DATA.getStudentMastery(stu);
   const mastery = m.pct;
   // 🎓 Preparación para el examen (métrica distinta al dominio: castiga más la
@@ -807,7 +830,10 @@ function StudentRow({ stu, rank, level, onClick, onDelete }) {
         <div>{status.label}</div>
         {conn && <div style={{fontSize:10.5,fontWeight:700,color:'#8B8B8B',marginTop:2}}>{conn}</div>}
       </div>
-      {onDelete ? <button className="row-del" title="Eliminar alumno" onClick={(e) => { e.stopPropagation(); onDelete(); }}>🗑️</button> : <span></span>}
+      <div style={{display:'flex',gap:4,alignItems:'center'}}>
+        {onCloseProgress && <button className="row-del" title="⏸ Cerrar avance (no continuó al siguiente módulo)" onClick={(e) => { e.stopPropagation(); onCloseProgress(); }}>⏸</button>}
+        {onDelete ? <button className="row-del" title="Eliminar alumno" onClick={(e) => { e.stopPropagation(); onDelete(); }}>🗑️</button> : null}
+      </div>
     </div>
   );
 }
@@ -821,6 +847,8 @@ function StudentDetail({ studentId, onBack, onContact }) {
   const [resetting, setResetting] = React.useState(false);
   const Gate = window.TeacherPasswordGate;
   const [showReport, setShowReport] = React.useState(false);
+  const [closingMe, setClosingMe] = React.useState(false);
+  const [, setMeTick] = React.useState(0);
   const doReset = () => {
     if (window.JUCUM_SB) window.JUCUM_SB.update('users', stu.id, { password: '1234' }).catch(e => console.warn(e.message));
     setResetting(false);
@@ -850,8 +878,13 @@ function StudentDetail({ studentId, onBack, onContact }) {
           <button className="btn-soft" onClick={() => setShowReport(true)}>📄 Reporte de avance</button>
           <button className="btn-soft" onClick={() => onContact && onContact(stu.id)}>💬 Contactar</button>
           <button className="btn-soft" onClick={() => setResetting(true)}>🔑 Resetear contraseña</button>
+          {(stu.level === 'a1' || stu.level === 'a2') && window.CloseProgressModal && !stu.closedAt && <button className="btn-soft" onClick={() => setClosingMe(true)}>⏸ Cerrar avance</button>}
+          {stu.closedAt && window.JUCUM_GRAD && <button className="btn-soft" onClick={async () => { if (!window.confirm('¿Reabrir el avance de ' + stu.fullName + '?')) return; const r = await window.JUCUM_GRAD.reopenStudent(stu.id); if (!r.ok) alert(r.error || 'No se pudo reabrir.'); setMeTick(t => t + 1); }}>↩ Reabrir avance</button>}
         </div>
       </div>
+      {stu.closedAt && <div style={{background:'#ECEFF4',borderRadius:12,padding:'10px 14px',fontSize:13,color:'#4A5468',fontWeight:700,margin:'10px 0'}}>⏸ Avance cerrado el {window.JUCUM_GRAD ? window.JUCUM_GRAD.fmtDate(stu.closedAt) : stu.closedAt}{stu.closedReason ? ' · ' + stu.closedReason : ''}. Al entrar ve “Mi recorrido”.</div>}
+      {window.BadgeShelf && <div className="scard" style={{margin:'12px 0'}}><BadgeShelf student={stu} title="🏅 Insignias de módulo" /></div>}
+      {closingMe && <CloseProgressModal student={stu} onClose={() => setClosingMe(false)} onDone={() => { setClosingMe(false); setMeTick(t => t + 1); }} />}
 
       <div className="kpi-grid">
         <div className="kpi"><div className="kpi-ico">📦</div><div className="kpi-num">{stu.completedModules}</div><div className="kpi-lbl">Módulos completos</div></div>

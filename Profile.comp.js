@@ -39,6 +39,8 @@ function StudentProfile({ user, onBack }) {
         <div className="kpi"><div className="kpi-ico">⏱️</div><div className="kpi-num">{Math.floor(student.totalMinutes/60)}h {student.totalMinutes%60}m</div><div className="kpi-lbl">Tiempo total</div></div>
       </div>
 
+      {window.BadgeShelf && window.JUCUM_BADGES && window.JUCUM_BADGES.enabledFor(student) && <div className="scard" style={{marginBottom:18}}><BadgeShelf student={student} /></div>}
+
       <div className="two-col">
         <WeeklyLeague student={student} />
         <div className="scard">

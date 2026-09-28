@@ -338,6 +338,8 @@ function StudentDashboard({ user, onLogout }) {
     return true;
   });
   const [surveyDue, setSurveyDue] = React.useState(false);
+  // 🏅 Insignias ganadas aún no celebradas en este equipo (A1/A2) — se muestran una tras otra
+  const [badgeCeleb, setBadgeCeleb] = React.useState(() => { try { return !!(window.JUCUM_BADGES && window.JUCUM_BADGES.enabledFor(student) && window.JUCUM_BADGES.pending(student).length); } catch (e) { return false; } });
   React.useEffect(() => {
     try { if (window.JUCUM_SURVEY) setSurveyDue(window.JUCUM_SURVEY.isSurveyDue(student)); } catch {}
   }, [student && student.id]);
@@ -570,6 +572,7 @@ function StudentDashboard({ user, onLogout }) {
       {!showOnb && !celebrate && !alertKind && dropExp && <DropExplainModal exp={dropExp} student={student} onClose={() => { try { window.JUCUM_DATA.ackDropExplanation(student); } catch {} setDropExp(null); }} onGo={() => { setDropExp(null); setView('dashboard'); }} />}
       {!showOnb && !celebrate && !alertKind && !dropExp && taskDue && <TaskDueCartel assignment={taskDue} onGo={() => { setTaskDue(null); setView('tasks'); }} onClose={() => setTaskDue(null)} />}
       {!showOnb && !celebrate && !alertKind && !dropExp && !taskDue && muteModal && <ForumMuteModal info={muteModal} onClose={() => setMuteModal(null)} />}
+      {!showOnb && !celebrate && !alertKind && !dropExp && !taskDue && !muteModal && badgeCeleb && window.BadgeCelebration && <BadgeCelebration student={student} onDone={() => setBadgeCeleb(false)} />}
       <header className="app-header st-hdr">
         <button type="button" className={`st-burger ${sideOpen ? 'on' : ''}`} data-tut="nav" onClick={toggleSide} aria-label={sideOpen ? 'Ocultar menú' : 'Mostrar menú'} title={sideOpen ? 'Ocultar menú' : 'Mostrar menú'}>
           <span className="st-burger-ico">{sideOpen && !narrow ? '«' : '☰'}</span>
@@ -1660,6 +1663,10 @@ function ModuleRoute({ student, selectedId, onSelect }) {
   if (lastCur < 0) route.forEach((x, i) => { if (x.state === 'cur') lastCur = i; });
   if (lastCur < 0) lastCur = 0;
   const useEmoji = student.level === 'a1' || student.level === 'a2';
+  const BDG = window.JUCUM_BADGES;
+  const badges = (BDG && BDG.enabledFor(student)) ? BDG.list(student) : [];
+  const hasBadge = (id) => badges.some(b => b.mod.id === id && b.earned);
+  const badgeOf = (id) => badges.find(b => b.mod.id === id);
   return (
     <div style={{background:'#fff', border:'1px solid var(--border)', borderRadius:16, padding:'14px 8px 6px', marginTop:4}}>
       <div style={{fontSize:11, fontWeight:800, letterSpacing:'.06em', textTransform:'uppercase', color:'var(--text-mute,#A8A8A8)', margin:'0 10px 4px'}}>🗺️ Tu ruta · Módulo {lastCur + 1} de {route.length} · toca un módulo para ver su contenido</div>
@@ -1670,17 +1677,20 @@ function ModuleRoute({ student, selectedId, onSelect }) {
           const lock = x.state === 'lock';
           const isCur = i === lastCur && !lock;
           const pct = x.total ? Math.round(((x.doneCount || 0) / x.total) * 100) : 0;
-          const face = done ? '✓' : lock ? '🔒' : (useEmoji && x.mod.emoji ? x.mod.emoji : (i + 1));
-          const ring = done ? '#2EA84B' : lock ? '#EDE9DE' : `conic-gradient(#2EA84B ${pct * 3.6}deg, #E3E9F8 0deg)`;
+          const gold = hasBadge(x.mod.id);
+          const nextGold = i < route.length - 1 && gold && hasBadge(route[i + 1].mod.id);
+          const bd = gold ? badgeOf(x.mod.id) : null;
+          const face = gold ? (x.mod.emoji || '🏅') : done ? '✓' : lock ? '🔒' : (useEmoji && x.mod.emoji ? x.mod.emoji : (i + 1));
+          const ring = gold ? 'radial-gradient(circle at 35% 30%,#FFF0B8,#E0AE1E 60%,#B8860B)' : done ? '#2EA84B' : lock ? '#EDE9DE' : `conic-gradient(#2EA84B ${pct * 3.6}deg, #E3E9F8 0deg)`;
           return (
             <button key={x.mod.id} onClick={() => onSelect(x.mod.id)} style={{flex:'none', width:108, display:'flex', flexDirection:'column', alignItems:'center', gap:7, position:'relative', cursor:'pointer', background:'none', border:'none', fontFamily:'inherit', padding:0}}>
               {isCur && <span style={{position:'absolute', top:-14, fontSize:9, fontWeight:800, background:'#1F3A8A', color:'#fff', padding:'2px 7px', borderRadius:10, whiteSpace:'nowrap', zIndex:2}}>Aquí vas</span>}
               {x.hasReview && <span title="Tienes un repaso pendiente aquí" style={{position:'absolute', top:-4, right:26, width:17, height:17, borderRadius:'50%', background:'#5B3FA0', color:'#fff', fontSize:9, display:'flex', alignItems:'center', justifyContent:'center', zIndex:3, border:'2px solid #fff'}}>🔁</span>}
-              {i < route.length - 1 && <span style={{position:'absolute', top:24, left:78, width:54, height:3, background:done?'#2EA84B':'var(--border)', borderRadius:2, zIndex:0}}></span>}
-              <span style={{width:48, height:48, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', background:ring, zIndex:1, border: isCur ? '3px solid #1F3A8A' : '3px solid #fff', boxShadow: sel ? '0 0 0 4px rgba(242,148,30,.35)' : 'none'}}>
-                <span style={{width:34, height:34, borderRadius:'50%', background: done ? 'transparent' : '#fff', color: done ? '#fff' : lock ? '#A8A8A8' : '#1F3A8A', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize: (useEmoji && !done && !lock) ? 17 : 15}}>{face}</span>
+              {i < route.length - 1 && <span style={{position:'absolute', top:24, left:78, width:54, height:nextGold ? 4 : 3, background:nextGold ? 'linear-gradient(90deg,#E0AE1E,#F5D36B)' : (done||gold)?'#2EA84B':'var(--border)', borderRadius:2, zIndex:0}}></span>}
+              <span title={gold ? `🏅 Módulo conseguido${bd && bd.score != null ? ' · ' + bd.score : ''}` : undefined} style={{width:48, height:48, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', background:ring, zIndex:1, border: isCur ? '3px solid #1F3A8A' : gold ? '3px solid #A67C00' : '3px solid #fff', boxShadow: sel ? '0 0 0 4px rgba(242,148,30,.35)' : 'none'}}>
+                <span style={{width:34, height:34, borderRadius:'50%', background: (done || gold) ? 'transparent' : '#fff', color: gold ? '#5C4300' : done ? '#fff' : lock ? '#A8A8A8' : '#1F3A8A', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize: (gold || (useEmoji && !done && !lock)) ? 17 : 15}}>{face}</span>
               </span>
-              <span style={{fontSize:10.5, fontWeight:800, color:lock?'var(--text-mute,#A8A8A8)':'var(--text-soft,#6B6B6B)', textAlign:'center', lineHeight:1.2, maxWidth:98}}>M{i + 1}<br/>{x.mod.name}{!done && !lock && <span style={{display:'block', color:'#2EA84B', fontSize:9.5, marginTop:1}}>{pct}% completado</span>}</span>
+              <span style={{fontSize:10.5, fontWeight:800, color:lock?'var(--text-mute,#A8A8A8)':'var(--text-soft,#6B6B6B)', textAlign:'center', lineHeight:1.2, maxWidth:98}}>M{i + 1}<br/>{x.mod.name}{gold ? <span style={{display:'block', color:'#9A7400', fontSize:9.5, marginTop:1}}>🏅 Conseguido{bd && bd.score != null ? ' · ' + bd.score : ''}</span> : (!done && !lock && <span style={{display:'block', color:'#2EA84B', fontSize:9.5, marginTop:1}}>{pct}% completado</span>)}</span>
             </button>
           );
         })}

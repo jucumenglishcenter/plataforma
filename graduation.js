@@ -54,6 +54,30 @@
       ? 'Falta ejecutar el script 28 en Supabase (SQL Editor). ' + m : m;
   }
 
+  /* ⏸ Cierre de avance POR ALUMNO (A1/A2, inscripción por módulo · 29-sep · script 29):
+   * users.closed_at / closed_module / closed_msg / closed_reason. Siempre a mano, reversible. */
+  function isClosed(studentId) { var s = stu(studentId); return !!(s && s.closedAt); }
+  async function closeStudent(studentId, o) {
+    var s = stu(studentId); if (!s) return { ok: false, error: 'Alumno no encontrado' };
+    var today = new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
+    var patch = { closed_at: today, closed_module: o.moduleId || null, closed_msg: o.msg || null, closed_reason: o.reason || null };
+    var sb = SBc();
+    if (sb) { var r = await sb.from('users').update(patch).eq('id', studentId); if (r.error) return { ok: false, error: colErr29(r.error) }; }
+    Object.assign(s, { closedAt: today, closedModule: o.moduleId || '', closedMsg: o.msg || '', closedReason: o.reason || '' });
+    return { ok: true };
+  }
+  async function reopenStudent(studentId) {
+    var s = stu(studentId); if (!s) return { ok: false };
+    var sb = SBc();
+    if (sb) { var r = await sb.from('users').update({ closed_at: null, closed_module: null, closed_msg: null, closed_reason: null }).eq('id', studentId); if (r.error) return { ok: false, error: colErr29(r.error) }; }
+    Object.assign(s, { closedAt: null, closedModule: '', closedMsg: '', closedReason: '' });
+    return { ok: true };
+  }
+  function colErr29(e) {
+    var m = String((e && e.message) || e || '');
+    return /closed_|column|schema cache/i.test(m) ? 'Falta ejecutar el script 29 en Supabase (SQL Editor). ' + m : m;
+  }
+
   /* groupId, { label, date:'yyyy-mm-dd', msg, msgFail, keep:[ids], failed:[ids], moves:{ studentId: groupId } }
    * failed = reprobaron (se quedan con vista de cierre o, si están en moves, se integran al grupo nuevo). */
   async function finishGroup(groupId, o) {
@@ -110,6 +134,12 @@
       updated_at: new Date().toISOString(),
     };
     if (data.wants === 'no') row.status = 'no_continuara';
+    if (s && s.closedAt) {
+      var mods = ((D().MODULE_CATALOG || {})[s.level]) || [];
+      var ci = mods.findIndex(function (m) { return m.id === s.closedModule; });
+      row.result = 'cerrado';
+      row.finished_label = ci >= 0 ? ('Hasta M' + (ci + 1) + (mods[ci + 1] ? ' · retomar M' + (ci + 2) : '')) : 'Avance cerrado';
+    }
     var sb = SBc(); var ok = true, err = '';
     if (sb) { var r = await sb.from('exit_surveys').upsert(row); if (r.error) { ok = false; err = colErr(r.error); } }
     if (ok) {
@@ -138,7 +168,7 @@
 
   window.JUCUM_GRAD = {
     CONTACT: CONTACT, QUOTES: QUOTES, isFinished: isFinished, isGraduated: isGraduated, keepList: keepList,
-    failedList: failedList, isFailed: isFailed,
+    failedList: failedList, isFailed: isFailed, isClosed: isClosed, closeStudent: closeStudent, reopenStudent: reopenStudent,
     nextLevel: nextLevel, fmtDate: fmtDate, finishGroup: finishGroup, reopenGroup: reopenGroup,
     loadMySurvey: loadMySurvey, saveSurvey: saveSurvey, loadAllSurveys: loadAllSurveys, setLeadStatus: setLeadStatus,
     myCached: myCached, waLink: waLink,
