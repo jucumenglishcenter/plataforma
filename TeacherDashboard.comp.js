@@ -36,9 +36,12 @@ function TeacherDashboard({ onLogout, user }) {
   // reset borraba el data-level que acababa de poner GroupDetail → cabecera naranja (Pre-A1).
   React.useEffect(() => { if (view.kind !== 'group' && view.kind !== 'student') document.body.removeAttribute('data-level'); }, [view.kind]);
 
-  const totalStudents = STUDENTS.length;
-  const activeToday = STUDENTS.filter(s => s.lastActiveDays === 0).length;
-  const avgMastery = STUDENTS.length ? Math.round(STUDENTS.reduce((s, x) => s + getStudentMastery(x).pct, 0) / STUDENTS.length) : 0;
+  // 🎓 Los números del panel cuentan solo grupos ACTIVOS (los finalizados no practican ni alarman)
+  const grdFin = (gid) => !!(window.JUCUM_GRAD && window.JUCUM_GRAD.isFinished(gid));
+  const activeStudents = STUDENTS.filter(s => !grdFin(s.group));
+  const totalStudents = activeStudents.length;
+  const activeToday = activeStudents.filter(s => s.lastActiveDays === 0).length;
+  const avgMastery = activeStudents.length ? Math.round(activeStudents.reduce((s, x) => s + getStudentMastery(x).pct, 0) / activeStudents.length) : 0;
 
   /* ─── header is shared ─── */
   return (
@@ -56,7 +59,7 @@ function TeacherDashboard({ onLogout, user }) {
           <a className={`nav-link ${view.kind==='materials-review'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'materials-review'});}}>📚 Materiales</a>
           <a className={`nav-link ${view.kind==='messages'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'messages'});}} style={{position:'relative'}}>💬 Chats{(() => { const n = window.JUCUM_MSG ? window.JUCUM_MSG.unreadForTeacher() : 0; return n > 0 ? <span className="nav-dot">{n > 9 ? '9+' : n}</span> : null; })()}</a>
           <TeacherForumNav onOpen={(gid)=>setView({kind:'forum', group:gid})} />
-          <NotifBell userId="teacher" />
+          <NotifBell userId="teacher" onNotifClick={(n) => { if (n && n.link === 'leads') setView({kind:'leads'}); }} />
           <div className="user-pill">
             <div className="ava" style={{background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>{(teacherName.split(' ').map(n=>n[0]).slice(0,2).join('')||'JM').toUpperCase()}</div>
             <span>{teacherName}</span>
@@ -65,7 +68,9 @@ function TeacherDashboard({ onLogout, user }) {
         </div>
       </header>
 
-      {view.kind === 'assess' ? (
+      {view.kind === 'leads' && window.GradLeads ? (
+        <GradLeads onBack={() => setView({kind:'groups'})} />
+      ) : view.kind === 'assess' ? (
         <TeacherAssessment onBack={() => setView({kind:'groups'})} initialTab={view.tab} />
       ) : view.kind === 'messages' ? (
         <TeacherMessages onBack={() => setView({kind:'groups'})} initialOpen={view.open} />
@@ -120,6 +125,7 @@ function TeacherDashboard({ onLogout, user }) {
             stats={{ totalStudents, activeToday, avgMastery }}
             teacherName={teacherName}
             onSelectGroup={(id) => setView({kind:'group', id})}
+            onLeads={() => setView({kind:'leads'})}
           />
         )}
         {view.kind === 'group' && (
@@ -247,14 +253,32 @@ function PrepNotas() {
   );
 }
 
-function GroupsView({ stats, onSelectGroup, teacherName }) {
+function GroupsView({ stats, onSelectGroup, onLeads, teacherName }) {
   const { GROUPS, STUDENTS, LEVELS, getStudentMastery } = window.JUCUM_DATA;
+  // 🎓 Filtro Activos · Finalizados · Todos (se recuerda en este equipo — clave chiquita)
+  const GR = window.JUCUM_GRAD;
+  const isFin = (g) => !!(GR && GR.isFinished(g));
+  const [gFilter, setGFilter] = React.useState(() => { try { return localStorage.getItem('jucum_groups_filter_v1') || 'act'; } catch (e) { return 'act'; } });
+  const pickFilter = (f) => { setGFilter(f); try { if (window.JUCUM_STORE) window.JUCUM_STORE.set('jucum_groups_filter_v1', f); else localStorage.setItem('jucum_groups_filter_v1', f); } catch (e) {} };
+  const actGroups = GROUPS.filter(g => !isFin(g));
+  const finGroups = GROUPS.filter(isFin);
+  const shownGroups = gFilter === 'fin' ? finGroups : gFilter === 'all' ? [...actGroups, ...finGroups] : actGroups;
+  const [leadCount, setLeadCount] = React.useState(null);
+  React.useEffect(() => {
+    if (!GR) return;
+    GR.loadAllSurveys().then(r => { if (r.ok) setLeadCount(r.rows.filter(x => (x.wants === 'si' || x.wants === 'tal_vez') && (x.status === 'nuevo' || x.status === 'contactado')).length); });
+  }, []);
+  const segBtn = (k, label, n) => (
+    <button key={k} type="button" onClick={() => pickFilter(k)} style={{border:0,background:gFilter===k?'#fff':'none',boxShadow:gFilter===k?'0 1px 3px rgba(0,0,0,.12)':'none',fontFamily:'inherit',fontWeight:800,fontSize:12.5,padding:'7px 12px',borderRadius:8,color:gFilter===k?'#1F3A8A':'#555',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}>
+      {k === 'fin' && window.GrdMedal && <GrdMedal size={15} />}{label}{n != null && <span style={{background:'#1F3A8A',color:'#fff',borderRadius:9,fontSize:10,padding:'1px 6px'}}>{n}</span>}
+    </button>
+  );
   return (
     <>
       <div className="welcome teacher">
         <div className="welcome-text">
           <div className="eyebrow t">👨‍🏫 Hola, {teacherName || 'Joe Miller'}</div>
-          <h1>{stats.totalStudents} alumnos · 4 grupos activos</h1>
+          <h1>{stats.totalStudents} alumnos · {actGroups.length} grupo{actGroups.length===1?'':'s'} activo{actGroups.length===1?'':'s'}</h1>
           <p><b>{stats.activeToday}</b> alumnos practicaron hoy · Dominio general <b>{stats.avgMastery}%</b></p>
         </div>
       </div>
@@ -263,18 +287,41 @@ function GroupsView({ stats, onSelectGroup, teacherName }) {
         <div className="kpi"><div className="kpi-ico">👥</div><div className="kpi-num">{stats.totalStudents}</div><div className="kpi-lbl">Total alumnos</div></div>
         <div className="kpi"><div className="kpi-ico">🟢</div><div className="kpi-num">{stats.activeToday}</div><div className="kpi-lbl">Practicaron hoy</div></div>
         <div className="kpi"><div className="kpi-ico">📊</div><div className="kpi-num">{stats.avgMastery}%</div><div className="kpi-lbl">Dominio</div></div>
-        <div className="kpi"><div className="kpi-ico">🎯</div><div className="kpi-num">4</div><div className="kpi-lbl">Grupos</div></div>
+        <div className="kpi"><div className="kpi-ico">🎯</div><div className="kpi-num">{actGroups.length}</div><div className="kpi-lbl">Grupos activos</div></div>
       </div>
 
-      <div className="sec-head" style={{marginTop:18}}>
+      <div className="sec-head" style={{marginTop:18,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
         <div className="sec-title">Mis grupos</div>
         <span className="sec-meta">Click para ver los alumnos</span>
+        <span style={{flex:1}}></span>
+        {GR && <button type="button" onClick={onLeads} style={{display:'inline-flex',alignItems:'center',gap:6,border:'1.5px solid #A5D6A7',background:'#E8F5E9',color:'#1B5E20',borderRadius:10,fontFamily:'inherit',fontWeight:800,fontSize:12.5,padding:'7px 12px',cursor:'pointer'}}>🙋 Interesados en continuar{leadCount ? <span style={{background:'#1E8E4E',color:'#fff',borderRadius:9,fontSize:10,padding:'1px 6px'}}>{leadCount}</span> : null}</button>}
+        {GR && <div style={{display:'flex',background:'#ECEFF4',borderRadius:10,padding:3,gap:2}}>{segBtn('act','Activos',actGroups.length)}{segBtn('fin','Finalizados',finGroups.length)}{segBtn('all','Todos')}</div>}
       </div>
 
+      {!shownGroups.length && <div className="empty-state">{gFilter === 'fin' ? 'Aún no hay grupos finalizados. Se finaliza desde dentro del grupo con “🎓 Finalizar grupo”.' : 'No hay grupos aquí.'}</div>}
       <div className="groups-grid">
-        {GROUPS.map(g => {
-          const level = LEVELS[g.level];
+        {shownGroups.map(g => {
+          const level = LEVELS[g.level] || { color:'#B0AC9E', dark:'#5b5648', emoji:'❓', code:String(g.level || '?') };
           const members = STUDENTS.filter(s => s.group === g.id);
+          if (isFin(g)) {
+            const kept = GR.keepList(g).filter(id => members.some(m => m.id === id)).length;
+            const failN = GR.failedList(g).filter(id => members.some(m => m.id === id)).length;
+            return (
+              <div key={g.id} className={`gcard lvl-${g.level}`} onClick={() => onSelectGroup(g.id)} style={{background:'#FFFCF3',borderColor:'#E9D9A6',position:'relative',overflow:'hidden'}}>
+                <div style={{position:'absolute',top:12,right:-38,transform:'rotate(35deg)',background:'#C9971A',color:'#fff',fontSize:9.5,fontWeight:800,letterSpacing:'.1em',padding:'3px 42px',textTransform:'uppercase'}}>Finalizado</div>
+                <div className="gcard-head">
+                  <span className="gcard-pill" style={{background:'linear-gradient(135deg,'+level.color+','+level.dark+')', color:'#fff', border:'none', filter:'saturate(.4)'}}>{level.emoji} {level.code}</span>
+                </div>
+                <div className="gcard-name">{g.name}</div>
+                <span style={{display:'inline-flex',alignItems:'center',gap:6,background:'#FFF1C9',border:'1px solid #E3C466',color:'#7A5A00',borderRadius:20,fontSize:11,fontWeight:800,padding:'3px 10px',width:'max-content',marginTop:4}}>{window.GrdMedal && <GrdMedal size={15} />}{g.finishedLabel || 'Etapa completada'}</span>
+                <div className="gcard-stats">
+                  <div>🗓 Cerró el <b>{GR.fmtDate(g.finishedAt)}</b></div>
+                  <div>🎓 <b>{members.length - kept - failN}</b> egresado{members.length - kept - failN === 1 ? '' : 's'}{failN ? <> · ❌ <b>{failN}</b> reprobó{failN === 1 ? '' : 'aron'}</> : null}{kept ? <> · <b>{kept}</b> sigue{kept === 1 ? '' : 'n'} activo{kept === 1 ? '' : 's'}</> : null}</div>
+                </div>
+                <div className="gcard-go">Ver historial →</div>
+              </div>
+            );
+          }
           const groupAvg = members.length ? Math.round(members.reduce((s,x)=>s+getStudentMastery(x).pct,0)/members.length) : 0;
           const activeNow = members.filter(s => s.lastActiveDays <= 1).length;
           const inactive = members.filter(s => s.lastActiveDays >= 7).length;
@@ -422,6 +469,9 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
   const members = STUDENTS.filter(s => s.group === groupId);
   const [showSettings, setShowSettings] = React.useState(false);
   const [showReport, setShowReport] = React.useState(false);
+  const [showFinish, setShowFinish] = React.useState(false);
+  const [, setGrdTick] = React.useState(0);
+  const grdFinished = !!(window.JUCUM_GRAD && window.JUCUM_GRAD.isFinished(group));
   React.useEffect(() => { document.body.setAttribute('data-level', group.level); return () => document.body.removeAttribute('data-level'); }, [group.level]);
 
   const groupAvg = members.length ? Math.round(members.reduce((s,x)=>s+getStudentMastery(x).pct,0)/members.length) : 0;
@@ -449,6 +499,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
   return (
     <>
       <button className="back-btn" onClick={onBack}>← Volver a grupos</button>
+      {grdFinished && window.FinishedGroupBanner && <FinishedGroupBanner group={group} onChanged={() => setGrdTick(t => t + 1)} />}
       <div className="welcome group">
         <div className="welcome-text">
           <div className="eyebrow">{level.emoji} {level.code} · {group.schedule}</div>
@@ -458,7 +509,9 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
         <button className="btn-settings" onClick={() => setShowSettings(true)}>⚙️ Configurar grupo</button>
         <button className="btn-settings" onClick={() => setShowReport(true)} style={{marginLeft:8}}>📄 Reporte PDF</button>
         <button className="btn-settings" onClick={() => { if (window.JUCUM_STUDENT_PREVIEW) window.JUCUM_STUDENT_PREVIEW.open(groupId); }} style={{marginLeft:8}} title="Ver la app tal como la ve un alumno de este grupo (demostración)">👁 Ver como alumno</button>
+        {!grdFinished && window.FinishGroupModal && <button className="btn-settings" onClick={() => setShowFinish(true)} style={{marginLeft:8,background:'#B8860B',borderColor:'#B8860B',color:'#fff'}} title="Cerrar el grupo: sus alumnos ven la pantalla de cierre y conservan su avance">🎓 Finalizar grupo</button>}
       </div>
+      {showFinish && <FinishGroupModal groupId={groupId} onClose={() => setShowFinish(false)} onDone={() => { setShowFinish(false); setGrdTick(t => t + 1); }} />}
 
       <GroupModulesQuick groupId={groupId} />
 

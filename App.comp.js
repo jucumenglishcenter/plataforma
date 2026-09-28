@@ -11,7 +11,12 @@ function applyRoster(groups, users) {
   window.JUCUM_DATA.GROUPS.length = 0;
   groups.forEach(g => window.JUCUM_DATA.GROUPS.push({
     id: g.id, level: g.level, name: g.name, schedule: g.schedule,
-    startDate: g.start_date, _settings: {
+    startDate: g.start_date,
+    // 🎓 script 28 · grupo finalizado (sin columnas → undefined → activo)
+    finishedAt: g.finished_at || null, finishedLabel: g.finished_label || '', finishedMsg: g.finished_msg || '',
+    finishedKeep: Array.isArray(g.finished_keep) ? g.finished_keep : [],
+    finishedFailed: Array.isArray(g.finished_failed) ? g.finished_failed : [], finishedMsgFail: g.finished_msg_fail || '',
+    _settings: {
       activeModuleId: g.active_module_id, deadline: g.deadline,
       dailyTargetMin: g.daily_target_min ?? 15, isPaused: g.is_paused,
       unlockMode: g.unlock_mode || 'sequential',
@@ -262,6 +267,8 @@ function App() {
   if (user.role === 'admin') return <AdminDashboard user={user} onLogout={onLogout} />;
   if (user.role === 'dev') return <DevDashboard user={user} onLogout={onLogout} />;
   if (user.role === 'teacher') return <TeacherDashboard onLogout={onLogout} user={user} />;
+  // 🎓 Egresado (grupo finalizado y no marcado como “sigue activo”) → solo su pantalla de cierre
+  if (window.JUCUM_GRAD && window.StudentGraduated && window.JUCUM_GRAD.isGraduated(user.studentId)) return <StudentGraduated user={user} onLogout={onLogout} />;
   return <StudentDashboard user={user} onLogout={onLogout} />;
 }
 
