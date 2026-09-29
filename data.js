@@ -2136,6 +2136,9 @@ function getModuleRoute(student) {
  * abría seleccionando un módulo viejo en vez del que el profesor acaba de activar. */
 function getFocusModuleId(student) {
   const route = getModuleRoute(student);
+  /* ⭕ 29-sep-2026 · manda el módulo “de clase” del grupo (último prendido o 📌 fijado) */
+  const cls = getClassModuleId(student.group);
+  if (cls && route.some(x => !x.placeholder && x.active && x.mod.id === cls)) return cls;
   /* 🎯 23-ago-2026: si la profesora APERTURÓ un módulo, ESE es el actual — aunque el alumno
    * ya lo tenga 100% completado. Antes un módulo activo completo pasaba a 'done' y “Aquí vas”
    * se regresaba a un módulo anterior con pendientes (el nuevo quedaba abajo). */
@@ -2146,6 +2149,26 @@ function getFocusModuleId(student) {
   const dones = route.filter(x => x.state === 'done');
   if (dones.length) return dones[dones.length - 1].mod.id;
   return route[0] ? route[0].mod.id : null;
+}
+
+/* ⭕ 29-sep-2026 · Módulo “EN CLASE AHORA” del grupo = el ÚLTIMO de activeModuleIds.
+ * En A1/A2 esa lista guarda el ORDEN DE APERTURA (lo nuevo se agrega al final) y 📌
+ * “Marcar como el de clase” lo mueve al final — viaja a la nube en active_module_ids,
+ * sin columnas nuevas. En Pre-A1 la lista sigue en orden de catálogo (= mismo resultado). */
+function getClassModuleId(groupId) {
+  try {
+    const s = getGroupSettings(groupId) || {};
+    const ids = (s.activeModuleIds && s.activeModuleIds.length) ? s.activeModuleIds : (s.activeModuleId ? [s.activeModuleId] : []);
+    return ids.length ? ids[ids.length - 1] : null;
+  } catch (e) { return null; }
+}
+/* Nueva lista de activos al prender/apagar: A1/A2 conserva el orden de apertura */
+function nextActiveIds(level, prevIds, modules, set) {
+  if (level === 'a1' || level === 'a2') {
+    const keep = (prevIds || []).filter(id => set.has(id) && modules.some(m => m.id === id));
+    return [...keep, ...modules.filter(m => set.has(m.id) && !keep.includes(m.id)).map(m => m.id)];
+  }
+  return modules.filter(m => set.has(m.id)).map(m => m.id);
 }
 
 /* Mejor racha histórica (récord personal). Se actualiza al leer. */
@@ -2321,6 +2344,8 @@ function getModuleNumber(level, moduleId) {
   return j >= 0 ? j + 1 : null;
 }
 window.JUCUM_DATA.getModuleNumber = getModuleNumber;
+window.JUCUM_DATA.getClassModuleId = getClassModuleId;
+window.JUCUM_DATA.nextActiveIds = nextActiveIds;
 
 
 /* ── Meta diaria multi-equipo: hidratar minutos de HOY desde la nube ──

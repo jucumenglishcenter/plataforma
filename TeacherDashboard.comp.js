@@ -337,6 +337,25 @@ function GroupsView({ stats, onSelectGroup, onLeads, onClosed, teacherName }) {
               </div>
               <div className="gcard-name">{g.name}</div>
               <div className="gcard-sched">⏰ {g.schedule}</div>
+              {(() => {
+                /* ⭕ ▶ En clase ahora (módulo de clase del grupo) */
+                const D1 = window.JUCUM_DATA; if (!D1.getClassModuleId) return null;
+                const cid = D1.getClassModuleId(g.id); const cm = cid && (D1.MODULE_CATALOG[g.level] || []).find(m => m.id === cid);
+                if (!cm) return null;
+                const nAct = ((D1.getGroupSettings(g.id) || {}).activeModuleIds || []).length;
+                let od = ''; try { const d = D1.getModuleOpenedAt && D1.getModuleOpenedAt(g.id, cid); od = d ? new Date(d + 'T12:00:00Z').toLocaleDateString('es-PE', { day:'numeric', month:'short', timeZone:'UTC' }) : ''; } catch (e) {}
+                return (
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginTop:7,padding:'7px 10px',borderRadius:10,background:'#EEF4FF',border:'1px solid #C5D6F2'}}>
+                    <span style={{fontSize:18}}>{cm.emoji}</span>
+                    <span style={{display:'flex',flexDirection:'column',minWidth:0}}>
+                      <span style={{fontSize:10,fontWeight:800,letterSpacing:'.08em',textTransform:'uppercase',color:'#1F3A8A'}}>▶ En clase ahora</span>
+                      <b style={{fontSize:12.5,color:'#0D1B5A',lineHeight:1.2}}>{cm.name}</b>
+                      {od && <span style={{fontSize:10.5,fontWeight:700,color:'#5A6B86'}}>desde {od}</span>}
+                    </span>
+                    {nAct > 1 && <span style={{marginLeft:'auto',fontSize:10.5,fontWeight:800,color:'#2E7D32',background:'#E8F5E9',borderRadius:9,padding:'1px 7px',whiteSpace:'nowrap'}}>+{nAct - 1} abierto{nAct > 2 ? 's' : ''}</span>}
+                  </div>
+                );
+              })()}
               <div className="gcard-stats">
                 <div><b style={{color:level.dark}}>{groupAvg}%</b> dominio</div>
                 <div><b style={{color:'#2E7D32'}}>{activeNow}</b> practicando</div>
@@ -426,15 +445,21 @@ function GroupModulesQuick({ groupId }) {
   const group = GROUPS.find(g => g.id === groupId);
   const modules = MODULE_CATALOG[group.level] || [];
   const [s, setS] = React.useState(() => getGroupSettings(groupId));
+  const noNum = group.level === 'a1' || group.level === 'a2';
+  const D0 = window.JUCUM_DATA;
   const toggle = (id) => {
     const set = new Set(s.activeModuleIds || []);
     if (set.has(id)) set.delete(id); else set.add(id);
-    const ids = modules.filter(x => set.has(x.id)).map(x => x.id);
+    const ids = D0.nextActiveIds ? D0.nextActiveIds(group.level, s.activeModuleIds, modules, set) : modules.filter(x => set.has(x.id)).map(x => x.id);
     const next = { ...s, activeModuleIds: ids, activeModuleId: ids[0] || null };
     setS(next); setGroupSettings(groupId, next);
   };
   const activeCount = (s.activeModuleIds || []).length;
-
+  /* ⭕ ▶ En clase ahora = último prendido; 📌 lo fija a mano (lo mueve al final de la lista activa) */
+  const clsId = activeCount ? s.activeModuleIds[activeCount - 1] : null;
+  const pin = (id) => { const ids = [...(s.activeModuleIds || []).filter(x => x !== id), id]; const next = { ...s, activeModuleIds: ids, activeModuleId: ids[0] || null }; setS(next); setGroupSettings(groupId, next); };
+  const shownMods = noNum && clsId ? [...modules.filter(m => m.id === clsId), ...modules.filter(m => m.id !== clsId)] : modules;
+  const openedTxt = (id) => { try { const d = D0.getModuleOpenedAt && D0.getModuleOpenedAt(groupId, id); return d ? new Date(d + 'T12:00:00Z').toLocaleDateString('es-PE', { day:'numeric', month:'short', timeZone:'UTC' }) : ''; } catch (e) { return ''; } };
   return (
     <div className="scard" style={{marginBottom:16}}>
       <div className="sec-head">
@@ -443,14 +468,18 @@ function GroupModulesQuick({ groupId }) {
       </div>
       {modules.length === 0 ? <div className="settings-hint">Este nivel no tiene módulos cargados.</div> : (
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))', gap:10}}>
-          {modules.map(m => {
+          {shownMods.map(m => {
             const on = (s.activeModuleIds || []).includes(m.id);
+            const cur = on && m.id === clsId;
+            const od = cur ? openedTxt(m.id) : '';
             return (
-              <div key={m.id} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 14px',border:'1.5px solid '+(on?'#A5D6A7':'#E6E3DA'),borderRadius:10,background:on?'#F0FAF1':'#fff'}}>
+              <div key={m.id} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 14px',border:cur ? '2px solid #1F3A8A' : '1.5px solid '+(on?'#A5D6A7':'#E6E3DA'),borderRadius:10,background:cur ? '#F4F8FF' : on?'#F0FAF1':'#fff',position:'relative'}}>
+                {cur && <span style={{position:'absolute',top:-9,left:12,fontSize:10,fontWeight:800,background:'#1F3A8A',color:'#fff',borderRadius:9,padding:'1px 8px'}}>▶ En clase ahora</span>}
                 <span style={{fontSize:20}}>{m.emoji}</span>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontFamily:"'Fredoka',sans-serif",fontWeight:600,fontSize:13,color:'var(--text)'}}>{m.name}</div>
-                  <div style={{fontSize:11,color:on?'#2E7D32':'var(--text-soft)',fontWeight:700,marginTop:1}}>{on ? '🟢 Activo' : '⚪ Apagado'} · {m.activities.length} act.</div>
+                  <div style={{fontSize:11,color:on?'#2E7D32':'var(--text-soft)',fontWeight:700,marginTop:1}}>{cur ? (od ? 'Abierto el ' + od : '🟢 Activo') : on ? (activeCount > 1 ? '🟢 Abierto para repasar' : '🟢 Activo') : '⚪ Apagado'} · {m.activities.length} act.</div>
+                  {on && !cur && <button type="button" onClick={() => pin(m.id)} style={{marginTop:5,fontSize:11,fontWeight:800,color:'#1F3A8A',border:'1.5px solid #C5D6F2',background:'#fff',borderRadius:9,padding:'3px 8px',cursor:'pointer',fontFamily:'inherit'}}>📌 Marcar como el de clase</button>}
                 </div>
                 <button type="button" onClick={()=>toggle(m.id)} aria-label={on?'Apagar':'Prender'}
                         style={{width:48,height:27,borderRadius:14,border:'none',cursor:'pointer',background:on?'#2EA84B':'#CFCFC8',position:'relative',transition:'background .15s',flexShrink:0,padding:0}}>
@@ -462,6 +491,7 @@ function GroupModulesQuick({ groupId }) {
         </div>
       )}
       {activeCount === 0 && <div className="settings-hint" style={{marginTop:8,color:'#C62828',fontWeight:700}}>⚠ Sin módulos activos, los alumnos no verán actividades.</div>}
+      {activeCount > 1 && <div className="settings-hint" style={{marginTop:8}}>▶ “En clase ahora” = el último módulo que prendiste. Es el que tus alumnos ven como “Aquí vas”.</div>}
     </div>
   );
 }
@@ -514,6 +544,13 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
         <div className="welcome-text">
           <div className="eyebrow">{level.emoji} {level.code} · {group.schedule}</div>
           <h1>{group.name}</h1>
+          {(() => {
+            const D1 = window.JUCUM_DATA; const cid = D1.getClassModuleId && D1.getClassModuleId(groupId);
+            const cm = cid && (D1.MODULE_CATALOG[group.level] || []).find(m => m.id === cid);
+            if (!cm) return null;
+            let od = ''; try { const d = D1.getModuleOpenedAt && D1.getModuleOpenedAt(groupId, cid); od = d ? new Date(d + 'T12:00:00Z').toLocaleDateString('es-PE', { day:'numeric', month:'short', timeZone:'UTC' }) : ''; } catch (e) {}
+            return <span style={{display:'inline-flex',alignItems:'center',gap:6,background:'#1F3A8A',color:'#fff',borderRadius:20,padding:'4px 12px 4px 5px',fontSize:12.5,fontWeight:800,maxWidth:'100%',margin:'4px 0'}}><span style={{background:'#fff',borderRadius:'50%',width:24,height:24,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:13,flex:'none'}}>{cm.emoji}</span>En clase ahora · {cm.name}{od ? <span style={{fontWeight:700,opacity:.8,fontSize:11}}> · desde {od}</span> : null}</span>;
+          })()}
           <p>{members.length} alumnos · dominio del grupo <b>{groupAvg}%</b> · 🎓 <b>{aptCount}</b> apto{aptCount===1?'':'s'} para examen · iniciado el {group.startDate}</p>
         </div>
         <button className="btn-settings" onClick={() => setShowSettings(true)}>⚙️ Configurar grupo</button>
@@ -650,7 +687,7 @@ function GroupSettingsModal({ groupId, level, onClose }) {
                 const toggle = () => {
                   const set = new Set(s.activeModuleIds || []);
                   if (on) set.delete(m.id); else set.add(m.id);
-                  const ids = modules.filter(x => set.has(x.id)).map(x => x.id);
+                  const ids = window.JUCUM_DATA.nextActiveIds ? window.JUCUM_DATA.nextActiveIds(group.level, s.activeModuleIds, modules, set) : modules.filter(x => set.has(x.id)).map(x => x.id);
                   setS({...s, activeModuleIds: ids, activeModuleId: ids[0] || null});
                 };
                 return (

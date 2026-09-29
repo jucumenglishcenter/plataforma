@@ -116,7 +116,7 @@ function StudentGraduated({ user, onLogout }) {
               <h1 style={{fontFamily:GRD_FONT_T,fontWeight:600,fontSize:25,color:'#0D1B5A',lineHeight:1.15,margin:0}}>{first}, ¡no te rindas!</h1>
               <p style={{fontSize:14,color:'#4A5468',lineHeight:1.5,margin:0,textWrap:'pretty'}}>Terminaste el ciclo de <b>{label}</b> con el grupo {group.name}. Esta vez no se llegó a la nota, pero lo que aprendiste es tuyo y te hace más fuerte para el próximo intento.</p>
               <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'center'}}>
-                {st.mods.map((m, i) => <span key={m.id} style={{fontSize:11.5,fontWeight:800,borderRadius:14,padding:'4px 10px',background:'#F4F7FB',border:'1px solid #DDE3EC',color:'#33415C'}}>M{i + 1} practicado</span>)}
+                {st.mods.map((m, i) => <span key={m.id} style={{fontSize:11.5,fontWeight:800,borderRadius:14,padding:'4px 10px',background:'#F4F7FB',border:'1px solid #DDE3EC',color:'#33415C'}}>{(student.level === 'a1' || student.level === 'a2') ? `${m.emoji || ''} ${m.name}`.trim() : `M${i + 1}`} practicado</span>)}
                 <span style={{fontSize:11.5,fontWeight:800,borderRadius:14,padding:'4px 10px',background:'#fff',border:'1.5px dashed #8FA6CF',color:'#1F3A8A'}}>Próximo paso: volver a intentarlo</span>
               </div>
             </div>
@@ -127,7 +127,7 @@ function StudentGraduated({ user, onLogout }) {
               <h1 style={{fontFamily:GRD_FONT_T,fontWeight:600,fontSize:26,color:'#0D1B5A',lineHeight:1.15,margin:0}}>¡Lo lograste, {first}!</h1>
               <p style={{fontSize:14,color:'#4A5468',lineHeight:1.5,margin:0,textWrap:'pretty'}}>Terminaste <b>{label}</b> con el grupo {group.name}.</p>
               <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'center'}}>
-                {st.mods.map((m, i) => <span key={m.id} style={{fontSize:11.5,fontWeight:800,borderRadius:14,padding:'4px 10px',background:'#E8F5E9',border:'1px solid #A5D6A7',color:'#1B5E20'}}>✓ M{i + 1}</span>)}
+                {st.mods.map((m, i) => <span key={m.id} style={{fontSize:11.5,fontWeight:800,borderRadius:14,padding:'4px 10px',background:'#E8F5E9',border:'1px solid #A5D6A7',color:'#1B5E20'}}>✓ {(student.level === 'a1' || student.level === 'a2') ? `${m.emoji || ''} ${m.name}`.trim() : `M${i + 1}`}</span>)}
                 {nx && <span style={{fontSize:11.5,fontWeight:800,borderRadius:14,padding:'4px 10px',background:'#fff',border:'1.5px dashed #8FA6CF',color:'#1F3A8A'}}>Siguiente: {nx}</span>}
               </div>
             </div>
@@ -228,6 +228,13 @@ function FinishGroupModal({ groupId, onClose, onDone }) {
   const others = D.GROUPS.filter(g => g.id !== groupId && !G.isFinished(g)).sort((a, b) => (a.level + a.name).localeCompare(b.level + b.name, 'es'));
   const labels = ['Nivel ' + level.code + ' completo', ...mods.map((m, i) => `Hasta el Módulo ${i + 1} · ${m.name}`)];
   const [label, setLabel] = React.useState(labels[0]);
+  /* ⭕ 29-sep-2026 · A1/A2 sin orden: “Nivel completo” o “Parte del nivel” marcando los módulos cursados (nunca “Hasta el Módulo N”) */
+  const noNum = group.level === 'a1' || group.level === 'a2';
+  const [partial, setPartial] = React.useState(false);
+  const [picked, setPicked] = React.useState(() => { const s = D.getGroupSettings(groupId) || {}; return (s.activeModuleIds || []).filter(id => mods.some(m => m.id === id)); });
+  const pickedNames = mods.filter(m => picked.includes(m.id)).map(m => `${m.emoji || ''} ${m.name}`.trim());
+  const joinY = a => a.length <= 1 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' y ' + a[a.length - 1];
+  const finalLabel = !noNum ? label : (!partial || !pickedNames.length) ? labels[0] : (pickedNames.length === 1 ? 'el módulo ' : 'los módulos ') + joinY(pickedNames);
   const [date, setDate] = React.useState(() => new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10)); // día Perú
   const [msg, setMsg] = React.useState('¡Felicitaciones! Terminaste esta etapa. Escríbenos o visítanos para conocer los nuevos horarios y seguir avanzando con tu inglés.');
   const [msgFail, setMsgFail] = React.useState('Esta vez no alcanzaste la nota para aprobar, pero todo lo que practicaste queda guardado. Comunícate con nosotros para conocer los nuevos horarios y volver a llevar el nivel. ¡Cada día con esfuerzo mejorarás más!');
@@ -253,7 +260,7 @@ function FinishGroupModal({ groupId, onClose, onDone }) {
       else if (v.startsWith('failmove:')) { failed.push(sid); moves[sid] = v.slice(9); }
       else if (v.startsWith('move:')) moves[sid] = v.slice(5);
     });
-    const r = await G.finishGroup(groupId, { label, date, msg: msg.trim(), msgFail: msgFail.trim(), keep, moves, failed });
+    const r = await G.finishGroup(groupId, { label: finalLabel, date, msg: msg.trim(), msgFail: msgFail.trim(), keep, moves, failed });
     setBusy(false);
     if (!r.ok) { setErr(r.error || 'No se pudo guardar.'); return; }
     if (r.fails && r.fails.length) alert('No se pudo mover a: ' + r.fails.join(', ') + '. Muévelos desde Gestionar alumnos.');
@@ -264,9 +271,22 @@ function FinishGroupModal({ groupId, onClose, onDone }) {
       <div onClick={e => e.stopPropagation()} style={{background:'#fff',borderRadius:18,width:'100%',maxWidth:640,padding:20,display:'flex',flexDirection:'column',gap:13}}>
         <h3 style={{fontFamily:GRD_FONT_T,fontWeight:600,fontSize:19,color:'#0D1B5A',display:'flex',gap:10,alignItems:'center',margin:0}}><GrdMedal size={26} />Finalizar grupo · {group.name}</h3>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:10}}>
-          <label style={fld}>¿Qué terminaron?<select value={label} onChange={e => setLabel(e.target.value)} style={inp}>{labels.map(l => <option key={l}>{l}</option>)}</select></label>
+          {noNum ? (
+            <div style={fld}>¿Qué terminaron?
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{[[false, labels[0]], [true, 'Parte del nivel']].map(([v, t]) => <button key={t} type="button" onClick={() => setPartial(v)} style={{...inp,cursor:'pointer',fontWeight:800,fontSize:12.5,padding:'8px 11px',background:partial === v ? '#1F3A8A' : '#fff',color:partial === v ? '#fff' : '#33415C',borderColor:partial === v ? '#1F3A8A' : '#D6DEEA'}}>{t}</button>)}</div>
+            </div>
+          ) : <label style={fld}>¿Qué terminaron?<select value={label} onChange={e => setLabel(e.target.value)} style={inp}>{labels.map(l => <option key={l}>{l}</option>)}</select></label>}
           <label style={fld}>Fecha de cierre<input type="date" value={date} onChange={e => setDate(e.target.value)} style={inp} /></label>
         </div>
+        {noNum && partial && (
+          <div style={fld}>Módulos que cursó el grupo
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>{mods.map(m => { const on = picked.includes(m.id); return (
+              <button key={m.id} type="button" onClick={() => setPicked(p => on ? p.filter(x => x !== m.id) : [...p, m.id])} style={{...inp,display:'flex',alignItems:'center',gap:10,cursor:'pointer',textAlign:'left',fontSize:13,fontWeight:700,borderColor:on ? '#A5D6A7' : '#E1E6EE',background:on ? '#F0FAF1' : '#fff'}}>
+                <span style={{width:18,height:18,borderRadius:5,border:`2px solid ${on ? '#2EA84B' : '#B9C6DA'}`,background:on ? '#2EA84B' : '#fff',color:'#fff',fontSize:12,display:'flex',alignItems:'center',justifyContent:'center',flex:'none'}}>{on ? '✓' : ''}</span>{m.emoji} {m.name}
+              </button>); })}</div>
+            <span style={{fontSize:12,fontWeight:700,color:'#5A6B86'}}>Así lo verán: “Terminaste {finalLabel}”</span>
+          </div>
+        )}
         <label style={fld}>Mensaje para los que aprobaron (lo verán al entrar)<textarea value={msg} onChange={e => setMsg(e.target.value)} style={{...inp,minHeight:62,resize:'vertical'}}></textarea></label>
         {anyFail && <label style={fld}>Mensaje para los que reprobaron<textarea value={msgFail} onChange={e => setMsgFail(e.target.value)} style={{...inp,minHeight:62,resize:'vertical'}}></textarea></label>}
         <div style={fld}>¿Qué pasa con cada alumno?
@@ -417,7 +437,7 @@ function BadgeShelf({ student, title, only }) {
           <div key={b.mod.id} title={b.earned ? `Aprobado${b.score != null ? ' con ' + b.score : ''}` : 'Por conseguir'} style={{borderRadius:14,padding:'12px 6px 10px',textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center',gap:6,border:`1px solid ${b.earned ? '#E9D9A6' : '#E8E5DC'}`,background:b.earned ? '#FFFCF3' : '#FAFBFD'}}>
             <BadgeMedal emoji={b.mod.emoji} off={!b.earned} />
             <b style={{fontSize:11.5,color:'#0D1B5A',lineHeight:1.2}}>{b.mod.name}</b>
-            <span style={{fontSize:10,color:b.earned ? '#9A7400' : '#8A94A6',fontWeight:700}}>M{b.index + 1}{b.earned ? (b.score != null ? ' · ' + b.score : '') + (b.date ? ' · ' + fmt(b.date) : '') : ' · por conseguir'}</span>
+            <span style={{fontSize:10,color:b.earned ? '#9A7400' : '#8A94A6',fontWeight:700}}>{b.earned ? 'Conseguido' + (b.score != null ? ' · ' + b.score : '') + (b.date ? ' · ' + fmt(b.date) : '') : 'Por conseguir'}</span>
           </div>
         ))}
       </div>
@@ -439,7 +459,7 @@ function BadgeCelebration({ student, onDone }) {
         <BadgeMedal emoji={b.mod.emoji} size={100} />
         <div style={{fontSize:11,fontWeight:800,letterSpacing:'.14em',textTransform:'uppercase',color:'#9A7400'}}>Módulo conseguido</div>
         <h3 style={{fontFamily:GRD_FONT_T,fontWeight:600,fontSize:22,color:'#0D1B5A',margin:0}}>¡Conseguiste {b.mod.name}!</h3>
-        <p style={{fontSize:13.5,color:'#555',lineHeight:1.5,margin:0}}>{b.via === 'exam' ? <>Aprobaste el examen del Módulo <b>{b.index + 1}</b>{b.score != null ? <> con <b>{b.score}</b></> : null}.</> : <>Completaste todo el Módulo <b>{b.index + 1}</b>.</>} Esta insignia queda en tu ruta para siempre.</p>
+        <p style={{fontSize:13.5,color:'#555',lineHeight:1.5,margin:0}}>{b.via === 'exam' ? <>Aprobaste el examen de <b>{b.mod.name}</b>{b.score != null ? <> con <b>{b.score}</b></> : null}.</> : <>Completaste todo <b>{b.mod.name}</b>.</>} Esta insignia queda en tu rueda del nivel para siempre.</p>
         <button type="button" onClick={next} style={{width:'100%',minHeight:46,borderRadius:23,border:0,background:'#1F3A8A',color:'#fff',fontFamily:'inherit',fontWeight:800,fontSize:14.5,cursor:'pointer'}}>{more ? `Ver la siguiente (${more} más) →` : '¡Vamos por el siguiente! →'}</button>
       </div>
     </div>
@@ -454,17 +474,21 @@ function JourneyHome({ student, level, first, card, qi, setQi, thanks, survey, o
   const all = (B && B.enabledFor(student)) ? B.list(student) : mods.map((m, i) => ({ mod: m, index: i, earned: ci >= 0 && i <= ci }));
   const got = all.filter(b => b.earned).length;
   const nextIdx = (() => { const f = all.findIndex(b => !b.earned); return f >= 0 ? f : -1; })();
-  const nextName = nextIdx >= 0 ? `Módulo ${nextIdx + 1}` : '';
+  /* ⭕ 29-sep-2026 · A1/A2 no tienen orden: se nombran los temas (conseguidos / que faltan), nunca “Módulo N” */
+  const noNum = student.level === 'a1' || student.level === 'a2';
+  const nextName = noNum ? all.filter(b => !b.earned).map(b => b.mod.name).join(', ') : (nextIdx >= 0 ? `Módulo ${nextIdx + 1}` : '');
   const msg = student.closedMsg || 'Gracias por ser parte de JUCUM. Tu avance quedó guardado: cuando quieras retomar, escríbenos y te contamos los horarios del siguiente módulo.';
-  const lastDone = got ? `Módulo ${all.filter(b => b.earned).slice(-1)[0].index + 1}` : '';
-  const waText = `Hola, soy ${student.fullName}. Llevé ${lastDone ? 'hasta el ' + lastDone : 'parte'} de ${level.code} y quiero retomar${nextName ? ' en el ' + nextName : ''}.`;
+  const lastDone = got ? (noNum ? all.filter(b => b.earned).map(b => b.mod.name).join(', ') : `Módulo ${all.filter(b => b.earned).slice(-1)[0].index + 1}`) : '';
+  const waText = noNum
+    ? `Hola, soy ${student.fullName}. En ${level.code} ya tengo: ${lastDone || 'parte del nivel'}.${nextName ? ' Me falta: ' + nextName + '.' : ''} Quiero retomar.`
+    : `Hola, soy ${student.fullName}. Llevé ${lastDone ? 'hasta el ' + lastDone : 'parte'} de ${level.code} y quiero retomar${nextName ? ' en el ' + nextName : ''}.`;
   const Shelf = ({ list }) => (
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(96px,1fr))',gap:8}}>
       {list.map(b => (
         <div key={b.mod.id} style={{borderRadius:14,padding:'12px 6px 10px',textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center',gap:6,border:`1px solid ${b.earned ? '#E9D9A6' : '#E8E5DC'}`,background:b.earned ? '#FFFCF3' : '#FAFBFD'}}>
           <BadgeMedal emoji={b.mod.emoji} off={!b.earned} />
           <b style={{fontSize:11.5,color:'#0D1B5A',lineHeight:1.2}}>{b.mod.name}</b>
-          <span style={{fontSize:10,color:b.earned ? '#9A7400' : '#8A94A6',fontWeight:700}}>M{b.index + 1}{b.earned && b.score != null ? ' · ' + b.score : ''}</span>
+          <span style={{fontSize:10,color:b.earned ? '#9A7400' : '#8A94A6',fontWeight:700}}>{b.earned ? 'Conseguido' + (b.score != null ? ' · ' + b.score : '') : 'Por conseguir'}</span>
         </div>
       ))}
     </div>
@@ -490,7 +514,7 @@ function JourneyHome({ student, level, first, card, qi, setQi, thanks, survey, o
           <button type="button" onClick={() => setQi(i => (i + 1) % G.QUOTES.length)} style={{alignSelf:'flex-end',border:'1px solid rgba(255,255,255,.35)',background:'none',color:'#fff',fontFamily:'inherit',fontWeight:800,fontSize:11.5,borderRadius:14,padding:'5px 11px',cursor:'pointer'}}>Otra frase ↻</button>
         </div>
         <div style={{...card,display:'flex',flexDirection:'column',gap:10}}>
-          <h3 style={{...h3,fontSize:18}}>{nextName ? `¿Retomamos en el ${nextName}?` : '¿Seguimos aprendiendo?'}</h3>
+          <h3 style={{...h3,fontSize:18}}>{noNum ? (nextName ? `¿Completamos tu ${level.code}?` : '¿Seguimos aprendiendo?') : (nextName ? `¿Retomamos en el ${nextName}?` : '¿Seguimos aprendiendo?')}</h3>
           <p style={{fontSize:13.5,color:'#555',lineHeight:1.5,margin:0,textWrap:'pretty'}}>{msg}</p>
           <a href={G.waLink(waText)} target="_blank" rel="noopener" style={{minHeight:48,borderRadius:24,background:'#1E8E4E',color:'#fff',fontWeight:800,fontSize:14.5,display:'flex',alignItems:'center',justifyContent:'center',gap:8,textDecoration:'none'}}>💬 Quiero retomar · {G.CONTACT.phoneLabel}</a>
           <div style={{display:'flex',gap:10,alignItems:'flex-start',background:'#F4F7FB',borderRadius:12,padding:'10px 12px',fontSize:13,color:'#33415C',lineHeight:1.45}}>
@@ -511,7 +535,9 @@ function CloseProgressModal({ student, onClose, onDone }) {
   const mods = D.MODULE_CATALOG[student.level] || [];
   const earned = B ? B.earnedIds(student) : [];
   const lastEarned = mods.map(m => m.id).filter(id => earned.includes(id)).slice(-1)[0];
-  const [mod, setMod] = React.useState(lastEarned || (mods[0] && mods[0].id) || '');
+  const noNum = student.level === 'a1' || student.level === 'a2';
+  const clsMod = D.getClassModuleId ? D.getClassModuleId(student.group) : null;
+  const [mod, setMod] = React.useState((noNum && clsMod && mods.some(m => m.id === clsMod)) ? clsMod : (lastEarned || (mods[0] && mods[0].id) || ''));
   const [reason, setReason] = React.useState('No se inscribió al siguiente módulo');
   const [msg, setMsg] = React.useState('Gracias por ser parte de JUCUM. Tu avance quedó guardado: cuando quieras retomar, escríbenos y te contamos los horarios del siguiente módulo.');
   const [busy, setBusy] = React.useState(false);
@@ -529,7 +555,7 @@ function CloseProgressModal({ student, onClose, onDone }) {
     <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(13,27,90,.42)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'32px 14px',overflow:'auto'}}>
       <div onClick={e => e.stopPropagation()} style={{background:'#fff',borderRadius:18,width:'100%',maxWidth:540,padding:20,display:'flex',flexDirection:'column',gap:12}}>
         <h3 style={{fontFamily:GRD_FONT_T,fontWeight:600,fontSize:19,color:'#0D1B5A',margin:0}}>⏸ Cerrar avance · {student.fullName}</h3>
-        <label style={fld}>Último módulo que llevó<select value={mod} onChange={e => setMod(e.target.value)} style={inp}>{mods.map((m, i) => <option key={m.id} value={m.id}>M{i + 1} · {m.name}{earned.includes(m.id) ? ' (🏅 conseguido)' : ''}</option>)}</select></label>
+        <label style={fld}>{noNum ? 'Módulo que cursaba al cerrar' : 'Último módulo que llevó'}<select value={mod} onChange={e => setMod(e.target.value)} style={inp}>{mods.map((m, i) => <option key={m.id} value={m.id}>{noNum ? `${m.id === clsMod ? '▶ ' : ''}${m.emoji || ''} ${m.name}${m.id === clsMod ? ' (el de clase)' : ''}` : `M${i + 1} · ${m.name}`}{earned.includes(m.id) ? ' (🏅 conseguido)' : ''}</option>)}</select></label>
         <label style={fld}>Motivo (solo lo ves tú)<select value={reason} onChange={e => setReason(e.target.value)} style={inp}>{['No se inscribió al siguiente módulo','Se retiró del programa','Cambio de horario / viaje','Otro'].map(x => <option key={x}>{x}</option>)}</select></label>
         <label style={fld}>Mensaje para el alumno<textarea value={msg} onChange={e => setMsg(e.target.value)} style={{...inp,minHeight:62,resize:'vertical'}}></textarea></label>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:10}}>
@@ -575,7 +601,7 @@ function ClosedStudentsList({ list, onChanged, onOpen }) {
         return (
           <div key={s.id} style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',background:'#fff',border:'1px solid #E8E5DC',borderRadius:10,padding:'8px 10px',fontSize:13}}>
             <b style={{color:'#667',flex:1,minWidth:140}}>{s.fullName}</b>
-            <span style={{fontSize:11,fontWeight:800,borderRadius:12,padding:'3px 9px',background:'#ECEFF4',color:'#4A5468'}}>⏸ {i >= 0 ? 'Hasta M' + (i + 1) : 'Cerrado'} · {window.JUCUM_GRAD.fmtDate(s.closedAt)}{s.closedReason ? ' · ' + s.closedReason : ''}</span>
+            <span style={{fontSize:11,fontWeight:800,borderRadius:12,padding:'3px 9px',background:'#ECEFF4',color:'#4A5468'}}>⏸ {i >= 0 ? ((s.level === 'a1' || s.level === 'a2') ? `${mods[i].emoji || ''} ${mods[i].name}`.trim() : 'Hasta M' + (i + 1)) : 'Cerrado'} · {window.JUCUM_GRAD.fmtDate(s.closedAt)}{s.closedReason ? ' · ' + s.closedReason : ''}</span>
             <button className="btn-settings" onClick={() => onOpen && onOpen(s.id)}>Ver ficha</button>
             <button className="btn-settings" disabled={busy === s.id} onClick={() => reopen(s)}>↩ Reabrir</button>
           </div>

@@ -138,6 +138,14 @@
       var mods = ((D().MODULE_CATALOG || {})[s.level]) || [];
       var ci = mods.findIndex(function (m) { return m.id === s.closedModule; });
       row.result = 'cerrado';
+      if (s.level === 'a1' || s.level === 'a2') {
+        /* ⭕ 29-sep-2026 · A1/A2 sin números: lo conseguido / lo que falta por nombre */
+        var B = window.JUCUM_BADGES, bl = (B && B.enabledFor(s)) ? B.list(s) : [];
+        var nm = function (m) { return String(m.name || '').split(/,|&| - /)[0].trim(); };
+        var gotN = bl.filter(function (b) { return b.earned; }).map(function (b) { return nm(b.mod); });
+        var misN = bl.filter(function (b) { return !b.earned; }).map(function (b) { return nm(b.mod); });
+        row.finished_label = bl.length ? ((gotN.length ? 'Consiguió ' + gotN.join(', ') : 'Sin módulos conseguidos') + (misN.length ? ' · le falta ' + misN.join(', ') : '')) : (ci >= 0 ? 'Cursaba ' + nm(mods[ci]) : 'Avance cerrado');
+      } else
       row.finished_label = ci >= 0 ? ('Hasta M' + (ci + 1) + (mods[ci + 1] ? ' · retomar M' + (ci + 2) : '')) : 'Avance cerrado';
     }
     var sb = SBc(); var ok = true, err = '';

@@ -1096,15 +1096,21 @@ function modTagFor(moduleId, student) {
     if (!n) return null;
     const gs = D.getGroupSettings(student.group) || {};
     const act = (gs.activeModuleIds && gs.activeModuleIds.length) ? gs.activeModuleIds : (gs.activeModuleId ? [gs.activeModuleId] : []);
-    return { n, review: act.length > 0 && !act.includes(moduleId) };
+    /* ⭕ 29-sep-2026 · A1/A2 no tienen orden de módulos: el chip dice el TEMA (emoji + 1.ª parte del nombre), nunca “M#”. Pre-A1 sigue con número. */
+    let label = 'M' + n;
+    if (student.level === 'a1' || student.level === 'a2') {
+      const m = (D.MODULE_CATALOG[student.level] || []).find(x => x.id === moduleId);
+      if (m) label = ((m.emoji ? m.emoji + ' ' : '') + String(m.name || '').split(/,|&| - /)[0].trim()).trim() || label;
+    }
+    return { n, label, review: act.length > 0 && !act.includes(moduleId) };
   } catch (e) { return null; }
 }
 function ModChip({ student, moduleId, onlyReview }) {
   const t = modTagFor(moduleId, student);
   if (!t || (onlyReview && !t.review)) return null;
   return t.review
-    ? <span style={{display:'inline-flex', alignItems:'center', gap:3, fontSize:10.5, fontWeight:800, color:'#6B4200', background:'#FFE9B8', border:'1px solid #EFC46A', borderRadius:9, padding:'1px 7px', marginLeft:6, verticalAlign:'middle', whiteSpace:'nowrap'}}>M{t.n} · repaso</span>
-    : <span style={{display:'inline-flex', alignItems:'center', fontSize:10.5, fontWeight:800, color:'#1B3B6F', background:'#E4EDFB', border:'1px solid #C5D6F2', borderRadius:9, padding:'1px 7px', marginLeft:6, verticalAlign:'middle', whiteSpace:'nowrap'}}>M{t.n}</span>;
+    ? <span style={{display:'inline-flex', alignItems:'center', gap:3, fontSize:10.5, fontWeight:800, color:'#6B4200', background:'#FFE9B8', border:'1px solid #EFC46A', borderRadius:9, padding:'1px 7px', marginLeft:6, verticalAlign:'middle', whiteSpace:'nowrap'}}>{t.label} · repaso</span>
+    : <span style={{display:'inline-flex', alignItems:'center', fontSize:10.5, fontWeight:800, color:'#1B3B6F', background:'#E4EDFB', border:'1px solid #C5D6F2', borderRadius:9, padding:'1px 7px', marginLeft:6, verticalAlign:'middle', whiteSpace:'nowrap'}}>{t.label}</span>;
 }
 function linkFor(a, mod, studentId) {
   // a.url = la URL real del material en GitHub Pages (se configura por actividad
@@ -1121,7 +1127,7 @@ function linkFor(a, mod, studentId) {
     const gs = stu && window.JUCUM_DATA.getGroupSettings(stu.group);
     if (gs && gs.unlockMode === 'free') free = '&jucum_free=1';
     const t = modTagFor(mod.id, stu);
-    if (t) free += '&jucum_mtag=' + encodeURIComponent('M' + t.n + (t.review ? ' · repaso' : ''));
+    if (t) free += '&jucum_mtag=' + encodeURIComponent(t.label + (t.review ? ' · repaso' : ''));
   } catch (e) {}
   return `${base}${sep}jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent(mod.id)}&jucum_act=${encodeURIComponent(a.id)}&jucum_kind=${encodeURIComponent(a.type||'')}${free}`;
 }
@@ -1662,7 +1668,11 @@ function ModuleRoute({ student, selectedId, onSelect }) {
   route.forEach((x, i) => { if (!x.placeholder && x.active) lastCur = i; });
   if (lastCur < 0) route.forEach((x, i) => { if (x.state === 'cur') lastCur = i; });
   if (lastCur < 0) lastCur = 0;
+  /* ⭕ 29-sep-2026 · “Aquí vas” = el módulo de clase del grupo (último prendido o 📌 fijado por el profesor) */
+  try { const cls = window.JUCUM_DATA.getClassModuleId && window.JUCUM_DATA.getClassModuleId(student.group); const ci = route.findIndex(x => !x.placeholder && x.active && x.mod.id === cls); if (ci >= 0) lastCur = ci; } catch (e) {}
   const useEmoji = student.level === 'a1' || student.level === 'a2';
+  /* ⭕ 29-sep-2026 · A1/A2 = RUEDA del nivel (Espejo v2, opción B elegida por la usuaria): se entra por cualquier módulo, sin inicio ni final → prohibido volver a M1/M2/“Módulo N de M” o candados de orden aquí. */
+  if (useEmoji) return <ModuleWheel student={student} route={route} lastCur={lastCur} selectedId={selectedId} onSelect={onSelect} />;
   const BDG = window.JUCUM_BADGES;
   const badges = (BDG && BDG.enabledFor(student)) ? BDG.list(student) : [];
   const hasBadge = (id) => badges.some(b => b.mod.id === id && b.earned);
@@ -1694,6 +1704,79 @@ function ModuleRoute({ student, selectedId, onSelect }) {
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+/* ⭕ Rueda del nivel (A1/A2): cada módulo es un tramo del anillo; se completa el nivel al cerrar el círculo */
+function ModuleWheel({ student, route, lastCur, selectedId, onSelect }) {
+  const BDG = window.JUCUM_BADGES;
+  const badges = (BDG && BDG.enabledFor(student)) ? BDG.list(student) : [];
+  const badgeOf = (id) => badges.find(b => b.mod.id === id && b.earned);
+  const lv = (window.JUCUM_DATA.LEVELS[student.level] || {}).code || String(student.level || '').toUpperCase();
+  const items = route.map((x, i) => {
+    const bd = badgeOf(x.mod.id);
+    const pct = x.total ? Math.round(((x.doneCount || 0) / x.total) * 100) : 0;
+    const kind = bd ? 'gold' : x.state === 'done' ? 'done' : x.placeholder ? 'soon' : x.state === 'lock' ? 'lock' : 'open';
+    return { x, i, bd, pct, kind, isCur: i === lastCur && x.state !== 'lock' };
+  });
+  /* El módulo que se cursa AHORA va siempre arriba (12 en punto) y primero en la lista; el resto sigue el giro del círculo. */
+  const st0 = items.findIndex(it => it.isCur);
+  if (st0 > 0) items.push(...items.splice(0, st0));
+  const n = items.length || 1, seg = 360 / n, gap = n > 1 ? 2 : 0;
+  const stops = [];
+  items.forEach((it, i) => {
+    const a0 = i * seg, a1 = a0 + seg - gap;
+    if (it.kind === 'gold') stops.push(`#E0AE1E ${a0}deg ${a1}deg`);
+    else if (it.kind === 'done') stops.push(`#2EA84B ${a0}deg ${a1}deg`);
+    else if (it.kind === 'open') { const m = a0 + (a1 - a0) * it.pct / 100; stops.push(`#2EA84B ${a0}deg ${m}deg`, `#D6E4FA ${m}deg ${a1}deg`); }
+    else stops.push(`#E6EBF2 ${a0}deg ${a1}deg`);
+    if (gap) stops.push(`#fff ${a1}deg ${a0 + seg}deg`);
+  });
+  const got = items.filter(it => it.kind === 'gold' || it.kind === 'done').length;
+  const W = 200, R = 74, ND = n > 6 ? 40 : 48;
+  const faceBg = (it) => it.kind === 'gold' ? 'radial-gradient(circle at 35% 30%,#FFF0B8,#E0AE1E 60%,#B8860B)' : it.kind === 'done' ? '#E8F5E9' : (it.kind === 'lock' || it.kind === 'soon') ? '#F4F6F9' : '#fff';
+  const faceBd = (it) => it.isCur ? '3px solid #1F3A8A' : it.kind === 'gold' ? '3px solid #A67C00' : it.kind === 'done' ? '3px solid #2EA84B' : (it.kind === 'lock' || it.kind === 'soon') ? '3px dashed #C3CCDA' : '3px solid #C5D6F2';
+  const status = (it) => it.kind === 'gold' ? <span style={{color:'#9A7400'}}>🏅 Conseguido{it.bd.score != null ? ' · ' + it.bd.score : ''}</span>
+    : it.kind === 'done' ? <span style={{color:'#1E7B3A'}}>✓ Completado</span>
+    : it.kind === 'soon' ? <span style={{color:'#8A94A6'}}>Próximamente</span>
+    : it.kind === 'lock' ? <span style={{color:'#8A94A6'}}>Por conseguir</span>
+    : <span style={{color:'#1E9E45'}}>{it.isCur ? 'Aquí vas · ' : ''}{it.pct}%</span>;
+  return (
+    <div style={{background:'#fff', border:'1px solid var(--border)', borderRadius:16, padding:'14px 14px 16px', marginTop:4, display:'flex', flexDirection:'column', gap:10}}>
+      <div style={{fontSize:11, fontWeight:800, letterSpacing:'.06em', textTransform:'uppercase', color:'var(--text-mute,#A8A8A8)'}}>⭕ Tu nivel {lv} · cierra el círculo · toca un módulo para ver su contenido</div>
+      <div style={{display:'flex', gap:22, alignItems:'center', flexWrap:'wrap'}}>
+        <div style={{position:'relative', width:W, height:W, flex:'none', margin:'0 auto'}}>
+          <div style={{position:'absolute', inset:26, borderRadius:'50%', background:`conic-gradient(${stops.join(',')})`, WebkitMask:'radial-gradient(circle,transparent 58%,#000 59%)', mask:'radial-gradient(circle,transparent 58%,#000 59%)'}}></div>
+          <div style={{position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', textAlign:'center', pointerEvents:'none'}}>
+            <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:28, color:'#0D1B5A', lineHeight:1}}>{got}/{items.length}</b>
+            <span style={{fontSize:11, fontWeight:800, color:'#6B7486'}}>módulos</span>
+          </div>
+          {items.map((it, i) => {
+            const a = (i * seg + seg / 2) * Math.PI / 180;
+            const sel = it.x.mod.id === selectedId;
+            return (
+              <button key={it.x.mod.id} type="button" onClick={() => onSelect(it.x.mod.id)} title={it.x.mod.name} style={{position:'absolute', left:W / 2 + R * Math.sin(a) - ND / 2, top:W / 2 - R * Math.cos(a) - ND / 2, width:ND, height:ND, borderRadius:'50%', background:faceBg(it), border:faceBd(it), boxShadow: it.isCur ? '0 0 0 4px #F9DDB8' : 'none', outline: sel ? '3px solid #64B5F6' : 'none', outlineOffset:3, display:'flex', alignItems:'center', justifyContent:'center', fontSize: ND > 44 ? 20 : 17, cursor:'pointer', padding:0, fontFamily:'inherit'}}>
+                <span style={{filter:(it.kind === 'lock' || it.kind === 'soon') ? 'grayscale(1)' : 'none', opacity:(it.kind === 'lock' || it.kind === 'soon') ? .55 : 1}}>{it.x.mod.emoji || '📦'}</span>
+                {it.x.hasReview && <span title="Tienes un repaso pendiente aquí" style={{position:'absolute', top:-6, right:-6, width:17, height:17, borderRadius:'50%', background:'#5B3FA0', color:'#fff', fontSize:9, display:'flex', alignItems:'center', justifyContent:'center', border:'2px solid #fff'}}>🔁</span>}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{flex:1, minWidth:230, display:'flex', flexDirection:'column', gap:6}}>
+          {items.map(it => {
+            const sel = it.x.mod.id === selectedId;
+            const dot = it.kind === 'gold' ? '#E0AE1E' : (it.kind === 'done' || it.kind === 'open') ? '#2EA84B' : '#D3DAE5';
+            return (
+              <button key={it.x.mod.id} type="button" onClick={() => onSelect(it.x.mod.id)} style={{display:'flex', alignItems:'center', gap:10, padding:'9px 12px', minHeight:44, borderRadius:12, border:`1.5px solid ${sel ? '#64B5F6' : '#EEF1F5'}`, background:sel ? '#F2F8FF' : '#FAFBFD', cursor:'pointer', fontFamily:'inherit', textAlign:'left', fontSize:13, fontWeight:800, color:'#33415C'}}>
+                <span style={{width:12, height:12, borderRadius:'50%', background:dot, flex:'none'}}></span>
+                <span style={{flex:1, minWidth:0}}>{it.x.mod.emoji || '📦'} {it.x.mod.name}</span>
+                <span style={{fontSize:12, fontWeight:800, whiteSpace:'nowrap', flex:'none'}}>{status(it)}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

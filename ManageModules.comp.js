@@ -128,6 +128,7 @@ function ManageModules({ onBack }) {
         ))}
       </div>
 
+      {(level === 'a1' || level === 'a2') && mods.length > 0 && <div className="settings-hint" style={{margin:'8px 0'}}>En {(LEVELS[level] || {}).code} el alumno entra por cualquier módulo: el orden de esta lista no cambia nada para él.</div>}
       <div className="mm-list">
         {mods.length === 0 ? (
           <div className="empty-state"><div className="icon">📦</div>Sin módulos en este nivel. Crea el primero.</div>
@@ -140,7 +141,7 @@ function ManageModules({ onBack }) {
             <div key={m.id} className="mm-card scard">
               <div className="mm-emoji">{m.emoji}</div>
               <div className="mm-info">
-                <div className="mm-name">M{i+1} · {m.name}</div>
+                <div className="mm-name">{(level === 'a1' || level === 'a2') ? '' : `M${i+1} · `}{m.name}</div>
                 <div className="mm-meta">
                   {m.activities.length} actividades{nGroups > 0 && ` · ${nGroups} temas`} · {nUrls}/{m.activities.length} con URL
                   {complete
