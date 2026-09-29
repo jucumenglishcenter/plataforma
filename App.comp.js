@@ -248,6 +248,17 @@ function App() {
     return <div style={{padding:40,fontFamily:'Nunito,sans-serif',color:'#C62828',textAlign:'center'}}>⚠ {bootErr}<br/><button onClick={()=>location.reload()} style={{marginTop:14,padding:'10px 20px',borderRadius:20,border:'none',background:'#1F3A8A',color:'#fff',fontWeight:800,cursor:'pointer'}}>Reintentar</button></div>;
   }
 
+  /* 👁 29-sep-2026 · Vista “Ver como alumno” (iframe del visor del profesor): se enruta
+   * EXACTAMENTE como si ese alumno hubiera entrado (egresado/cerrado → su pantalla de cierre). */
+  const pvE = window.JUCUM_PV_EMBED;
+  if (pvE && user && user.role !== 'student') {
+    const pu = pvE.user();
+    if (!pu) return <div style={{padding:40,fontFamily:'Nunito,sans-serif',color:'#777',textAlign:'center',fontWeight:700}}>Cargando la pantalla del alumno…</div>;
+    const pvExit = () => pvE.exit();
+    if (window.JUCUM_GRAD && window.StudentGraduated && (window.JUCUM_GRAD.isGraduated(pu.studentId) || (window.JUCUM_GRAD.isClosed && window.JUCUM_GRAD.isClosed(pu.studentId)))) return <StudentGraduated user={pu} onLogout={pvExit} />;
+    return <StudentDashboard user={pu} onLogout={pvExit} />;
+  }
+
   if (!user) {
     // Durante el mantenimiento, los visitantes ven la pantalla de mantenimiento.
     // El equipo entra por un acceso discreto que revela el login (para que el
