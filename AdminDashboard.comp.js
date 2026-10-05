@@ -268,7 +268,7 @@ function AdminRoster({ onChange }) {
           const g = D.GROUPS.find(g => g.id === s.group);
           const lvl = D.LEVELS[s.level] || { code:'—', color:'#9AA', dark:'#667' };
           const st = P.getAccountStatus(s);
-          const sm = { al_dia:{l:'✅ Al día',c:'#2E7D32'}, en_revision:{l:'🕒 En revisión',c:'#E65100'}, por_vencer:{l:`⏳ ${st.daysLeft}d`,c:'#E65100'}, bloqueado:{l:'🔒 Bloqueado',c:'#C62828'} }[st.state] || {l:'—',c:'#999'};
+          const sm = { al_dia:{l:'✅ Al día',c:'#2E7D32'}, en_revision:{l:'🕒 En revisión',c:'#E65100'}, por_vencer:{l:`📅 ${st.daysLeft}d`,c:'#1565C0'}, aviso:{l:`⏳ aviso ${st.daysLeft}d`,c:'#E65100'}, bloqueado:{l:'⏸️ En pausa',c:'#C62828'} }[st.state] || {l:'—',c:'#999'};
           const active = (s.totalMinutes||0) > 0;
           const mastery = D.getStudentMastery ? D.getStudentMastery(s).pct : (s.avgScore||0);
           return (
@@ -577,21 +577,22 @@ function AdminGestionPagos({ onChange }) {
   const P = window.JUCUM_PAY;
   const payments = P.getAllPayments();
   const pendCount = payments.filter(p => p.status === 'por_confirmar').length;
-  const [tab, setTab] = React.useState('registro');   // registro · config · avisos · grupos
+  const [tab, setTab] = React.useState('control');   // control · registro · config · avisos
   return (
     <main>
       <div className="welcome teacher">
-        <div className="welcome-text"><div className="eyebrow t">💳 Gestión de pagos</div><h1>Pagos y configuración</h1><p>Confirma pagos, define montos y fechas, avisa a los grupos y registra pagos individuales — todo en un solo lugar.</p></div>
+        <div className="welcome-text"><div className="eyebrow t">💳 Gestión de pagos</div><h1>Pagos y configuración</h1><p>Quién no ha pagado, próximos cobros, avisos y pausa por pago, confirmación de capturas y montos — todo en un solo lugar (hora Perú).</p></div>
       </div>
 
       <div className="mm-tabs" style={{flexWrap:'wrap'}}>
-        <button className={`mm-tab ${tab==='registro'?'on':''}`} onClick={()=>setTab('registro')}>🧾 Registro de pagos{pendCount>0 && <span className="mm-count">{pendCount}</span>}</button>
-        <button className={`mm-tab ${tab==='config'?'on':''}`} onClick={()=>setTab('config')}>⚙️ Configuración</button>
-        <button className={`mm-tab ${tab==='avisos'?'on':''}`} onClick={()=>setTab('avisos')}>📣 Avisos de pago</button>
-        <button className={`mm-tab ${tab==='grupos'?'on':''}`} onClick={()=>setTab('grupos')}>📊 Reporte por grupo</button>
+        <button className={`mm-tab ${tab==='control'?'on':''}`} onClick={()=>setTab('control')}>🚦 Control y deudores</button>
+        <button className={`mm-tab ${tab==='registro'?'on':''}`} onClick={()=>setTab('registro')}>🧾 Capturas por confirmar{pendCount>0 && <span className="mm-count">{pendCount}</span>}</button>
+        <button className={`mm-tab ${tab==='config'?'on':''}`} onClick={()=>setTab('config')}>💰 Montos por nivel</button>
+        <button className={`mm-tab ${tab==='avisos'?'on':''}`} onClick={()=>setTab('avisos')}>📣 Mensaje a grupos</button>
       </div>
 
-      {tab === 'config' ? <AdminConfigBody onChange={onChange} />
+      {tab === 'control' ? (window.AdminPayControl ? <AdminPayControl onChange={onChange} /> : <div className="scard" style={{marginTop:16}}><div className="err">Falta AdminPayControl.comp.js en el servidor.</div></div>)
+        : tab === 'config' ? <AdminConfigBody onChange={onChange} />
         : tab === 'avisos' ? <AdminPaymentNotices />
         : tab === 'grupos' ? <AdminGroupPaymentReport />
         : <AdminPaymentsBody onChange={onChange} />}
@@ -642,8 +643,9 @@ function AdminPaymentsBody({ onChange }) {
                   </div>
                   <span className="mm-chip" style={{background:meta.bg, color:meta.c}}>{meta.l}</span>
                 </div>
-                <div className="row-flex" style={{gap:8, marginTop:10}}>
-                  {p.screenshot && <button className="att-btn" onClick={()=>setShot(p.screenshot)}>🖼️ Ver captura</button>}
+                <div className="row-flex" style={{gap:8, marginTop:10, flexWrap:'wrap'}}>
+                  {!p.byAdmin && <button className="att-btn" onClick={async ()=>{ setShot('loading'); const s = await P.fetchShot(p.id); setShot(s || 'none'); }}>🖼️ Ver captura</button>}
+                  {!p.byAdmin && <button className="att-btn" style={{borderColor:'#A5D6A7', color:'#1B5E20'}} onClick={()=>sharePaymentWA(p, nameOf(p.studentId), groupOf(p.studentId), cfg.currency)} title="Comparte la captura y los datos del alumno (en el celular puedes elegir el grupo de WhatsApp)">📲 Enviar a WhatsApp</button>}
                   {p.status === 'confirmado' && <button className="att-btn" style={{borderColor:'#90CAF9', color:'#1565C0'}} onClick={()=>printReceipt(p)}>🖶 Imprimir constancia</button>}
                   {p.status !== 'confirmado' && <button className="att-btn" style={{borderColor:'#A5D6A7', color:'#2E7D32'}} onClick={()=>{ P.confirmPayment(p.id); onChange(); }}>✅ Confirmar</button>}
                   {p.status !== 'rechazado' && <button className="att-btn" style={{borderColor:'#EF9A9A', color:'#C62828'}} onClick={()=>{ const note = prompt('Motivo (opcional) para el alumno:', 'Revisa los datos e inténtalo de nuevo.'); if (note!==null){ P.rejectPayment(p.id, note); onChange(); } }}>⚠️ Rechazar</button>}
@@ -658,7 +660,7 @@ function AdminPaymentsBody({ onChange }) {
         <div className="modal-backdrop" onClick={()=>setShot(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:560}}>
             <div className="modal-head"><div className="modal-title">🖼️ Captura del pago</div><button className="modal-close" onClick={()=>setShot(null)}>✕</button></div>
-            <div className="modal-body"><img src={shot} alt="captura" style={{width:'100%', borderRadius:10}} /></div>
+            <div className="modal-body">{shot === 'loading' ? <div className="settings-hint">Cargando captura…</div> : shot === 'none' ? <div className="settings-hint">Este pago no tiene captura.</div> : <img src={shot} alt="captura" style={{width:'100%', borderRadius:10}} />}</div>
           </div>
         </div>
       )}
@@ -691,6 +693,26 @@ function PickStudentModal({ onClose, onPick }) {
       </div>
     </div>
   );
+}
+
+/* 📲 Compartir un pago (captura + datos) a WhatsApp.
+ * En el CELULAR abre el menú de compartir con la foto: se elige WhatsApp y el
+ * grupo de administración (WhatsApp no permite que una web publique sola en un
+ * grupo). En la computadora no se puede adjuntar la foto: copia los datos y abre
+ * WhatsApp Web para pegarlos y elegir el chat. */
+async function sharePaymentWA(p, name, group, cur) {
+  const P = window.JUCUM_PAY;
+  const txt = `💳 Pago registrado en la plataforma\nAlumno: ${name || '—'}\nGrupo: ${group || '—'}\nDNI boleta: ${p.dni || '—'}\nModalidad: ${P.labelMode(p.mode)} · periodo ${p.period}${p.amount ? `\nMonto: ${cur} ${p.amount}` : ''}\nRegistrado: ${new Date(p.registeredAt).toLocaleString('es-PE', { timeZone:'America/Lima', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}\nEstado: ${p.status === 'confirmado' ? 'confirmado' : p.status === 'rechazado' ? 'rechazado' : 'por confirmar'}`;
+  try {
+    const shot = await P.fetchShot(p.id);
+    if (shot && navigator.canShare) {
+      const blob = await (await fetch(shot)).blob();
+      const file = new File([blob], `pago-${(name || 'alumno').replace(/\s+/g, '-')}.jpg`, { type: blob.type || 'image/jpeg' });
+      if (navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text: txt }); return; }
+    }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(txt); } catch (e) {}
+  window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank', 'noopener');
 }
 
 function AdminPaymentNotices() {
@@ -765,19 +787,8 @@ function AdminConfigBody({ onChange }) {
 
   return (
     <>
-      <div className="scard" style={{marginTop:18, borderLeft:`5px solid ${cfg.enforce?'#2EA84B':'#9E9E9E'}`}}>
-        <div className="sec-head"><div className="sec-title">🚦 Control de pagos</div></div>
-        <label className="check-row"><input type="checkbox" checked={!!cfg.enforce} onChange={e=>setCfg(c=>({...c, enforce:e.target.checked}))} /><span><b>Activar control de pagos</b> (recordatorio de 7 días + bloqueo por falta de pago)</span></label>
-        <div className="settings-hint" style={{marginTop:6}}>{cfg.enforce ? '🟢 Activo: los alumnos sin pago al día verán el recordatorio y, pasados 7 días del día de pago, se bloquearán hasta registrar su pago.' : '⚪ Apagado: nadie se bloquea. Actívalo cuando ya hayas definido los montos y comunicado las fechas a los alumnos.'}</div>
-      </div>
-
-      <div className="scard" style={{marginTop:18}}>
-        <div className="sec-head"><div className="sec-title">📅 Día de pago</div></div>
-        <div className="settings-hint">Un día fijo del mes, igual para todos (1–28). Las excepciones por alumno se definen más abajo.</div>
-        <div className="row-flex" style={{marginTop:8}}>
-          <input type="number" min="1" max="28" className="input-text" style={{width:90}} value={cfg.payDay} onChange={e=>setCfg(c=>({...c, payDay:Math.max(1,Math.min(28,parseInt(e.target.value)||1))}))} />
-          <span className="settings-hint" style={{margin:0}}>de cada mes</span>
-        </div>
+      <div className="scard" style={{marginTop:18, borderLeft:'5px solid #1F3A8A'}}>
+        <div className="settings-hint" style={{margin:0}}>🚦 Los avisos, la pausa por pago, el día de pago de cada grupo y los montos especiales por alumno ahora se manejan en <b>Control y deudores</b>. Aquí quedan los montos generales por nivel.</div>
       </div>
 
       <div className="scard" style={{marginTop:18}}>
@@ -798,29 +809,9 @@ function AdminConfigBody({ onChange }) {
         <div className="settings-hint" style={{marginTop:10}}>“Por módulo” solo aplica a A1 y A2. El “pago total” se valida manualmente (válido los primeros {cfg.totalMonths} meses; descuenta el primer mes ya pagado).</div>
       </div>
 
-      <div className="scard" style={{marginTop:18}}>
-        <div className="sec-head"><div className="sec-title">🎯 Excepciones de día de pago</div></div>
-        <div className="settings-hint">Para un alumno con un día de pago distinto al general.</div>
-        <div className="row-flex" style={{marginTop:8, gap:8, flexWrap:'wrap'}}>
-          <select className="input-text" style={{maxWidth:240}} value={excSid} onChange={e=>setExcSid(e.target.value)}>
-            <option value="">Elige alumno…</option>
-            {D.STUDENTS.map(s => <option key={s.id} value={s.id}>{s.fullName}</option>)}
-          </select>
-          <input type="number" min="1" max="28" className="input-text" style={{width:80}} value={excDay} onChange={e=>setExcDay(e.target.value)} />
-          <button className="att-btn" onClick={addException}>+ Agregar</button>
-        </div>
-        {Object.keys(cfg.exceptions||{}).length > 0 && (
-          <div className="sm-list" style={{marginTop:10}}>
-            {Object.entries(cfg.exceptions).map(([sid, day]) => (
-              <div key={sid} className="muted-row"><b>{nameOf(sid)}</b><span className="muted-until">Día {day}</span><button className="att-btn" onClick={()=>delException(sid)}>Quitar</button></div>
-            ))}
-          </div>
-        )}
-      </div>
-
       <div className="modal-actions" style={{maxWidth:1100, margin:'14px auto 0'}}>
         {savedMsg && <span className="pwd-ok" style={{marginRight:'auto'}}>{savedMsg}</span>}
-        <button className="btn-save" onClick={save}>💾 Guardar configuración</button>
+        <button className="btn-save" onClick={save}>💾 Guardar montos</button>
       </div>
     </>
   );
@@ -862,4 +853,4 @@ function AdminAccount({ user }) {
   );
 }
 
-Object.assign(window, { AdminDashboard, AdminGestionPagos, AdminRoster, AdminConfigBody, AdminPaymentsBody, AdminPaymentNotices, AdminGroupPaymentReport, AdminAccount, AdminPasswordGate, ManualPaymentModal, NotifyPaymentModal, ContactLogModal, PickStudentModal, originOf, exportRosterCSV, printReceipt });
+Object.assign(window, { AdminDashboard, AdminGestionPagos, AdminRoster, AdminConfigBody, AdminPaymentsBody, AdminPaymentNotices, AdminGroupPaymentReport, AdminAccount, AdminPasswordGate, sharePaymentWA, ManualPaymentModal, NotifyPaymentModal, ContactLogModal, PickStudentModal, originOf, exportRosterCSV, printReceipt });

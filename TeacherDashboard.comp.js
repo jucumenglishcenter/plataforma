@@ -29,6 +29,14 @@ function TeacherDashboard({ onLogout, user }) {
     return () => { alive = false; clearInterval(iv); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
   }, []);
   const teacherName = (user && user.name && user.name !== 'Profesor' && user.name !== 'Profesor JUCUM') ? user.name : 'Joe Miller';
+  // 🔒 Control de pagos: quién está en pausa por pago (sin nube = nadie)
+  React.useEffect(() => {
+    const P = window.JUCUM_PAY; if (!P || !P.gateLoad) return;
+    let alive = true;
+    const go = () => P.gateLoad().then(() => { if (alive) setLiveTick(t => t + 1); }).catch(() => {});
+    go(); const iv = setInterval(() => { if (document.visibilityState === 'visible') go(); }, 5 * 60000);
+    return () => { alive = false; clearInterval(iv); };
+  }, []);
   React.useEffect(() => { window.JUCUM_TEACHER_NAME = teacherName; }, [teacherName]);
 
   // Reset palette — 26-sep-2026: SOLO fuera de grupo/alumno. Los efectos del padre corren
@@ -856,6 +864,7 @@ function StudentRow({ stu, rank, level, onClick, onDelete, onCloseProgress }) {
         <div>
           <div className="st-name">{stu.starred && '⭐ '}{stu.fullName}</div>
           <div className="st-user">@{stu.username}</div>
+          {window.JUCUM_PAY && window.JUCUM_PAY.gateStatus && window.JUCUM_PAY.gateStatus(stu).k === 'cl' && <div style={{fontSize:10.5, fontWeight:800, color:'#4A5468', background:'#ECEFF1', borderRadius:8, padding:'2px 7px', marginTop:3, display:'inline-block'}}>🔒 En pausa por pago</div>}
         </div>
       </div>
       <div className="col-mod">{stu.completedModules}</div>
@@ -899,6 +908,10 @@ function StudentDetail({ studentId, onBack, onContact }) {
   const level = LEVELS[stu.level];
   const myLog = window.JUCUM_DATA.getStudentLog ? window.JUCUM_DATA.getStudentLog(stu.id) : ACTIVITY_LOG.filter(a => a.studentId === stu.id);
   React.useEffect(() => { document.body.setAttribute('data-level', stu.level); return () => document.body.removeAttribute('data-level'); }, [stu.level]);
+  // 🔒 En pausa por pago: avance oculto; el profesor tiene UNA vista (la da administración si hace falta otra)
+  const [payUnlocked, setPayUnlocked] = React.useState(false);
+  const payPaused = !!(window.JUCUM_PAY && window.JUCUM_PAY.gateStatus && window.JUCUM_PAY.gateStatus(stu).k === 'cl');
+  if (payPaused && !payUnlocked && window.TeacherPayLock) return <TeacherPayLock student={stu} onBack={onBack} onUnlock={() => setPayUnlocked(true)} />;
 
   if (showReport) return <StudentReport student={stu} onBack={() => setShowReport(false)} forTeacher />;
 

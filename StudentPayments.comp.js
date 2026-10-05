@@ -60,7 +60,8 @@ function StudentPayments({ user, onBack, focusRegister }) {
   const [done, setDone] = React.useState(false);
 
   const amounts = cfg.amounts[student.level] || {};
-  const amount = mode === 'modulo' ? amounts.modulo : mode === 'mensual' ? amounts.mensual : null;
+  const special = P.amountFor ? P.amountFor(student) : { special: false };
+  const amount = mode === 'modulo' ? amounts.modulo : mode === 'mensual' ? (special.special ? special.amount : amounts.mensual) : null;
 
   const onFile = (e) => { const f = e.target.files[0]; if (!f) return; payDownscale(f, 1000, 0.7).then(setShot); };
   const submit = () => {
@@ -68,14 +69,16 @@ function StudentPayments({ user, onBack, focusRegister }) {
     if (!shot) { setErr('Adjunta la captura de tu pago.'); return; }
     P.registerPayment(student.id, { dni: dni.trim(), mode, level: student.level, amount, screenshot: shot });
     setDone(true); setErr(''); setDni(''); setShot(null); setTick(t => t + 1);
+    if (P.gateLoad) setTimeout(() => P.gateLoad().then(() => setTick(t => t + 1)), 1500);
   };
 
   const stateMeta = {
     al_dia:     { ico:'✅', color:'#2E7D32', bg:'#E8F5E9', title:'Estás al día', msg:'Tu cuenta está activa. ¡Gracias por tu puntualidad!' },
-    en_revision:{ ico:'🕒', color:'#E65100', bg:'#FFF3E0', title:'Pago en revisión', msg:`Tu pago fue registrado. El administrador lo confirmará a la brevedad. Si en 2 días no recibes confirmación, comunícate al ${status.phone}.` },
-    por_vencer: { ico:'⏳', color:'#E65100', bg:'#FFF8E1', title:'Pago pendiente', msg:`Tienes ${status.daysLeft} día${status.daysLeft===1?'':'s'} para regularizar tu pago. Pasado ese plazo tu cuenta se bloqueará.` },
-    bloqueado:  { ico:'🔒', color:'#C62828', bg:'#FFEBEE', title:'Cuenta bloqueada', msg:'Tu cuenta está bloqueada por falta de pago. Registra tu pago para reactivarla.' },
-  }[status.state];
+    en_revision:{ ico:'🕒', color:'#1565C0', bg:'#E3F2FD', title:'Pago en revisión', msg:`Recibimos tu pago y lo estamos revisando. Mientras tanto sigues practicando con normalidad. Si en 2 días no recibes confirmación, escríbenos al ${status.phone}.` },
+    por_vencer: { ico:'📅', color:'#1565C0', bg:'#E3F2FD', title:'Tu pago vence pronto', msg:`Tu pago vence ${status.daysLeft===0?'hoy':`en ${status.daysLeft} día${status.daysLeft===1?'':'s'}`}. Si ya pagaste, regístralo aquí.` },
+    aviso:      { ico:'⏳', color:'#E65100', bg:'#FFF3E0', title:'Tu pago está pendiente', msg:`Registra tu pago o comunícate con administración. Si no, tu plataforma se pondrá en pausa ${payFmtDay(status.closeDate)}.` },
+    bloqueado:  { ico:'⏸️', color:'#C62828', bg:'#FFEBEE', title:'Tu acceso está en pausa', msg:'Tu pago está pendiente. Registra tu pago aquí o escríbenos: en cuanto lo confirmemos vuelves a practicar. Todo tu avance está guardado.' },
+  }[status.state] || { ico:'✅', color:'#2E7D32', bg:'#E8F5E9', title:'Estás al día', msg:'' };
 
   return (
     <main>
@@ -96,9 +99,10 @@ function StudentPayments({ user, onBack, focusRegister }) {
             <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, color:stateMeta.color}}>{stateMeta.title}</div>
             <div style={{fontSize:13, color:'var(--text)', lineHeight:1.5, marginTop:3}}>{stateMeta.msg}</div>
           </div>
-          {status.state === 'por_vencer' && <div className="target-val" style={{fontSize:26, color:'#C62828', minWidth:90}}>{status.daysLeft}<span>días</span></div>}
+          {(status.state === 'aviso' || status.state === 'por_vencer') && <div className="target-val" style={{fontSize:26, color:stateMeta.color, minWidth:90}}>{status.daysLeft}<span>días</span></div>}
         </div>
-        <div className="settings-hint" style={{marginTop:10}}>📅 El pago está fijado para el <b>día {status.payDay} de cada mes</b>, igual para todos — no depende de la fecha en que cada alumno se inscribió. Agradecemos tu comprensión y puntualidad para que la academia siga creciendo contigo. 💙</div>
+        {status.payDay ? <div className="settings-hint" style={{marginTop:10}}>📅 Tu pago es el <b>día {status.payDay} de cada mes</b>{status.amount ? <> · monto <b>{cfg.currency} {status.amount}</b></> : null}. Agradecemos tu puntualidad para que la academia siga creciendo contigo. 💙</div> : null}
+        {(status.state === 'aviso' || status.state === 'bloqueado') && <div className="row-flex" style={{gap:8, marginTop:10, flexWrap:'wrap'}}><a className="btn-soft" href={payWaLink(student)} target="_blank" rel="noopener">💬 Escribir a administración</a></div>}
         {status.rejected && <div className="forum-muted" style={{marginTop:10, marginBottom:0}}>⚠️ Tu último pago no pudo confirmarse. Vuelve a registrarlo con la captura correcta.</div>}
       </div>
 
@@ -177,27 +181,80 @@ function StudentPayments({ user, onBack, focusRegister }) {
   );
 }
 
-/* Barra de recordatorio (fija, no intrusiva) durante los 7 días de gracia */
+/* 🚦 Utilidades del control de pagos (día Perú, WhatsApp de administración) */
+function payFmtDay(iso) {
+  if (!iso) return 'pronto';
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const DW = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'], MO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return `el ${DW[dt.getUTCDay()]} ${d}-${MO[m - 1]}`;
+}
+function payWaLink(student) {
+  const ph = String((window.JUCUM_PAY && window.JUCUM_PAY.ATTN_PHONE) || '+51 935 972 183').replace(/\D/g, '');
+  const g = (() => { try { return (window.JUCUM_DATA.GROUPS.find(x => x.id === student.group) || {}).name || ''; } catch { return ''; } })();
+  const txt = `Hola, soy ${student.fullName}${g ? ' del grupo ' + g : ''}. Quiero regularizar mi pago de la plataforma JUCUM.`;
+  return `https://wa.me/${ph}?text=${encodeURIComponent(txt)}`;
+}
+
+/* Barra fija: recordatorio amable (azul) o aviso con cuenta regresiva (naranja) */
 function PayReminderBar({ status, onGo }) {
+  const av = status.state === 'aviso';
   return (
-    <div className="pay-reminder" onClick={onGo}>
-      <span>⏳ Recordatorio de pago: te queda{status.daysLeft===1?'':'n'} <b>{status.daysLeft} día{status.daysLeft===1?'':'s'}</b> para regularizar tu pago (día {status.payDay} de cada mes).</span>
+    <div className="pay-reminder" onClick={onGo} style={av ? {background:'#FFE0B2', color:'#7A3A00', borderColor:'#FFB74D'} : {background:'#E3F2FD', color:'#0D47A1', borderColor:'#90CAF9'}}>
+      {av
+        ? <span>⏳ Tu pago está pendiente: tu plataforma se pondrá <b>en pausa {payFmtDay(status.closeDate)}</b>. Registra tu pago o comunícate con administración.</span>
+        : <span>📅 Recordatorio: tu pago vence <b>{status.daysLeft === 0 ? 'hoy' : payFmtDay(status.dueDate)}</b>. Si ya pagaste, regístralo.</span>}
       <button className="pay-reminder-btn">Registrar pago →</button>
     </div>
   );
 }
 
-/* Pantalla de bloqueo: dirige Únicamente a registrar el pago */
-function PayBlockGate({ status, onGo }) {
+/* Ventana del aviso: aparece UNA vez al día (día Perú) mientras dure el aviso */
+function PayNoticeModal({ status, student, onGo, onClose }) {
+  return (
+    <div className="onb-backdrop" onClick={onClose}>
+      <div className="onb-card" onClick={e => e.stopPropagation()} style={{borderTop:'6px solid #E65100'}}>
+        <div className="onb-ico">⏳</div>
+        <div className="onb-title" style={{color:'#B45300'}}>Tu pago está pendiente</div>
+        <div className="onb-body">Registra tu pago o comunícate con administración. Si no, tu plataforma se pondrá <b>en pausa {payFmtDay(status.closeDate)}</b> y no podrás practicar ni dar exámenes hasta regularizarlo.</div>
+        <div style={{textAlign:'center', margin:'4px 0 10px'}}><span style={{display:'inline-block', background:'#FFF3E0', borderRadius:12, padding:'8px 16px', fontFamily:"'Fredoka',sans-serif", fontSize:28, fontWeight:600, color:'#B45300'}}>{status.daysLeft}<span style={{fontSize:12, marginLeft:4}}>día{status.daysLeft===1?'':'s'}</span></span></div>
+        <div className="onb-actions" style={{flexWrap:'wrap', gap:8}}>
+          <button className="btn-save" onClick={onGo}>💳 Registrar mi pago</button>
+          <a className="btn-soft" href={payWaLink(student)} target="_blank" rel="noopener">💬 Escribir a administración</a>
+          <button className="btn-cancel" onClick={onClose}>Entendido</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Pantalla de PAUSA: se ve en Inicio/Mi práctica/Tareas/Examen/Foro/Hablemos.
+ * Mi avance, Boletín, Perfil y Pagos siguen abiertos (pedido de la usuaria). */
+function PayBlockGate({ status, student, onGo, setView }) {
+  const m = (() => { try { return window.JUCUM_DATA.getStudentMastery(student); } catch { return null; } })();
   return (
     <main>
-      <div className="scard" style={{margin:'40px auto', maxWidth:560, textAlign:'center', borderTop:'5px solid #C62828'}}>
-        <div style={{fontSize:56}}>🔒</div>
-        <h1 style={{fontFamily:"'Fredoka',sans-serif", color:'#C62828', fontSize:24, margin:'8px 0'}}>Tu cuenta está bloqueada</h1>
-        <p style={{fontSize:14, lineHeight:1.6, color:'var(--text)'}}>Pasaron más de 7 días del día de pago (día {status.payDay}) sin registrar tu pago, por eso tu cuenta se bloqueó temporalmente y no puedes avanzar.</p>
-        <p style={{fontSize:14, lineHeight:1.6, color:'var(--text)', marginTop:8}}>Para reactivarla, <b>registra tu pago</b> aquí mismo. En cuanto el administrador lo confirme, recuperas tu acceso. ¡Gracias por tu comprensión! 💙</p>
-        <button className="btn-save" style={{marginTop:16}} onClick={onGo}>💳 Ir a registrar mi pago</button>
+      <div className="scard" style={{margin:'28px auto 14px', maxWidth:560, textAlign:'center', borderTop:'5px solid #C62828'}}>
+        <div style={{fontSize:50}}>⏸️</div>
+        <h1 style={{fontFamily:"'Fredoka',sans-serif", color:'#C62828', fontSize:24, margin:'8px 0'}}>Tu acceso está en pausa</h1>
+        <p style={{fontSize:14, lineHeight:1.6, color:'var(--text)'}}>Tu pago está pendiente. Mientras tanto <b>tu avance no se registra</b> y los exámenes están en pausa. Todo lo que lograste está guardado.</p>
+        <div className="row-flex" style={{gap:8, justifyContent:'center', flexWrap:'wrap', marginTop:14}}>
+          <button className="btn-save" onClick={onGo}>💳 Registrar mi pago</button>
+          {student && <a className="btn-soft" href={payWaLink(student)} target="_blank" rel="noopener">💬 Escribir a administración</a>}
+        </div>
+        <div className="settings-hint" style={{marginTop:12}}>Administración: {status.phone} · Av. Amazonas 934, Tingo María</div>
       </div>
+      {student && (
+        <div className="scard" style={{margin:'0 auto', maxWidth:560}}>
+          <div className="sec-head"><div className="sec-title">🌱 Te está esperando</div></div>
+          {student.streak > 0 && <div style={{fontSize:14, margin:'4px 0'}}>🔥 Tu racha de <b>{student.streak} día{student.streak===1?'':'s'}</b> — vuelve pronto para no perderla.</div>}
+          {m && m.total > 0 && <div style={{fontSize:14, margin:'4px 0'}}>📚 Llevas <b>{m.done} de {m.total}</b> actividades de tu módulo. ¡Te falta poco!</div>}
+          {setView && <div className="row-flex" style={{gap:8, marginTop:10, flexWrap:'wrap'}}>
+            <button className="btn-soft" onClick={() => setView('avance')}>📈 Ver mi avance</button>
+            {window.StudentBoletin && <button className="btn-soft" onClick={() => setView('boletin')}>📔 Mi boletín</button>}
+          </div>}
+        </div>
+      )}
     </main>
   );
 }
@@ -217,4 +274,4 @@ function PayCelebration({ payment, onClose }) {
   );
 }
 
-Object.assign(window, { StudentPayments, PaymentMethods, PayMethodRow, payDownscale, PayReminderBar, PayBlockGate, PayCelebration });
+Object.assign(window, { StudentPayments, PaymentMethods, PayMethodRow, payDownscale, PayReminderBar, PayBlockGate, PayCelebration, PayNoticeModal, payFmtDay, payWaLink });

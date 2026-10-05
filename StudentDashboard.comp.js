@@ -420,7 +420,22 @@ function StudentDashboard({ user, onLogout }) {
     setView('forum');
   };
   const P = window.JUCUM_PAY;
+  // 🚦 Control de pagos: se lee de la NUBE al entrar y cada 5 min (sin nube = todo normal)
+  const [, setGateTick] = React.useState(0);
+  React.useEffect(() => {
+    if (!P || !P.gateLoad) return;
+    let alive = true;
+    const go = () => P.gateLoad().then(() => { if (alive) setGateTick(t => t + 1); }).catch(() => {});
+    go();
+    const iv = setInterval(() => { if (document.visibilityState === 'visible') go(); }, 5 * 60000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [student.id]);
   const acct = P ? P.getAccountStatus(student) : { state:'al_dia', blocked:false, daysLeft:null, payDay:5 };
+  const payNoticeKey = `jucum_paynotice_${student.id}`;
+  const [payNoticeSeen, setPayNoticeSeen] = React.useState(() => { try { return localStorage.getItem(payNoticeKey) || ''; } catch { return ''; } });
+  const payNoticeToday = new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
+  const showPayNotice = acct.state === 'aviso' && payNoticeSeen !== payNoticeToday;
+  const closePayNotice = () => { try { localStorage.setItem(payNoticeKey, payNoticeToday); } catch {} setPayNoticeSeen(payNoticeToday); };
   const [celebrate, setCelebrate] = React.useState(() => P ? P.pendingConfirmCelebration(student.id) : null);
   const closeCelebrate = () => { if (celebrate && P) P.markCelebrationSeen(celebrate.id); setCelebrate(null); };
 
@@ -573,6 +588,7 @@ function StudentDashboard({ user, onLogout }) {
       {!showOnb && !celebrate && !alertKind && !dropExp && taskDue && <TaskDueCartel assignment={taskDue} onGo={() => { setTaskDue(null); setView('tasks'); }} onClose={() => setTaskDue(null)} />}
       {!showOnb && !celebrate && !alertKind && !dropExp && !taskDue && muteModal && <ForumMuteModal info={muteModal} onClose={() => setMuteModal(null)} />}
       {!showOnb && !celebrate && !alertKind && !dropExp && !taskDue && !muteModal && badgeCeleb && window.BadgeCelebration && <BadgeCelebration student={student} onDone={() => setBadgeCeleb(false)} />}
+      {showPayNotice && window.PayNoticeModal && <PayNoticeModal status={acct} student={student} onClose={closePayNotice} onGo={() => { closePayNotice(); setView('payments'); }} />}
       <header className="app-header st-hdr">
         <button type="button" className={`st-burger ${sideOpen ? 'on' : ''}`} data-tut="nav" onClick={toggleSide} aria-label={sideOpen ? 'Ocultar menú' : 'Mostrar menú'} title={sideOpen ? 'Ocultar menú' : 'Mostrar menú'}>
           <span className="st-burger-ico">{sideOpen && !narrow ? '«' : '☰'}</span>
@@ -584,7 +600,7 @@ function StudentDashboard({ user, onLogout }) {
         </div>
         <div className="app-right st-hdr-right">
           <span data-tut="bell" style={{display:'inline-flex'}}><NotifBell userId={student.id} onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); else if (n.link === 'tasks') setView('tasks'); else if (n.link === 'exam') setView('exam'); else if (n.link === 'messages') setView('mensajes'); else if (n.link === 'practica' || n.type === 'daily-reminder' || n.type === 'streak' || n.type === 'achievement') setView('practica'); }} /></span>
-          <StudentUserMenu student={student} level={level} group={group} view={view} setView={setView} onLogout={onLogout} payAlert={!!(acct.blocked || acct.state==='por_vencer')} />
+          <StudentUserMenu student={student} level={level} group={group} view={view} setView={setView} onLogout={onLogout} payAlert={!!(acct.blocked || acct.state==='por_vencer' || acct.state==='aviso')} />
         </div>
       </header>
 
@@ -605,10 +621,10 @@ function StudentDashboard({ user, onLogout }) {
 
       {window.StudentTutorial && <StudentTutorial student={student} onGoHome={() => setView('dashboard')} />}
 
-      {acct.state === 'por_vencer' && view !== 'payments' && <PayReminderBar status={acct} onGo={() => setView('payments')} />}
+      {(acct.state === 'por_vencer' || acct.state === 'aviso') && view !== 'payments' && <PayReminderBar status={acct} onGo={() => setView('payments')} />}
 
-      {acct.blocked && view !== 'payments' ? (
-        <PayBlockGate status={acct} onGo={() => setView('payments')} />
+      {acct.blocked && !['payments','profile','avance','report','diagnosis','boletin'].includes(view) ? (
+        <PayBlockGate status={acct} student={student} setView={setView} onGo={() => setView('payments')} />
       ) : view === 'payments' ? (
         <StudentPayments user={user} onBack={() => setView('dashboard')} />
       ) : view === 'profile' ? (

@@ -234,6 +234,7 @@
   var teacher = q.get('jucum_teacher') === '1'; // profesor: vista libre para dar clase
   var exam = q.get('jucum_exam') === '1';       // alumno rindiendo examen (no registra como práctica)
   var demo = !uid || teacher || exam; // sin uid / profesor / examen → no registra avance
+  var payPaused = false;              // 💳 pausa por pago confirmada por la nube (ver payGate al final)
   var groupId = q.get('jucum_group') || '';
   var matName = q.get('jucum_name') || '';
   var MTAG = String(q.get('jucum_mtag') || '').replace(/[^\wÀ-ÿ ·.-]/g, '').slice(0, 24);
@@ -353,7 +354,7 @@
     var liveStartISO = new Date().toISOString();
     var liveTick = 0;
     function pushLive(state, extra, leaving) {
-      if (!uid || teacher) return;   // profesor y modo prueba no ocupan el salón
+      if (!uid || teacher || payPaused) return;   // profesor, modo prueba y pausa por pago no ocupan el salón
       try {
         fetch(LIVE_URL, {
           method: 'POST', keepalive: !!leaving, mode: 'cors',
@@ -979,5 +980,55 @@
     });
   }
 
-  load(start);
+  /* 💳 PAUSA POR PAGO (script 30 · motor pay-gate.js · PAYGATE-V1).
+   * Solo si la NUBE confirma la fase 'cl' (en pausa): la práctica se puede
+   * mirar pero NO registra nada (demo) y el examen no se puede rendir.
+   * Sin red, sin tabla, error o más de 4 s → todo normal (nunca castigar por duda). */
+  function payGate(cb) {
+    if (!uid || teacher) return cb(false);
+    var fin = false;
+    function end(p) { if (!fin) { fin = true; cb(!!p); } }
+    setTimeout(function () { end(false); }, 4000);
+    try {
+      var me = document.querySelector('script[src*="jucum-connect.js"]');
+      var base = me && me.src ? me.src.replace(/jucum-connect\.js.*$/, '') : 'https://jucum-english-center.netlify.app/';
+      var s = document.createElement('script');
+      s.src = base + 'pay-gate.js?v=20261001a';
+      s.onload = function () {
+        try { window.JUCUM_PAYGATE.checkRest(SUPABASE_URL, SUPABASE_KEY, uid).then(function (r) { end(r && r.k === 'cl'); }, function () { end(false); }); }
+        catch (e) { end(false); }
+      };
+      s.onerror = function () { end(false); };
+      document.head.appendChild(s);
+    } catch (e) { end(false); }
+  }
+  function payPausedUI() {
+    var ph = '+51 935 972 183';
+    var wa = 'https://wa.me/51935972183?text=' + encodeURIComponent('Hola, quiero regularizar mi pago de la plataforma JUCUM.');
+    if (exam) {
+      var ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;z-index:1000000;background:rgba(13,27,90,.92);display:flex;align-items:center;justify-content:center;padding:20px;font-family:system-ui,sans-serif;';
+      ov.innerHTML = '<div style="background:#fff;border-radius:18px;max-width:420px;padding:24px;text-align:center;border-top:6px solid #C62828">' +
+        '<div style="font-size:44px">⏸️</div><div style="font:800 20px system-ui;color:#C62828;margin:6px 0">Tu examen está en pausa</div>' +
+        '<div style="font-size:14px;line-height:1.5;color:#333">Los exámenes solo se rinden con el pago al día. Regulariza tu pago con administración y vuelve a entrar.</div>' +
+        '<a href="' + wa + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:14px;background:#2E7D32;color:#fff;font-weight:800;padding:10px 16px;border-radius:10px;text-decoration:none">💬 Escribir a administración</a>' +
+        '<div style="font-size:12px;color:#666;margin-top:10px">' + ph + '</div></div>';
+      document.body.appendChild(ov);
+      return;
+    }
+    var st = document.createElement('div');
+    st.id = 'jec-pay-strip';
+    st.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999998;background:#C62828;color:#fff;padding:8px 14px;font:800 12.5px system-ui,sans-serif;text-align:center;line-height:1.4;';
+    st.innerHTML = '⏸️ Tu avance NO se está registrando: tu acceso está en pausa por pago pendiente. <a href="' + wa + '" target="_blank" rel="noopener" style="color:#fff;text-decoration:underline">Regularízalo con administración</a> (' + ph + ').';
+    document.body.appendChild(st);
+  }
+
+  payGate(function (paused) {
+    if (!paused) return load(start);
+    payPaused = true; demo = true;
+    function ui() { try { payPausedUI(); } catch (e) {} }
+    if (document.body) ui(); else document.addEventListener('DOMContentLoaded', ui);
+    if (exam) return;              // examen: no arranca nada (no se rinde ni se registra)
+    load(start);                   // práctica: se puede mirar, sin registrar
+  });
 })();
