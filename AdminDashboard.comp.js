@@ -577,24 +577,17 @@ function AdminGestionPagos({ onChange }) {
   const P = window.JUCUM_PAY;
   const payments = P.getAllPayments();
   const pendCount = payments.filter(p => p.status === 'por_confirmar').length;
-  const [tab, setTab] = React.useState('control');   // control · registro · config · avisos
+  const [tab, setTab] = React.useState('control');   // control · registro · avisos
   return (
     <main>
-      <div className="welcome teacher">
-        <div className="welcome-text"><div className="eyebrow t">💳 Gestión de pagos</div><h1>Pagos y configuración</h1><p>Quién no ha pagado, próximos cobros, avisos y pausa por pago, confirmación de capturas y montos — todo en un solo lugar (hora Perú).</p></div>
-      </div>
-
-      <div className="mm-tabs" style={{flexWrap:'wrap'}}>
-        <button className={`mm-tab ${tab==='control'?'on':''}`} onClick={()=>setTab('control')}>🚦 Control y deudores</button>
-        <button className={`mm-tab ${tab==='registro'?'on':''}`} onClick={()=>setTab('registro')}>🧾 Capturas por confirmar{pendCount>0 && <span className="mm-count">{pendCount}</span>}</button>
-        <button className={`mm-tab ${tab==='config'?'on':''}`} onClick={()=>setTab('config')}>💰 Montos por nivel</button>
+      <div className="mm-tabs" style={{flexWrap:'wrap', marginTop:6}}>
+        <button className={`mm-tab ${tab==='control'?'on':''}`} onClick={()=>setTab('control')}>💳 ¿Quién no ha pagado?{pendCount>0 && <span className="mm-count">{pendCount}</span>}</button>
+        <button className={`mm-tab ${tab==='registro'?'on':''}`} onClick={()=>setTab('registro')}>🧾 Historial de pagos</button>
         <button className={`mm-tab ${tab==='avisos'?'on':''}`} onClick={()=>setTab('avisos')}>📣 Mensaje a grupos</button>
       </div>
 
       {tab === 'control' ? (window.AdminPayControl ? <AdminPayControl onChange={onChange} /> : <div className="scard" style={{marginTop:16}}><div className="err">Falta AdminPayControl.comp.js en el servidor.</div></div>)
-        : tab === 'config' ? <AdminConfigBody onChange={onChange} />
         : tab === 'avisos' ? <AdminPaymentNotices />
-        : tab === 'grupos' ? <AdminGroupPaymentReport />
         : <AdminPaymentsBody onChange={onChange} />}
     </main>
   );
@@ -607,6 +600,7 @@ function AdminPaymentsBody({ onChange }) {
   const [filter, setFilter] = React.useState('por_confirmar');
   const [shot, setShot] = React.useState(null);
   const [paying, setPaying] = React.useState(null);
+  const [review, setReview] = React.useState(null);
   const nameOf = (sid) => (D.STUDENTS.find(s => s.id === sid) || {}).fullName || null;
   const groupOf = (sid) => { const s = D.STUDENTS.find(s => s.id === sid); const g = s && D.GROUPS.find(g => g.id === s.group); return g ? g.name : ''; };
   const list = payments.filter(p => filter === 'todos' ? true : p.status === filter);
@@ -647,8 +641,7 @@ function AdminPaymentsBody({ onChange }) {
                   {!p.byAdmin && <button className="att-btn" onClick={async ()=>{ setShot('loading'); const s = await P.fetchShot(p.id); setShot(s || 'none'); }}>🖼️ Ver captura</button>}
                   {!p.byAdmin && <button className="att-btn" style={{borderColor:'#A5D6A7', color:'#1B5E20'}} onClick={()=>sharePaymentWA(p, nameOf(p.studentId), groupOf(p.studentId), cfg.currency)} title="Comparte la captura y los datos del alumno (en el celular puedes elegir el grupo de WhatsApp)">📲 Enviar a WhatsApp</button>}
                   {p.status === 'confirmado' && <button className="att-btn" style={{borderColor:'#90CAF9', color:'#1565C0'}} onClick={()=>printReceipt(p)}>🖶 Imprimir constancia</button>}
-                  {p.status !== 'confirmado' && <button className="att-btn" style={{borderColor:'#A5D6A7', color:'#2E7D32'}} onClick={()=>{ P.confirmPayment(p.id); onChange(); }}>✅ Confirmar</button>}
-                  {p.status !== 'rechazado' && <button className="att-btn" style={{borderColor:'#EF9A9A', color:'#C62828'}} onClick={()=>{ const note = prompt('Motivo (opcional) para el alumno:', 'Revisa los datos e inténtalo de nuevo.'); if (note!==null){ P.rejectPayment(p.id, note); onChange(); } }}>⚠️ Rechazar</button>}
+                  {p.status === 'por_confirmar' && D.STUDENTS.find(s => s.id === p.studentId) && window.PcReviewDialog && <button className="att-btn" style={{borderColor:'#90CAF9', color:'#1565C0'}} onClick={()=>setReview(p)}>🧾 Revisar y aprobar</button>}
                 </div>
               </div>
             );
@@ -665,6 +658,7 @@ function AdminPaymentsBody({ onChange }) {
         </div>
       )}
 
+      {review && <PcReviewDialog payment={review} student={D.STUDENTS.find(s => s.id === review.studentId)} onClose={()=>setReview(null)} onDone={()=>{ setReview(null); onChange(); }} />}
       {paying === 'pick' && <PickStudentModal onClose={()=>setPaying(null)} onPick={(s)=>setPaying(s)} />}
       {paying && paying !== 'pick' && <ManualPaymentModal student={paying} onClose={()=>setPaying(null)} onDone={()=>{ setPaying(null); onChange(); }} />}
     </>

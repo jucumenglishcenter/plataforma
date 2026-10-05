@@ -52,21 +52,27 @@ function StudentPayments({ user, onBack, focusRegister }) {
   const status = P.getAccountStatus(student);
   const mine = P.getStudentPayments(student.id);
 
-  const isA1A2 = student.level === 'a1' || student.level === 'a2';
+  const modes = P.modesFor ? P.modesFor(student.level) : ['mensual'];
   const [dni, setDni] = React.useState('');
-  const [mode, setMode] = React.useState('mensual');
+  const [mode, setMode] = React.useState(() => (P.modeOf ? P.modeOf(student) : 'mensual'));
   const [shot, setShot] = React.useState(null);
   const [err, setErr] = React.useState('');
   const [done, setDone] = React.useState(false);
+  const [reopened, setReopened] = React.useState(false);
 
-  const amounts = cfg.amounts[student.level] || {};
-  const special = P.amountFor ? P.amountFor(student) : { special: false };
-  const amount = mode === 'modulo' ? amounts.modulo : mode === 'mensual' ? (special.special ? special.amount : amounts.mensual) : null;
+  const priceOf = (m) => P.priceFor ? P.priceFor(student, m) : ((cfg.amounts[student.level] || {})[m] || null);
+  const amount = priceOf(mode);
+  const MODE_INFO = {
+    mensual: { emo:'🗓️', name:'Mensual', hint:'Pagas cada mes, el día de pago de tu grupo.' },
+    modulo:  { emo:'📦', name:'Por módulo', hint:'Un solo pago por todo el módulo (2 meses).' },
+    total:   { emo:'💯', name: student.level === 'pre-a1' ? 'Curso completo' : 'Paquete completo', hint: student.level === 'pre-a1' ? 'Todo el curso en un solo pago.' : 'Todo el nivel en un solo pago.' },
+  };
 
   const onFile = (e) => { const f = e.target.files[0]; if (!f) return; payDownscale(f, 1000, 0.7).then(setShot); };
   const submit = () => {
     if (!/^\d{8}$/.test(dni.trim())) { setErr('Ingresa un DNI válido (8 dígitos) para la boleta.'); return; }
     if (!shot) { setErr('Adjunta la captura de tu pago.'); return; }
+    setReopened(status.state === 'aviso' || status.state === 'bloqueado');
     P.registerPayment(student.id, { dni: dni.trim(), mode, level: student.level, amount, screenshot: shot });
     setDone(true); setErr(''); setDni(''); setShot(null); setTick(t => t + 1);
     if (P.gateLoad) setTimeout(() => P.gateLoad().then(() => setTick(t => t + 1)), 1500);
@@ -74,10 +80,10 @@ function StudentPayments({ user, onBack, focusRegister }) {
 
   const stateMeta = {
     al_dia:     { ico:'✅', color:'#2E7D32', bg:'#E8F5E9', title:'Estás al día', msg:'Tu cuenta está activa. ¡Gracias por tu puntualidad!' },
-    en_revision:{ ico:'🕒', color:'#1565C0', bg:'#E3F2FD', title:'Pago en revisión', msg:`Recibimos tu pago y lo estamos revisando. Mientras tanto sigues practicando con normalidad. Si en 2 días no recibes confirmación, escríbenos al ${status.phone}.` },
+    en_revision:{ ico:'🕒', color:'#1565C0', bg:'#E3F2FD', title:'Pago en revisión', msg:`Recibimos tu pago y administración lo está revisando. Mientras tanto sigues practicando con normalidad. Si en 2 días no recibes confirmación, escríbenos al ${status.phone}.` },
     por_vencer: { ico:'📅', color:'#1565C0', bg:'#E3F2FD', title:'Tu pago vence pronto', msg:`Tu pago vence ${status.daysLeft===0?'hoy':`en ${status.daysLeft} día${status.daysLeft===1?'':'s'}`}. Si ya pagaste, regístralo aquí.` },
-    aviso:      { ico:'⏳', color:'#E65100', bg:'#FFF3E0', title:'Tu pago está pendiente', msg:`Registra tu pago o comunícate con administración. Si no, tu plataforma se pondrá en pausa ${payFmtDay(status.closeDate)}.` },
-    bloqueado:  { ico:'⏸️', color:'#C62828', bg:'#FFEBEE', title:'Tu acceso está en pausa', msg:'Tu pago está pendiente. Registra tu pago aquí o escríbenos: en cuanto lo confirmemos vuelves a practicar. Todo tu avance está guardado.' },
+    aviso:      { ico:'⏳', color:'#E65100', bg:'#FFF3E0', title: status.reason ? 'Tu pago no se pudo aprobar' : 'Tu pago está pendiente', msg:`${status.reason ? status.reason + '. ' : ''}Registra tu pago o comunícate con administración. Si no, tu plataforma se pondrá en pausa ${payFmtDay(status.closeDate)}.` },
+    bloqueado:  { ico:'⏸️', color:'#C62828', bg:'#FFEBEE', title:'Tu acceso está en pausa', msg:`${status.reason ? status.reason + '. ' : 'Tu pago está pendiente. '}Registra tu pago aquí o escríbenos: mientras administración lo revisa vuelves a practicar. Todo tu avance está guardado.` },
   }[status.state] || { ico:'✅', color:'#2E7D32', bg:'#E8F5E9', title:'Estás al día', msg:'' };
 
   return (
@@ -112,7 +118,7 @@ function StudentPayments({ user, onBack, focusRegister }) {
         {done ? (
           <div className="diag-block ok" style={{margin:0}}>
             <div className="diag-h">✅ ¡Pago registrado!</div>
-            <div className="diag-it-body">Tu pago quedó <b>registrado y en revisión</b>. El administrador lo confirmará a la brevedad posible. Si en <b>2 días</b> no recibes la confirmación, comunícate al <b>{status.phone}</b> para solicitarla. ¡Gracias! 💙</div>
+            <div className="diag-it-body">Tu pago quedó <b>registrado y en revisión</b>.{reopened ? <> <b>Tu plataforma se reabrió</b> mientras administración lo revisa.</> : null} Si administración no lo aprueba (por ejemplo, si el monto no está completo), te avisaremos. Si en <b>2 días</b> no recibes la confirmación, comunícate al <b>{status.phone}</b>. ¡Gracias! 💙</div>
             <button className="btn-soft" style={{marginTop:10}} onClick={() => { setDone(false); setTick(t => t + 1); }}>Registrar otro pago</button>
           </div>
         ) : (
@@ -124,23 +130,16 @@ function StudentPayments({ user, onBack, focusRegister }) {
               <input className="input-text" style={{width:'100%', maxWidth:240}} value={dni} onChange={e => setDni(e.target.value.replace(/\D/g,'').slice(0,8))} placeholder="8 dígitos" inputMode="numeric" />
             </div>
             <div className="settings-block">
-              <div className="settings-label">Modalidad de pago</div>
+              <div className="settings-label">¿Cómo vas a pagar?</div>
               <div className="module-picker">
-                <button className={`mp-btn ${mode==='mensual'?'on':''}`} onClick={() => setMode('mensual')}>
-                  <span className="mp-emo">🗓️</span><span className="mp-name">Mensual</span>
-                  {amounts.mensual > 0 && <span className="mp-count">{cfg.currency} {amounts.mensual}</span>}
-                </button>
-                {isA1A2 && (
-                  <button className={`mp-btn ${mode==='modulo'?'on':''}`} onClick={() => setMode('modulo')}>
-                    <span className="mp-emo">📦</span><span className="mp-name">Por módulo <span style={{fontWeight:600, color:'var(--text-soft)'}}>(solo A1 y A2)</span></span>
-                    {amounts.modulo > 0 && <span className="mp-count">{cfg.currency} {amounts.modulo}</span>}
+                {modes.map(m => (
+                  <button key={m} className={`mp-btn ${mode===m?'on':''}`} onClick={() => setMode(m)}>
+                    <span className="mp-emo">{MODE_INFO[m].emo}</span><span className="mp-name">{MODE_INFO[m].name}</span>
+                    <span className="mp-count">{priceOf(m) ? `${cfg.currency} ${priceOf(m)}` : 'Consultar'}</span>
                   </button>
-                )}
-                <button className={`mp-btn ${mode==='total'?'on':''}`} onClick={() => setMode('total')}>
-                  <span className="mp-emo">💯</span><span className="mp-name">Pago total</span>
-                </button>
+                ))}
               </div>
-              {mode === 'total' && <div className="settings-hint" style={{marginTop:8}}>El <b>pago total</b> es válido durante los <b>primeros {cfg.totalMonths} meses</b> de apertura del módulo. Si ya pagaste tu primer mes, el administrador descontará ese monto del total. Adjunta tu captura y lo verificamos.</div>}
+              <div className="settings-hint" style={{marginTop:8}}>{MODE_INFO[mode].hint} Administración revisa tu captura y aprueba el monto.</div>
             </div>
             <div className="settings-block">
               <div className="settings-label">Captura de tu pago</div>
@@ -215,8 +214,8 @@ function PayNoticeModal({ status, student, onGo, onClose }) {
     <div className="onb-backdrop" onClick={onClose}>
       <div className="onb-card" onClick={e => e.stopPropagation()} style={{borderTop:'6px solid #E65100'}}>
         <div className="onb-ico">⏳</div>
-        <div className="onb-title" style={{color:'#B45300'}}>Tu pago está pendiente</div>
-        <div className="onb-body">Registra tu pago o comunícate con administración. Si no, tu plataforma se pondrá <b>en pausa {payFmtDay(status.closeDate)}</b> y no podrás practicar ni dar exámenes hasta regularizarlo.</div>
+        <div className="onb-title" style={{color:'#B45300'}}>{status.reason ? 'Tu pago no se pudo aprobar' : 'Tu pago está pendiente'}</div>
+        <div className="onb-body">{status.reason ? <><b>{status.reason}.</b> </> : null}Registra tu pago o comunícate con administración. Si no, tu plataforma se pondrá <b>en pausa {payFmtDay(status.closeDate)}</b> y no podrás practicar ni dar exámenes hasta regularizarlo.</div>
         <div style={{textAlign:'center', margin:'4px 0 10px'}}><span style={{display:'inline-block', background:'#FFF3E0', borderRadius:12, padding:'8px 16px', fontFamily:"'Fredoka',sans-serif", fontSize:28, fontWeight:600, color:'#B45300'}}>{status.daysLeft}<span style={{fontSize:12, marginLeft:4}}>día{status.daysLeft===1?'':'s'}</span></span></div>
         <div className="onb-actions" style={{flexWrap:'wrap', gap:8}}>
           <button className="btn-save" onClick={onGo}>💳 Registrar mi pago</button>

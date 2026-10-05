@@ -12,6 +12,9 @@
  *  4. Quien subió su captura (por confirmar) sigue practicando mientras se revisa.
  *  5. Si algo no se puede leer (sin red, sin tabla) quien llama trata el
  *     resultado como 'off' → todo normal.
+ * V2 (05-oct-2026 · PAYGATE-V2): grupos que no cobran (groups[gid].off), pago
+ * rechazado/incompleto por la administradora (row.rejected → pausa, salvo plazo),
+ * plazo individual (extension_until) o de GRUPO (groups[gid].pror).
  * Fases: off · ok · ex (exonerado) · pr (prórroga) · rev (en revisión) ·
  *        mark (marcado, aviso sin enviar: el alumno NO ve nada) · nod (grupo sin día) ·
  *        pre (recordatorio amable) · av (aviso con cuenta regresiva) · cl (en pausa)
@@ -32,16 +35,23 @@
 
   /* pays: [{status, period, registeredAt|registered_at, confirmedAt|confirmed_at}] */
   function classify(ctl, row, pays, gid, today) {
-    var c = cfg(ctl); row = row || {}; pays = pays || []; today = today || peruToday();
+    var c = cfg(ctl); row = row || {}; today = today || peruToday();
     var g = c.groups[gid] || {};
+    var r = core(c, row, pays || [], g, today);
+    // Plazo de GRUPO: solo protege a quien debe (aviso / pausa)
+    if ((r.k === 'av' || r.k === 'cl') && g.pror && today <= g.pror) return R('pr', { payDay: r.payDay, avDays: r.avDays, until: g.pror, group: true, reason: row.rejected || '' });
+    return r;
+  }
+  function core(c, row, pays, g, today) {
     var payDay = parseInt(row.pay_day, 10) || parseInt(g.payDay, 10) || null;
     var base = { payDay: payDay, avDays: c.avDays };
     if (!c.on) return R('off', base);
-    if (row.exempt) return R('ex', base);
-    if (row.extension_until && today <= row.extension_until) return R('pr', Object.assign(base, { until: row.extension_until }));
+    if (row.exempt || g.off) return R('ex', base);
+    if (row.extension_until && today <= row.extension_until) return R('pr', Object.assign(base, { until: row.extension_until, reason: row.rejected || '' }));
     var regAt = function (p) { return peruDayOf(p.registeredAt || p.registered_at); };
     if (c.prov && pays.some(function (p) { return p.status === 'por_confirmar' && diff(today, regAt(p)) <= 7; })) return R('rev', base);
     if (row.closed_manual) return R('cl', Object.assign(base, { manual: true }));
+    if (row.rejected) return R('cl', Object.assign(base, { reason: row.rejected, since: row.extension_until ? addDays(row.extension_until, 1) : '' }));
     if (row.debtor) {
       if (!row.notice_start) return R('mark', base);
       var close = addDays(row.notice_start, c.avDays);
@@ -83,5 +93,7 @@
     });
   }
 
-  window.JUCUM_PAYGATE = { classify: classify, checkRest: checkRest, cfg: cfg, peruToday: peruToday, peruDayOf: peruDayOf, addDays: addDays, diff: diff, lastDue: lastDue, nextDue: nextDue, DEF: DEF, VERSION: 'PAYGATE-V1' };
+  function addMonths(s, n) { var y = +s.slice(0, 4), m = +s.slice(5, 7) - 1 + n, d = +s.slice(8, 10); y += Math.floor(m / 12); m = ((m % 12) + 12) % 12; return onDay(y, m, d); }
+
+  window.JUCUM_PAYGATE = { classify: classify, checkRest: checkRest, cfg: cfg, peruToday: peruToday, peruDayOf: peruDayOf, addDays: addDays, addMonths: addMonths, diff: diff, lastDue: lastDue, nextDue: nextDue, DEF: DEF, VERSION: 'PAYGATE-V2' };
 })();

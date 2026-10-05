@@ -22,11 +22,12 @@
       totalMonths: 2,            // "pago total" válido los primeros 2 meses del módulo
       exceptions: {},            // { studentId: díaDePago }
       exemptGroups: [],          // ids de grupos exonerados de pago (convenio). También se exoneran automáticamente los grupos con "Homeschool"/"Convenio" en el nombre.
-      amounts: {                 // montos por nivel (los define el admin)
-        'pre-a1': { mensual: 0 },
-        'a1':     { mensual: 0, modulo: 0 },
-        'a2':     { mensual: 0, modulo: 0 },
+      amounts: {                 // montos por nivel y modalidad (los define el admin)
+        'pre-a1': { mensual: 0, total: 0 },
+        'a1':     { mensual: 180, modulo: 350, total: 0 },
+        'a2':     { mensual: 180, modulo: 350, total: 0 },
       },
+      packMonths: { 'pre-a1': 6, 'a1': 6, 'a2': 6 }, // meses que cubre el paquete completo (sugerencia; se edita en cada pago)
     };
   }
   function getConfig() {
@@ -152,7 +153,7 @@
   async function gateLogList(limit) {
     try { const { data } = await window.JUCUM_SB.getClient().from('pay_log').select('*').order('at', { ascending: false }).limit(limit || 80); return data || []; } catch (e) { return []; }
   }
-  const ROW_COLS = ['debtor','notice_start','closed_manual','extension_until','paid_until','amount','amount_why','pay_day','join_date','exempt','teacher_allow','teacher_views','note'];
+  const ROW_COLS = ['debtor','notice_start','closed_manual','extension_until','paid_until','amount','amount_why','pay_day','join_date','exempt','teacher_allow','teacher_views','note','mode','rejected','falta'];
   async function gateSet(sid, patch, action, detail) {
     const sb = window.JUCUM_SB && window.JUCUM_SB.getClient();
     if (!sb) return { ok: false, error: 'Sin conexión' };
@@ -178,12 +179,60 @@
     if (detail) gateLog('', 'config', detail);
     return { ok: true };
   }
-  /* Monto que corresponde a un alumno: especial (pay_status.amount) o general del nivel */
+  /* Modalidades por nivel (05-oct): Pre-A1 mensual o curso completo · A1/A2 mensual, módulo (2 meses) o completo */
+  const MODE_LABEL = { mensual: 'Mensual', modulo: 'Por módulo', total: 'Paquete completo' };
+  function modesFor(level) { return level === 'a1' || level === 'a2' ? ['mensual', 'modulo', 'total'] : ['mensual', 'total']; }
+  function modeOf(student) { const r = GATE.rows[student.id]; return (r && r.mode) || student.payMode || 'mensual'; }
+  /* Precio de una modalidad para un alumno. El monto especial (pay_status.amount) aplica al mensual. */
+  function priceFor(student, mode) {
+    const r = GATE.rows[student.id];
+    if (mode === 'mensual' && r && r.amount != null && r.amount !== '') return Number(r.amount);
+    const v = (getConfig().amounts[student.level] || {})[mode];
+    return v ? Number(v) : null;
+  }
+  /* Monto que corresponde a un alumno (según su modalidad): especial o general del nivel */
   function amountFor(student) {
     const r = GATE.rows[student.id];
-    if (r && r.amount != null && r.amount !== '') return { amount: Number(r.amount), special: true, why: r.amount_why || '' };
-    const a = (getConfig().amounts[student.level] || {}).mensual || 0;
-    return { amount: a, special: false, why: '' };
+    const m = modeOf(student);
+    const special = m === 'mensual' && r && r.amount != null && r.amount !== '';
+    return { amount: priceFor(student, m) || 0, special: !!special, why: special ? (r.amount_why || '') : '', mode: m };
+  }
+  /* Lo que se limpia al quedar al día */
+  function clearDebt(extra) { return Object.assign({ debtor: false, notice_start: null, closed_manual: false, extension_until: null, rejected: '', falta: null }, extra || {}); }
+
+  /* ✅ La ADMINISTRADORA aprueba un pago subido por el alumno (con modalidad, monto y hasta cuándo cubre) */
+  async function approvePayment(id, o) {
+    const arr = loadPayments(); const p = arr.find(x => x.id === id);
+    if (!p) return { ok: false, error: 'No se encontró el pago.' };
+    const res = await gateSet(p.studentId, clearDebt({ paid_until: o.until, mode: o.mode }), 'aprobó pago', `${labelMode(o.mode)} · ${getConfig().currency} ${o.amount ?? '—'} · cubre hasta ${o.until}`);
+    if (!res.ok) return res;
+    p.status = 'confirmado'; p.confirmedAt = new Date().toISOString(); p.note = ''; p.mode = o.mode; if (o.amount != null && o.amount !== '') p.amount = Number(o.amount);
+    savePayments(arr); pushPaymentCloud(p);
+    if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(p.studentId, { type: 'payment-ok', title: '✅ ¡Pago confirmado!', body: 'Administración aprobó tu pago. ¡Gracias! Sigue practicando con normalidad. 🎉', link: 'payments' });
+    return { ok: true };
+  }
+  /* ⚠️ La administradora NO aprueba: incompleto o rechazado → pausa al instante, salvo que dé plazo (días) */
+  async function disapprovePayment(id, o) {
+    const arr = loadPayments(); const p = arr.find(x => x.id === id);
+    if (!p) return { ok: false, error: 'No se encontró el pago.' };
+    const cur = getConfig().currency;
+    const falta = o.kind === 'inc' ? Math.max(0, (Number(o.expected) || 0) - (Number(o.received) || 0)) : null;
+    const why = o.kind === 'inc' ? `Pago incompleto · falta ${cur} ${falta}` : ('Pago no aprobado' + (o.reason ? ' · ' + o.reason : ''));
+    const until = o.days ? window.JUCUM_PAYGATE.addDays(window.JUCUM_PAYGATE.peruToday(), Number(o.days)) : null;
+    const res = await gateSet(p.studentId, { debtor: true, rejected: why, falta, extension_until: until, closed_manual: false }, o.kind === 'inc' ? 'pago incompleto' : 'no aprobó pago', why + (until ? ` · plazo hasta ${until}` : ' · plataforma pausada'));
+    if (!res.ok) return res;
+    p.status = 'rechazado'; p.note = why; if (o.kind === 'inc' && o.received) p.amount = Number(o.received);
+    savePayments(arr); pushPaymentCloud(p);
+    if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(p.studentId, { type: 'payment', link: 'payments', title: '⚠️ Tu pago no se pudo aprobar',
+      body: `${why}. ${until ? `Tienes hasta el ${until} para regularizarlo; si no, tu plataforma se pondrá en pausa.` : 'Tu plataforma quedó en pausa hasta que lo regularices.'} Escríbenos al ${ATTN_PHONE}.` });
+    return { ok: true };
+  }
+  /* 💵 Pago registrado por la administradora (efectivo, etc.): ya aprobado */
+  async function adminRecordPayment(student, o) {
+    const res = await gateSet(student.id, clearDebt({ paid_until: o.until, mode: o.mode }), 'pagó', `${labelMode(o.mode)} · ${getConfig().currency} ${o.amount ?? '—'} · ${o.medio || ''} · cubre hasta ${o.until}`);
+    if (!res.ok) return res;
+    registerManualPayment(student.id, { dni: student.dni || '', mode: o.mode, level: student.level, amount: o.amount === '' || o.amount == null ? null : Number(o.amount), note: (o.medio || 'Registrado por administración') + ' · cubre hasta ' + o.until, _gateDone: true });
+    return { ok: true };
   }
 
   function getStudentPayments(studentId) {
@@ -226,7 +275,7 @@
     savePayments(arr); pushPaymentCloud(p);
     // 🚦 Confirmar el pago quita la marca de deudor / la pausa manual
     const gr = GATE.rows[p.studentId];
-    if (gr && (gr.debtor || gr.closed_manual || gr.notice_start)) gateSet(p.studentId, { debtor: false, notice_start: null, closed_manual: false }, 'pago confirmado', 'Captura confirmada · se quitó el aviso/pausa');
+    if (gr && (gr.debtor || gr.closed_manual || gr.notice_start || gr.rejected)) gateSet(p.studentId, gr.rejected ? clearDebt() : { debtor: false, notice_start: null, closed_manual: false }, 'pago confirmado', 'Captura confirmada · se quitó el aviso/pausa');
     if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(p.studentId, {
       type: 'payment-ok',
       title: '✅ ¡Pago confirmado!',
@@ -277,12 +326,16 @@
     const g = gateStatus(student);
     const mine = loadPayments().filter(p => p.studentId === sid);
     const last = mine.sort((a, b) => String(b.registeredAt).localeCompare(String(a.registeredAt)))[0];
-    const st = g.k === 'pre' ? 'por_vencer' : g.k === 'av' ? 'aviso' : g.k === 'rev' ? 'en_revision' : g.k === 'cl' ? 'bloqueado' : 'al_dia';
+    // Pago no aprobado CON plazo → el alumno ve el aviso con la fecha en que se pausa
+    const plazo = g.k === 'pr' && !!g.reason;
+    const PGg = PG();
+    const closeDate = plazo ? PGg.addDays(g.until, 1) : (g.close || null);
+    const st = g.k === 'pre' ? 'por_vencer' : (g.k === 'av' || plazo) ? 'aviso' : g.k === 'rev' ? 'en_revision' : g.k === 'cl' ? 'bloqueado' : 'al_dia';
     return {
-      state: st, gate: g,
-      daysLeft: (g.k === 'pre' || g.k === 'av') ? g.left : null,
+      state: st, gate: g, reason: g.reason || '',
+      daysLeft: plazo ? PGg.diff(closeDate, PGg.peruToday()) : (g.k === 'pre' || g.k === 'av') ? g.left : null,
       payDay: g.payDay || null,
-      dueDate: g.due || null, closeDate: g.close || null,
+      dueDate: g.due || null, closeDate,
       blocked: st === 'bloqueado',
       pending: st === 'en_revision', rejected: !!(last && last.status === 'rechazado'),
       confirmed: mine.find(p => p.status === 'confirmado') || null,
@@ -308,7 +361,7 @@
     localStorage.setItem(SEEN_KEY, JSON.stringify(seen));
   }
 
-  function labelMode(m) { return m === 'mensual' ? 'Mensual' : m === 'modulo' ? 'Por módulo' : m === 'total' ? 'Pago total' : m; }
+  function labelMode(m) { return m === 'mensual' ? 'Mensual' : m === 'modulo' ? 'Por módulo' : m === 'total' ? 'Paquete completo' : m; }
 
   /* ── Registro de pago hecho POR LA ADMINISTRACIÓN, en nombre del alumno ──
    * Para alumnos que pagan pero tienen problemas para registrarlo solos.
@@ -327,6 +380,9 @@
     arr.unshift(p);
     savePayments(arr);
     pushPaymentCloud(p);
+    // 🚦 Un pago registrado a mano también quita aviso / pausa / marca de deudor
+    const gr = GATE.rows[studentId];
+    if (!data._gateDone && gr && (gr.debtor || gr.closed_manual || gr.notice_start || gr.rejected)) gateSet(studentId, gr.rejected ? clearDebt() : { debtor: false, notice_start: null, closed_manual: false }, 'pagó', 'Pago registrado por administración');
     if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(studentId, {
       type: 'payment-ok',
       title: '✅ Pago registrado',
@@ -400,5 +456,6 @@
     pendingConfirmCelebration, markCelebrationSeen, cloudLoad, currentPeriod,
     PAYMENT_METHODS, ATTN_PHONE, fetchShot,
     gateLoad, gateStatus, gateRow, gateCtl, gateSet, gateSetControl, gateLog, gateLogList, amountFor, gateReady: () => GATE.ok, gateError: () => GATE.err,
+    modesFor, modeOf, priceFor, MODE_LABEL, approvePayment, disapprovePayment, adminRecordPayment, isExemptGroup,
   };
 })();

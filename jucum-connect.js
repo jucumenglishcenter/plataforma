@@ -993,7 +993,7 @@
       var me = document.querySelector('script[src*="jucum-connect.js"]');
       var base = me && me.src ? me.src.replace(/jucum-connect\.js.*$/, '') : 'https://jucum-english-center.netlify.app/';
       var s = document.createElement('script');
-      s.src = base + 'pay-gate.js?v=20261001a';
+      s.src = base + 'pay-gate.js?v=20261005a';
       s.onload = function () {
         try { window.JUCUM_PAYGATE.checkRest(SUPABASE_URL, SUPABASE_KEY, uid).then(function (r) { end(r && r.k === 'cl'); }, function () { end(false); }); }
         catch (e) { end(false); }
