@@ -2328,18 +2328,21 @@ function TodayPracticeCard({ student }) {
           const mod = mods.find(m => m.id === it.moduleId);
           const a = mod && (mod.activities || []).find(x => x.id === it.activityId);
           const href = (mod && a) ? linkFor(a, mod, student.id) : null;
+          /* 📄 Plan del teacher: Quizlet abre el juego exacto que pidió (vocabulario/traducir/ordenar) */
+          const qGame = (mod && a && a.type === 'quizlet') ? (() => { const gs = quizletGames(a); const g = gs.find(x => x.key === it.quizKey) || gs[0]; return g ? { ...g, url: it.quizUrl || g.url } : (it.quizUrl ? { key: it.quizKey, url: it.quizUrl } : null); })() : null;
           const tint = st.st === 'ok' ? {background:'#F2FAF3', borderColor:'#BFE3C3'} : st.st === 'low' ? {background:'#FFFBF0', borderColor:'#F0DDB0'} : null;
           const sub = st.st === 'ok'
             ? <span style={{color:'#2E7D32', fontWeight:800}}>✓ Hecha hoy{st.pct != null ? ` · ${st.pct}%` : ''} — ¡bien ahí!</span>
             : st.st === 'low'
               ? <span style={{color:'#92510F', fontWeight:800}}>Hecha hoy · {st.pct}% — vuelve a intentarla (la nota cambia tras ½ hora)</span>
-              : <span>{isGeneric ? 'Recomendado para ti' : 'Indicado por tu profesor'}</span>;
+              : <span>{isGeneric ? 'Recomendado para ti' : (it.fromImport ? '📌 Según el plan de tu teacher' : 'Indicado por tu profesor')}{it.prio ? <b style={{color:'#AD1457'}}> · primero esto</b> : null}</span>;
           const inner = (<>
             {badge(st)}
             <span className="next-ico">{typeIcon(it.type)}</span>
-            <div className="next-info"><b>{it.label}<ModChip student={student} moduleId={it.moduleId} onlyReview /></b>{sub}</div>
-            {href && <span className="next-arr">→</span>}
+            <div className="next-info"><b>{it.label}<ModChip student={student} moduleId={it.moduleId} onlyReview /></b>{it.note ? <span style={{display:'block', fontSize:12, color:'#555', fontWeight:600, lineHeight:1.4, margin:'2px 0'}}>{it.note}</span> : null}{sub}</div>
+            {(href || qGame) && <span className="next-arr">→</span>}
           </>);
+          if (qGame) return <a key={i} className="next-card" href={qGame.url} target="_blank" rel="noopener" style={tint} onClick={() => { try { D.markActivityComplete(student.id, mod.id, a.id, null, 0, { quizlet: qGame.key }); } catch (e) {} }}>{inner}</a>;
           return href
             ? <a key={i} className="next-card" href={href} style={tint}>{inner}</a>
             : <div key={i} className="next-card" style={{cursor:'default', ...(tint || {})}}>{inner}</div>;

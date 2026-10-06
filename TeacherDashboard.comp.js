@@ -447,59 +447,127 @@ function TeacherChampions({ groupId, levelColor }) {
   );
 }
 
-/* Panel SIEMPRE visible para prender/apagar módulos del grupo sin entrar a un modal */
-function GroupModulesQuick({ groupId }) {
-  const { MODULE_CATALOG, getGroupSettings, setGroupSettings, GROUPS } = window.JUCUM_DATA;
+/* Panel SIEMPRE visible para los módulos del grupo · MODS-PANEL-V2 (06-oct-2026)
+ * Cada módulo tiene UN control de 3 estados: Cerrado · Repaso · ▶ En clase (A1/A2).
+ * “En clase” es ÚNICO (= último de activeModuleIds = “Aquí vas” del alumno); elegir otro
+ * pasa el anterior a Repaso. “Dejar solo …” cierra todos los repasos de un toque.
+ * Siempre parte de getGroupSettings() FRESCO (antes usaba un estado congelado y pisaba lo
+ * guardado desde ⚙️ Configurar grupo), el orden de las tarjetas NO salta al tocar, y se
+ * comprueba en la nube que quedó guardado (aviso + Reintentar si no). Pre-A1: Cerrado · Abierto. */
+function GroupModulesQuick({ groupId, onChanged }) {
+  const D0 = window.JUCUM_DATA;
+  const { MODULE_CATALOG, getGroupSettings, setGroupSettings, GROUPS } = D0;
   const group = GROUPS.find(g => g.id === groupId);
   const modules = MODULE_CATALOG[group.level] || [];
-  const [s, setS] = React.useState(() => getGroupSettings(groupId));
   const noNum = group.level === 'a1' || group.level === 'a2';
-  const D0 = window.JUCUM_DATA;
-  const toggle = (id) => {
-    const set = new Set(s.activeModuleIds || []);
-    if (set.has(id)) set.delete(id); else set.add(id);
-    const ids = D0.nextActiveIds ? D0.nextActiveIds(group.level, s.activeModuleIds, modules, set) : modules.filter(x => set.has(x.id)).map(x => x.id);
-    const next = { ...s, activeModuleIds: ids, activeModuleId: ids[0] || null };
-    setS(next); setGroupSettings(groupId, next);
+  const [s, setS] = React.useState(() => getGroupSettings(groupId));
+  const [save, setSave] = React.useState('');   // '' · saving · ok · fail
+  const [note, setNote] = React.useState('');
+  const vRef = React.useRef(0);
+  const ids = s.activeModuleIds || [];
+  const clsId = ids.length ? ids[ids.length - 1] : null;
+  /* orden fijo mientras se usa el panel (el de clase arriba solo al abrir la pantalla) */
+  const [order] = React.useState(() => noNum && clsId ? [clsId, ...modules.filter(m => m.id !== clsId).map(m => m.id)] : modules.map(m => m.id));
+  const shownMods = [...order.map(id => modules.find(m => m.id === id)).filter(Boolean), ...modules.filter(m => !order.includes(m.id))];
+  const verify = (want) => {
+    const sb = window.JUCUM_SB && window.JUCUM_SB.getClient && window.JUCUM_SB.getClient();
+    if (!sb) { setSave(''); return; }
+    const v = ++vRef.current; setSave('saving');
+    setTimeout(async () => {
+      try {
+        const { data, error } = await sb.from('groups').select('active_module_ids').eq('id', groupId).maybeSingle();
+        if (v !== vRef.current) return;
+        const got = (data && data.active_module_ids) || [];
+        setSave(!error && JSON.stringify(got) === JSON.stringify(want) ? 'ok' : 'fail');
+      } catch (e) { if (v === vRef.current) setSave('fail'); }
+    }, 1600);
   };
-  const activeCount = (s.activeModuleIds || []).length;
-  /* ⭕ ▶ En clase ahora = último prendido; 📌 lo fija a mano (lo mueve al final de la lista activa) */
-  const clsId = activeCount ? s.activeModuleIds[activeCount - 1] : null;
-  const pin = (id) => { const ids = [...(s.activeModuleIds || []).filter(x => x !== id), id]; const next = { ...s, activeModuleIds: ids, activeModuleId: ids[0] || null }; setS(next); setGroupSettings(groupId, next); };
-  const shownMods = noNum && clsId ? [...modules.filter(m => m.id === clsId), ...modules.filter(m => m.id !== clsId)] : modules;
+  const apply = (next, msg) => {
+    const cur = getGroupSettings(groupId);
+    const out = { ...cur, activeModuleIds: next, activeModuleId: next[0] || null };
+    setGroupSettings(groupId, out); setS(out); setNote(msg || '');
+    if (onChanged) onChanged();
+    verify(next);
+  };
+  const retry = () => {
+    const cur = getGroupSettings(groupId);
+    if (window.JUCUM_SYNC && window.JUCUM_SYNC.pushSettings) window.JUCUM_SYNC.pushSettings(groupId, cur);
+    verify(cur.activeModuleIds || []);
+  };
+  const nameOf = (id) => { const m = modules.find(x => x.id === id); return m ? m.name : 'el módulo'; };
+  const setState = (id, st) => {
+    const cur = getGroupSettings(groupId).activeModuleIds || [];
+    const has = cur.includes(id); const rest = cur.filter(x => x !== id);
+    const curCls = cur.length ? cur[cur.length - 1] : null;
+    if (st === 'off') { if (!has) return; apply(rest, id === curCls && rest.length ? '▶ Ahora «' + nameOf(rest[rest.length - 1]) + '» es el de clase.' : ''); return; }
+    if (!noNum) {   // Pre-A1: abierto/cerrado, el de clase es el más avanzado (orden de catálogo)
+      if (has) return; const set = new Set([...cur, id]);
+      apply(D0.nextActiveIds ? D0.nextActiveIds(group.level, cur, modules, set) : modules.filter(x => set.has(x.id)).map(x => x.id)); return;
+    }
+    if (st === 'cls') { if (id === curCls) return; apply([...rest, id], curCls ? '«' + nameOf(curCls) + '» quedó abierto para repasar.' : ''); return; }
+    if (st === 'rev') {
+      if (has && id !== curCls) return;
+      if (!rest.length) { if (has) { setNote('Es el único abierto: sigue siendo el de clase. Para cambiarlo, marca otro como ▶ En clase.'); return; } apply([id], 'Era el único abierto, así que quedó como ▶ En clase.'); return; }
+      apply([id, ...rest], has ? '▶ Ahora «' + nameOf(rest[rest.length - 1]) + '» es el de clase.' : '');
+    }
+  };
+  const onlyClass = () => { if (clsId) apply([clsId], 'Listo: solo «' + nameOf(clsId) + '» queda abierto.'); };
   const openedTxt = (id) => { try { const d = D0.getModuleOpenedAt && D0.getModuleOpenedAt(groupId, id); return d ? new Date(d + 'T12:00:00Z').toLocaleDateString('es-PE', { day:'numeric', month:'short', timeZone:'UTC' }) : ''; } catch (e) { return ''; } };
+  const clsMod = clsId && modules.find(m => m.id === clsId);
+  const revCount = Math.max(0, ids.length - 1);
+  const segBtn = (active, kind) => ({ flex:1, minWidth:0, border:'none', borderRadius:7, padding:'7px 4px', fontSize:11.5, fontWeight:800, fontFamily:'inherit', cursor:'pointer', lineHeight:1.15,
+    background: active ? (kind === 'cls' ? '#1F3A8A' : kind === 'rev' ? '#2EA84B' : '#fff') : 'transparent',
+    color: active ? (kind === 'off' ? '#4A4A44' : '#fff') : '#6B6B63', boxShadow: active && kind === 'off' ? '0 1px 3px rgba(0,0,0,.15)' : 'none' });
+  const saveChip = save === 'saving' ? <span style={{fontSize:11.5,fontWeight:800,color:'#6B6B63'}}>Guardando…</span>
+    : save === 'ok' ? <span style={{fontSize:11.5,fontWeight:800,color:'#2E7D32'}}>✓ Guardado en la nube</span>
+    : save === 'fail' ? <span style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:11.5,fontWeight:800,color:'#C62828'}}>No se guardó en la nube<button type="button" onClick={retry} style={{fontSize:11,fontWeight:800,border:'1.5px solid #EF9A9A',background:'#fff',color:'#C62828',borderRadius:8,padding:'2px 8px',cursor:'pointer',fontFamily:'inherit'}}>Reintentar</button></span>
+    : <span className="sec-meta">{ids.length} abierto{ids.length === 1 ? '' : 's'}</span>;
   return (
     <div className="scard" style={{marginBottom:16}}>
       <div className="sec-head">
         <div className="sec-title">📦 Módulos del grupo</div>
-        <span className="sec-meta">{activeCount} activo{activeCount===1?'':'s'} · prende/apaga al instante</span>
+        {saveChip}
       </div>
-      {modules.length === 0 ? <div className="settings-hint">Este nivel no tiene módulos cargados.</div> : (
-        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))', gap:10}}>
+      {modules.length === 0 ? <div className="settings-hint">Este nivel no tiene módulos cargados.</div> : (<>
+        <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',background:ids.length ? '#F4F8FF' : '#FFEBEE',border:'1.5px solid ' + (ids.length ? '#C5D6F2' : '#EF9A9A'),borderRadius:10,padding:'10px 12px',marginBottom:12}}>
+          {clsMod ? (<>
+            <span style={{fontSize:12.5,fontWeight:700,color:'#4A5468'}}>Tus alumnos ven:</span>
+            <span style={{display:'inline-flex',alignItems:'center',gap:6,background:'#1F3A8A',color:'#fff',borderRadius:20,padding:'3px 11px 3px 4px',fontSize:12.5,fontWeight:800}}><span style={{background:'#fff',borderRadius:'50%',width:22,height:22,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:12}}>{clsMod.emoji}</span>{clsMod.name} · Aquí vas</span>
+            {revCount > 0 && <span style={{fontSize:12.5,fontWeight:800,color:'#2E7D32'}}>+ {revCount} para repasar</span>}
+            <span style={{flex:1}}></span>
+            {revCount > 0 && <button type="button" onClick={onlyClass} style={{fontSize:12,fontWeight:800,color:'#1F3A8A',border:'1.5px solid #1F3A8A',background:'#fff',borderRadius:9,padding:'6px 12px',cursor:'pointer',fontFamily:'inherit'}}>Dejar solo este abierto</button>}
+          </>) : <span style={{fontSize:12.5,fontWeight:800,color:'#C62828'}}>Ningún módulo abierto: tus alumnos no verán actividades. {noNum ? 'Marca uno como ▶ En clase.' : 'Abre uno.'}</span>}
+        </div>
+        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(250px,1fr))', gap:10}}>
           {shownMods.map(m => {
-            const on = (s.activeModuleIds || []).includes(m.id);
+            const on = ids.includes(m.id);
             const cur = on && m.id === clsId;
+            const st = cur ? 'cls' : on ? 'rev' : 'off';
             const od = cur ? openedTxt(m.id) : '';
+            const onlyOne = cur && ids.length === 1;
             return (
-              <div key={m.id} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 14px',border:cur ? '2px solid #1F3A8A' : '1.5px solid '+(on?'#A5D6A7':'#E6E3DA'),borderRadius:10,background:cur ? '#F4F8FF' : on?'#F0FAF1':'#fff',position:'relative'}}>
-                {cur && <span style={{position:'absolute',top:-9,left:12,fontSize:10,fontWeight:800,background:'#1F3A8A',color:'#fff',borderRadius:9,padding:'1px 8px'}}>▶ En clase ahora</span>}
-                <span style={{fontSize:20}}>{m.emoji}</span>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontFamily:"'Fredoka',sans-serif",fontWeight:600,fontSize:13,color:'var(--text)'}}>{m.name}</div>
-                  <div style={{fontSize:11,color:on?'#2E7D32':'var(--text-soft)',fontWeight:700,marginTop:1}}>{cur ? (od ? 'Abierto el ' + od : '🟢 Activo') : on ? (activeCount > 1 ? '🟢 Abierto para repasar' : '🟢 Activo') : '⚪ Apagado'} · {m.activities.length} act.</div>
-                  {on && !cur && <button type="button" onClick={() => pin(m.id)} style={{marginTop:5,fontSize:11,fontWeight:800,color:'#1F3A8A',border:'1.5px solid #C5D6F2',background:'#fff',borderRadius:9,padding:'3px 8px',cursor:'pointer',fontFamily:'inherit'}}>📌 Marcar como el de clase</button>}
+              <div key={m.id} style={{display:'flex',flexDirection:'column',gap:10,padding:'12px 13px',border:cur ? '2px solid #1F3A8A' : '1.5px solid ' + (on ? '#A5D6A7' : '#E6E3DA'),borderRadius:10,background:cur ? '#F4F8FF' : on ? '#F0FAF1' : '#fff'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <span style={{fontSize:20}}>{m.emoji}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontFamily:"'Fredoka',sans-serif",fontWeight:600,fontSize:13,color:'var(--text)'}}>{m.name}</div>
+                    <div style={{fontSize:11,fontWeight:700,marginTop:1,color:cur ? '#1F3A8A' : on ? '#2E7D32' : 'var(--text-soft)'}}>{cur ? ('Aquí vas' + (od ? ' · abierto el ' + od : '')) : on ? 'Abierto para repasar' : 'Cerrado · no lo ven'} · {m.activities.length} act.</div>
+                  </div>
                 </div>
-                <button type="button" onClick={()=>toggle(m.id)} aria-label={on?'Apagar':'Prender'}
-                        style={{width:48,height:27,borderRadius:14,border:'none',cursor:'pointer',background:on?'#2EA84B':'#CFCFC8',position:'relative',transition:'background .15s',flexShrink:0,padding:0}}>
-                  <span style={{position:'absolute',top:3,left:on?24:3,width:21,height:21,borderRadius:'50%',background:'#fff',transition:'left .15s',boxShadow:'0 1px 3px rgba(0,0,0,0.3)'}}></span>
-                </button>
+                <div role="radiogroup" aria-label={'Estado de ' + m.name} style={{display:'flex',gap:3,background:'#F1EFE8',borderRadius:9,padding:3}}>
+                  <button type="button" role="radio" aria-checked={st === 'off'} onClick={() => setState(m.id, 'off')} style={segBtn(st === 'off', 'off')}>Cerrado</button>
+                  {noNum ? (<>
+                    <button type="button" role="radio" aria-checked={st === 'rev'} onClick={() => setState(m.id, 'rev')} title={onlyOne ? 'Es el único abierto: marca otro como En clase para pasarlo a repaso' : 'Abierto para practicar, sin ser el tema de la clase'} style={{...segBtn(st === 'rev', 'rev'), opacity: onlyOne ? .45 : 1}}>Repaso</button>
+                    <button type="button" role="radio" aria-checked={st === 'cls'} onClick={() => setState(m.id, 'cls')} title="El tema de la clase: tus alumnos lo ven como “Aquí vas”" style={segBtn(st === 'cls', 'cls')}>▶ En clase</button>
+                  </>) : <button type="button" role="radio" aria-checked={on} onClick={() => setState(m.id, 'on')} style={segBtn(on, 'rev')}>Abierto</button>}
+                </div>
               </div>
             );
           })}
         </div>
-      )}
-      {activeCount === 0 && <div className="settings-hint" style={{marginTop:8,color:'#C62828',fontWeight:700}}>⚠ Sin módulos activos, los alumnos no verán actividades.</div>}
-      {activeCount > 1 && <div className="settings-hint" style={{marginTop:8}}>▶ “En clase ahora” = el último módulo que prendiste. Es el que tus alumnos ven como “Aquí vas”.</div>}
+        {note && <div className="settings-hint" style={{marginTop:10,fontWeight:700,color:'#1F3A8A'}}>{note}</div>}
+        <div className="settings-hint" style={{marginTop:8}}>{noNum ? <><b>▶ En clase</b> = el tema de hoy, solo uno (tus alumnos lo ven como “Aquí vas”). <b>Repaso</b> = abierto para practicar. <b>Cerrado</b> = no lo ven.</> : <>El módulo abierto más avanzado es el que tus alumnos ven como “Aquí vas”.</>}</div>
+      </>)}
     </div>
   );
 }
@@ -519,6 +587,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
   const [showReport, setShowReport] = React.useState(false);
   const [showFinish, setShowFinish] = React.useState(false);
   const [, setGrdTick] = React.useState(0);
+  const [modTick, setModTick] = React.useState(0);   // ⚙️ al cerrar Configurar grupo, el panel de módulos se relee
   const grdFinished = !!(window.JUCUM_GRAD && window.JUCUM_GRAD.isFinished(group));
   React.useEffect(() => { document.body.setAttribute('data-level', group.level); return () => document.body.removeAttribute('data-level'); }, [group.level]);
 
@@ -568,7 +637,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
       </div>
       {showFinish && <FinishGroupModal groupId={groupId} onClose={() => setShowFinish(false)} onDone={() => { setShowFinish(false); setGrdTick(t => t + 1); }} />}
 
-      <GroupModulesQuick groupId={groupId} />
+      <GroupModulesQuick key={'gmq' + modTick} groupId={groupId} onChanged={() => setGrdTick(t => t + 1)} />
 
       <TeacherChampions groupId={groupId} levelColor={level.dark} />
 
@@ -642,7 +711,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
         />
       )}
 
-      {showSettings && <GroupSettingsModal groupId={groupId} level={level} onClose={() => setShowSettings(false)} />}
+      {showSettings && <GroupSettingsModal groupId={groupId} level={level} onClose={() => { setShowSettings(false); setModTick(x => x + 1); }} />}
     </>
   );
 }

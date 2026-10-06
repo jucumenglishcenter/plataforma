@@ -121,8 +121,22 @@ function ClassPlanner({ onBack, onGoExams }) {
   const [editPractice, setEditPractice] = React.useState(null);
   const [classModePlan, setClassModePlan] = React.useState(null);
   const [defaultGroup, setDefaultGroup] = React.useState(null);
+  /* 👥 GROUP-PICKER-V1 · grupo con el que se trabaja (se recuerda en este equipo) → selector + distintivo de nivel */
+  const [curGroup, setCurGroupRaw] = React.useState(() => {
+    let saved = null; try { saved = localStorage.getItem('jucum_planner_group_v1'); } catch (e) {}
+    if (saved && GROUPS.some(g => g.id === saved)) return saved;
+    const s = (window.gpSortGroups ? window.gpSortGroups(GROUPS) : groupsSorted()).filter(g => !g.finishedAt);
+    return s[0] ? s[0].id : (GROUPS[0] ? GROUPS[0].id : null);
+  });
+  const setCurGroup = (id) => { if (!id) return; setCurGroupRaw(id); try { if (window.JUCUM_STORE) window.JUCUM_STORE.set('jucum_planner_group_v1', id); else localStorage.setItem('jucum_planner_group_v1', id); } catch (e) {} };
+  const badgeGroup = (screen === 'calendar' || screen === 'class' || screen === 'practice') ? curGroup : (screen === 'classmode' && classModePlan) ? classModePlan.groupId : null;
   const [tick, setTick] = React.useState(0);
   const refresh = () => setTick(t => t + 1);
+  /* 📄 Plan importado del teacher (PLAN-IMPORT-V1): se abre en su propio editor para que plan y práctica sigan juntos */
+  const [importRef, setImportRef] = React.useState(null);
+  const goImport = (id, tab) => { setImportRef({ id: id || null, tab: tab || null, k: Date.now() }); setScreen('import'); };
+  const isImported = (p) => !!(p && p.source && p.source.importId && window.JUCUM_PLANIMPORT && window.JUCUM_PLANIMPORT.get(p.source.importId));
+  const openClassPlan = (p) => { if (isImported(p)) { goImport(p.source.importId); return; } setEditPlan(p); setScreen('class'); };
 
   const goNewClass = (date, gid) => { setEditPlan(null); setSelDate(date || selDate); if (gid !== undefined) setDefaultGroup(gid); setScreen('class'); };
   const goNewPractice = (date, gid) => { setEditPractice(null); setSelDate(date || selDate); if (gid !== undefined) setDefaultGroup(gid); setScreen('practice'); };
@@ -130,52 +144,60 @@ function ClassPlanner({ onBack, onGoExams }) {
 
   return (
     <main>
+      {window.LevelRibbon && <LevelRibbon groupId={badgeGroup} />}
       <button className="back-btn" onClick={onBack}>← Volver al panel</button>
-      <div className="welcome teacher">
+      <div className="welcome teacher" style={{flexWrap:'wrap', gap:14}}>
         <div className="welcome-text">
           <div className="eyebrow">🗓️ Planificador</div>
           <h1>Calendario de clases y prácticas</h1>
           <p>Planea cada día: tu clase minuto a minuto y los sets de práctica para tus alumnos. Mira lo que ya diste y deja listas las próximas semanas.</p>
         </div>
+        {window.LevelStamp && <LevelStamp groupId={badgeGroup} />}
       </div>
 
       <div className="mm-tabs" style={{flexWrap:'wrap'}}>
         <button className={`mm-tab ${screen === 'calendar' ? 'on' : ''}`} onClick={() => setScreen('calendar')}>📅 Calendario</button>
         <button className={`mm-tab ${screen === 'class' ? 'on' : ''}`} onClick={() => goNewClass()}>📘 Plan de clase</button>
         <button className={`mm-tab ${screen === 'practice' ? 'on' : ''}`} onClick={() => goNewPractice()}>📝 Set de práctica</button>
+        {window.PlanImport && <button className={`mm-tab ${screen === 'import' ? 'on' : ''}`} onClick={() => goImport()}>📄 Subir plan del teacher</button>}
         <button className={`mm-tab ${screen === 'tareas' ? 'on' : ''}`} onClick={() => setScreen('tareas')}>📋 Tareas</button>
         <button className={`mm-tab ${screen === 'saved' ? 'on' : ''}`} onClick={() => setScreen('saved')}>📁 Guardados</button>
       </div>
 
       {screen === 'calendar' && (
-        <CalendarHub cursor={cursor} setCursor={setCursor} selDate={selDate} setSelDate={setSelDate} onGoExams={onGoExams}
-          onNewClass={goNewClass} onNewPractice={goNewPractice} onEditClass={(p) => { setEditPlan(p); setScreen('class'); }}
+        <CalendarHub groupId={curGroup} setGroupId={setCurGroup} cursor={cursor} setCursor={setCursor} selDate={selDate} setSelDate={setSelDate} onGoExams={onGoExams}
+          onNewClass={goNewClass} onNewPractice={goNewPractice} onEditClass={openClassPlan} onReport={(p) => goImport(p.source.importId, 'report')} isImported={isImported}
           onEditPractice={(p) => { setEditPractice(p); setScreen('practice'); }} onClassMode={goClassMode} onOpenTasks={() => setScreen('tareas')} refreshKey={tick} onChange={refresh} />
       )}
       {screen === 'class' && (
-        <ClassPlanEditor key={editPlan ? editPlan.id || 'tpl' : 'new'} date={selDate} initial={editPlan} defaultGroupId={defaultGroup} onClassMode={goClassMode} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
+        <ClassPlanEditor key={editPlan ? editPlan.id || 'tpl' : 'new'} date={selDate} initial={editPlan} defaultGroupId={defaultGroup || curGroup} onGroupSeen={setCurGroup} onClassMode={goClassMode} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
+      )}
+      {screen === 'import' && window.PlanImport && (
+        <PlanImport key={importRef ? importRef.k : 'imp'} importId={importRef && importRef.id} startTab={importRef && importRef.tab} onBack={() => { refresh(); setScreen('calendar'); }} onClassMode={goClassMode} />
       )}
       {screen === 'classmode' && (
         <ClassMode plan={classModePlan} onBack={() => setScreen('calendar')} />
       )}
       {screen === 'practice' && (
-        <PracticePlanEditor key={editPractice ? editPractice.id || 'tpl' : 'new'} date={selDate} initial={editPractice} defaultGroupId={defaultGroup} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
+        <PracticePlanEditor key={editPractice ? editPractice.id || 'tpl' : 'new'} date={selDate} initial={editPractice} defaultGroupId={defaultGroup || curGroup} onGroupSeen={setCurGroup} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
       )}
       {screen === 'tareas' && (
         <TeacherAssignments embedded onBack={() => setScreen('calendar')} />
       )}
       {screen === 'saved' && (
-        <SavedItems onOpenClass={(p) => { setEditPlan(p); setScreen('class'); }} onOpenPractice={(p) => { setEditPractice(p); setScreen('practice'); }} onChange={refresh} refreshKey={tick} />
+        <SavedItems onOpenClass={openClassPlan} onOpenPractice={(p) => { setEditPractice(p); setScreen('practice'); }} onChange={refresh} refreshKey={tick} />
       )}
     </main>
   );
 }
 
 /* ════════ Calendario mensual ════════ */
-function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNewPractice, onEditClass, onEditPractice, onClassMode, onOpenTasks, refreshKey, onChange, onGoExams }) {
+function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor, setCursor, selDate, setSelDate, onNewClass, onNewPractice, onEditClass, onEditPractice, onClassMode, onOpenTasks, refreshKey, onChange, onGoExams, onReport, isImported }) {
   const TT = window.JUCUM_TT;
   const { GROUPS } = window.JUCUM_DATA;
-  const [groupId, setGroupId] = React.useState(GROUPS[0] ? GROUPS[0].id : null);
+  const [groupIdLocal, setGroupIdLocal] = React.useState(GROUPS[0] ? GROUPS[0].id : null);
+  const groupId = setGroupIdProp ? groupIdProp : groupIdLocal;
+  const setGroupId = setGroupIdProp || setGroupIdLocal;
   const [summaryDate, setSummaryDate] = React.useState(null);   // ✅ resumen de la clase realizada
   const [dupPlan, setDupPlan] = React.useState(null);           // ⧉ duplicar plan a otro grupo
   const [trackSet, setTrackSet] = React.useState(null);         // 📊 avance de un set de práctica
@@ -193,9 +215,10 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
       <div className="scard">
         <div style={{display:'flex', alignItems:'center', gap:9, marginBottom:12, flexWrap:'wrap'}}>
           <span style={{fontSize:12, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'0.03em'}}>👥 Grupo</span>
+          {window.GroupPicker ? <GroupPicker value={groupId || ''} onChange={e => setGroupId(e.target.value)} style={{flex:'0 1 520px'}} /> : (
           <select value={groupId || ''} onChange={e => setGroupId(e.target.value)} style={{...selStyle, width:'auto', minWidth:180, flex:'0 1 auto'}}>
             {groupsSorted().map(g => <option key={g.id} value={g.id}>{groupOptionLabel(g)}</option>)}
-          </select>
+          </select>)}
           <span style={{fontSize:11.5, color:'#A8A8A8', fontWeight:700}}>Este calendario es de este grupo</span>
         </div>
         <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:12}}>
@@ -264,8 +287,9 @@ function CalendarHub({ cursor, setCursor, selDate, setSelDate, onNewClass, onNew
         })}
 
         {sel.classPlans.map(p => (
-          <DayRow key={p.id} icon="📘" tint="#EEF2FC" border="#C9D6F5" title={`${p.moduleName} · ${p.sessionLabel}`}
-            sub={`Plan de clase · ${p.lengthMin} min · ${(p.blocks || []).length} bloques`}
+          <DayRow key={p.id} icon={isImported && isImported(p) ? '📄' : '📘'} tint="#EEF2FC" border="#C9D6F5" title={`${p.moduleName} · ${p.sessionLabel}`}
+            sub={`Plan de clase · ${p.lengthMin} min · ${(p.blocks || []).length} bloques${isImported && isImported(p) ? ' · 📄 del plan del teacher' : ''}`}
+            onReport={isImported && isImported(p) && onReport ? () => onReport(p) : null}
             onPlay={() => onClassMode(p)} onOpen={() => onEditClass(p)} onDup={() => setDupPlan(p)} onDelete={() => { TT.deleteClassPlan(p.id); onChange(); }} />
         ))}
         {sel.practicePlans.map(p => (
@@ -460,7 +484,7 @@ function DuplicateClassModal({ plan, onClose, onDone }) {
         <div style={{padding:'16px 20px 6px'}}>
           {others.length === 0 ? <div style={mutedStyle}>No tienes otro grupo al que duplicar todavía.</div> : (
             <>
-              <Field label="Grupo destino"><select value={gid || ''} onChange={e => setGid(e.target.value)} style={selStyle}>{others.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></Field>
+              <Field label="Grupo destino">{window.GroupPicker ? <GroupPicker value={gid || ''} groups={others} onChange={e => setGid(e.target.value)} /> : <select value={gid || ''} onChange={e => setGid(e.target.value)} style={selStyle}>{others.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select>}</Field>
               <div style={{height:12}} />
               <Field label="Fecha en ese grupo"><input type="date" value={date} onChange={e => setDate(e.target.value)} style={selStyle} /></Field>
               <div style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700, margin:'10px 0 2px'}}>Se crea una <b>copia idéntica</b> (secuencia y materiales). El original no se modifica.</div>
@@ -476,7 +500,7 @@ function DuplicateClassModal({ plan, onClose, onDone }) {
   );
 }
 
-function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDup, onTrack }) {
+function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDup, onTrack, onReport }) {
   return (
     <div style={{display:'flex', alignItems:'center', gap:11, border:'1px solid ' + border, background: tint, borderRadius:11, padding:'10px 12px', marginBottom:8, flexWrap:'wrap'}}>
       <span style={{fontSize:19}}>{icon}</span>
@@ -486,6 +510,7 @@ function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDu
       </div>
       {onPlay && <button onClick={onPlay} style={{...btnPrimary, padding:'6px 12px', fontSize:12.5, background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>▶ Modo clase</button>}
       {onTrack && <button onClick={onTrack} title="Quiénes ya hicieron estas prácticas" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#B7A8E0', color:'#5B3FA0'}}>📊 Avance</button>}
+      {onReport && <button onClick={onReport} title="Reporte de cumplimiento para devolver a Claude" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>📤 Reporte</button>}
       <button onClick={onOpen} style={{...btnGhost, padding:'6px 12px', fontSize:12.5}}>Abrir</button>
       {onDup && <button onClick={onDup} title="Duplicar a otro grupo" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>⧉ Duplicar</button>}
       <button onClick={onDelete} title="Eliminar" style={{...iconBtn, color:'#C0392B'}}>×</button>
@@ -602,7 +627,7 @@ function PracticeSetProgress({ plan, onClose }) {
 }
 
 /* ════════ Editor de PLAN DE CLASE ════════ */
-function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaultGroupId }) {
+function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaultGroupId, onGroupSeen }) {
   const { MODULE_CATALOG, GROUPS } = window.JUCUM_DATA;
   const TT = window.JUCUM_TT;
   const [cfg, setCfg] = React.useState(() => {
@@ -612,6 +637,7 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
     const lvl = (grp && grp.level) || 'pre-a1'; const mods = MODULE_CATALOG[lvl] || [];
     return { level: lvl, groupId: gid, moduleId: mods[0] ? mods[0].id : null, themeGroup: '', lengthMin: 100, sessionLabel: 'Sesión 1', startTime: '09:00', emphasis: 'Vocabulario · Story/Diálogo · Gramática', date };
   });
+  React.useEffect(() => { if (onGroupSeen && cfg.groupId) onGroupSeen(cfg.groupId); }, [cfg.groupId]);
   const [plan, setPlan] = React.useState(initial || null);
   const mods = MODULE_CATALOG[cfg.level] || [];
   const mod = mods.find(m => m.id === cfg.moduleId) || mods[0];
@@ -665,7 +691,8 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
         )}
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:14, marginTop:6}}>
           <Field label="Fecha"><input type="date" value={cfg.date || date} onChange={e => setCfg(c => ({ ...c, date: e.target.value }))} style={selStyle} /></Field>
-          <Field label="Grupo"><select value={cfg.groupId || ''} onChange={e => { const g = GROUPS.find(x => x.id === e.target.value); const lvl = g ? g.level : cfg.level; const m = (MODULE_CATALOG[lvl] || [])[0]; setCfg(c => ({ ...c, groupId: e.target.value, level: lvl, moduleId: m ? m.id : c.moduleId, themeGroup: '' })); }} style={selStyle}>{groupsSorted().map(g => <option key={g.id} value={g.id}>{groupOptionLabel(g)}</option>)}</select></Field>
+          <Field label="Grupo">{(() => { const onG = e => { const g = GROUPS.find(x => x.id === e.target.value); const lvl = g ? g.level : cfg.level; const m = (MODULE_CATALOG[lvl] || [])[0]; setCfg(c => ({ ...c, groupId: e.target.value, level: lvl, moduleId: m ? m.id : c.moduleId, themeGroup: '' })); };
+            return window.GroupPicker ? <GroupPicker value={cfg.groupId || ''} onChange={onG} /> : <select value={cfg.groupId || ''} onChange={onG} style={selStyle}>{groupsSorted().map(g => <option key={g.id} value={g.id}>{groupOptionLabel(g)}</option>)}</select>; })()}</Field>
           <Field label="Nivel"><select value={cfg.level} onChange={e => { const lvl = e.target.value; const m = (MODULE_CATALOG[lvl] || [])[0]; setCfg(c => ({ ...c, level: lvl, moduleId: m ? m.id : null, themeGroup: '' })); }} style={selStyle}>{Object.keys(MODULE_CATALOG).map(lv => <option key={lv} value={lv}>{lv.toUpperCase()}</option>)}</select></Field>
           <Field label="Módulo"><select value={cfg.moduleId || ''} onChange={e => setCfg(c => ({ ...c, moduleId: e.target.value, themeGroup: '' }))} style={selStyle}>{mods.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
           <Field label="Tema / foco (opcional)"><select value={cfg.themeGroup} onChange={e => setCfg(c => ({ ...c, themeGroup: e.target.value }))} style={selStyle}><option value="">— Todo el módulo —</option>{themes.map(t => <option key={t} value={t}>{t}</option>)}</select></Field>
@@ -761,7 +788,7 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
 }
 
 /* ════════ Editor de SET DE PRÁCTICA ════════ */
-function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }) {
+function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, onGroupSeen }) {
   const { MODULE_CATALOG, GROUPS } = window.JUCUM_DATA;
   const TT = window.JUCUM_TT;
   const g0 = GROUPS.find(g => g.id === defaultGroupId) || GROUPS[0] || {};
@@ -773,6 +800,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
   const GSORT = GROUPS.slice().sort((a, b) => String(a.level).localeCompare(String(b.level)) || String(a.name).localeCompare(String(b.name)));
   const gLabel = (g) => g ? (g.name + (g.schedule ? ' · ' + g.schedule : '')) : '';
   const groupReal = GROUPS.find(x => x.id === groupId) || null;
+  React.useEffect(() => { if (onGroupSeen && groupReal) onGroupSeen(groupReal.id); }, [groupId]);
   const group = groupReal || {};
   const nAlumnos = groupReal ? (window.JUCUM_DATA.STUDENTS || []).filter(s => s.group === groupReal.id).length : 0;
   const [level, setLevel] = React.useState(initial && initial.level ? initial.level : ((groupReal || g0).level || 'pre-a1'));
@@ -874,7 +902,8 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId }
         </div>
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:14, marginTop:6}}>
           <Field label="Título"><input value={title} onChange={e => setTitle(e.target.value)} style={selStyle} /></Field>
-          <Field label="👥 Grupo destino"><select value={groupId || ''} onChange={e => { const g = GROUPS.find(x => x.id === e.target.value); const lv = g ? g.level : level; setGroupId(e.target.value); if (lv !== level) { setLevel(lv); const m = (MODULE_CATALOG[lv] || [])[0]; setModuleId(m ? m.id : null); setThemeGroup(''); setPicked([]); setGuide(null); } }} style={{...selStyle, borderColor: groupReal ? '#B4C1E0' : '#EF9A9A'}}>{!groupReal && <option value="">— elige la clase —</option>}{GSORT.map(g => <option key={g.id} value={g.id}>{gLabel(g)}</option>)}</select></Field>
+          <Field label="👥 Grupo destino">{(() => { const onG = e => { const g = GROUPS.find(x => x.id === e.target.value); const lv = g ? g.level : level; setGroupId(e.target.value); if (lv !== level) { setLevel(lv); const m = (MODULE_CATALOG[lv] || [])[0]; setModuleId(m ? m.id : null); setThemeGroup(''); setPicked([]); setGuide(null); } };
+            return window.GroupPicker ? <GroupPicker value={groupReal ? groupId : ''} onChange={onG} invalid={!groupReal} placeholder="— elige la clase —" /> : <select value={groupId || ''} onChange={onG} style={{...selStyle, borderColor: groupReal ? '#B4C1E0' : '#EF9A9A'}}>{!groupReal && <option value="">— elige la clase —</option>}{GSORT.map(g => <option key={g.id} value={g.id}>{gLabel(g)}</option>)}</select>; })()}</Field>
           <Field label="Nivel"><select value={level} onChange={e => { const lv = e.target.value; setLevel(lv); const m = (MODULE_CATALOG[lv] || [])[0]; setModuleId(m ? m.id : null); setThemeGroup(''); setPicked([]); setGuide(null); }} style={selStyle}>{Object.keys(MODULE_CATALOG).map(lv => <option key={lv} value={lv}>{lv.toUpperCase()}</option>)}</select></Field>
           <Field label="Módulo (puedes elegir uno pasado)"><select value={moduleId || ''} onChange={e => { setModuleId(e.target.value); setThemeGroup(''); }} style={selStyle}>{mods.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
           <Field label="Tema / foco (opcional)"><select value={themeGroup} onChange={e => setThemeGroup(e.target.value)} style={selStyle}><option value="">— Todo el módulo —</option>{themes.map(t => <option key={t} value={t}>{t}</option>)}</select></Field>
@@ -1444,10 +1473,11 @@ function SavedItems({ onOpenClass, onOpenPractice, onChange, refreshKey }) {
       <div className="scard" style={{marginBottom:16}}>
         <div style={{display:'flex', alignItems:'center', gap:9, flexWrap:'wrap'}}>
           <span style={{fontSize:12, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'.03em'}}>🔎 Filtrar</span>
+          {window.GroupPicker ? <GroupPicker value={fGroup} onChange={e => setFGroup(e.target.value)} allOption={{ value:'all', label:'Todos los grupos' }} style={{flex:'0 1 380px'}} /> : (
           <select value={fGroup} onChange={e => setFGroup(e.target.value)} style={{...selStyle, width:'auto', minWidth:150}}>
             <option value="all">Todos los grupos</option>
             {groupsSorted().map(g => <option key={g.id} value={g.id}>{groupOptionLabel(g)}</option>)}
-          </select>
+          </select>)}
           <select value={fLevel} onChange={e => setFLevel(e.target.value)} style={{...selStyle, width:'auto', minWidth:120}}>
             <option value="all">Todos los niveles</option>
             {levels.map(lv => <option key={lv} value={lv}>{lv.toUpperCase()}</option>)}

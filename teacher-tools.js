@@ -50,10 +50,26 @@
     const plans = getPracticePlansForStudentOnDate(student, date).filter(p => p.assignToStudents !== false);
     if (plans.length) {
       const seen = new Set(); const items = [];
+      /* 📄 Plan del teacher (PLAN-IMPORT-V1): `onlyPending` = solo para quien aún no lo
+       * aprobó. Se oculta SOLO si lo aprobó ANTES de hoy (día Perú): si lo hizo hoy
+       * sigue en la lista para que vea su ✓. `prio` va primero. */
+      let prog = null; const D = window.JUCUM_DATA;
+      try { prog = D && D.getStudentProgress ? D.getStudentProgress(student.id) : null; } catch (e) {}
+      const passedBefore = (a) => {
+        if (!prog || !prog.completed) return false;
+        const e = prog.completed[`${a.moduleId}:${a.activityId}`]; if (!e || !e.date) return false;
+        const day = new Date(Date.parse(e.date) - 5 * 3600000).toISOString().slice(0, 10);
+        if (day >= date) return false;
+        const noGrade = ['story', 'summary', 'quizlet', 'dialog'].includes(a.type);
+        return noGrade || (D.entryPassed ? D.entryPassed(e, student.level, student.group) : true);
+      };
       plans.forEach(p => (p.activities || []).forEach(a => {
         const k = `${a.moduleId}:${a.activityId}:${a.label}`;
-        if (seen.has(k)) return; seen.add(k); items.push(a);
+        if (seen.has(k)) return; seen.add(k);
+        if (a.onlyPending && passedBefore(a)) return;
+        items.push(a);
       }));
+      if (items.some(a => a.prio)) items.sort((x, y) => (y.prio || 0) - (x.prio || 0));
       if (items.length) return { items, isGeneric: false, source: 'plan', planTitle: plans[0].title, planId: plans[0].id };
     }
     // 2) legado: práctica por día de la semana (solo si el profe la dejó así)
