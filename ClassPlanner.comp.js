@@ -160,6 +160,7 @@ function ClassPlanner({ onBack, onGoExams }) {
         <button className={`mm-tab ${screen === 'class' ? 'on' : ''}`} onClick={() => goNewClass()}>📘 Plan de clase</button>
         <button className={`mm-tab ${screen === 'practice' ? 'on' : ''}`} onClick={() => goNewPractice()}>📝 Set de práctica</button>
         {window.PlanImport && <button className={`mm-tab ${screen === 'import' ? 'on' : ''}`} onClick={() => goImport()}>📄 Subir plan del teacher</button>}
+        {window.RoutinesManager && <button className={`mm-tab ${screen === 'routines' ? 'on' : ''}`} onClick={() => setScreen('routines')}>⭐ Mis rutinas</button>}
         <button className={`mm-tab ${screen === 'tareas' ? 'on' : ''}`} onClick={() => setScreen('tareas')}>📋 Tareas</button>
         <button className={`mm-tab ${screen === 'saved' ? 'on' : ''}`} onClick={() => setScreen('saved')}>📁 Guardados</button>
       </div>
@@ -181,6 +182,7 @@ function ClassPlanner({ onBack, onGoExams }) {
       {screen === 'practice' && (
         <PracticePlanEditor key={editPractice ? editPractice.id || 'tpl' : 'new'} date={selDate} initial={editPractice} defaultGroupId={defaultGroup || curGroup} onGroupSeen={setCurGroup} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
       )}
+      {screen === 'routines' && window.RoutinesManager && <RoutinesManager defaultLevel={((GROUPS || []).find(g => g.id === curGroup) || {}).level} />}
       {screen === 'tareas' && (
         <TeacherAssignments embedded onBack={() => setScreen('calendar')} />
       )}
@@ -816,8 +818,10 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
                   ))}
                   <button onClick={() => addStep(b.id)} style={{alignSelf:'flex-start', whiteSpace:'nowrap', border:'1px dashed #cdb86a', background:'none', color:'#8a7320', borderRadius:8, padding:'4px 10px', fontSize:11.5, fontWeight:700, cursor:'pointer', marginTop:2}}>+ paso</button>
                 </div>
+                {window.RoutinePicker && <RoutinePicker block={plan.blocks.find(x => x.id === b.id)} level={cfg.level} groupId={cfg.groupId} date={cfg.date || date} onApply={patch => upd(b.id, patch)} />}
                 <div style={{marginTop:8, display:'flex', gap:6, flexWrap:'wrap', alignItems:'center'}}>
                   {(plan.blocks.find(x => x.id === b.id).mats || []).map((m, k) => { const f = cpMatInfo(m, MODULE_CATALOG); return <span key={k} style={{display:'inline-flex', alignItems:'center', gap:6, whiteSpace:'nowrap', fontSize:11.5, fontWeight:800, padding:'4px 10px', borderRadius:20, background:'#EEF2FC', color:'#1F3A8A', border:'1px solid #C9D4F0'}}>{typeIcon(f ? f.a.type : '')} {cpMatLabel(m, MODULE_CATALOG)}<span onClick={() => delMat(b.id, k)} title="Quitar" style={{cursor:'pointer', color:'#C0392B'}}>✕</span></span>; })}
+                  {window.rtTypeOf && window.rtTypeOf(plan.blocks.find(x => x.id === b.id), MODULE_CATALOG) && (b.steps || []).some(x => String(x).trim()) && <button onClick={() => { const blk = plan.blocks.find(x => x.id === b.id); const ty = window.rtTypeOf(blk, MODULE_CATALOG); const name = window.prompt('Nombre para esta rutina:', blk.title); if (!name) return; const list = window.rtList(cfg.level, ty).concat([{ name: name.trim(), steps: blk.steps.filter(x => String(x).trim()) }]); const L = String.fromCharCode(64 + list.length); window.JUCUM_RT_SAVE(cfg.level, ty, list); upd(b.id, { routine: { type: ty, letter: L, name: name.trim() } }); alert('⭐ Guardada como rutina ' + L + '. La encuentras en ⭐ Mis rutinas.'); }} style={{whiteSpace:'nowrap', border:'1px dashed #cdb86a', background:'none', color:'#8a7320', borderRadius:8, padding:'4px 10px', fontSize:11.5, fontWeight:800, cursor:'pointer'}}>⭐ Guardar como rutina</button>}
                   <button onClick={() => setPickFor(pickFor === b.id ? null : b.id)} style={{whiteSpace:'nowrap', border:'1px dashed #9FB0DA', background:'none', color:'#3F5BB8', borderRadius:8, padding:'4px 10px', fontSize:11.5, fontWeight:800, cursor:'pointer'}}>＋ material</button>
                 </div>
                 {pickFor === b.id && <CpMatPicker level={cfg.level} classModId={mod ? mod.id : null} onPick={m => addMat(b.id, m)} onClose={() => setPickFor(null)} />}

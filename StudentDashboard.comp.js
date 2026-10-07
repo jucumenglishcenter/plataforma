@@ -1995,6 +1995,7 @@ function StudentPractice({ student, settings, onBack }) {
 
       {/* ── 2) Tu práctica de hoy ── */}
       <PracHead emoji="🎯" title="Tu práctica de hoy" color="#1B3B6F" tint="#E4EDFB" line="#D2E0F5" />
+      {window.StudentRhythmNotice && <StudentRhythmNotice student={student} />}
       <div style={{marginTop:10}}><TodayPracticeCard student={student} /></div>
       {(() => {
         const F2 = window.JUCUM_EXAMFLOW;

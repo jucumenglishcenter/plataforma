@@ -202,6 +202,7 @@ function FollowUpPanel({ plan, where, onAddPending, startOpen }) {
             {F.homeRows.length ? <FuTable rows={F.homeRows} students={F.students} /> : <div style={{fontSize:12.5, color:'#999', fontWeight:700}}>No hubo set de práctica para esos días.</div>}
             <div style={{display:'flex', gap:12, flexWrap:'wrap', fontSize:11, color:'#6B7280', fontWeight:800}}><span>{fuDot({ st:'ok' })} hecho / aprobado</span><span>{fuDot({ st:'lo' })} nota baja</span><span>{fuDot({ st:'no' })} no lo hizo</span></div>
           </div>
+          {window.RhythmPanel && <RhythmPanel groupId={plan.groupId} />}
           {F.stories.length > 0 && (
             <div style={{display:'flex', flexDirection:'column', gap:8, border:'1px solid #E3DCC9', borderRadius:12, padding:12, gridColumn:'1 / -1'}}>
               <b style={{fontFamily:"'Fredoka',sans-serif", fontSize:15.5}}>📖 Historias y diálogos · veces trabajadas (clase + casa)</b>
