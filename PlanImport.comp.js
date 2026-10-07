@@ -143,8 +143,12 @@ function PiReview({ rec, setRec, tab, setTab, onBack, onExit, onClassMode }) {
     try { const r = PI.publish(rec); setRec(r); setCloud('checking'); setSavedAt(new Date().toTimeString().slice(0, 5)); const st = await PI.verifyCloud(r); setCloud(st); }
     catch (e) { window.alert('No se pudo publicar: ' + (e && e.message ? e.message : e)); }
   };
-  const status = rec.status === 'published' ? ['✔ Publicado', '#E8F5E9', '#1B5E20'] : rec.status === 'changed' ? ['Publicado · con cambios sin publicar', '#FFF4E5', '#9C5D00'] : left ? ['Borrador · faltan ' + left + ' datos', '#FDECEA', '#8E1B1B'] : ['Borrador · listo para publicar', '#EEF2FC', '#1F3A8A'];
-  const TABS = [['read', '1 · Lo que entendí'], ['gaps', '2 · Falta completar' + (left ? ' (' + left + ')' : '')], ['edit', '3 · Revisar y editar'], ['report', '4 · Reporte de vuelta']];
+  const faltan = n => n === 1 ? 'falta 1 dato' : 'faltan ' + n + ' datos';
+  const missing = (rec.gaps || []).filter(g => g.sev === 'need' && (rec.draft.answers || {})[g.id] === undefined);
+  const [flash, setFlash] = React.useState(false);
+  const tryPublish = () => { if (left) { setTab('gaps'); setFlash(true); setTimeout(() => setFlash(false), 1600); return; } publish(); };
+  const status = rec.status === 'published' ? ['✔ Publicado', '#E8F5E9', '#1B5E20'] : rec.status === 'changed' ? ['Publicado · con cambios sin publicar', '#FFF4E5', '#9C5D00'] : left ? ['Borrador · ' + faltan(left), '#FDECEA', '#8E1B1B'] : ['Borrador · listo para publicar', '#EEF2FC', '#1F3A8A'];
+  const TABS = [['read', '1 · Lo que entendí'], ['gaps', '2 · Falta completar' + (left ? ' (' + left + ')' : ' ✓')], ['edit', '3 · Revisar y editar'], ['report', '4 · Seguimiento y reporte']];
   return (
     <>
       <div style={{background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)', color:'#fff', borderRadius:16, padding:'16px 20px', marginBottom:14, display:'flex', gap:14, alignItems:'center', flexWrap:'wrap'}}>
@@ -164,12 +168,22 @@ function PiReview({ rec, setRec, tab, setTab, onBack, onExit, onClassMode }) {
         <span style={{flex:1}}></span>
         <button onClick={() => setShowOrig(true)} style={piBtn}>📄 Ver original</button>
         {rec.published && onClassMode && <button onClick={() => { const p = window.JUCUM_TT.getClassPlans().find(x => x.id === rec.published.classPlanId); if (p) onClassMode(p); }} style={piBtnB}>▶ Modo clase</button>}
-        <button onClick={publish} disabled={left > 0} title={left ? 'Completa los datos marcados “Falta”' : ''} style={{...piBtnP, opacity: left ? .45 : 1, cursor: left ? 'not-allowed' : 'pointer'}}>{rec.published ? 'Volver a publicar' : 'Publicar plan'}</button>
+        <button onClick={tryPublish} title={left ? 'Antes de publicar: ' + missing.map(g => g.t).join(' · ') : ''} style={{...piBtnP, opacity: left ? .55 : 1}}>{rec.published ? 'Volver a publicar' : 'Publicar plan'}</button>
       </div>
+      {left > 0 && (
+        <div style={{display:'flex', gap:10, alignItems:'flex-start', flexWrap:'wrap', background:'#FDECEA', border:'1.5px solid ' + (flash ? '#C0392B' : '#F3B9B2'), boxShadow: flash ? '0 0 0 4px #F8D2CD' : 'none', borderRadius:12, padding:'10px 13px', marginBottom:14, transition:'box-shadow .3s'}}>
+          <span style={{fontSize:18}}>⚠</span>
+          <div style={{flex:1, minWidth:220}}>
+            <div style={{fontWeight:800, fontSize:13.5, color:'#8E1B1B'}}>Para publicar, {faltan(left)}:</div>
+            <ul style={{margin:'4px 0 0 18px', padding:0, fontSize:12.8, color:'#5D1A12', lineHeight:1.5}}>{missing.map(g => <li key={g.id}><b>{g.t}</b></li>)}</ul>
+          </div>
+          {tab !== 'gaps' && <button onClick={() => setTab('gaps')} style={{...piBtn, borderColor:'#E7A79E', color:'#8E1B1B'}}>Completarlo ahora →</button>}
+        </div>
+      )}
       {tab === 'read' && <PiRead rec={rec} mod={mod} eff={eff} />}
       {tab === 'gaps' && <PiGaps rec={rec} update={update} setTab={setTab} />}
       {tab === 'edit' && <PiEdit rec={rec} mod={mod} eff={eff} update={update} />}
-      {tab === 'report' && <PiReport rec={rec} update={update} />}
+      {tab === 'report' && <PiReport rec={rec} />}
       {showOrig && (
         <div onClick={() => setShowOrig(false)} style={{position:'fixed', inset:0, background:'rgba(0,0,0,.42)', zIndex:80, display:'flex', alignItems:'center', justifyContent:'center', padding:20}}>
           <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, padding:'18px 22px', maxWidth:720, width:'100%', maxHeight:'82vh', overflow:'auto'}}>
@@ -196,19 +210,7 @@ function PiRead({ rec, mod, eff }) {
         {(rec.unknown || []).length > 0 && <div style={{fontSize:12, color:'#9C5D00', fontWeight:700, marginTop:6}}>No reconocí: {rec.unknown.join(', ')}</div>}
         {d.ctx.length > 0 && <><div style={{...piLbl, margin:'12px 0 4px'}}>{d.mode === 'jucum' ? 'Del documento (solo lo ve el teacher)' : 'Contexto del tracker (solo lo ve el teacher)'}</div>{d.ctx.map((c, i) => <div key={i} style={{fontSize:12.5, padding:'3px 0', borderBottom:'1px solid #F2ECDD'}}><b style={{color:'#8a7f6a'}}>{c[0]}:</b> {c[1]}</div>)}</>}
       </div>
-      <div className="scard">
-        <div className="sec-title" style={{marginBottom:4}}>Práctica de la última clase</div>
-        {d.lastReport.length > 0 && <div style={{fontSize:12, color:'#6b5a1f', background:'#FFF7EC', borderRadius:8, padding:'6px 9px', marginBottom:8, lineHeight:1.45}}>El tracker dice: <i>“{d.lastReport.join(' ').slice(0, 260)}”</i></div>}
-        {!last ? <div style={{fontSize:12.5, color:'#999', fontWeight:700}}>No hay sets de práctica de este grupo en los 10 días anteriores a la clase.</div> : (
-          <div style={{overflowX:'auto'}}>
-            <div style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700, marginBottom:6}}>Sets del {PI.fmtDay(last.from)} al {PI.fmtDay(last.to)} · datos reales de la plataforma</div>
-            <table style={{borderCollapse:'collapse', width:'100%', minWidth:380}}>
-              <thead><tr><th style={{...piLbl, textAlign:'left', padding:'4px'}}>Alumno</th>{last.items.map((it, i) => <th key={i} style={{...piLbl, textTransform:'none', letterSpacing:0, padding:'4px', textAlign:'center'}}>{(it.label || actName(it.activityId)).slice(0, 28)}</th>)}</tr></thead>
-              <tbody>{last.rows.map(r => <tr key={r.id}><td style={{fontWeight:800, fontSize:12.5, padding:'5px 4px', borderTop:'1px solid #F2ECDD'}}>{r.name}</td>{r.marks.map((v, i) => <td key={i} style={{textAlign:'center', borderTop:'1px solid #F2ECDD'}}>{piMark(v)}</td>)}</tr>)}</tbody>
-            </table>
-            <div style={{display:'flex', gap:12, fontSize:11, color:'#999', fontWeight:700, marginTop:6}}><span>{piMark(1)} completo</span><span>{piMark(.5)} nota baja</span><span>{piMark(0)} no lo hizo</span></div>
-          </div>)}
-      </div>
+      {window.FollowUpPanel && <div style={{gridColumn:'1 / -1'}}><FollowUpPanel plan={window.fuLastPlan(rec.groupId, eff.date || PI.peruToday())} where="plan" /></div>}
       <div className="scard">
         <div className="sec-title" style={{marginBottom:8}}>Agenda → bloques de la clase</div>
         {d.blocks.length === 0 && <div style={{fontSize:12.5, color:'#999', fontWeight:700}}>Sin agenda (no se subió el outline).</div>}
@@ -345,65 +347,15 @@ function PiEdit({ rec, mod, eff, update }) {
           </div>
         </div>
       </div>
-      <div className="scard" style={{marginTop:14}}>
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8, marginBottom:8}}><div className="sec-title">🕘 Versiones</div><button onClick={saveVer} style={piBtn}>💾 Guardar versión ahora</button></div>
-        {(rec.versions || []).map((v, i) => (
-          <div key={i} style={{display:'flex', alignItems:'center', gap:9, border:'1px solid #E3DCC9', borderRadius:10, padding:'7px 11px', marginBottom:6, fontSize:12.5, flexWrap:'wrap'}}>
-            <b>v{v.n}</b><span style={{flex:1}}>{v.label} · {new Date(v.at).toLocaleString('es-PE', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</span>
-            <button onClick={() => restore(i)} style={{...piBtn, padding:'4px 9px'}}>↺ Volver a esta</button>
-          </div>))}
-        <div style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700}}>Volver a una versión nunca borra nada: antes guarda una copia de cómo está ahora. La v1 (lo que se leyó del documento) no se descarta.</div>
-      </div>
     </>
   );
 }
 
-function PiReport({ rec, update }) {
-  const PI = window.JUCUM_PLANIMPORT; const d = rec.draft;
-  const [note, setNote] = React.useState('');
-  const [copied, setCopied] = React.useState(false);
-  const txt = PI.report(rec);
-  const HOW = [['ok', 'Como estaba'], ['trim', 'Recortado'], ['no', 'No se hizo']];
-  return (
-    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(420px,1fr))', gap:14, alignItems:'start'}}>
-      <div style={{display:'flex', flexDirection:'column', gap:14}}>
-        <div className="scard">
-          <div className="sec-title" style={{marginBottom:8}}>¿Cómo salió cada bloque?</div>
-          {d.blocks.map((b, i) => (
-            <div key={b.id} style={{display:'flex', alignItems:'center', gap:8, padding:'5px 0', borderBottom:'1px solid #F2ECDD', flexWrap:'wrap'}}>
-              <span style={{flex:1, minWidth:180, fontSize:12.5, fontWeight:700}}>{b.emoji} {b.title}</span>
-              {HOW.map(([k, l]) => { const on = (d.how || {})[i] === k; return <button key={k} onClick={() => update(r => { r.draft.how = r.draft.how || {}; r.draft.how[i] = k; }, { keepStatus: true })} style={{...piBtn, padding:'3px 9px', fontSize:11.5, background: on ? '#3F5BB8' : '#fff', color: on ? '#fff' : '#6b5a1f', borderColor: on ? '#3F5BB8' : '#cdb86a'}}>{l}</button>; })}
-            </div>))}
-        </div>
-        <div className="scard">
-          <div className="sec-title" style={{marginBottom:8}}>➡ Para la próxima clase</div>
-          {(d.carry || []).map((c, i) => (
-            <label key={i} style={{display:'flex', gap:8, alignItems:'flex-start', fontSize:12.5, lineHeight:1.45, padding:'4px 0', cursor:'pointer'}}>
-              <input type="checkbox" checked={!!(d.carryDone || {})[i]} onChange={e => update(r => { r.draft.carryDone = r.draft.carryDone || {}; r.draft.carryDone[i] = e.target.checked; }, { keepStatus: true })} style={{marginTop:3}} />
-              <span style={{fontStyle:'italic', color:'#555'}}>{c}</span>
-            </label>))}
-          <div style={{...piLbl, margin:'10px 0 5px'}}>Mis apuntes para la próxima clase</div>
-          {(d.myNotes || []).map((n, i) => (
-            <div key={n.id || i} style={{display:'flex', gap:7, alignItems:'flex-start', background:'#FFF7EC', border:'1px solid #F2E6CF', borderRadius:9, padding:'6px 9px', marginBottom:6, fontSize:12.5}}>
-              <span style={{flex:1}}>📌 {n.t}<span style={{display:'block', fontSize:10.5, color:'#a08a5a', fontWeight:700}}>{new Date(n.at).toLocaleString('es-PE', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</span></span>
-              <button onClick={() => { if (window.confirm('¿Borrar este apunte?')) update(r => { r.draft.myNotes.splice(i, 1); }, { keepStatus: true }); }} style={{...piBtn, padding:'1px 7px', color:'#C0392B', borderColor:'#F0C0BA'}}>✕</button>
-            </div>))}
-          <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Ej.: empezar repasando el paso 3, que no alcanzó el tiempo…" style={{...piIn, width:'100%', resize:'vertical'}} />
-          <button onClick={() => { const t = note.trim(); if (!t) return; update(r => { (r.draft.myNotes = r.draft.myNotes || []).push({ id: 'n-' + Date.now(), t, at: new Date().toISOString() }); }, { keepStatus: true }); setNote(''); }} style={{...piBtn, marginTop:6}}>＋ Guardar apunte</button>
-          <div style={{fontSize:11, color:'#999', fontWeight:700, marginTop:6}}>Se guardan dentro de este plan y salen en el reporte.</div>
-        </div>
-      </div>
-      <div className="scard">
-        <div className="sec-title" style={{marginBottom:4}}>📤 Reporte para devolver a Claude</div>
-        <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginBottom:8}}>En inglés y en el orden que piden sus documentos (“Completion Reporting”). El cumplimiento sale de lo que cada alumno practicó desde el día de la clase.</div>
-        <pre style={{fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, background:'#0F172A', color:'#E2E8F0', borderRadius:12, padding:14, whiteSpace:'pre-wrap', lineHeight:1.55, maxHeight:460, overflow:'auto', margin:0}}>{txt}</pre>
-        <div style={{display:'flex', gap:8, marginTop:10, flexWrap:'wrap'}}>
-          <button onClick={() => { try { navigator.clipboard.writeText(txt).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }); } catch (e) { window.prompt('Copia el reporte:', txt); } }} style={piBtnB}>{copied ? '✓ Copiado' : 'Copiar reporte'}</button>
-          <button onClick={() => { const b = new Blob([txt], { type:'text/plain' }); const u = URL.createObjectURL(b); const l = document.createElement('a'); l.href = u; l.download = 'Completion Report - ' + d.sessionLabel + '.txt'; l.click(); setTimeout(() => URL.revokeObjectURL(u), 2000); }} style={piBtn}>⬇ Descargar .txt</button>
-        </div>
-      </div>
-    </div>
-  );
+function PiReport({ rec }) {
+  const TT = window.JUCUM_TT;
+  const cp = rec.published && rec.published.classPlanId ? TT.getClassPlans().find(p => p.id === rec.published.classPlanId) : null;
+  if (!cp) return <div className="scard" style={{fontSize:13, color:'#8a7f6a', fontWeight:700}}>Publica el plan para ver su seguimiento. Al terminar la clase usa 🏁 Terminar clase en el Modo clase; después, aquí verás cómo les fue en clase y en casa, y el reporte para tu Claude.</div>;
+  return window.FollowUpPanel ? <FollowUpPanel plan={cp} where="cal" startOpen /> : null;
 }
 
 Object.assign(window, { PlanImport });

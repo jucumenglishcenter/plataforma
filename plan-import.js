@@ -448,7 +448,7 @@
     const s = String(text || ''); const out = []; const push = (a, x) => { if (a && !out.some(o => o.a.id === a.id)) out.push({ a, ...(x || {}) }); };
     const tm = s.match(/\bT(\d+)\b/); const tg = tm ? groupsOf(mod).find(g => new RegExp('^T' + tm[1] + '\\b').test(g)) : null;
     const grp = tg || bestGroup(mod, s, ctxGroup);
-    if (/quizlet/i.test(s)) { const q = byType(mod, 'quizlet'); if (q) push(q, { quizKey: /tradu|translat/i.test(s) ? 'traducir' : /orden|order/i.test(s) ? 'ordenar' : 'vocabulario' }); return out; }
+    if (/quizlet|vocabular/i.test(s)) { const q = byType(mod, 'quizlet'); if (q) push(q, { quizKey: /tradu|translat/i.test(s) ? 'traducir' : /orden|order/i.test(s) ? 'ordenar' : 'vocabulario' }); return out; }
     if (/fill|\bP1\b|pr[aá]ctica\s*#?\s*1/i.test(s)) actOfKind(mod, grp, 'fill').slice(0, 1).forEach(a => push(a));
     if (/identif|\bP2\b|pr[aá]ctica\s*#?\s*2/i.test(s)) actOfKind(mod, grp, 'id').slice(0, 1).forEach(a => push(a));
     if (/transform|\bP3\b|pr[aá]ctica\s*#?\s*3/i.test(s)) actOfKind(mod, grp, 'tr').slice(0, 1).forEach(a => push(a));
@@ -713,5 +713,5 @@
   }
 
   setTimeout(cloudLoad, 2500);
-  window.JUCUM_PLANIMPORT = { version: 'PLAN-IMPORT-V2', groupMeta, sessionFor, guideJ, jKind, readFile, blocksFromText, build, create, save, get, list, remove, addVersion, publish, verifyCloud, effective, distribute, gapsLeft, lastClass, marksFor, report, fmtDay, peruToday, cloudLoad };
+  window.JUCUM_PLANIMPORT = { version: 'PLAN-IMPORT-V2', matchJ, groupMeta, sessionFor, guideJ, jKind, readFile, blocksFromText, build, create, save, get, list, remove, addVersion, publish, verifyCloud, effective, distribute, gapsLeft, lastClass, marksFor, report, fmtDay, peruToday, cloudLoad };
 })();

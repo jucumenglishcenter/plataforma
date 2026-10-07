@@ -201,6 +201,7 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
   const [summaryDate, setSummaryDate] = React.useState(null);   // ✅ resumen de la clase realizada
   const [dupPlan, setDupPlan] = React.useState(null);           // ⧉ duplicar plan a otro grupo
   const [trackSet, setTrackSet] = React.useState(null);         // 📊 avance de un set de práctica
+  const [followPlan, setFollowPlan] = React.useState(null);     // 🔎 seguimiento de una clase dada
   const cells = monthMatrix(cursor.y, cursor.m);
   const prevM = () => setCursor(c => { const d = new Date(c.y, c.m - 1, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
   const nextM = () => setCursor(c => { const d = new Date(c.y, c.m + 1, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
@@ -288,8 +289,8 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
 
         {sel.classPlans.map(p => (
           <DayRow key={p.id} icon={isImported && isImported(p) ? '📄' : '📘'} tint="#EEF2FC" border="#C9D6F5" title={`${p.moduleName} · ${p.sessionLabel}`}
-            sub={`Plan de clase · ${p.lengthMin} min · ${(p.blocks || []).length} bloques${isImported && isImported(p) ? ' · 📄 del plan del teacher' : ''}`}
-            onReport={isImported && isImported(p) && onReport ? () => onReport(p) : null}
+            sub={`Plan de clase · ${p.lengthMin} min · ${(p.blocks || []).length} bloques${isImported && isImported(p) ? ' · 📄 del plan del teacher' : ''}${p.closing ? ' · 🏁 terminada' : (p.date && p.date <= todayYMD() ? ' · 🏁 sin cierre' : '')}`}
+            onFollow={window.FollowUpModal && p.date && p.date <= todayYMD() ? () => setFollowPlan(p) : null}
             onPlay={() => onClassMode(p)} onOpen={() => onEditClass(p)} onDup={() => setDupPlan(p)} onDelete={() => { TT.deleteClassPlan(p.id); onChange(); }} />
         ))}
         {sel.practicePlans.map(p => (
@@ -324,6 +325,7 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
       {summaryDate && <ClassSummaryModal date={summaryDate} groupId={groupId} onClose={() => setSummaryDate(null)} onDuplicate={(p) => { setSummaryDate(null); setDupPlan(p); }} />}
       {dupPlan && <DuplicateClassModal plan={dupPlan} onClose={() => setDupPlan(null)} onDone={() => { setDupPlan(null); onChange(); }} />}
       {trackSet && <PracticeSetProgress plan={trackSet} onClose={() => setTrackSet(null)} />}
+      {followPlan && window.FollowUpModal && <FollowUpModal plan={followPlan} onClose={() => setFollowPlan(null)} />}
     </>
   );
 }
@@ -500,7 +502,7 @@ function DuplicateClassModal({ plan, onClose, onDone }) {
   );
 }
 
-function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDup, onTrack, onReport }) {
+function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDup, onTrack, onReport, onFollow }) {
   return (
     <div style={{display:'flex', alignItems:'center', gap:11, border:'1px solid ' + border, background: tint, borderRadius:11, padding:'10px 12px', marginBottom:8, flexWrap:'wrap'}}>
       <span style={{fontSize:19}}>{icon}</span>
@@ -510,6 +512,7 @@ function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDu
       </div>
       {onPlay && <button onClick={onPlay} style={{...btnPrimary, padding:'6px 12px', fontSize:12.5, background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>▶ Modo clase</button>}
       {onTrack && <button onClick={onTrack} title="Quiénes ya hicieron estas prácticas" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#B7A8E0', color:'#5B3FA0'}}>📊 Avance</button>}
+      {onFollow && <button onClick={onFollow} title="Cómo va: en clase y en casa" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>🔎 Seguimiento</button>}
       {onReport && <button onClick={onReport} title="Reporte de cumplimiento para devolver a Claude" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>📤 Reporte</button>}
       <button onClick={onOpen} style={{...btnGhost, padding:'6px 12px', fontSize:12.5}}>Abrir</button>
       {onDup && <button onClick={onDup} title="Duplicar a otro grupo" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>⧉ Duplicar</button>}
@@ -632,10 +635,36 @@ function PracticeSetProgress({ plan, onClose }) {
  * subir sus PDF. Sin texto pre-llenado que borrar (ayuda en gris), pegar varias líneas = varios pasos,
  * y la sesión/hora salen del grupo (planes anteriores + 1). */
 function cpNewId() { return 'b_' + Math.random().toString(36).slice(2, 8); }
-function cpCloneBlocks(bl) { return (bl || []).map(b => ({ id: cpNewId(), emoji: b.emoji || '•', title: b.title || '', mins: Number(b.mins) || 10, steps: (b.steps || []).slice() })); }
+function cpCloneBlocks(bl) { return (bl || []).map(b => ({ id: cpNewId(), emoji: b.emoji || '•', title: b.title || '', mins: Number(b.mins) || 10, steps: (b.steps || []).slice(), ...(Array.isArray(b.mats) ? { mats: b.mats.map(m => ({ ...m })) } : {}) })); }
 function cpBaseTpl(level) { const TT = window.JUCUM_TT; return ((TT && TT.getTemplates) ? TT.getTemplates() : []).find(t => t.kind === 'base-class' && t.level === level) || null; }
 function cpAutoSession(groupId, d) { const PI = window.JUCUM_PLANIMPORT; return (PI && PI.sessionFor && groupId && d) ? 'Sesión ' + PI.sessionFor(groupId, d) : null; }
 function cpAutoStart(groupId) { const PI = window.JUCUM_PLANIMPORT; const m = PI && PI.groupMeta && groupId ? PI.groupMeta(groupId) : null; return (m && m.start) || null; }
+/* MATS-POR-BLOQUE (07-oct): cada bloque trae su material (detectado del título) y “＋ material” agrega uno olvidado. */
+function cpDetectMats(mod, b, themeGroup) { const PI = window.JUCUM_PLANIMPORT; if (!mod || !PI || !PI.matchJ) return []; return PI.matchJ(mod, b.title || '', themeGroup || null).map(x => ({ moduleId: mod.id, activityId: x.a.id, quizKey: x.quizKey || null })); }
+function cpWithMats(blocks, mod, themeGroup) { return blocks.map(b => ({ ...b, mats: Array.isArray(b.mats) ? b.mats : cpDetectMats(mod, b, themeGroup) })); }
+function cpMatInfo(m, catalog) { for (const lv of Object.keys(catalog)) { const mm = (catalog[lv] || []).find(x => x.id === m.moduleId); if (mm) { const a = (mm.activities || []).find(x => x.id === m.activityId); if (a) return { a, mod: mm }; } } return null; }
+function cpMatLabel(m, catalog) { const f = cpMatInfo(m, catalog); if (!f) return m.name || m.activityId; if (f.a.type === 'quizlet') return 'Quizlet · ' + ({ vocabulario:'Vocabulario', vocabulario2:'Vocabulario 2', traducir:'Traducir', ordenar:'Ordenar' }[m.quizKey] || 'Vocabulario'); return f.a.name + (f.a.group ? ' · ' + f.a.group : ''); }
+function cpMatsToMaterials(blocks, extra, catalog) {
+  const out = []; const add = m => { if (!m || !m.activityId || out.some(x => x.activityId === m.activityId && x.moduleId === m.moduleId)) return; const f = cpMatInfo(m, catalog); if (!f) return; const a = f.a;
+    out.push({ moduleId: f.mod.id, activityId: a.id, name: a.name, type: a.type, group: a.group || null, url: a.url || null, ...(a.type === 'quizlet' ? { quizLinks: { vocabulario: a.quizVocabulario || '', vocabulario2: a.quizVocabulario2 || '', traducir: a.quizTraducir || '', ordenar: a.quizOrdenar || '' } } : {}) }); };
+  (blocks || []).forEach(b => (b.mats || []).forEach(add)); (extra || []).forEach(add); return out;
+}
+function CpMatPicker({ level, classModId, onPick, onClose }) {
+  const { MODULE_CATALOG } = window.JUCUM_DATA; const [q, setQ] = React.useState('');
+  const mods = (MODULE_CATALOG[level] || []).slice().sort((a, b) => (a.id === classModId ? -1 : b.id === classModId ? 1 : 0));
+  const opts = []; mods.forEach(m => (m.activities || []).forEach(a => { if (a.type === 'quizlet') ['vocabulario', 'vocabulario2', 'traducir', 'ordenar'].forEach(k => opts.push({ m, a, k })); else opts.push({ m, a, k: null }); }));
+  const toks = q.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/\s+/).filter(Boolean);
+  const lab = o => (o.a.type === 'quizlet' ? 'Quizlet · ' + ({ vocabulario:'Vocabulario', vocabulario2:'Vocabulario 2', traducir:'Traducir', ordenar:'Ordenar' }[o.k]) : o.a.name + (o.a.group ? ' · ' + o.a.group : ''));
+  const list = opts.filter(o => { const t = (lab(o) + ' ' + o.m.name + ' ' + o.a.type).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); return toks.every(x => t.includes(x)); }).slice(0, 8);
+  return (
+    <div style={{border:'1.5px solid #9FB0DA', borderRadius:12, background:'#fff', padding:10, display:'flex', flexDirection:'column', gap:6, boxShadow:'0 8px 22px rgba(13,27,90,.15)', marginTop:4}}>
+      <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Busca: story, P2, quizlet traducir…" style={{border:'1px solid #E3DCC9', borderRadius:9, padding:'7px 10px', fontFamily:'inherit', fontSize:13}} />
+      {list.map((o, i) => <button key={i} onClick={() => onPick({ moduleId: o.m.id, activityId: o.a.id, quizKey: o.k })} style={{display:'flex', alignItems:'center', gap:9, textAlign:'left', border:'none', background:'none', padding:'6px 8px', borderRadius:8, cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:700}}><span>{typeIcon(o.a.type)}</span><span style={{flex:1}}>{lab(o)}</span><span style={{fontSize:11, color:'#8a7f6a'}}>{o.m.id === classModId ? 'módulo en clase' : o.m.name}</span></button>)}
+      {!list.length && <div style={{fontSize:12, color:'#999', fontWeight:700}}>Nada con ese nombre.</div>}
+      <button onClick={onClose} style={{...btnGhost, alignSelf:'flex-start', padding:'4px 10px', fontSize:12}}>Cerrar</button>
+    </div>
+  );
+}
 function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaultGroupId, onGroupSeen, onImport }) {
   const { MODULE_CATALOG, GROUPS } = window.JUCUM_DATA;
   const TT = window.JUCUM_TT;
@@ -650,7 +679,15 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
   const [autoSess, setAutoSess] = React.useState(!initial || !!initial._tpl);
   React.useEffect(() => { if (!autoSess) return; const sl = cpAutoSession(cfg.groupId, cfg.date || date); const st = cpAutoStart(cfg.groupId); setCfg(c => ({ ...c, sessionLabel: sl || c.sessionLabel, startTime: st || c.startTime })); }, [cfg.groupId, cfg.date, autoSess]);
   React.useEffect(() => { if (onGroupSeen && cfg.groupId) onGroupSeen(cfg.groupId); }, [cfg.groupId]);
-  const [plan, setPlan] = React.useState(initial || null);
+  const [plan, setPlan] = React.useState(() => {
+    if (!initial) return null;
+    if ((initial.blocks || []).some(b => Array.isArray(b.mats))) return initial;
+    /* plan de antes (lista de materiales suelta): detecto el material de cada bloque y lo que sobra queda como “otros” */
+    const mm = (MODULE_CATALOG[initial.level] || []).find(m => m.id === initial.moduleId);
+    const blocks = cpWithMats(initial.blocks || [], mm, initial.themeGroup);
+    const extraMats = (initial.materials || []).filter(m => !blocks.some(b => b.mats.some(x => x.activityId === m.activityId))).map(m => ({ moduleId: m.moduleId, activityId: m.activityId, quizKey: null }));
+    return { ...initial, blocks, extraMats };
+  });
   const mods = MODULE_CATALOG[cfg.level] || [];
   const mod = mods.find(m => m.id === cfg.moduleId) || mods[0];
   const themes = mod ? Array.from(new Set((mod.activities || []).filter(a => a.group).map(a => a.group))) : [];
@@ -659,18 +696,23 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
   const upd = (id, patch) => setPlan(p => ({ ...p, blocks: p.blocks.map(b => b.id === id ? { ...b, ...patch } : b) }));
   const move = (id, dir) => setPlan(p => { const i = p.blocks.findIndex(b => b.id === id); const j = i + dir; if (i < 0 || j < 0 || j >= p.blocks.length) return p; const bl = p.blocks.slice(); const t = bl[i]; bl[i] = bl[j]; bl[j] = t; return { ...p, blocks: bl }; });
   const delBlock = (id) => setPlan(p => ({ ...p, blocks: p.blocks.filter(b => b.id !== id) }));
-  const addBlock = () => setPlan(p => ({ ...p, blocks: [...p.blocks, { id: cpNewId(), emoji: '•', title: '', mins: 10, steps: [''] }] }));
+  const addBlock = () => setPlan(p => ({ ...p, blocks: [...p.blocks, { id: cpNewId(), emoji: '•', title: '', mins: 10, steps: [''], mats: [] }] }));
   /* Pegar varias líneas en un paso = un paso por línea (texto exacto) */
   const pasteSteps = (bid, si, e) => { const t = (e.clipboardData && e.clipboardData.getData('text')) || ''; const lines = t.split(/\r?\n/).map(x => x.replace(/^\s*(?:[-•·*]|\d+[.)])\s+/, '').trim()).filter(Boolean); if (lines.length < 2) return; e.preventDefault();
     setPlan(p => ({ ...p, blocks: p.blocks.map(b => { if (b.id !== bid) return b; const st = b.steps.slice(); const cur = st[si] || ''; st.splice(si, 1, ...(cur.trim() ? [cur, ...lines] : lines)); return { ...b, steps: st }; }) })); };
   const baseTpl = cpBaseTpl(cfg.level);
   const lastPlan = TT.getClassPlans().filter(p => p.groupId === cfg.groupId && p.date && p.date < (cfg.date || date) && (!initial || p.id !== initial.id)).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0] || null;
+  const [pickFor, setPickFor] = React.useState(null);
+  const addMat = (bid, m) => { setPlan(p => ({ ...p, blocks: p.blocks.map(b => b.id === bid ? { ...b, mats: [...(b.mats || []).filter(x => !(x.activityId === m.activityId && (x.quizKey || null) === (m.quizKey || null))), m] } : b) })); setPickFor(null); };
+  const delMat = (bid, k) => setPlan(p => ({ ...p, blocks: p.blocks.map(b => b.id === bid ? { ...b, mats: (b.mats || []).filter((_, j) => j !== k) } : b) }));
+  const addPending = (lines) => { const blk = { id: cpNewId(), emoji: '📌', title: 'Pendientes de la clase anterior', mins: 10, steps: lines.slice(), mats: [] };
+    if (!plan) { const base = buildClassPlan({ ...cfg, date }, MODULE_CATALOG); setPlan({ ...base, blocks: [blk, ...cpWithMats(base.blocks, mod, cfg.themeGroup)] }); } else setPlan(p => ({ ...p, blocks: [blk, ...p.blocks] })); };
   const startFrom = (mode) => {
     if (plan && !window.confirm('¿Reemplazar los bloques que tienes ahora?')) return;
     const base = buildClassPlan({ ...cfg, date }, MODULE_CATALOG);
-    if (mode === 'tpl') { if (baseTpl) { const bp = baseTpl.payload || {}; setPlan({ ...base, blocks: cpCloneBlocks(bp.blocks), emphasis: bp.emphasis || base.emphasis, lengthMin: bp.lengthMin || base.lengthMin }); if (bp.lengthMin) setCfg(c => ({ ...c, lengthMin: bp.lengthMin })); } else setPlan(base); }
-    else if (mode === 'last' && lastPlan) { setPlan({ ...base, blocks: cpCloneBlocks(lastPlan.blocks), materials: (lastPlan.materials || base.materials).map(m => ({ ...m })), emphasis: lastPlan.emphasis || base.emphasis, themeGroup: lastPlan.themeGroup || '' }); setCfg(c => ({ ...c, moduleId: lastPlan.moduleId || c.moduleId, themeGroup: lastPlan.themeGroup || '', lengthMin: lastPlan.lengthMin || c.lengthMin })); }
-    else setPlan({ ...base, blocks: [{ id: cpNewId(), emoji: '•', title: '', mins: cfg.lengthMin || 100, steps: [''] }] });
+    if (mode === 'tpl') { if (baseTpl) { const bp = baseTpl.payload || {}; setPlan({ ...base, materials: [], blocks: cpWithMats(cpCloneBlocks(bp.blocks), mod, cfg.themeGroup), emphasis: bp.emphasis || base.emphasis, lengthMin: bp.lengthMin || base.lengthMin }); if (bp.lengthMin) setCfg(c => ({ ...c, lengthMin: bp.lengthMin })); } else setPlan({ ...base, materials: [], blocks: cpWithMats(base.blocks, mod, cfg.themeGroup) }); }
+    else if (mode === 'last' && lastPlan) { setPlan({ ...base, blocks: (lastPlan.blocks || []).map(b => ({ ...cpCloneBlocks([b])[0], mats: Array.isArray(b.mats) ? b.mats.map(m => ({ ...m })) : cpDetectMats(mod, b, lastPlan.themeGroup) })), materials: [], emphasis: lastPlan.emphasis || base.emphasis, themeGroup: lastPlan.themeGroup || '' }); setCfg(c => ({ ...c, moduleId: lastPlan.moduleId || c.moduleId, themeGroup: lastPlan.themeGroup || '', lengthMin: lastPlan.lengthMin || c.lengthMin })); }
+    else setPlan({ ...base, materials: [], blocks: [{ id: cpNewId(), emoji: '•', title: '', mins: cfg.lengthMin || 100, steps: [''], mats: [] }] });
   };
   const saveBase = () => { if (!plan) return; const lv = cfg.level; const payload = { blocks: cpCloneBlocks(plan.blocks).map(b => ({ ...b, steps: b.steps.filter(x => String(x).trim()) })), lengthMin: totalMin, emphasis: plan.emphasis || '' };
     if (!window.confirm('¿Guardar estos bloques como tu plantilla ' + lv.toUpperCase() + '?\n\nEs lo que aparecerá al elegir “⭐ Mi plantilla” en los planes nuevos de este nivel.')) return;
@@ -700,13 +742,14 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
       return;
     }
     const clean = plan.blocks.map(b => ({ ...b, title: String(b.title || '').trim() || '(sin título)', steps: (b.steps || []).filter(x => String(x).trim()) }));
-    const rec = { ...plan, blocks: clean, groupId: cfg.groupId, date: cfg.date || date, sessionLabel: cfg.sessionLabel, startTime: cfg.startTime, lengthMin: totalMin, id: initial && !initial._tpl ? initial.id : undefined };
+    const rec = { ...plan, blocks: clean, materials: cpMatsToMaterials(clean, plan.extraMats || [], MODULE_CATALOG), extraMats: undefined, groupId: cfg.groupId, date: cfg.date || date, sessionLabel: cfg.sessionLabel, startTime: cfg.startTime, lengthMin: totalMin, id: initial && !initial._tpl ? initial.id : undefined };
     TT.upsertClassPlan(rec); alert('✅ Plan de clase guardado en el calendario'); onSaved();
   };
   const printPlan = () => printClassPlan(plan, cfg, totalMin);
 
   return (
     <>
+      {window.FollowUpPanel && <FollowUpPanel plan={lastPlan} where="plan" onAddPending={addPending} />}
       <div className="scard">
         <div className="sec-head"><div className="sec-title">📘 Plan de clase · {fmtDateLong(cfg.date || date)}</div></div>
         {initial && !initial._tpl && (
@@ -721,15 +764,13 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
         )}
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:14, marginTop:6}}>
           <Field label="Fecha"><input type="date" value={cfg.date || date} onChange={e => setCfg(c => ({ ...c, date: e.target.value }))} style={selStyle} /></Field>
-          <Field label="Grupo">{(() => { const onG = e => { const g = GROUPS.find(x => x.id === e.target.value); const lvl = g ? g.level : cfg.level; const m = (MODULE_CATALOG[lvl] || [])[0]; setCfg(c => ({ ...c, groupId: e.target.value, level: lvl, moduleId: m ? m.id : c.moduleId, themeGroup: '' })); };
+          <Field label="Grupo">{(() => { const onG = e => { const g = GROUPS.find(x => x.id === e.target.value); const lvl = g ? g.level : cfg.level; const cmid = window.JUCUM_DATA.getClassModuleId ? window.JUCUM_DATA.getClassModuleId(e.target.value) : null; const m = (MODULE_CATALOG[lvl] || []).find(x => x.id === cmid) || (MODULE_CATALOG[lvl] || [])[0]; setCfg(c => ({ ...c, groupId: e.target.value, level: lvl, moduleId: m ? m.id : c.moduleId, themeGroup: '' })); };
             return window.GroupPicker ? <GroupPicker value={cfg.groupId || ''} onChange={onG} /> : <select value={cfg.groupId || ''} onChange={onG} style={selStyle}>{groupsSorted().map(g => <option key={g.id} value={g.id}>{groupOptionLabel(g)}</option>)}</select>; })()}</Field>
-          <Field label="Nivel"><select value={cfg.level} onChange={e => { const lvl = e.target.value; const m = (MODULE_CATALOG[lvl] || [])[0]; setCfg(c => ({ ...c, level: lvl, moduleId: m ? m.id : null, themeGroup: '' })); }} style={selStyle}>{Object.keys(MODULE_CATALOG).map(lv => <option key={lv} value={lv}>{lv.toUpperCase()}</option>)}</select></Field>
-          <Field label="Módulo"><select value={cfg.moduleId || ''} onChange={e => setCfg(c => ({ ...c, moduleId: e.target.value, themeGroup: '' }))} style={selStyle}>{mods.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
-          <Field label="Tema / foco (opcional)"><select value={cfg.themeGroup} onChange={e => setCfg(c => ({ ...c, themeGroup: e.target.value }))} style={selStyle}><option value="">— Todo el módulo —</option>{themes.map(t => <option key={t} value={t}>{t}</option>)}</select></Field>
           <Field label={autoSess ? 'Sesión (la cuenta la plataforma)' : 'Sesión'}><input value={cfg.sessionLabel} onChange={e => { setAutoSess(false); setCfg(c => ({ ...c, sessionLabel: e.target.value })); }} style={selStyle} /></Field>
           <Field label="Duración (min)"><input type="number" min="40" max="180" step="5" value={cfg.lengthMin} onChange={e => setCfg(c => ({ ...c, lengthMin: Number(e.target.value) }))} style={selStyle} /></Field>
           <Field label="Hora de inicio"><input type="time" value={cfg.startTime} onChange={e => setCfg(c => ({ ...c, startTime: e.target.value }))} style={selStyle} /></Field>
         </div>
+        <div style={{display:'flex', gap:8, alignItems:'flex-start', background:'#EEF2FC', border:'1px solid #C9D4F0', borderRadius:10, padding:'8px 11px', fontSize:12.5, fontWeight:700, color:'#1F3A8A', lineHeight:1.45, marginTop:12}}>ℹ️ <span>Módulo: <b>{mod ? mod.name : '—'}</b> (el ▶ En clase del grupo · {cfg.level.toUpperCase()}). Los materiales van dentro de cada bloque.</span></div>
         <div style={{marginTop:16}}>
           <div style={lblStyle}>{plan ? '¿Empezar de nuevo desde…?' : '¿Cómo quieres empezar?'}</div>
           <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))', gap:9}}>
@@ -773,46 +814,19 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
                       <button onClick={() => delStep(b.id, si)} style={{...iconBtn, width:24, height:24, color:'#C0392B'}}>×</button>
                     </div>
                   ))}
-                  <button onClick={() => addStep(b.id)} style={{alignSelf:'flex-start', border:'1px dashed #cdb86a', background:'none', color:'#8a7320', borderRadius:8, padding:'4px 10px', fontSize:11.5, fontWeight:700, cursor:'pointer', marginTop:2}}>+ paso</button>
+                  <button onClick={() => addStep(b.id)} style={{alignSelf:'flex-start', whiteSpace:'nowrap', border:'1px dashed #cdb86a', background:'none', color:'#8a7320', borderRadius:8, padding:'4px 10px', fontSize:11.5, fontWeight:700, cursor:'pointer', marginTop:2}}>+ paso</button>
                 </div>
+                <div style={{marginTop:8, display:'flex', gap:6, flexWrap:'wrap', alignItems:'center'}}>
+                  {(plan.blocks.find(x => x.id === b.id).mats || []).map((m, k) => { const f = cpMatInfo(m, MODULE_CATALOG); return <span key={k} style={{display:'inline-flex', alignItems:'center', gap:6, whiteSpace:'nowrap', fontSize:11.5, fontWeight:800, padding:'4px 10px', borderRadius:20, background:'#EEF2FC', color:'#1F3A8A', border:'1px solid #C9D4F0'}}>{typeIcon(f ? f.a.type : '')} {cpMatLabel(m, MODULE_CATALOG)}<span onClick={() => delMat(b.id, k)} title="Quitar" style={{cursor:'pointer', color:'#C0392B'}}>✕</span></span>; })}
+                  <button onClick={() => setPickFor(pickFor === b.id ? null : b.id)} style={{whiteSpace:'nowrap', border:'1px dashed #9FB0DA', background:'none', color:'#3F5BB8', borderRadius:8, padding:'4px 10px', fontSize:11.5, fontWeight:800, cursor:'pointer'}}>＋ material</button>
+                </div>
+                {pickFor === b.id && <CpMatPicker level={cfg.level} classModId={mod ? mod.id : null} onPick={m => addMat(b.id, m)} onClose={() => setPickFor(null)} />}
               </div>
             ))}
           </div>
           <button onClick={addBlock} style={{marginTop:12, border:'1.5px dashed #9FB0DA', background:'none', color:'#3F5BB8', borderRadius:10, padding:'9px 14px', fontWeight:800, fontSize:13, cursor:'pointer', width:'100%'}}>+ Agregar bloque</button>
 
-          <div style={{marginTop:18, borderTop:'1px dashed #E3DCC9', paddingTop:14}}>
-            <div className="sec-title" style={{marginBottom:4}}>📎 Materiales para esta clase</div>
-            <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginBottom:10}}>En el orden de tu secuencia (vocabulario → story → gramática…). Márcalos; en clase los abres con un clic (pestaña nueva) y se registran solos en tu bitácora.</div>
-            <div style={{display:'flex', flexDirection:'column', gap:7}}>
-              {(mod ? mod.activities.slice().sort((x, y) => matRank(x.type) - matRank(y.type)) : []).map(a => {
-                const on = matOn(a); const mo = matObj(a) || {};
-                return (
-                  <div key={a.id} style={{border:'1px solid ' + (on ? '#9FB0DA' : '#E3DCC9'), background: on ? '#EEF2FC' : '#fff', borderRadius:10, overflow:'hidden'}}>
-                    <div style={{display:'flex', alignItems:'center', gap:10, padding:'8px 11px'}}>
-                      <button onClick={() => toggleMat(a)} style={{width:20, height:20, flexShrink:0, borderRadius:6, border:'2px solid ' + (on ? '#3F5BB8' : '#cdc4ad'), background: on ? '#3F5BB8' : '#fff', color:'#fff', fontSize:13, fontWeight:900, cursor:'pointer', display:'inline-flex', alignItems:'center', justifyContent:'center'}}>{on ? '✓' : ''}</button>
-                      <span style={{fontSize:15}}>{typeIcon(a.type)}</span>
-                      <span style={{flex:1, fontWeight:700, fontSize:13}}>{a.name}{a.group ? <span style={{display:'block', fontSize:11, color:'#8a7f6a', fontWeight:700}}>{a.group}</span> : null}</span>
-                      {a.url
-                        ? <button onClick={() => window.open(matLink({ moduleId: mod.id, activityId: a.id }, MODULE_CATALOG, cfg.groupId), '_blank')} style={{...btnGhost, padding:'5px 11px', fontSize:12}}>Abrir ▸</button>
-                        : <span style={{fontSize:10.5, fontWeight:800, color:'#9C5D00', background:'#FFF3E0', borderRadius:20, padding:'2px 8px'}}>sin archivo</span>}
-                    </div>
-                    {a.type === 'quizlet' && on && (
-                      <div style={{padding:'4px 11px 10px 40px', display:'flex', flexDirection:'column', gap:6, borderTop:'1px dashed #C9D6F5'}}>
-                        <div style={{fontSize:11, fontWeight:800, color:'#6C4FB0'}}>Pega los 3 links de Quizlet (los que uses):</div>
-                        {['vocabulario', 'vocabulario2', 'traducir', 'ordenar'].map(k => (
-                          <div key={k} style={{display:'flex', alignItems:'center', gap:7}}>
-                            <span style={{fontSize:11, fontWeight:800, color:'#8a7f6a', minWidth:78, textTransform:'capitalize'}}>{k === 'vocabulario2' ? 'vocab. 2' : k}</span>
-                            <input value={(mo.quizLinks || {})[k] || ''} onChange={e => updateMat(a, { quizLinks: { ...(mo.quizLinks || {}), [k]: e.target.value } })} placeholder="https://quizlet.com/…" style={{flex:1, border:'1px solid #D9CEEC', borderRadius:7, padding:'5px 8px', fontSize:11.5}} />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
+          {(plan.extraMats || []).length > 0 && <div style={{marginTop:14, display:'flex', gap:6, flexWrap:'wrap', alignItems:'center'}}><span style={{fontSize:12, fontWeight:800, color:'#8a7f6a'}}>📎 Otros materiales de este plan:</span>{plan.extraMats.map((m, k) => <span key={k} style={{display:'inline-flex', alignItems:'center', gap:6, fontSize:11.5, fontWeight:800, padding:'4px 10px', borderRadius:20, background:'#F4F1E8', color:'#5f5540'}}>{cpMatLabel(m, MODULE_CATALOG)}<span onClick={() => setPlan(p => ({ ...p, extraMats: p.extraMats.filter((_, j) => j !== k) }))} style={{cursor:'pointer', color:'#C0392B'}}>✕</span></span>)}</div>}
           <div style={{display:'flex', gap:10, flexWrap:'wrap', marginTop:16}}>
             <button onClick={() => save(false)} style={btnPrimary}>💾 Guardar en el calendario</button>
             <button onClick={() => { if (onClassMode) onClassMode({ ...plan, groupId: cfg.groupId, startTime: cfg.startTime, sessionLabel: cfg.sessionLabel, date: cfg.date || date }); }} style={{...btnGhost, borderColor:'#9FB0DA', color:'#3F5BB8'}}>▶ Modo clase</button>
@@ -1254,6 +1268,8 @@ function ClassMode({ plan, onBack }) {
   const askTimer = () => { if (!timer) { const go = window.confirm('⏱️ ¿Activar el cronómetro de la clase ahora?\n\nAceptar: inicia el cronómetro y abre el material.\nCancelar: abre el material sin iniciar el cronómetro.'); if (go) startTimer(); } };
   const [liveOn, setLiveOn] = React.useState(false);
   const [evalOn, setEvalOn] = React.useState(false);
+  const [closeOn, setCloseOn] = React.useState(false);
+  const [closedPlan, setClosedPlan] = React.useState(plan.closing ? plan : null);
   const focusKeys = (plan.materials || []).filter(m => m.moduleId && m.activityId).map(m => m.moduleId + ':' + m.activityId);
   const open = (m) => {
     if (m.type === 'quizlet') { setQuizPick({ ...m, quizLinks: cpQuizLinks(m, MODULE_CATALOG) }); return; }
@@ -1269,6 +1285,7 @@ function ClassMode({ plan, onBack }) {
   return (
     <main>
       <button className="back-btn" onClick={onBack}>← Salir del modo clase</button>
+      {closeOn && window.ClassCloseModal && <ClassCloseModal plan={closedPlan || plan} onClose={() => setCloseOn(false)} onOpenRoster={() => { setCloseOn(false); setRosterOpen(true); }} onOpenEval={() => { setCloseOn(false); setEvalOn(true); }} onSaved={(p) => { setClosedPlan(p); setCloseOn(false); }} />}
       <div style={{background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)', color:'#fff', borderRadius:16, padding:'18px 22px', margin:'4px 0 16px', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap'}}>
         <div style={{flex:1, minWidth:200}}>
           <div style={{fontSize:11, fontWeight:800, letterSpacing:'0.07em', textTransform:'uppercase', opacity:0.75}}>▶ Modo clase</div>
@@ -1287,6 +1304,13 @@ function ClassMode({ plan, onBack }) {
               border:'1.5px solid ' + (evalOn ? '#fff' : 'rgba(255,255,255,0.35)'), borderRadius:22, padding:'8px 15px'}}>
             📋 {evalOn ? 'Cerrar evaluación' : 'Evaluar la clase'}
           </button>
+          {window.ClassCloseModal && plan.id && (
+            <button onClick={() => setCloseOn(true)} title="Al terminar: cuenta qué pasó con cada bloque"
+              style={{marginTop:9, marginLeft:8, display:'inline-flex', alignItems:'center', gap:7, cursor:'pointer', fontFamily:'inherit', fontWeight:800, fontSize:13.5,
+                background: closedPlan ? 'rgba(255,255,255,0.16)' : '#FFC107', color: closedPlan ? '#fff' : '#3A2A00', border:'1.5px solid ' + (closedPlan ? 'rgba(255,255,255,0.35)' : '#FFC107'), borderRadius:22, padding:'8px 16px',
+                boxShadow: (!closedPlan && cd && cd.state === 'after') ? '0 0 0 4px rgba(255,193,7,.45)' : 'none'}}>
+              🏁 {closedPlan ? 'Clase terminada ✓ (corregir)' : 'Terminar clase'}
+            </button>)}
         </div>
         {timer ? (
           <button onClick={() => { if (window.confirm('¿Reiniciar el cronómetro de la clase?')) resetTimer(); }} title="Clic para reiniciar" style={{background: cd.state === 'after' ? 'rgba(255,120,120,0.18)' : 'rgba(255,255,255,0.14)', border:'1px solid rgba(255,255,255,0.25)', borderRadius:14, padding:'12px 18px', textAlign:'center', minWidth:150, cursor:'pointer', color:'#fff', font:'inherit'}}>
