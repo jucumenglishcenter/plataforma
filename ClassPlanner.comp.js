@@ -170,7 +170,7 @@ function ClassPlanner({ onBack, onGoExams }) {
           onEditPractice={(p) => { setEditPractice(p); setScreen('practice'); }} onClassMode={goClassMode} onOpenTasks={() => setScreen('tareas')} refreshKey={tick} onChange={refresh} />
       )}
       {screen === 'class' && (
-        <ClassPlanEditor key={editPlan ? editPlan.id || 'tpl' : 'new'} date={selDate} initial={editPlan} defaultGroupId={defaultGroup || curGroup} onGroupSeen={setCurGroup} onClassMode={goClassMode} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
+        <ClassPlanEditor key={editPlan ? editPlan.id || 'tpl' : 'new'} onImport={window.PlanImport ? () => goImport() : null} date={selDate} initial={editPlan} defaultGroupId={defaultGroup || curGroup} onGroupSeen={setCurGroup} onClassMode={goClassMode} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
       )}
       {screen === 'import' && window.PlanImport && (
         <PlanImport key={importRef ? importRef.k : 'imp'} importId={importRef && importRef.id} startTab={importRef && importRef.tab} onBack={() => { refresh(); setScreen('calendar'); }} onClassMode={goClassMode} />
@@ -627,7 +627,16 @@ function PracticeSetProgress({ plan, onClose }) {
 }
 
 /* ════════ Editor de PLAN DE CLASE ════════ */
-function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaultGroupId, onGroupSeen }) {
+/* PLAN-START-V1 (07-oct-2026) · pedido del teacher: “el ingreso de datos” era lo más lento.
+ * Cómo empezar = mi plantilla del nivel (la edita él) · copiar la última clase del grupo · en blanco ·
+ * subir sus PDF. Sin texto pre-llenado que borrar (ayuda en gris), pegar varias líneas = varios pasos,
+ * y la sesión/hora salen del grupo (planes anteriores + 1). */
+function cpNewId() { return 'b_' + Math.random().toString(36).slice(2, 8); }
+function cpCloneBlocks(bl) { return (bl || []).map(b => ({ id: cpNewId(), emoji: b.emoji || '•', title: b.title || '', mins: Number(b.mins) || 10, steps: (b.steps || []).slice() })); }
+function cpBaseTpl(level) { const TT = window.JUCUM_TT; return ((TT && TT.getTemplates) ? TT.getTemplates() : []).find(t => t.kind === 'base-class' && t.level === level) || null; }
+function cpAutoSession(groupId, d) { const PI = window.JUCUM_PLANIMPORT; return (PI && PI.sessionFor && groupId && d) ? 'Sesión ' + PI.sessionFor(groupId, d) : null; }
+function cpAutoStart(groupId) { const PI = window.JUCUM_PLANIMPORT; const m = PI && PI.groupMeta && groupId ? PI.groupMeta(groupId) : null; return (m && m.start) || null; }
+function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaultGroupId, onGroupSeen, onImport }) {
   const { MODULE_CATALOG, GROUPS } = window.JUCUM_DATA;
   const TT = window.JUCUM_TT;
   const [cfg, setCfg] = React.useState(() => {
@@ -635,8 +644,11 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
     const gid = defaultGroupId || (GROUPS[0] && GROUPS[0].id) || null;
     const grp = GROUPS.find(g => g.id === gid);
     const lvl = (grp && grp.level) || 'pre-a1'; const mods = MODULE_CATALOG[lvl] || [];
-    return { level: lvl, groupId: gid, moduleId: mods[0] ? mods[0].id : null, themeGroup: '', lengthMin: 100, sessionLabel: 'Sesión 1', startTime: '09:00', emphasis: 'Vocabulario · Story/Diálogo · Gramática', date };
+    const cm = window.JUCUM_DATA.getClassModuleId ? window.JUCUM_DATA.getClassModuleId(gid) : null;
+    return { level: lvl, groupId: gid, moduleId: (mods.find(m => m.id === cm) || mods[0] || {}).id || null, themeGroup: '', lengthMin: 100, sessionLabel: cpAutoSession(gid, date) || 'Sesión 1', startTime: cpAutoStart(gid) || '09:00', emphasis: 'Vocabulario · Story/Diálogo · Gramática', date };
   });
+  const [autoSess, setAutoSess] = React.useState(!initial || !!initial._tpl);
+  React.useEffect(() => { if (!autoSess) return; const sl = cpAutoSession(cfg.groupId, cfg.date || date); const st = cpAutoStart(cfg.groupId); setCfg(c => ({ ...c, sessionLabel: sl || c.sessionLabel, startTime: st || c.startTime })); }, [cfg.groupId, cfg.date, autoSess]);
   React.useEffect(() => { if (onGroupSeen && cfg.groupId) onGroupSeen(cfg.groupId); }, [cfg.groupId]);
   const [plan, setPlan] = React.useState(initial || null);
   const mods = MODULE_CATALOG[cfg.level] || [];
@@ -647,9 +659,26 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
   const upd = (id, patch) => setPlan(p => ({ ...p, blocks: p.blocks.map(b => b.id === id ? { ...b, ...patch } : b) }));
   const move = (id, dir) => setPlan(p => { const i = p.blocks.findIndex(b => b.id === id); const j = i + dir; if (i < 0 || j < 0 || j >= p.blocks.length) return p; const bl = p.blocks.slice(); const t = bl[i]; bl[i] = bl[j]; bl[j] = t; return { ...p, blocks: bl }; });
   const delBlock = (id) => setPlan(p => ({ ...p, blocks: p.blocks.filter(b => b.id !== id) }));
-  const addBlock = () => setPlan(p => ({ ...p, blocks: [...p.blocks, { id: 'b_' + Math.random().toString(36).slice(2, 7), emoji: '•', title: 'Nuevo bloque', mins: 10, steps: [] }] }));
+  const addBlock = () => setPlan(p => ({ ...p, blocks: [...p.blocks, { id: cpNewId(), emoji: '•', title: '', mins: 10, steps: [''] }] }));
+  /* Pegar varias líneas en un paso = un paso por línea (texto exacto) */
+  const pasteSteps = (bid, si, e) => { const t = (e.clipboardData && e.clipboardData.getData('text')) || ''; const lines = t.split(/\r?\n/).map(x => x.replace(/^\s*(?:[-•·*]|\d+[.)])\s+/, '').trim()).filter(Boolean); if (lines.length < 2) return; e.preventDefault();
+    setPlan(p => ({ ...p, blocks: p.blocks.map(b => { if (b.id !== bid) return b; const st = b.steps.slice(); const cur = st[si] || ''; st.splice(si, 1, ...(cur.trim() ? [cur, ...lines] : lines)); return { ...b, steps: st }; }) })); };
+  const baseTpl = cpBaseTpl(cfg.level);
+  const lastPlan = TT.getClassPlans().filter(p => p.groupId === cfg.groupId && p.date && p.date < (cfg.date || date) && (!initial || p.id !== initial.id)).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0] || null;
+  const startFrom = (mode) => {
+    if (plan && !window.confirm('¿Reemplazar los bloques que tienes ahora?')) return;
+    const base = buildClassPlan({ ...cfg, date }, MODULE_CATALOG);
+    if (mode === 'tpl') { if (baseTpl) { const bp = baseTpl.payload || {}; setPlan({ ...base, blocks: cpCloneBlocks(bp.blocks), emphasis: bp.emphasis || base.emphasis, lengthMin: bp.lengthMin || base.lengthMin }); if (bp.lengthMin) setCfg(c => ({ ...c, lengthMin: bp.lengthMin })); } else setPlan(base); }
+    else if (mode === 'last' && lastPlan) { setPlan({ ...base, blocks: cpCloneBlocks(lastPlan.blocks), materials: (lastPlan.materials || base.materials).map(m => ({ ...m })), emphasis: lastPlan.emphasis || base.emphasis, themeGroup: lastPlan.themeGroup || '' }); setCfg(c => ({ ...c, moduleId: lastPlan.moduleId || c.moduleId, themeGroup: lastPlan.themeGroup || '', lengthMin: lastPlan.lengthMin || c.lengthMin })); }
+    else setPlan({ ...base, blocks: [{ id: cpNewId(), emoji: '•', title: '', mins: cfg.lengthMin || 100, steps: [''] }] });
+  };
+  const saveBase = () => { if (!plan) return; const lv = cfg.level; const payload = { blocks: cpCloneBlocks(plan.blocks).map(b => ({ ...b, steps: b.steps.filter(x => String(x).trim()) })), lengthMin: totalMin, emphasis: plan.emphasis || '' };
+    if (!window.confirm('¿Guardar estos bloques como tu plantilla ' + lv.toUpperCase() + '?\n\nEs lo que aparecerá al elegir “⭐ Mi plantilla” en los planes nuevos de este nivel.')) return;
+    if (baseTpl) TT.updateTemplate(baseTpl.id, { payload }); else TT.addTemplate({ kind: 'base-class', name: 'Mi plantilla ' + lv.toUpperCase(), level: lv, payload });
+    alert('⭐ Listo: tu plantilla ' + lv.toUpperCase() + ' quedó guardada (también en la nube).'); setPlan(p => ({ ...p })); };
+  const resetBase = () => { if (!baseTpl) return; if (!window.confirm('¿Volver a la plantilla de fábrica de ' + cfg.level.toUpperCase() + '? Tu plantilla se borra (los planes ya guardados no cambian).')) return; TT.deleteTemplate(baseTpl.id); setPlan(p => p ? ({ ...p }) : p); };
   const updStep = (bid, si, val) => setPlan(p => ({ ...p, blocks: p.blocks.map(b => b.id === bid ? { ...b, steps: b.steps.map((s, k) => k === si ? val : s) } : b) }));
-  const addStep = (bid) => setPlan(p => ({ ...p, blocks: p.blocks.map(b => b.id === bid ? { ...b, steps: [...b.steps, 'Nuevo paso'] } : b) }));
+  const addStep = (bid) => setPlan(p => ({ ...p, blocks: p.blocks.map(b => b.id === bid ? { ...b, steps: [...b.steps, ''] } : b) }));
   const delStep = (bid, si) => setPlan(p => ({ ...p, blocks: p.blocks.map(b => b.id === bid ? { ...b, steps: b.steps.filter((_, k) => k !== si) } : b) }));
   const totalMin = plan ? plan.blocks.reduce((a, b) => a + (Number(b.mins) || 0), 0) : 0;
 
@@ -670,7 +699,8 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
       alert('⭐ Plantilla "' + name.trim() + '" guardada. La encuentras en 📁 Guardados.');
       return;
     }
-    const rec = { ...plan, groupId: cfg.groupId, date: cfg.date || date, sessionLabel: cfg.sessionLabel, startTime: cfg.startTime, lengthMin: totalMin, id: initial && !initial._tpl ? initial.id : undefined };
+    const clean = plan.blocks.map(b => ({ ...b, title: String(b.title || '').trim() || '(sin título)', steps: (b.steps || []).filter(x => String(x).trim()) }));
+    const rec = { ...plan, blocks: clean, groupId: cfg.groupId, date: cfg.date || date, sessionLabel: cfg.sessionLabel, startTime: cfg.startTime, lengthMin: totalMin, id: initial && !initial._tpl ? initial.id : undefined };
     TT.upsertClassPlan(rec); alert('✅ Plan de clase guardado en el calendario'); onSaved();
   };
   const printPlan = () => printClassPlan(plan, cfg, totalMin);
@@ -696,13 +726,21 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
           <Field label="Nivel"><select value={cfg.level} onChange={e => { const lvl = e.target.value; const m = (MODULE_CATALOG[lvl] || [])[0]; setCfg(c => ({ ...c, level: lvl, moduleId: m ? m.id : null, themeGroup: '' })); }} style={selStyle}>{Object.keys(MODULE_CATALOG).map(lv => <option key={lv} value={lv}>{lv.toUpperCase()}</option>)}</select></Field>
           <Field label="Módulo"><select value={cfg.moduleId || ''} onChange={e => setCfg(c => ({ ...c, moduleId: e.target.value, themeGroup: '' }))} style={selStyle}>{mods.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
           <Field label="Tema / foco (opcional)"><select value={cfg.themeGroup} onChange={e => setCfg(c => ({ ...c, themeGroup: e.target.value }))} style={selStyle}><option value="">— Todo el módulo —</option>{themes.map(t => <option key={t} value={t}>{t}</option>)}</select></Field>
-          <Field label="Sesión"><input value={cfg.sessionLabel} onChange={e => setCfg(c => ({ ...c, sessionLabel: e.target.value }))} style={selStyle} /></Field>
+          <Field label={autoSess ? 'Sesión (la cuenta la plataforma)' : 'Sesión'}><input value={cfg.sessionLabel} onChange={e => { setAutoSess(false); setCfg(c => ({ ...c, sessionLabel: e.target.value })); }} style={selStyle} /></Field>
           <Field label="Duración (min)"><input type="number" min="40" max="180" step="5" value={cfg.lengthMin} onChange={e => setCfg(c => ({ ...c, lengthMin: Number(e.target.value) }))} style={selStyle} /></Field>
           <Field label="Hora de inicio"><input type="time" value={cfg.startTime} onChange={e => setCfg(c => ({ ...c, startTime: e.target.value }))} style={selStyle} /></Field>
         </div>
-        <div style={{display:'flex', gap:10, marginTop:16, flexWrap:'wrap'}}>
-          <button onClick={() => { if (plan && !window.confirm('¿Regenerar desde cero? Se perderán los cambios que hiciste a los bloques.')) return; generate(); }} style={{...btnPrimary, background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>⚡ {plan ? 'Regenerar' : 'Generar plan'}</button>
-          <button onClick={onCancel} style={btnGhost}>Cancelar</button>
+        <div style={{marginTop:16}}>
+          <div style={lblStyle}>{plan ? '¿Empezar de nuevo desde…?' : '¿Cómo quieres empezar?'}</div>
+          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))', gap:9}}>
+            {[
+              ['tpl', '⭐ ' + (baseTpl ? 'Mi plantilla ' : 'Plantilla JUCUM ') + cfg.level.toUpperCase(), baseTpl ? 'La que tú guardaste para este nivel.' : 'La secuencia de siempre. Puedes guardar la tuya.', true],
+              ['last', '📋 Copiar la última clase', lastPlan ? (lastPlan.sessionLabel || 'Clase') + ' · ' + fmtDateLong(lastPlan.date) : 'Este grupo aún no tiene clases guardadas.', !!lastPlan],
+              ['blank', '⬜ Empezar en blanco', 'Sin nada escrito: escribe o pega lo tuyo.', true],
+              ['pdf', '📄 Subir mis PDF', 'Plan de clase + práctica de la semana, palabra por palabra.', !!onImport]
+            ].map(([k, t, sub, ok]) => <button key={k} disabled={!ok} onClick={() => k === 'pdf' ? onImport() : startFrom(k)} style={{textAlign:'left', cursor: ok ? 'pointer' : 'not-allowed', opacity: ok ? 1 : .5, fontFamily:'inherit', border:'2px solid #E3DCC9', background:'#fff', borderRadius:12, padding:'10px 12px', display:'flex', flexDirection:'column', gap:3}}><b style={{fontSize:13.5, color:'#0D1B5A'}}>{t}</b><span style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700, lineHeight:1.35}}>{sub}</span></button>)}
+          </div>
+          <div style={{display:'flex', gap:10, marginTop:10, flexWrap:'wrap'}}><button onClick={onCancel} style={btnGhost}>Cancelar</button></div>
         </div>
       </div>
 
@@ -718,7 +756,7 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
                 <div style={{display:'flex', alignItems:'center', gap:9, flexWrap:'wrap'}}>
                   <span style={{fontSize:12, fontWeight:800, color:'#1F3A8A', whiteSpace:'nowrap'}}>{b.from}–{b.to}</span>
                   <input value={b.emoji} onChange={e => upd(b.id, { emoji: e.target.value })} style={{width:34, textAlign:'center', border:'1px solid #E3DCC9', borderRadius:8, padding:'5px 2px', fontSize:14}} />
-                  <input value={b.title} onChange={e => upd(b.id, { title: e.target.value })} style={{flex:1, minWidth:120, border:'1px solid #E3DCC9', borderRadius:8, padding:'6px 9px', fontWeight:700, fontSize:13.5}} />
+                  <input value={b.title} placeholder="Nombre del bloque…" onChange={e => upd(b.id, { title: e.target.value })} style={{flex:1, minWidth:120, border:'1px solid #E3DCC9', borderRadius:8, padding:'6px 9px', fontWeight:700, fontSize:13.5}} />
                   <input type="number" min="5" step="5" value={b.mins} onChange={e => upd(b.id, { mins: Number(e.target.value) })} style={{width:58, border:'1px solid #E3DCC9', borderRadius:8, padding:'6px 7px', fontWeight:700, fontSize:13}} />
                   <span style={{fontSize:11, color:'#999', fontWeight:700}}>min</span>
                   <span style={{display:'inline-flex', gap:3}}>
@@ -731,7 +769,7 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
                   {b.steps.map((s, si) => (
                     <div key={si} style={{display:'flex', alignItems:'center', gap:7}}>
                       <span style={{color:'#B0A88F', fontSize:12}}>•</span>
-                      <input value={s} onChange={e => updStep(b.id, si, e.target.value)} style={{flex:1, border:'1px solid #EFE8D6', borderRadius:7, padding:'5px 8px', fontSize:12.5, color:'#555'}} />
+                      <input value={s} placeholder="Escribe el paso… (o pega varias líneas: una por paso)" onPaste={e => pasteSteps(b.id, si, e)} onChange={e => updStep(b.id, si, e.target.value)} style={{flex:1, border:'1px solid #EFE8D6', borderRadius:7, padding:'5px 8px', fontSize:12.5, color:'#555'}} />
                       <button onClick={() => delStep(b.id, si)} style={{...iconBtn, width:24, height:24, color:'#C0392B'}}>×</button>
                     </div>
                   ))}
@@ -779,6 +817,8 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
             <button onClick={() => save(false)} style={btnPrimary}>💾 Guardar en el calendario</button>
             <button onClick={() => { if (onClassMode) onClassMode({ ...plan, groupId: cfg.groupId, startTime: cfg.startTime, sessionLabel: cfg.sessionLabel, date: cfg.date || date }); }} style={{...btnGhost, borderColor:'#9FB0DA', color:'#3F5BB8'}}>▶ Modo clase</button>
             <button onClick={() => save(true)} style={btnGhost}>⭐ Plantilla</button>
+            <button onClick={saveBase} title="Lo que aparecerá al elegir “⭐ Mi plantilla” en los planes nuevos de este nivel" style={btnGhost}>⭐ Guardar como mi plantilla {cfg.level.toUpperCase()}</button>
+            {baseTpl && <button onClick={resetBase} style={{...btnGhost, color:'#8a7f6a'}}>↺ Plantilla de fábrica</button>}
             <button onClick={printPlan} style={btnGhost}>🖨️ Imprimir / PDF</button>
           </div>
         </div>
@@ -836,9 +876,11 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
   const moveStep = (i, dir) => setGuide(g => { const arr = g.steps.slice(); const j = i + dir; if (j < 0 || j >= arr.length) return g; const t = arr[i]; arr[i] = arr[j]; arr[j] = t; return { ...g, steps: arr }; });
   const delStep = (i) => setGuide(g => ({ ...g, steps: g.steps.filter((_, k) => k !== i) }));
   const updLine = (i, key, li, val) => setGuide(g => ({ ...g, steps: g.steps.map((s, k) => k === i ? { ...s, [key]: (s[key] || []).map((x, j) => j === li ? val : x) } : s) }));
+  const pasteLines = (i, key, li, e) => { const t = (e.clipboardData && e.clipboardData.getData('text')) || ''; const lines = t.split(/\r?\n/).map(x => x.replace(/^\s*(?:[-•·*]|\d+[.)])\s+/, '').trim()).filter(Boolean); if (lines.length < 2) return; e.preventDefault();
+    setGuide(g => ({ ...g, steps: g.steps.map((s0, k) => { if (k !== i) return s0; const arr = (s0[key] || []).slice(); const cur = arr[li] || ''; arr.splice(li, 1, ...(cur.trim() ? [cur, ...lines] : lines)); return { ...s0, [key]: arr }; }) })); };
   const addLine = (i, key) => setGuide(g => ({ ...g, steps: g.steps.map((s, k) => k === i ? { ...s, [key]: [...(s[key] || []), ''] } : s) }));
   const delLine = (i, key, li) => setGuide(g => ({ ...g, steps: g.steps.map((s, k) => k === i ? { ...s, [key]: (s[key] || []).filter((_, j) => j !== li) } : s) }));
-  const addGuideBlock = () => setGuide(g => ({ ...g, steps: [...g.steps, { emoji: '•', title: 'Nuevo bloque', type: 'custom', linesEs: [''], linesEn: [''] }] }));
+  const addGuideBlock = () => setGuide(g => ({ ...g, steps: [...g.steps, { emoji: '•', title: '', type: 'custom', linesEs: [''], linesEn: [''] }] }));
   const loadFav = (favId) => { const f = (TT.getGuideFavs() || []).find(x => x.id === favId); if (!f) return; const g = JSON.parse(JSON.stringify(f.guide)); g.title = title; g.note = note; g.moduleName = mod ? mod.name : g.moduleName; setGuide(g); };
   const saveFav = () => { const g = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }); if (!guide) setGuide(g); const name = window.prompt('Ponle un nombre a este instructivo favorito (para reconocerlo después):', title || 'Mi instructivo'); if (!name) return; TT.addGuideFav(name.trim(), g); setFavTick(t => t + 1); alert('⭐ Guardado en favoritos como “' + name.trim() + '”'); };
   const delFav = (id) => { if (window.confirm('¿Borrar este instructivo favorito?')) { TT.deleteGuideFav(id); setFavTick(t => t + 1); } };
@@ -1115,7 +1157,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
                             {arr.map((ln, li) => (
                               <div key={li} style={{display:'flex', alignItems:'center', gap:7}}>
                                 <span style={{color:'#B0A88F', fontSize:12}}>•</span>
-                                <input value={ln} onChange={e => updLine(i, key, li, e.target.value)} style={{flex:1, border:'1px solid #EFE8D6', borderRadius:7, padding:'6px 9px', fontSize:12.5, fontFamily:'inherit', fontWeight:600, color: italic ? '#777' : '#444', fontStyle: italic ? 'italic' : 'normal'}} />
+                                <input value={ln} placeholder="Escribe el paso… (o pega varias líneas)" onPaste={e => pasteLines(i, key, li, e)} onChange={e => updLine(i, key, li, e.target.value)} style={{flex:1, border:'1px solid #EFE8D6', borderRadius:7, padding:'6px 9px', fontSize:12.5, fontFamily:'inherit', fontWeight:600, color: italic ? '#777' : '#444', fontStyle: italic ? 'italic' : 'normal'}} />
                                 <button onClick={() => delLine(i, key, li)} style={{...iconBtn, width:24, height:24, color:'#C0392B'}}>×</button>
                               </div>
                             ))}

@@ -1,4 +1,5 @@
-/* 📄 Subir el plan del teacher (PLAN-IMPORT-V1 · 02-oct-2026)
+/* 📄 Subir el plan del teacher (PLAN-IMPORT-V2 · 07-oct-2026 · acepta los PDF en formato de la plataforma;
+ *    el teacher elige grupo + día, la sesión y las fechas las pone la plataforma)
  * Pantalla del Planificador: elegir grupo → subir los .docx → “Lo que entendí” →
  * “Falta completar” → “Revisar y editar” → Publicar → “Reporte de vuelta”.
  * Toda la lógica vive en plan-import.js (window.JUCUM_PLANIMPORT). El Modo clase
@@ -35,6 +36,9 @@ function PiStart({ onBack, onOpen }) {
   const PI = window.JUCUM_PLANIMPORT; const D = window.JUCUM_DATA;
   const groups = (typeof groupsSorted === 'function' ? groupsSorted() : (D.GROUPS || [])).filter(g => !g.finishedAt);
   const [gid, setGid] = React.useState(null);
+  const [day, setDay] = React.useState('');
+  const meta = gid && PI.groupMeta ? PI.groupMeta(gid) : null;
+  const dayEff = day || (meta && meta.next[0]) || '';
   const [files, setFiles] = React.useState([]);
   const [paste, setPaste] = React.useState('');
   const [showPaste, setShowPaste] = React.useState(false);
@@ -46,9 +50,9 @@ function PiStart({ onBack, onOpen }) {
   const go = async () => {
     setErr(''); if (!gid) { setErr('Elige el grupo primero.'); return; }
     const src = files.slice(); if (paste.trim()) src.push(new File([paste], 'texto-pegado.txt', { type:'text/plain' }));
-    if (!src.length) { setErr('Sube al menos el outline o la práctica.'); return; }
+    if (!src.length) { setErr('Sube al menos el plan de clase o la práctica.'); return; }
     setBusy(true);
-    try { const read = []; for (const f of src) read.push(await PI.readFile(f)); const r = PI.create(read, gid); onOpen(r); }
+    try { const read = []; for (const f of src) read.push(await PI.readFile(f)); const r = PI.create(read, gid, { date: dayEff }); onOpen(r); }
     catch (e) { setErr(e && e.message ? e.message : 'No se pudo leer.'); }
     setBusy(false);
   };
@@ -74,23 +78,37 @@ function PiStart({ onBack, onOpen }) {
             const n = (D.STUDENTS || []).filter(s => s.group === g.id && s.active !== false).length;
             const cm = D.getClassModuleId ? (D.MODULE_CATALOG[g.level] || []).find(m => m.id === D.getClassModuleId(g.id)) : null;
             return (
-              <button key={g.id} onClick={() => setGid(g.id)} style={{textAlign:'left', cursor:'pointer', font:'inherit', border:'2px solid ' + (on ? '#3F5BB8' : '#E3DCC9'), borderLeft:'7px solid ' + lvc, borderRadius:12, background: on ? '#EEF2FC' : '#fff', padding:'9px 11px', display:'flex', flexDirection:'column', gap:2, boxShadow: on ? '0 0 0 3px #C9D6F5' : 'none'}}>
+              <button key={g.id} onClick={() => { setGid(g.id); setDay(''); }} style={{textAlign:'left', cursor:'pointer', font:'inherit', border:'2px solid ' + (on ? '#3F5BB8' : '#E3DCC9'), borderLeft:'7px solid ' + lvc, borderRadius:12, background: on ? '#EEF2FC' : '#fff', padding:'9px 11px', display:'flex', flexDirection:'column', gap:2, boxShadow: on ? '0 0 0 3px #C9D6F5' : 'none'}}>
                 <span style={{fontWeight:800, fontSize:13.5}}>{g.name}</span>
                 <span style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700}}>{String(g.level).toUpperCase()}{g.schedule ? ' · ' + g.schedule : ''} · {n} alumnos</span>
                 {cm && <span style={{fontSize:11, color:'#3F5BB8', fontWeight:800}}>▶ En clase: {cm.name}</span>}
               </button>); })}
         </div>
+        {meta && (
+          <div style={{marginTop:12, borderTop:'1px dashed #E3DCC9', paddingTop:12, display:'flex', flexDirection:'column', gap:8}}>
+            <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center'}}>
+              <b style={{fontSize:13}}>Día de la clase:</b>
+              {meta.next.map((d0, i) => { const on = dayEff === d0; return <button key={d0} onClick={() => setDay(d0)} style={{...piBtn, background: on ? '#3F5BB8' : '#fff', color: on ? '#fff' : '#3F5BB8', borderColor: on ? '#3F5BB8' : '#9FB0DA'}}>{d0 === meta.today ? 'Hoy · ' : ''}{PI.fmtDay(d0)}</button>; })}
+              <input type="date" value={dayEff} onChange={e => setDay(e.target.value)} style={piIn} title="Otro día" />
+            </div>
+            {dayEff && <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+              <span style={piChip('#EEF2FC', '#1F3A8A')}>🔢 Sesión {meta.sessionFor(dayEff)} de este grupo</span>
+              {meta.start && <span style={piChip('#EEF2FC', '#1F3A8A')}>🕒 {meta.start} (horario del grupo)</span>}
+              {meta.days.length > 0 && <span style={piChip('#EEF2FC', '#1F3A8A')}>📱 Práctica hasta el día antes de la próxima clase</span>}
+            </div>}
+            <div style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700}}>La sesión y las fechas las pone la plataforma con el seguimiento del grupo: lo que diga el documento no cuenta.</div>
+          </div>)}
       </div>
       <div className="scard">
         <div className="sec-title" style={{marginBottom:10}}>2 · Documentos del teacher</div>
         <label onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); addFiles(e.dataTransfer.files); }} style={{display:'flex', flexDirection:'column', alignItems:'center', gap:6, border:'2.5px dashed #C9B87A', background:'#FFFBF2', borderRadius:14, padding:'20px 14px', textAlign:'center', cursor:'pointer'}}>
           <span style={{fontSize:28}}>⬆</span>
-          <b style={{fontSize:14}}>Arrastra aquí los .docx que te dio Claude, o toca para elegirlos</b>
-          <span style={{fontSize:12, color:'#8a7f6a', fontWeight:700}}>Outline de la clase y práctica fuera de clase. El tracker es opcional, pero da contexto. Se leen aquí mismo: no se envían a ningún servicio.</span>
-          <input type="file" multiple accept=".docx,.txt" onChange={e => addFiles(e.target.files)} style={{display:'none'}} />
+          <b style={{fontSize:14}}>Arrastra aquí los PDF del plan de clase y de la práctica, o toca para elegirlos</b>
+          <span style={{fontSize:12, color:'#8a7f6a', fontWeight:700}}>“Plan de clase · …” y “Práctica de la semana” (también acepta los .docx de antes). Tu texto se copia tal cual. Se leen aquí mismo: no se envían a ningún servicio.</span>
+          <input type="file" multiple accept=".pdf,.docx,.txt" onChange={e => addFiles(e.target.files)} style={{display:'none'}} />
         </label>
         {files.length > 0 && <div style={{display:'flex', flexDirection:'column', gap:6, marginTop:10}}>{files.map(f => (
-          <div key={f.name} style={{display:'flex', alignItems:'center', gap:9, ...piBox, padding:'8px 11px'}}><span style={piChip('#EEF2FC', '#3F5BB8')}>{/\.docx$/i.test(f.name) ? 'DOCX' : 'TXT'}</span><span style={{flex:1, fontWeight:700, fontSize:12.5, wordBreak:'break-word'}}>{f.name}</span><button onClick={() => setFiles(fs => fs.filter(x => x !== f))} style={{...piBtn, padding:'3px 8px', color:'#C0392B', borderColor:'#F0C0BA'}}>✕</button></div>))}</div>}
+          <div key={f.name} style={{display:'flex', alignItems:'center', gap:9, ...piBox, padding:'8px 11px'}}><span style={piChip('#EEF2FC', '#3F5BB8')}>{/\.pdf$/i.test(f.name) ? 'PDF' : /\.docx$/i.test(f.name) ? 'DOCX' : 'TXT'}</span><span style={{flex:1, fontWeight:700, fontSize:12.5, wordBreak:'break-word'}}>{f.name}</span><button onClick={() => setFiles(fs => fs.filter(x => x !== f))} style={{...piBtn, padding:'3px 8px', color:'#C0392B', borderColor:'#F0C0BA'}}>✕</button></div>))}</div>}
         <button onClick={() => setShowPaste(v => !v)} style={{...piBtn, marginTop:10, borderStyle:'dashed'}}>{showPaste ? 'Ocultar' : '📋 O pegar el texto del plan'}</button>
         {showPaste && <textarea value={paste} onChange={e => setPaste(e.target.value)} rows={7} placeholder="Pega aquí el texto del outline y/o de la práctica…" style={{...piIn, width:'100%', marginTop:8, resize:'vertical'}} />}
         {err && <div style={{marginTop:10, background:'#FDECEA', border:'1px solid #F3B9B2', color:'#8E1B1B', borderRadius:10, padding:'8px 11px', fontSize:12.5, fontWeight:800}}>⚠ {err}</div>}
@@ -173,9 +191,10 @@ function PiRead({ rec, mod, eff }) {
     <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(340px,1fr))', gap:14}}>
       <div className="scard">
         <div className="sec-title" style={{marginBottom:8}}>Documentos</div>
-        {['outline', 'practice', 'tracker'].map(k => <div key={k} style={{display:'flex', gap:8, alignItems:'center', fontSize:13, padding:'3px 0'}}>{rec.found[k] ? <span style={piChip('#E8F5E9', '#2E7D32')}>✓ leído</span> : <span style={piChip('#ECEFF1', '#607D8B')}>no subido</span>}<b>{({ outline:'Outline de la clase', practice:'Práctica fuera de clase', tracker:'Tracker del grupo' })[k]}</b></div>)}
+        {d.fidelity && <div style={{background: d.fidelity.kept === d.fidelity.total ? '#E8F5E9' : '#FDECEA', border:'1px solid ' + (d.fidelity.kept === d.fidelity.total ? '#A5D6A7' : '#F3B9B2'), color: d.fidelity.kept === d.fidelity.total ? '#1B5E20' : '#8E1B1B', borderRadius:10, padding:'8px 11px', fontSize:12.5, fontWeight:800, marginBottom:8}}>{d.fidelity.kept === d.fidelity.total ? '✓' : '⚠'} Texto idéntico al documento · {d.fidelity.kept} de {d.fidelity.total} palabras</div>}
+        {(d.mode === 'jucum' ? ['outline', 'practice'] : ['outline', 'practice', 'tracker']).map(k => <div key={k} style={{display:'flex', gap:8, alignItems:'center', fontSize:13, padding:'3px 0'}}>{rec.found[k] ? <span style={piChip('#E8F5E9', '#2E7D32')}>✓ leído</span> : <span style={piChip('#ECEFF1', '#607D8B')}>no subido</span>}<b>{(d.mode === 'jucum' ? { outline:'Plan de clase', practice:'Práctica de la semana' } : { outline:'Outline de la clase', practice:'Práctica fuera de clase', tracker:'Tracker del grupo' })[k]}</b></div>)}
         {(rec.unknown || []).length > 0 && <div style={{fontSize:12, color:'#9C5D00', fontWeight:700, marginTop:6}}>No reconocí: {rec.unknown.join(', ')}</div>}
-        {d.ctx.length > 0 && <><div style={{...piLbl, margin:'12px 0 4px'}}>Contexto del tracker (solo lo ve el teacher)</div>{d.ctx.map((c, i) => <div key={i} style={{fontSize:12.5, padding:'3px 0', borderBottom:'1px solid #F2ECDD'}}><b style={{color:'#8a7f6a'}}>{c[0]}:</b> {c[1]}</div>)}</>}
+        {d.ctx.length > 0 && <><div style={{...piLbl, margin:'12px 0 4px'}}>{d.mode === 'jucum' ? 'Del documento (solo lo ve el teacher)' : 'Contexto del tracker (solo lo ve el teacher)'}</div>{d.ctx.map((c, i) => <div key={i} style={{fontSize:12.5, padding:'3px 0', borderBottom:'1px solid #F2ECDD'}}><b style={{color:'#8a7f6a'}}>{c[0]}:</b> {c[1]}</div>)}</>}
       </div>
       <div className="scard">
         <div className="sec-title" style={{marginBottom:4}}>Práctica de la última clase</div>
@@ -195,17 +214,20 @@ function PiRead({ rec, mod, eff }) {
         {d.blocks.length === 0 && <div style={{fontSize:12.5, color:'#999', fontWeight:700}}>Sin agenda (no se subió el outline).</div>}
         {d.blocks.map(b => (
           <div key={b.id} style={{borderTop:'1px dashed #E3DCC9', padding:'8px 0'}}>
-            <div style={{fontSize:12, color:'#777', fontStyle:'italic'}}>“{b.en.slice(0, 200)}”</div>
+            {d.mode !== 'jucum' && <div style={{fontSize:12, color:'#777', fontStyle:'italic'}}>“{b.en.slice(0, 200)}”</div>}
             <div style={{fontWeight:800, fontSize:13, marginTop:3}}>{b.emoji} {b.mins} min · {b.title}</div>
+            {d.mode === 'jucum' && (b.steps || []).map((x, k) => <div key={k} style={{fontSize:12.5, color:'#444', paddingLeft:10}}>• {x}</div>)}
             {(b.mats || []).length > 0 && <div style={{display:'flex', gap:5, flexWrap:'wrap', marginTop:4}}>{b.mats.map((m, i) => <span key={i} style={piChip('#EEF2FC', '#3F5BB8')}>{actName(m.activityId)}{m.quizKey ? ' · ' + m.quizKey : ''}</span>)}</div>}
           </div>))}
       </div>
       <div className="scard">
-        <div className="sec-title" style={{marginBottom:8}}>Práctica → “Tu práctica de hoy”</div>
+        <div className="sec-title" style={{marginBottom:8}}>Práctica → “{d.mode === 'jucum' ? (d.setTitle || 'Práctica de la semana') : 'Tu práctica de hoy'}”</div>
+        {d.mode === 'jucum' && window.JUCUM_GUIDE && <button onClick={() => window.JUCUM_GUIDE.openOverlay(window.JUCUM_PLANIMPORT.guideJ(d, mod || { name: d.moduleName }), {})} style={{...piBtnB, marginBottom:8}}>👁 Ver como lo verá el alumno</button>}
         {d.practice.map(p => (
           <div key={p.id} style={{borderTop:'1px dashed #E3DCC9', padding:'8px 0'}}>
-            <div style={{fontSize:12, color:'#777', fontStyle:'italic'}}>“{p.en.slice(0, 200)}”</div>
-            <div style={{fontWeight:800, fontSize:13, marginTop:3}}>{piIcon(p.type)} {p.label}</div>
+            {d.mode !== 'jucum' && <div style={{fontSize:12, color:'#777', fontStyle:'italic'}}>“{p.en.slice(0, 200)}”</div>}
+            <div style={{fontWeight:800, fontSize:13, marginTop:3}}>{p.emoji || piIcon(p.type)} {p.label}</div>
+            {d.mode === 'jucum' && <>{(p.sub || []).map((x, k) => <div key={'s' + k} style={{fontSize:12.5, color:'#1F3A8A', fontWeight:800}}>{x}</div>)}{(p.steps || []).map((x, k) => <div key={k} style={{fontSize:12.5, color:'#444', paddingLeft:10}}>{k + 1}. {x}</div>)}{(p.tips || []).map((x, k) => <div key={'t' + k} style={{fontSize:12, color:'#9c6a00', paddingLeft:10}}>📌 {x}</div>)}{!p.activityId && <span style={piChip('#FFF4E5', '#9C5D00')}>sin material enlazado</span>}</>}
             {p.note && <div style={{fontSize:12.5, color:'#444', marginTop:2}}>{p.note}</div>}
             <div style={{display:'flex', gap:5, flexWrap:'wrap', marginTop:4}}>
               {p.onlyPending && <span style={piChip('#FCE4EC', '#AD1457')}>solo quienes no lo terminaron</span>}
@@ -292,7 +314,7 @@ function PiEdit({ rec, mod, eff, update }) {
           <button onClick={() => update(r => { r.draft.blocks.push({ id: 'b_' + Math.random().toString(36).slice(2, 7), emoji: '•', title: 'Nuevo bloque', mins: 10, steps: [], mats: [], en: '(agregado por el teacher)' }); })} style={piBtn}>＋ Agregar bloque</button>
         </div>
         <div className="scard">
-          <div className="sec-title" style={{marginBottom:4}}>📝 Práctica diaria de los alumnos</div>
+          <div className="sec-title" style={{marginBottom:4}}>📝 {d.mode === 'jucum' ? (d.setTitle || 'Práctica de la semana') : 'Práctica diaria de los alumnos'}</div>
           <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginBottom:10}}>Días entre la clase ({eff.date ? window.JUCUM_PLANIMPORT.fmtDay(eff.date) : '—'}) y la próxima ({eff.next ? window.JUCUM_PLANIMPORT.fmtDay(eff.next) : 'confirma los días de clase'}). Toca una casilla para mover una tarea de día.</div>
           <div style={{overflowX:'auto'}}>
             <table style={{borderCollapse:'collapse', width:'100%', minWidth:460}}>
@@ -301,7 +323,11 @@ function PiEdit({ rec, mod, eff, update }) {
                 <tr key={p.id} style={{borderTop:'1px solid #F2ECDD'}}>
                   <td style={{padding:'7px 4px', verticalAlign:'top'}}>
                     <input value={p.label} onChange={e => update(r => { r.draft.practice[i].label = e.target.value; })} style={{...piIn, width:'100%', fontWeight:800, fontSize:12.5}} />
-                    <textarea value={p.note} onChange={e => update(r => { r.draft.practice[i].note = e.target.value; r.draft.practice[i].noteEs = true; })} rows={2} placeholder="Instrucción para el alumno (español)" style={{...piIn, width:'100%', fontSize:12, marginTop:4, resize:'vertical', borderColor: p.noteEs ? '#E3DCC9' : '#F0C28A', background: p.noteEs ? '#fff' : '#FFF8EC'}} />
+                    {d.mode === 'jucum' ? <>
+                      <textarea value={(p.steps || []).join('\n')} onChange={e => update(r => { r.draft.practice[i].steps = e.target.value.split('\n'); })} rows={Math.min(6, Math.max(2, (p.steps || []).length))} placeholder="Pasos para el alumno (uno por línea)" style={{...piIn, width:'100%', fontSize:12, marginTop:4, resize:'vertical'}} />
+                      <input value={(p.tips || []).join(' ')} onChange={e => update(r => { r.draft.practice[i].tips = e.target.value ? [e.target.value] : []; })} placeholder="📌 Consejo (opcional)" style={{...piIn, width:'100%', fontSize:12, marginTop:4}} />
+                      <select value={p.activityId || ''} onChange={e => { const a = acts.find(x => x.id === e.target.value); update(r => { const q = r.draft.practice[i]; q.activityId = a ? a.id : null; q.type = a ? a.type : 'custom'; q.quizKey = a && a.type === 'quizlet' ? (q.quizKey || 'vocabulario') : null; }); }} style={{...piIn, fontSize:11.5, padding:'2px 5px', marginTop:4, borderColor: p.activityId ? '#E3DCC9' : '#F0C28A'}}><option value="">⚠ sin material (sin botón ▶)</option>{acts.map(a => <option key={a.id} value={a.id}>{a.name}{a.group ? ' · ' + a.group : ''}</option>)}</select>
+                    </> : <textarea value={p.note} onChange={e => update(r => { r.draft.practice[i].note = e.target.value; r.draft.practice[i].noteEs = true; })} rows={2} placeholder="Instrucción para el alumno (español)" style={{...piIn, width:'100%', fontSize:12, marginTop:4, resize:'vertical', borderColor: p.noteEs ? '#E3DCC9' : '#F0C28A', background: p.noteEs ? '#fff' : '#FFF8EC'}} />}
                     <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center', marginTop:4}}>
                       <span style={{fontSize:11, color:'#8a7f6a', fontWeight:700}}>{piIcon(p.type)} {actName(p.activityId)}{p.quizKey ? ' · ' + p.quizKey : ''}</span>
                       <select value={p.onlyPending ? 'pend' : 'all'} onChange={e => update(r => { r.draft.practice[i].onlyPending = e.target.value === 'pend'; })} style={{...piIn, fontSize:11.5, padding:'2px 5px'}}><option value="all">Para todos</option><option value="pend">Solo quienes no lo terminaron</option></select>
