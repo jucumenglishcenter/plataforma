@@ -283,8 +283,22 @@
   function nextClassAfter(dateStr, days) { if (!dateStr || !days || !days.length) return null; const d0 = parseYMD(dateStr); for (let i = 1; i <= 7; i++) { const d = new Date(d0); d.setDate(d0.getDate() + i); if (days.includes(d.getDay())) return ymd(d); } return null; }
   function nextClassFrom(today, days) { if (!days || !days.length) return today; const d0 = parseYMD(today); for (let i = 0; i <= 7; i++) { const d = new Date(d0); d.setDate(d0.getDate() + i); if (days.includes(d.getDay())) return ymd(d); } return today; }
 
+  /* LECTOR-V3 (09-oct): el formato de la plataforma ya no depende solo del título del PDF.
+   * Si ningún archivo se reconoce, se adivina por el nombre y por el contenido y se usa el lector nuevo
+   * (el viejo era para los .docx “Classroom Outline / Outside Practice” y dejaba todo vacío). */
+  function guessKind(f) {
+    const nm = String(f.name || ''); const L = jLines(f);
+    if (/plan\s*de\s*clase|class\s*plan|outline|sesi[oó]n/i.test(nm) && !/pr[aá]ctica|practice/i.test(nm)) return 'jplan';
+    if (/pr[aá]ctica|practice|practicar|tarea/i.test(nm)) return 'jset';
+    if (L.filter(l => RE_ROW.test(l) || RE_TR.test(l)).length >= 1) return 'jplan';
+    if (L.filter(l => /^(\d+)\s+(\D.*)$/.test(l) && !/^\d+\.\s/.test(l)).length >= 1 || L.some(l => /quizlet|story|listening|reading/i.test(l))) return 'jset';
+    return null;
+  }
+  const isOldDocx = f => { const t = jLines(f).slice(0, 30).join(' '); return /classroom session outline|outside-?practice assignment|teaching plan|pace status/i.test(t); };
   function build(files, groupId, opts) {
-    if (files.some(f => jKind(f))) return buildJ(files, groupId, opts || {});
+    opts = opts || {};
+    if (files.some(f => jKind(f))) return buildJ(files, groupId, opts);
+    if (!files.some(isOldDocx)) { const forced = files.map(f => Object.assign({}, f, { _k: guessKind(f) })); if (forced.some(f => f._k)) return buildJ(forced, groupId, opts); }
     const D = window.JUCUM_DATA;
     const group = (D.GROUPS || []).find(g => g.id === groupId);
     if (!group) throw new Error('Elige primero el grupo.');
@@ -412,11 +426,11 @@
   const jOpen = s => !/[.!?)]$/.test(s);
   /* DETECCION-V2 (09-oct): el PDF puede traer “Plan de clase – …”, “PLAN DE CLASE: …”, el título partido en dos
    * líneas o la hora / minutos / título en renglones separados. Antes caía al lector viejo y salía sin bloques. */
-  const RE_PLAN = /^plan de clase\b\s*[·:\-–—|]?\s*(.*)$/i, RE_SET = /^(pr[aá]ctica\s+(de\s+la\s+semana|semanal|en\s+casa|diaria|fuera\s+de\s+clase)|c[oó]mo\s+practicar(\s+hoy)?)\b/i;
+  const RE_PLAN = /^plan de clase\b\s*[·:\-–—|]?\s*(.*)$/i, RE_SET = /(^|[—–\-·|]\s*)(pr[aá]ctica\s+(de\s+la\s+semana|del?\s+fin\s+de\s+semana|semanal|en\s+casa|diaria|fuera\s+de\s+clase|de\s+refuerzo|extra)|c[oó]mo\s+practicar(\s+hoy)?)\b/i;
   const RE_ROW = /^(\d{1,2}:\d{2})\s*(?:[–\-—]|a)\s*(\d{1,2}:\d{2})\s*[·|]?\s*(?:(\d+)\s*(?:['’′]|min\.?)\s*[·|]?\s*)?(\S.*)$/;
   const RE_TR = /^(\d{1,2}:\d{2})\s*(?:[–\-—]|a)\s*(\d{1,2}:\d{2})\s*$/;
   const jMin = (a, b) => { const t = s => { const [h, m] = s.split(':').map(Number); return h * 60 + m; }; const d = t(b) - t(a); return d > 0 ? d : 0; };
-  function jKind(f) { const L = jLines(f).slice(0, 15); const iP = L.findIndex(l => RE_PLAN.test(l)), iS = L.findIndex(l => RE_SET.test(l));
+  function jKind(f) { if (f && f._k) return f._k; const L = jLines(f).slice(0, 15); const iP = L.findIndex(l => RE_PLAN.test(l)), iS = L.findIndex(l => RE_SET.test(l));
     if (iP >= 0 && (iS < 0 || iP <= iS)) return 'jplan'; if (iS >= 0) return 'jset';
     const all = jLines(f); if (all.filter(l => RE_ROW.test(l) || RE_TR.test(l)).length >= 2) return 'jplan'; return null; }
   const J_EMO = [[/quizlet/i, '🗂️'], [/stor(y|ies)|historia|lectura|reading/i, '📖'], [/di[aá]logo|dialogue/i, '💬'], [/listening|audio/i, '🎧'], [/repaso de gram|resumen|summary/i, '🧠'], [/fill|identif|transform|pr[aá]ctica.*gram|\bP[123]\b/i, '✍️'], [/cierre|wrap/i, '✅']];
@@ -436,20 +450,30 @@
   }
   function parseSetJ(L) {
     const S = { level: '', module: '', title: '', intro: '', acts: [], outro: '', src: [] }; let m;
-    const idx = L.findIndex(l => RE_SET.test(l)); S.title = L[idx] || 'Práctica de la semana';
+    const idx = L.findIndex(l => RE_SET.test(l));
+    /* PRACTICA-FINDE (09-oct): “JUCUM English Center — A1 · TRANSPORTATION & / DIRECTIONS — Práctica del Fin de Semana”
+     * (encabezado en tabla, partido en 2 renglones). Título = la frase “Práctica …”; nivel y módulo salen del encabezado. */
+    const tm = idx >= 0 ? L[idx].match(/(pr[aá]ctica\s.*|c[oó]mo\s+practicar.*)$/i) : null;
+    S.title = tm ? tm[1].trim() : (L[idx] || 'Práctica de la semana');
+    const headTxt = L.slice(Math.max(0, idx - 4), idx + 1).join(' ');
+    if ((m = headTxt.match(/\b(PRE-?A1|A1|A2)\s*[·:\-–—]\s*(.+?)\s*[—–]\s*(?:pr[aá]ctica|c[oó]mo\s+practicar)/i))) { S.level = m[1].toLowerCase().replace('prea1', 'pre-a1'); S.module = m[2].trim(); }
     if ((m = (L[idx - 1] || '').match(/^(PRE-?A1|A1|A2)\s*[·:\-–]\s*(.+)$/i)) || (m = (L[idx + 1] || '').match(/^(PRE-?A1|A1|A2)\s*[·:\-–]\s*(.+)$/i))) { S.level = m[1].toLowerCase().replace('prea1', 'pre-a1'); S.module = m[2]; }
     if ((m = (L[idx - 1] || '').match(/^(PRE-?A1|A1|A2)\s*·\s*(.+)$/i))) { S.level = m[1].toLowerCase().replace('prea1', 'pre-a1'); S.module = m[2]; }
     let cur = null, end = false; const intro = [], out = []; S.head = L.slice(0, Math.max(0, idx + 1)).slice(-6);
     L.slice(idx + 1).forEach(l => {
-      S.src.push(l.replace(/^\d+\.?\s/, ''));
+      if (/^(campo\s+valor|encabezado|jucum english center|[.·•]+)$/i.test(l)) return;
+      S.src.push(l.replace(/^\d+\.?\s/, '').replace(/^[●•▪◦]\s*/, ''));
       if (end) { out.push(l); return; }
       if (/^Al terminar/i.test(l)) { end = true; out.push(l); return; }
       if ((m = l.match(/^(\d+)\s+(\D.*)$/)) && !/^\d+\.\s/.test(l)) { const [e, ti] = jEmo(m[2].replace(/^[•·]\s*/, '').trim()); cur = { n: +m[1], e, title: ti, sub: [], steps: [], tips: [] }; S.acts.push(cur); return; }
       if (!cur) { intro.push(l); return; }
-      if ((m = l.match(/^(\d+)\.\s(.+)$/))) { cur.steps.push(m[2]); return; }
+      if ((m = l.match(/^(\d+)\.\s(.+)$/)) || (m = l.match(/^()[●•▪◦]\s*(.+)$/))) { cur.steps.push(m[2]); return; }
+      if (!cur.sub.length && !cur.steps.length && jOpen(cur.title) && /^[a-záéíóúñ(\/]/.test(l)) { cur.title += ' ' + l; return; }
       const st = cur.steps; if (st.length && jOpen(st[st.length - 1]) && !cur.tips.length) { st[st.length - 1] += ' ' + l; return; }
       if (st.length) cur.tips.push(l); else cur.sub.push(l);
     });
+    if (!S.acts.length) { /* sin numeración “1 Quizlet…”: cada renglón con un material es una actividad */
+      const rest = intro.splice(0); rest.forEach(l => { const mm = l.match(/^(?:[•·\-–]\s*|\d+[.)]\s*)?(.*(quizlet|story|stories|historia|di[aá]logo|listening|reading|lectura|resumen|summary|fill|identify|transform|P[123]\b).*)$/i); if (mm) { const [e, ti] = jEmo(mm[1].trim()); S.acts.push({ n: S.acts.length + 1, e, title: ti, sub: [], steps: [], tips: [] }); } else if (S.acts.length) S.acts[S.acts.length - 1].steps.push(l.replace(/^(?:[•·\-–]\s*|\d+[.)]\s*)/, '')); else intro.push(l); }); }
     S.intro = intro.join(' '); S.outro = out.join(' '); S.headAll = S.head.concat(intro);
     return S;
   }
@@ -538,7 +562,8 @@
     /* Día (lo elige el teacher), hora y días del grupo */
     const tRange = onlyP && opts.from ? { from: opts.from, to: opts.to && opts.to >= opts.from ? opts.to : opts.from, how: 'teacher' } : null;
     const base0 = onlyP ? (opts.from || meta.today) : (opts.date || meta.next[0] || meta.today);
-    const docR = S ? (jRange(S.headAll || [], base0) || (onlyP ? jRange((S.src || []).slice(0, 40), base0) : null)) : null;
+    const fileR = sf ? jRange([String(sf.name || '').replace(/\.[a-z0-9]+$/i, '').replace(/[_]+/g, ' ')], base0) : null;
+    const docR = S ? (jRange(S.headAll || [], base0) || (onlyP ? jRange((S.src || []).slice(0, 40), base0) : null) || fileR) : null;
     const date = onlyP ? ((tRange && tRange.from) || (docR && docR.from) || base0) : base0;
     const sNum = sessionFor(groupId, date);
     if (!meta.days.length) gaps.push({ id: 'days', sev: 'need', t: 'Días de clase del grupo', why: 'El nombre del grupo no dice los días y no tiene planes anteriores. Con esto sé hasta cuándo dura la práctica.', type: 'days', sug: [] });
@@ -549,8 +574,8 @@
     const practice = (S ? S.acts : []).map((x, i) => { const f = matchJ(mod, x.title + ' ' + x.sub.join(' '), ctxGroup)[0];
       return { id: 'p' + i + '_' + Math.random().toString(36).slice(2, 5), moduleId: mod.id, activityId: f ? f.a.id : null, type: f ? f.a.type : 'custom', quizKey: (f && f.quizKey) || null,
         label: x.title, emoji: x.e, sub: x.sub.slice(), steps: x.steps.slice(), tips: x.tips.slice(), note: '', noteEs: true, en: [x.title].concat(x.sub, x.steps, x.tips).join(' · '),
-        onlyPending: false, prio: 0, daily: 1, ai: 0, days: null, manual: false }; });
-    const pRange = tRange || (S ? (onlyP ? docR : jRange(S.headAll || [], date)) : null);
+        onlyPending: /si\s+todav[ií]a\s+no\s+lo\s+has\s+completado|si\s+a[uú]n\s+no\s+lo/i.test(x.title), prio: 0, daily: 1, ai: 0, days: null, manual: false }; });
+    const pRange = tRange || (S ? (onlyP ? docR : (jRange(S.headAll || [], date) || fileR)) : null);
     if (S && !tRange) { const nx = nextClassAfter(date, meta.days); const defTo = nx ? (() => { const x = parseYMD(nx); x.setDate(x.getDate() - 1); return ymd(x); })() : (() => { const x = parseYMD(date); x.setDate(x.getDate() + 6); return ymd(x); })();
       gaps.push({ id: 'prange', sev: pRange ? 'check' : 'need', t: onlyP ? '¿Qué días hacen esta práctica?' : 'Días de la práctica en casa', why: pRange ? 'Lo leí del documento: ' + fmtDay(pRange.from) + ' → ' + fmtDay(pRange.to) + '. Confírmalo o cámbialo.' : 'El documento no dice fechas. Sugiero ' + fmtDay(date) + ' → ' + fmtDay(defTo) + (onlyP ? ' (hasta el día antes de la próxima clase).' : ' (de la clase al día antes de la próxima).') + ' Elige el rango.', type: 'range', sug: pRange ? [pRange.from, pRange.to] : [date, defTo] }); }
     const noMat = practice.filter(p => !p.activityId);
