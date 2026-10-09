@@ -125,8 +125,9 @@ function TeacherDashboard({ onLogout, user }) {
           {view.kind === 'group' && <><span>›</span><a onClick={() => setView({kind:'group', id:view.id})}>{GROUPS.find(g => g.id === view.id)?.name}</a></>}
           {view.kind === 'student' && (() => {
             const stu = STUDENTS.find(s => s.id === view.id);
-            const g = GROUPS.find(gr => gr.id === stu.group);
-            return <><span>›</span><a onClick={() => setView({kind:'group', id:g.id})}>{g.name}</a><span>›</span><a>{stu.fullName}</a></>;
+            const g = stu && (GROUPS.find(gr => gr.id === (stu.closedGroup || stu.group)) || GROUPS.find(gr => gr.id === stu.group));  // PAUSA-SIN-GRUPO-V1: en espera no tiene grupo
+            if (!stu) return null;
+            return <><span>›</span>{g ? <a onClick={() => setView({kind:'group', id:g.id})}>{g.name}</a> : <a>⏸ En espera</a>}<span>›</span><a>{stu.fullName}</a></>;
           })()}
         </div>
 
@@ -150,7 +151,7 @@ function TeacherDashboard({ onLogout, user }) {
           <StudentDetail
             studentId={view.id}
             onContact={(sid) => setView({kind:'messages', open: sid})}
-            onBack={() => { const stu = STUDENTS.find(s => s.id === view.id); setView({kind:'group', id:stu.group}); }}
+            onBack={() => { const stu = STUDENTS.find(s => s.id === view.id); const gid = stu && [stu.closedGroup, stu.group].find(x => x && GROUPS.some(g => g.id === x)); setView(gid ? {kind:'group', id:gid} : {kind:'groups'}); }}
           />
         )}
       </main>
@@ -959,6 +960,56 @@ function StudentRow({ stu, rank, level, onClick, onDelete, onCloseProgress }) {
 
 /* ─── Student detail view ──────────────────────────────────────────── */
 
+/* 🔐 MOD-ACCESO-V1 (09-oct-2026) · Qué módulos ve ESTE alumno (A1/A2 cíclicos):
+ * conseguidos (insignia) + ▶ En clase + los que el profesor le abre aquí (users.extra_modules · script 34). */
+function StudentModuleAccess({ stu, onChanged }) {
+  const [busy, setBusy] = React.useState('');
+  const [msg, setMsg] = React.useState('');
+  const D = window.JUCUM_DATA;
+  if (!stu || !(stu.level === 'a1' || stu.level === 'a2') || !D.getStudentModuleIds) return null;
+  const mods = D.MODULE_CATALOG[stu.level] || [];
+  const gid = stu.group || stu.closedGroup;
+  const gs = D.getGroupSettings(gid) || {};
+  const gIds = gs.activeModuleIds || [];
+  const cls = D.getClassModuleId ? D.getClassModuleId(gid) : null;
+  let earned = []; try { earned = window.JUCUM_BADGES ? window.JUCUM_BADGES.earnedIds(stu) : []; } catch (e) {}
+  const extra = Array.isArray(stu.extraModules) ? stu.extraModules : [];
+  const allowed = D.getStudentModuleIds(stu);
+  const toggle = async (id) => {
+    const next = extra.indexOf(id) >= 0 ? extra.filter(x => x !== id) : extra.concat(id);
+    setBusy(id); setMsg('');
+    try {
+      const sb = window.JUCUM_SB && window.JUCUM_SB.getClient && window.JUCUM_SB.getClient();
+      if (sb) {
+        const r = await sb.from('users').update({ extra_modules: next }).eq('id', stu.id);
+        if (r.error) { setMsg(/extra_modules|column|schema/i.test(String(r.error.message || '')) ? 'Falta ejecutar el script 34 en Supabase.' : 'No se pudo guardar: ' + r.error.message); setBusy(''); return; }
+      }
+      stu.extraModules = next;
+    } catch (e) { setMsg('No se pudo guardar: ' + e.message); setBusy(''); return; }
+    setBusy(''); if (onChanged) onChanged();
+  };
+  return (
+    <div className="scard" style={{margin:'12px 0', display:'flex', flexDirection:'column', gap:8}}>
+      <div style={{fontWeight:800, fontSize:14, color:'#33415C'}}>🔐 Módulos que ve este alumno</div>
+      <div style={{fontSize:12.5, color:'#6B7486', fontWeight:600}}>Ve solo los que ya consiguió (insignia) y el que su grupo cursa ahora. Si necesita otro, ábreselo aquí.</div>
+      {mods.map(m => {
+        const isCls = m.id === cls, isEarn = earned.indexOf(m.id) >= 0, isExtra = extra.indexOf(m.id) >= 0, sees = allowed.indexOf(m.id) >= 0;
+        const grpClosed = isEarn && gIds.indexOf(m.id) < 0;
+        const chip = isExtra ? ['🔓 Abierto por ti', '#E3F2FD', '#1565C0'] : isCls ? ['▶ En clase', '#E8F0FF', '#1F3A8A'] : isEarn ? (grpClosed ? ['🏅 Conseguido · cerrado en el grupo', '#F4F6F9', '#6B7486'] : ['🏅 Conseguido', '#FFF6D6', '#8A6400']) : ['🔒 No lo ve', '#F4F6F9', '#6B7486'];
+        return (
+          <div key={m.id} style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', padding:'8px 10px', borderRadius:10, background: sees ? '#FAFBFD' : '#fff', border:'1px solid #EEF1F5'}}>
+            <span style={{fontSize:18}}>{m.emoji || '📦'}</span>
+            <span style={{flex:1, minWidth:160, fontWeight:800, fontSize:13, color:'#33415C'}}>{m.name}</span>
+            <span style={{fontSize:11.5, fontWeight:800, padding:'3px 9px', borderRadius:20, background:chip[1], color:chip[2]}}>{chip[0]}</span>
+            {(isExtra || !sees) && <button type="button" className="btn-soft" disabled={!!busy} onClick={() => toggle(m.id)} style={{minHeight:36}}>{busy === m.id ? 'Guardando…' : isExtra ? 'Quitar acceso' : '🔓 Abrirle este módulo'}</button>}
+          </div>
+        );
+      })}
+      {msg && <div style={{fontSize:12.5, fontWeight:800, color:'#B3261E'}}>{msg}</div>}
+    </div>
+  );
+}
+
 function StudentDetail({ studentId, onBack, onContact }) {
   const { STUDENTS, GROUPS, LEVELS, ACHIEVEMENT_DEFS, ACTIVITY_LOG, getStudentMastery } = window.JUCUM_DATA;
   const stu = STUDENTS.find(s => s.id === studentId);
@@ -973,7 +1024,8 @@ function StudentDetail({ studentId, onBack, onContact }) {
     setResetting(false);
     alert(`✅ Contraseña de ${stu.fullName} reseteada a "1234".\n\n⚠ IMPORTANTE: pídele que al ingresar la cambie por una que pueda recordar, y que la anote en un lugar seguro para no volver a tener problemas.`);
   };
-  const group = GROUPS.find(g => g.id === stu.group);
+  // PAUSA-SIN-GRUPO-V1: un alumno en espera (avance cerrado) no tiene grupo → se usa el grupo del que salió
+  const group = GROUPS.find(g => g.id === (stu.closedGroup || stu.group)) || GROUPS.find(g => g.id === stu.group) || { id: null, name: '⏸ En espera (sin grupo)', schedule: '', level: stu.level };
   const level = LEVELS[stu.level];
   const myLog = window.JUCUM_DATA.getStudentLog ? window.JUCUM_DATA.getStudentLog(stu.id) : ACTIVITY_LOG.filter(a => a.studentId === stu.id);
   React.useEffect(() => { document.body.setAttribute('data-level', stu.level); return () => document.body.removeAttribute('data-level'); }, [stu.level]);
@@ -1007,6 +1059,7 @@ function StudentDetail({ studentId, onBack, onContact }) {
       </div>
       {stu.closedAt && <div style={{background:'#ECEFF4',borderRadius:12,padding:'10px 14px',fontSize:13,color:'#4A5468',fontWeight:700,margin:'10px 0'}}>⏸ Avance cerrado el {window.JUCUM_GRAD ? window.JUCUM_GRAD.fmtDate(stu.closedAt) : stu.closedAt}{stu.closedReason ? ' · ' + stu.closedReason : ''}. Al entrar ve “Mi recorrido”.</div>}
       {window.BadgeShelf && <div className="scard" style={{margin:'12px 0'}}><BadgeShelf student={stu} title="🏅 Insignias de módulo" /></div>}
+      <StudentModuleAccess stu={stu} onChanged={() => setMeTick(t => t + 1)} />
       {closingMe && <CloseProgressModal student={stu} onClose={() => setClosingMe(false)} onDone={() => { setClosingMe(false); setMeTick(t => t + 1); }} />}
 
       <div className="kpi-grid">

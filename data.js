@@ -1408,9 +1408,7 @@ function getStudentMastery(student) {
   let scope = mods;
   const group = GROUPS.find(g => g.id === student.group);
   if (group) {
-    const settings = getGroupSettings(group.id);
-    const activeIds = settings.activeModuleIds
-      || (settings.activeModuleId ? [settings.activeModuleId] : []);
+    const activeIds = getStudentModuleIds(student);   // MOD-ACCESO-V1: A1/A2 = solo los módulos que el alumno puede ver
     const active = mods.filter(m => activeIds.includes(m.id));
     if (active.length) scope = active;
   }
@@ -1836,12 +1834,14 @@ function getActivitiesToImprove(student) {
   if (!student) return [];
   const completed = (getStudentProgress(student.id) || {}).completed || {};
   const thr = passThreshold(student.level, student.group);
+  const allow = isCyclicLevel(student.level) ? new Set(getStudentModuleIds(student)) : null;   // MOD-ACCESO-V1
   const out = [];
   Object.entries(completed).forEach(([k, e]) => {
     const pct = scorePct(e && e.score);
     if (pct === null) return;
     if (pct < thr) {
       const [moduleId, activityId] = k.split(':');
+      if (allow && !allow.has(moduleId)) return;
       const mod = (MODULE_CATALOG[student.level] || []).find(m => m.id === moduleId);
       const act = mod && (mod.activities || []).find(a => a.id === activityId);
       /* 25-sep-2026 · Notas de módulos/actividades que YA NO existen en el catálogo (se
@@ -1964,9 +1964,11 @@ function getDueReviews(student) {
   const reviews = getReviews(student.id);
   const today = _todayStr();
   const mods = MODULE_CATALOG[student.level] || [];
+  const allow = isCyclicLevel(student.level) ? new Set(getStudentModuleIds(student)) : null;   // MOD-ACCESO-V1
   const out = [];
   Object.values(reviews).forEach(r => {
     if (!r.due || _daysBetween(r.due, today) < 0) return;   // aún no toca
+    if (allow && !allow.has(r.moduleId)) return;
     const mod = mods.find(m => m.id === r.moduleId);
     const act = mod && (mod.activities || []).find(a => a.id === r.activityId);
     if (!act) return;
@@ -2097,14 +2099,37 @@ const CURRICULUM = {
     { name:'Feelings, States & Qualities', emoji:'😊' },
     { name:'Connectors & Key Expressions', emoji:'🔗' },
   ],
+  /* 09-oct-2026 · A1/A2 = 5 módulos cada uno (Currículo oficial). Los que aún no existen en el
+   * catálogo salen como “Próximamente” en la rueda. Los nombres deben coincidir EXACTO con catalogo.json. */
+  'a1': [
+    { name:'Daily Life & Personal Routines', emoji:'🌅' },
+    { name:'Shopping, Services & Money',     emoji:'🛍️' },
+    { name:'Transportation & Directions',    emoji:'🚌' },
+    { name:'Health & Housing Basics',        emoji:'🏥' },
+    { name:'Work, School & Technology',      emoji:'💻' },
+  ],
+  'a2': [
+    { name:'Services, Support & Problem Solving',   emoji:'🛠️' },
+    { name:'Banking, Money & Admin',                emoji:'🏦' },
+    { name:'Appointments, Coordination & Planning', emoji:'📅' },
+    { name:'Health, Housing & Lifestyle',           emoji:'🏡' },
+    { name:'Events, Travel & Community',            emoji:'🎉' },
+  ],
 };
+/* Lista completa del nivel: currículo + cualquier módulo del catálogo que no figure en él (nunca se pierde uno) */
+function getLevelOutline(level) {
+  const mods = MODULE_CATALOG[level] || [];
+  const base = CURRICULUM[level];
+  if (!base) return mods.map(m => ({ name: m.name, emoji: m.emoji }));
+  const extra = mods.filter(m => !base.some(o => o.name === m.name)).map(m => ({ name: m.name, emoji: m.emoji }));
+  return base.concat(extra);
+}
 function getModuleRoute(student) {
   if (!student) return [];
   const mods = MODULE_CATALOG[student.level] || [];
-  const outline = CURRICULUM[student.level] || mods.map(m => ({ name: m.name, emoji: m.emoji }));
-  const settings = getGroupSettings(student.group) || {};
-  const activeIds = (settings.activeModuleIds && settings.activeModuleIds.length)
-    ? settings.activeModuleIds : (settings.activeModuleId ? [settings.activeModuleId] : []);
+  const outline = getLevelOutline(student.level);
+  const activeIds = getStudentModuleIds(student);   // MOD-ACCESO-V1: A1/A2 = conseguidos + en clase + abiertos por el profesor
+  const cyclic = isCyclicLevel(student.level);
   const prog = getStudentProgress(student.id);
   const due = (typeof getDueReviews === 'function') ? getDueReviews(student) : [];
   const reviewMods = new Set(due.map(d => d.moduleId));
@@ -2124,6 +2149,8 @@ function getModuleRoute(student) {
   // profesor perdía el control. Ahora manda el toggle del profesor: un módulo
   // está abierto SOLO si está activo (o ya fue completado → 'done').
   info.forEach(x => {
+    /* MOD-ACCESO-V1 · A1/A2 cíclicos: lo que el alumno no puede ver queda en 'lock' aunque tenga actividades hechas */
+    if (cyclic) { x.state = x.placeholder ? 'lock' : !x.active ? 'lock' : x.allDone ? 'done' : 'cur'; return; }
     x.state = (!x.placeholder && x.allDone) ? 'done'
             : (!x.placeholder && x.active) ? 'cur'
             : 'lock';
@@ -2162,6 +2189,34 @@ function getClassModuleId(groupId) {
     return ids.length ? ids[ids.length - 1] : null;
   } catch (e) { return null; }
 }
+/* 🔐 MOD-ACCESO-V1 (09-oct-2026) · A1/A2 son CÍCLICOS: cada alumno ve SOLO
+ *   · los módulos cuya insignia ganó (aprobó el examen) y que el grupo tiene abiertos (Repaso/En clase),
+ *   · el módulo ▶ En clase de su grupo,
+ *   · los que el profesor le abrió a mano desde su ficha (users.extra_modules · script 34).
+ * Un alumno que entra a mitad del ciclo NO ve los módulos que el grupo dio antes de que llegara.
+ * Pre-A1 no cambia: ve todo lo que el grupo tiene abierto. */
+function isCyclicLevel(lv) { return lv === 'a1' || lv === 'a2'; }
+const _modAccessCache = {};
+function getStudentModuleIds(student) {
+  if (!student) return [];
+  const gid = student.group || student.closedGroup;
+  const s = getGroupSettings(gid) || {};
+  const ids = (s.activeModuleIds && s.activeModuleIds.length) ? s.activeModuleIds : (s.activeModuleId ? [s.activeModuleId] : []);
+  if (!isCyclicLevel(student.level)) return ids.slice();
+  const extra = Array.isArray(student.extraModules) ? student.extraModules : [];
+  const key = student.id + '|' + ids.join(',') + '|' + extra.join(',');
+  const hit = _modAccessCache[student.id];
+  if (hit && hit.key === key && Date.now() - hit.t < 2000) return hit.v.slice();
+  const cls = ids.length ? ids[ids.length - 1] : null;
+  let earned = [];
+  try { if (window.JUCUM_BADGES && window.JUCUM_BADGES.earnedIds) earned = window.JUCUM_BADGES.earnedIds(student); } catch (e) {}
+  const ok = new Set([cls].concat(earned).filter(Boolean));
+  const mods = MODULE_CATALOG[student.level] || [];
+  const v = ids.filter(id => ok.has(id)).concat(extra.filter(id => ids.indexOf(id) < 0 && mods.some(m => m.id === id)));
+  _modAccessCache[student.id] = { key, t: Date.now(), v };
+  return v.slice();
+}
+function canSeeModule(student, modId) { return getStudentModuleIds(student).indexOf(modId) >= 0; }
 /* Nueva lista de activos al prender/apagar: A1/A2 conserva el orden de apertura */
 function nextActiveIds(level, prevIds, modules, set) {
   if (level === 'a1' || level === 'a2') {
@@ -2197,7 +2252,9 @@ function getRefuerzo(student, limit) {
   const dueSet = new Set((typeof getDueReviews === 'function' ? getDueReviews(student) : []).map(d => `${d.moduleId}:${d.activityId}`));
   const impSet = new Set((typeof getActivitiesToImprove === 'function' ? getActivitiesToImprove(student) : []).map(d => `${d.moduleId}:${d.activityId}`));
   const pool = [];
+  const allow = isCyclicLevel(student.level) ? new Set(getStudentModuleIds(student)) : null;   // MOD-ACCESO-V1
   mods.forEach(m => {
+    if (allow && !allow.has(m.id)) return;
     (m.activities || []).forEach(a => {
       const key = `${m.id}:${a.id}`;
       const e = (prog.completed || {})[key];
@@ -2345,6 +2402,10 @@ function getModuleNumber(level, moduleId) {
 }
 window.JUCUM_DATA.getModuleNumber = getModuleNumber;
 window.JUCUM_DATA.getClassModuleId = getClassModuleId;
+window.JUCUM_DATA.getStudentModuleIds = getStudentModuleIds;
+window.JUCUM_DATA.canSeeModule = canSeeModule;
+window.JUCUM_DATA.isCyclicLevel = isCyclicLevel;
+window.JUCUM_DATA.getLevelOutline = getLevelOutline;
 window.JUCUM_DATA.nextActiveIds = nextActiveIds;
 
 

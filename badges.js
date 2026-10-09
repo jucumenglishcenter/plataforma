@@ -90,7 +90,7 @@
     markSeen(student.id, badge.mod.id);
     try {
       var N = window.JUCUM_NOTIF; if (!N) return;
-      var all = list(student); var total = all.length;
+      var all = list(student); var total = Math.max(all.length, (D().getLevelOutline ? D().getLevelOutline(student.level).length : 0));   // 5 módulos del nivel aunque falten en el catálogo
       var n = all.filter(function (b) { return b.earned && b.index <= badge.index; }).length;
       var lv = ((D().LEVELS || {})[student.level] || {}).code || '';
       var c = cheer(n, total, badge.mod.name, lv);

@@ -110,7 +110,7 @@
     try {
       const settings = D.getGroupSettings(student.group);
       const mods = D.MODULE_CATALOG[student.level] || [];
-      const activeIds = settings.activeModuleIds || (settings.activeModuleId ? [settings.activeModuleId] : []);
+      const activeIds = D.getStudentModuleIds ? D.getStudentModuleIds(student) : (settings.activeModuleIds || (settings.activeModuleId ? [settings.activeModuleId] : []));   // MOD-ACCESO-V1
       const prog = D.getStudentProgress(student.id);
       // 🔧 Multi-módulo: recomienda desde el primer módulo ACTIVO con pendientes
       // (antes tomaba siempre el primero de la lista, aunque ya estuviera terminado).

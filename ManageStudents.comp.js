@@ -18,7 +18,7 @@ function ManageStudents({ onBack }) {
   const byName = (a, b) => a.fullName.localeCompare(b.fullName, 'es');
   const groupsSorted = [...GROUPS].sort((a, b) =>
     (LVL_RANK[a.level] ?? 9) - (LVL_RANK[b.level] ?? 9) || a.name.localeCompare(b.name, 'es'));
-  const ungrouped = STUDENTS.filter(s => !GROUPS.some(g => g.id === s.group));
+  const ungrouped = STUDENTS.filter(s => !GROUPS.some(g => g.id === s.group) && !s.closedAt);  // PAUSA-SIN-GRUPO-V1: los ⏸ en espera no son “sin grupo”
 
   // Lista mostrada según el grupo elegido (o búsqueda)
   const q = search.trim().toLowerCase();
@@ -68,7 +68,7 @@ function ManageStudents({ onBack }) {
         </div>
         <div className="sm-info">
           <div className="sm-name">{s.fullName}</div>
-          <div className="sm-meta">@{s.username} · {level.emoji} {level.code} · {group?.name || '⚠ sin grupo'}</div>
+          <div className="sm-meta">@{s.username} · {level.emoji} {level.code} · {group?.name || (s.closedAt ? `⏸ en espera${(GROUPS.find(g => g.id === s.closedGroup) || {}).name ? ' · venía de ' + GROUPS.find(g => g.id === s.closedGroup).name : ''}` : '⚠ sin grupo')}</div>
         </div>
         <div title={active ? `Promedio ${avg}% · ${mods} módulo${mods===1?'':'s'} completado${mods===1?'':'s'}` : 'Aún sin actividad'}
              style={{display:'flex', gap:14, alignItems:'center', flex:'none', padding:'0 4px'}}>

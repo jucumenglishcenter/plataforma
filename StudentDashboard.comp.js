@@ -19,8 +19,8 @@ function VocabReminder({ student, settings, onGo }) {
   if (hidden) return null;
   // módulo activo → su actividad de vocabulario (quizlet)
   const mods = D.MODULE_CATALOG[student.level] || [];
-  const activeIds = (settings && (settings.activeModuleIds || (settings.activeModuleId ? [settings.activeModuleId] : []))) || [];
-  const mod = mods.find(m => activeIds.includes(m.id)) || mods[0];
+  const activeIds = D.getStudentModuleIds ? D.getStudentModuleIds(student) : ((settings && (settings.activeModuleIds || (settings.activeModuleId ? [settings.activeModuleId] : []))) || []);   // MOD-ACCESO-V1
+  const mod = mods.find(m => activeIds.includes(m.id)) || ((D.isCyclicLevel && D.isCyclicLevel(student.level)) ? null : mods[0]);
   const vocab = mod && (mod.activities || []).find(a => a.type === 'quizlet');
   if (!mod || !vocab) return null;
   const dismiss = () => { try { localStorage.setItem(dismissKey, '1'); } catch {} setHidden(true); };
@@ -309,9 +309,8 @@ function StudentDashboard({ user, onLogout }) {
   const settings = getGroupSettings(student.group);
   const progress = getStudentProgress(student.id);
   const allModules = MODULE_CATALOG[student.level] || [];
-  const activeIds = (settings.activeModuleIds && settings.activeModuleIds.length)
-    ? settings.activeModuleIds
-    : (settings.activeModuleId ? [settings.activeModuleId] : []);
+  const activeIds = window.JUCUM_DATA.getStudentModuleIds ? window.JUCUM_DATA.getStudentModuleIds(student)   // MOD-ACCESO-V1
+    : ((settings.activeModuleIds && settings.activeModuleIds.length) ? settings.activeModuleIds : (settings.activeModuleId ? [settings.activeModuleId] : []));
   const activeModules = allModules.filter(m => activeIds.includes(m.id));
   const activeModule = activeModules[0] || allModules[0];
   const [view, setViewRaw] = React.useState(() => (window.JUCUM_NAV ? window.JUCUM_NAV.load('student', 'dashboard') : 'dashboard'));
@@ -2031,7 +2030,9 @@ function StudentPractice({ student, settings, onBack }) {
               <span style={{fontSize:24}}>🔒</span>
               <div style={{fontSize:13.5, fontWeight:700}}>{sel.placeholder
                 ? <>El módulo <b>{selMod.name}</b> aún no está disponible — llegará más adelante en tu ruta.</>
-                : <>El módulo <b>{selMod.name}</b> se abrirá cuando tu profesor lo active. Mientras tanto, sigue con tu módulo actual.</>}</div>
+                : (student.level === 'a1' || student.level === 'a2')
+                  ? <>El módulo <b>{selMod.name}</b> se abre cuando lo curses en clase con tu grupo. Mientras tanto, sigue con tu módulo actual.</>
+                  : <>El módulo <b>{selMod.name}</b> se abrirá cuando tu profesor lo active. Mientras tanto, sigue con tu módulo actual.</>}</div>
             </div>
           ) : (
             <div className="scard">
