@@ -332,11 +332,15 @@ function tiParse(lines, groupId, fileName) {
   const steps = []; L.forEach((l, i) => { const m = l.match(/^(?:\d+[.)]|[-•·*])\s+(.+)$/); if (m && !used.has(i)) { steps.push({ es: m[1], en: '' }); used.add(i); } });
   /* Enlaces y material del catálogo */
   const urls = []; L.forEach(l => (l.match(/https?:\/\/[^\s)]+/g) || []).forEach(u => urls.push(u)));
-  const found = []; if (mod && PI.matchJ) L.forEach(l => PI.matchJ(mod, l, null).forEach(x => { if (!found.some(f => f.a.id === x.a.id && f.quizKey === x.quizKey)) found.push(x); }));
+  /* El material NOMBRADO gana a lo que solo sale de un verbo (“graba tu audio” ≠ listening si dice “Story 2”) */
+  const KW = { story: /\b(story|stories|historia|di[aá]logo|dialog)/i, quizlet: /quizlet|vocabulario/i, grammar: /\b(P[123]|fill|identif|transform|gram[aá]tica|pr[aá]ctica\s*[123])\b/i, summary: /resumen|summary/i, reading: /\b(reading|lectura)\b/i, listening: /\b(listening|comprensi[oó]n auditiva)\b/i };
+  const found = []; if (mod && PI.matchJ) L.forEach((l, li) => PI.matchJ(mod, l, null).forEach(x => { const kw = KW[x.a.type] && KW[x.a.type].test(l); const sc = (kw ? 3 : 0) + (li === ti ? 1 : 0); const k = found.find(f => f.a.id === x.a.id && f.quizKey === x.quizKey); if (k) { k.sc = Math.max(k.sc, sc); k.kw = k.kw || kw; } else found.push({ ...x, sc, kw, li }); }));
+  found.sort((a, b) => b.sc - a.sc || a.li - b.li);
+  if (found.some(f => f.kw)) { for (let i = found.length - 1; i >= 0; i--) if (!found[i].kw) found.splice(i, 1); }
   const attachments = []; let gradable = /calific|nota|puntaje|graded|score/i.test(L.join(' '));
   if (found.length) { const f = found[0]; const a = f.a; let url = a.url || '';
     if (a.type === 'quizlet') { const q = { vocabulario: a.quizVocabulario, vocabulario2: a.quizVocabulario2, traducir: a.quizTraducir, ordenar: a.quizOrdenar }; url = q[f.quizKey] || a.quizVocabulario || a.quizTraducir || a.quizOrdenar || url; }
-    if (url) { attachments.push({ kind: 'link', url, linkType: a.type === 'quizlet' ? 'ext' : 'jucum', name: a.name }); if (['grammar', 'reading', 'listening'].includes(a.type)) gradable = true; } }
+    if (url) { attachments.push({ kind: 'link', url, linkType: a.type === 'quizlet' ? 'ext' : 'jucum', name: a.name }); if (f.kw && ['grammar', 'reading', 'listening'].includes(a.type)) gradable = true; } }
   else if (urls.length) attachments.push({ kind: 'link', url: urls[0], linkType: /jucumenglishcenter\.github\.io/i.test(urls[0]) ? 'jucum' : 'ext', name: urls[0] });
   if (!attachments.length) notes.push('el enlace de la actividad');
   const plain = L.filter((l, i) => !used.has(i)).join('\n');
