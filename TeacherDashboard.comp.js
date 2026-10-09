@@ -468,7 +468,8 @@ function GroupModulesQuick({ groupId, onChanged }) {
   const ids = s.activeModuleIds || [];
   const clsId = ids.length ? ids[ids.length - 1] : null;
   /* orden fijo mientras se usa el panel (el de clase arriba solo al abrir la pantalla) */
-  const [order] = React.useState(() => noNum && clsId ? [clsId, ...modules.filter(m => m.id !== clsId).map(m => m.id)] : modules.map(m => m.id));
+  /* MODS-ORDEN-V1 (09-oct): siempre en orden del nivel (1.º, 2.º, 3.º…) — más cómodo para el teacher; el de clase se distingue por su borde azul */
+  const [order] = React.useState(() => modules.map(m => m.id));
   const shownMods = [...order.map(id => modules.find(m => m.id === id)).filter(Boolean), ...modules.filter(m => !order.includes(m.id))];
   const verify = (want) => {
     const sb = window.JUCUM_SB && window.JUCUM_SB.getClient && window.JUCUM_SB.getClient();
