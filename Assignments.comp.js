@@ -303,12 +303,86 @@ function TaskFilePicker({ attachments, setAttachments, allowRecord }) {
   );
 }
 
+/* ═══════ 📄 TAREA DESDE DOCUMENTO · TASK-IMPORT-V1 (09-oct-2026) ═══════
+ * Igual que “Subir plan del teacher”: el teacher elige el grupo y sube su .pdf/.docx/.txt; la plataforma
+ * lee título, fecha de entrega, pasos numerados, material del catálogo y enlaces, y abre el formulario de
+ * siempre ya lleno para Guardar = publicar en el grupo. El texto va TAL CUAL (no se traduce ni resume). */
+function tiParse(lines, groupId, fileName) {
+  const D = window.JUCUM_DATA; const PI = window.JUCUM_PLANIMPORT;
+  const meta = PI.groupMeta(groupId) || { days: [], start: '', next: [] };
+  const g = (D.GROUPS || []).find(x => x.id === groupId) || {}; const mods = (D.MODULE_CATALOG[g.level] || []);
+  const cmid = D.getClassModuleId ? D.getClassModuleId(groupId) : null; const mod = mods.find(m => m.id === cmid) || mods[0] || null;
+  const today = new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
+  const L = lines.map(l => String(l).trim()).filter(Boolean).filter(l => !/^jucum english center$/i.test(l));
+  const notes = []; const used = new Set();
+  /* Título */
+  let ti = L.findIndex(l => /^(tarea|homework|assignment|task)\b/i.test(l));
+  if (ti < 0) ti = L.findIndex(l => !/^(pre-?a1|a1|a2)\b/i.test(l) && l.length < 120);
+  let title = ti >= 0 ? L[ti].replace(/^(tarea|homework|assignment|task)\s*[:·\-–]\s*/i, '').trim() : ''; if (ti >= 0) used.add(ti);
+  if (!title && ti >= 0) title = L[ti]; if (!title) { title = String(fileName || 'Tarea').replace(/\.[a-z0-9]+$/i, ''); notes.push('el título'); }
+  /* Fecha de entrega */
+  let due = '', dueHow = '';
+  const di = L.findIndex(l => /(entrega|fecha\s+l[ií]mite|plazo|due|deadline|para el|hasta el|entregar)/i.test(l));
+  if (di >= 0) { const r = PI.jRange([L[di]], today); if (r) { due = r.to; dueHow = 'doc'; used.add(di); }
+    const tm = L[di].match(/(\d{1,2})(?::(\d{2}))?\s*(a\.?\s?m\.?|p\.?\s?m\.?)/i) || L[di].match(/\b(\d{1,2}):(\d{2})\b/);
+    if (due && tm) { let h = +tm[1]; const mi = tm[2] || '00'; const ap = (tm[3] || '').toLowerCase().replace(/[^ap]/g, ''); if (ap === 'p' && h < 12) h += 12; if (ap === 'a' && h === 12) h = 0; due += 'T' + String(h).padStart(2, '0') + ':' + mi; } }
+  if (!due) { const nx = (meta.next || []).find(d => d > today) || meta.next[0]; if (nx) { due = nx; dueHow = 'next'; } notes.push('la fecha de entrega'); }
+  if (due && due.length === 10) due += 'T' + (dueHow === 'next' && meta.start ? meta.start : '23:59');
+  /* Pasos numerados o con viñeta */
+  const steps = []; L.forEach((l, i) => { const m = l.match(/^(?:\d+[.)]|[-•·*])\s+(.+)$/); if (m && !used.has(i)) { steps.push({ es: m[1], en: '' }); used.add(i); } });
+  /* Enlaces y material del catálogo */
+  const urls = []; L.forEach(l => (l.match(/https?:\/\/[^\s)]+/g) || []).forEach(u => urls.push(u)));
+  const found = []; if (mod && PI.matchJ) L.forEach(l => PI.matchJ(mod, l, null).forEach(x => { if (!found.some(f => f.a.id === x.a.id && f.quizKey === x.quizKey)) found.push(x); }));
+  const attachments = []; let gradable = /calific|nota|puntaje|graded|score/i.test(L.join(' '));
+  if (found.length) { const f = found[0]; const a = f.a; let url = a.url || '';
+    if (a.type === 'quizlet') { const q = { vocabulario: a.quizVocabulario, vocabulario2: a.quizVocabulario2, traducir: a.quizTraducir, ordenar: a.quizOrdenar }; url = q[f.quizKey] || a.quizVocabulario || a.quizTraducir || a.quizOrdenar || url; }
+    if (url) { attachments.push({ kind: 'link', url, linkType: a.type === 'quizlet' ? 'ext' : 'jucum', name: a.name }); if (['grammar', 'reading', 'listening'].includes(a.type)) gradable = true; } }
+  else if (urls.length) attachments.push({ kind: 'link', url: urls[0], linkType: /jucumenglishcenter\.github\.io/i.test(urls[0]) ? 'jucum' : 'ext', name: urls[0] });
+  if (!attachments.length) notes.push('el enlace de la actividad');
+  const plain = L.filter((l, i) => !used.has(i)).join('\n');
+  const structured = { resource: { label: found.length ? found[0].a.name : '', url: attachments[0] ? attachments[0].url : '' }, focus: [], steps, materials: found.slice(1).map(f => f.a.name) };
+  return { title, description: buildTaskDescription(plain, structured), dueAt: due ? new Date(due).toISOString() : null, groupId, targetStudentIds: [], gradable, attachments, _file: fileName, _notes: notes };
+}
+function TaskImportModal({ onClose, onParsed }) {
+  const { GROUPS } = window.JUCUM_DATA;
+  const [gid, setGid] = tUseState(() => { let v = ''; try { v = localStorage.getItem('jucum_planner_group_v1') || ''; } catch (e) {} return (GROUPS.find(g => g.id === v) || GROUPS[0] || {}).id || ''; });
+  const [busy, setBusy] = tUseState(false); const [err, setErr] = tUseState('');
+  const fileRef = tUseRef(null);
+  const read = async (f) => {
+    if (!f) return; if (!gid) { setErr('Elige primero el grupo.'); return; }
+    setBusy(true); setErr('');
+    try { const PI = window.JUCUM_PLANIMPORT; const r = await PI.readFile(f); const lines = PI.jLines(r); if (!lines.length) throw new Error('El documento no trae texto.'); onParsed(tiParse(lines, gid, f.name)); }
+    catch (e) { setErr(e && e.message ? e.message : 'No pude leer el documento.'); }
+    setBusy(false);
+  };
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal settings-modal" style={{maxWidth:560}} onClick={e => e.stopPropagation()}>
+        <div className="modal-head"><div className="modal-title">📄 Subir tarea desde un documento</div><button className="modal-close" onClick={onClose}>✕</button></div>
+        <div className="modal-body">
+          {err && <div className="err" style={{marginBottom:12}}>⚠ {err}</div>}
+          <div className="settings-block"><div className="settings-label">1 · ¿Para qué grupo?</div>
+            {window.GroupPicker ? <GroupPicker value={gid} onChange={e => setGid(e.target.value)} /> : <select className="input-text" style={{width:'100%'}} value={gid} onChange={e => setGid(e.target.value)}>{GROUPS.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select>}
+          </div>
+          <div className="settings-block"><div className="settings-label">2 · Tu documento (.pdf · .docx · .txt)</div>
+            <div onClick={() => !busy && fileRef.current && fileRef.current.click()} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); read(e.dataTransfer.files[0]); }} style={{border:'2px dashed #9FB0DA', borderRadius:14, padding:'22px 14px', textAlign:'center', cursor:'pointer', background:'#F7F9FE', fontWeight:800, color:'#3F5BB8', fontSize:14}}>{busy ? 'Leyendo…' : '📎 Toca o arrastra el archivo aquí'}</div>
+            <input ref={fileRef} type="file" accept=".pdf,.docx,.txt" style={{display:'none'}} onChange={e => { read(e.target.files[0]); e.target.value = ''; }} />
+          </div>
+          <div className="settings-hint" style={{lineHeight:1.55}}>Leo el <b>título</b>, la <b>fecha de entrega</b> (“Entrega: viernes 10 oct, 8 pm”), los <b>pasos</b> numerados y el <b>material</b> de la plataforma que nombres (Story 2, P1, Quizlet Traducir…) o un enlace. Si no dice fecha, propongo la próxima clase del grupo. Luego revisas y pulsas Guardar.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════════ PROFESOR ═══════════════════════ */
 function TeacherAssignments({ onBack, embedded }) {
   const { STUDENTS, GROUPS, LEVELS } = window.JUCUM_DATA;
   const T = window.JUCUM_TASKS;
   const [creating, setCreating] = tUseState(false);
   const [editing, setEditing] = tUseState(null);
+  const [importing, setImporting] = tUseState(false);
+  const [prefill, setPrefill] = tUseState(null);
   const [viewing, setViewing] = tUseState(null); // assignment
   const [tick, setTick] = tUseState(0);
   const [retrying, setRetrying] = tUseState(false);
@@ -337,7 +411,10 @@ function TeacherAssignments({ onBack, embedded }) {
       {embedded ? (
         <div className="scard" style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, marginBottom:14}}>
           <div className="settings-hint" style={{margin:0}}>Asigna <b>tareas</b> a un grupo o a alumnos puntuales. Ellos entregan adjuntando archivos y ganan XP. Calificar es opcional.</div>
-          <button onClick={() => setCreating(true)} style={{flexShrink:0, border:'none', cursor:'pointer', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14, color:'#fff', background:'linear-gradient(135deg,#7B5FC4,#5A3FA0)', borderRadius:12, padding:'10px 18px', boxShadow:'0 4px 12px rgba(108,79,176,.3)', whiteSpace:'nowrap'}}>＋ Nueva tarea</button>
+          <div style={{display:'flex', gap:8, flexWrap:'wrap', flexShrink:0}}>
+            {window.JUCUM_PLANIMPORT && <button onClick={() => setImporting(true)} style={{border:'none', cursor:'pointer', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14, color:'#fff', background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)', borderRadius:12, padding:'10px 18px', boxShadow:'0 4px 12px rgba(13,27,90,.25)', whiteSpace:'nowrap'}}>📄 Subir tarea (documento)</button>}
+            <button onClick={() => setCreating(true)} style={{border:'none', cursor:'pointer', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14, color:'#fff', background:'linear-gradient(135deg,#7B5FC4,#5A3FA0)', borderRadius:12, padding:'10px 18px', boxShadow:'0 4px 12px rgba(108,79,176,.3)', whiteSpace:'nowrap'}}>＋ Nueva tarea</button>
+          </div>
         </div>
       ) : (
         <div className="welcome teacher">
@@ -393,28 +470,31 @@ function TeacherAssignments({ onBack, embedded }) {
       )}
 
       {creating && <AssignmentForm onClose={() => setCreating(false)} onSaved={() => { setCreating(false); refresh(); }} />}
+      {importing && <TaskImportModal onClose={() => setImporting(false)} onParsed={pf => { setImporting(false); setPrefill(pf); }} />}
+      {prefill && <AssignmentForm prefill={prefill} onClose={() => setPrefill(null)} onSaved={() => { setPrefill(null); refresh(); }} />}
       {editing && <AssignmentForm initial={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />}
     </Wrap>
   );
 }
 
 /* ── formulario de nueva tarea ── */
-function AssignmentForm({ onClose, onSaved, initial }) {
+function AssignmentForm({ onClose, onSaved, initial, prefill }) {
   const { GROUPS, STUDENTS, LEVELS } = window.JUCUM_DATA;
-  const initLink = (initial && (initial.attachments || []).find(x => x.kind === 'link')) || null;
+  const P0 = initial || prefill || null;
+  const initLink = (P0 && (P0.attachments || []).find(x => x.kind === 'link')) || null;
   const toLocalInput = (iso) => { if (!iso) return ''; const d = new Date(iso); const p = n => String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
-  const initMeta = parseTaskMeta(initial || {});
-  const [title, setTitle] = tUseState(initial?.title || '');
+  const initMeta = parseTaskMeta(P0 || {});
+  const [title, setTitle] = tUseState(P0?.title || '');
   const [desc, setDesc] = tUseState(initMeta.plain);
   const [structured, setStructured] = tUseState(initMeta.structured || emptyStructured());
   const [showStruct, setShowStruct] = tUseState(hasStructured(initMeta.structured));
   const [preview, setPreview] = tUseState(false);
-  const [due, setDue] = tUseState(toLocalInput(initial?.dueAt));
-  const [groupId, setGroupId] = tUseState(initial?.groupId || GROUPS[0]?.id || '');
-  const [mode, setMode] = tUseState((initial?.targetStudentIds || []).length > 0 ? 'students' : 'group');
-  const [picked, setPicked] = tUseState(initial?.targetStudentIds || []);
-  const [gradable, setGradable] = tUseState(!!initial?.gradable);
-  const [attachments, setAttachments] = tUseState((initial?.attachments || []).filter(x => x.kind !== 'link'));
+  const [due, setDue] = tUseState(toLocalInput(P0?.dueAt));
+  const [groupId, setGroupId] = tUseState(P0?.groupId || GROUPS[0]?.id || '');
+  const [mode, setMode] = tUseState((P0?.targetStudentIds || []).length > 0 ? 'students' : 'group');
+  const [picked, setPicked] = tUseState(P0?.targetStudentIds || []);
+  const [gradable, setGradable] = tUseState(!!P0?.gradable);
+  const [attachments, setAttachments] = tUseState((P0?.attachments || []).filter(x => x.kind !== 'link'));
   const [linkUrl, setLinkUrl] = tUseState(initLink?.url || '');
   const [linkType, setLinkType] = tUseState(initLink?.linkType || 'jucum');
   const [err, setErr] = tUseState('');
@@ -460,11 +540,12 @@ function AssignmentForm({ onClose, onSaved, initial }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal settings-modal" style={{maxWidth:640}} onClick={e => e.stopPropagation()}>
         <div className="modal-head">
-          <div className="modal-title">{initial ? '✏️ Editar tarea' : '📝 Nueva tarea'}</div>
+          <div className="modal-title">{initial ? '✏️ Editar tarea' : prefill ? '📄 Tarea leída del documento' : '📝 Nueva tarea'}</div>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
           {err && <div className="err" style={{marginBottom:12}}>⚠ {err}</div>}
+          {prefill && <div style={{background:'#EEF2FC', border:'1px solid #C9D4F0', borderRadius:10, padding:'9px 12px', fontSize:12.8, fontWeight:700, color:'#1F3A8A', lineHeight:1.5, marginBottom:12}}>📄 Leí <b>{prefill._file}</b>. Tu texto quedó tal cual. Revisa lo que marqué en {(prefill._notes || []).length ? <b>{prefill._notes.join(' · ')}</b> : 'los campos'} y pulsa <b>Guardar</b>: la tarea se publica en el grupo.</div>}
 
           <div className="settings-block">
             <div className="settings-label">Título</div>

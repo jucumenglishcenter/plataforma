@@ -746,5 +746,5 @@
   }
 
   setTimeout(cloudLoad, 2500);
-  window.JUCUM_PLANIMPORT = { version: 'PLAN-IMPORT-V2', matchJ, jRange, daysBetween, effective, groupMeta, sessionFor, guideJ, jKind, readFile, blocksFromText, build, create, save, get, list, remove, addVersion, publish, verifyCloud, effective, distribute, gapsLeft, lastClass, marksFor, report, fmtDay, peruToday, cloudLoad };
+  window.JUCUM_PLANIMPORT = { version: 'PLAN-IMPORT-V2', jLines, nextClassAfter, matchJ, jRange, daysBetween, effective, groupMeta, sessionFor, guideJ, jKind, readFile, blocksFromText, build, create, save, get, list, remove, addVersion, publish, verifyCloud, effective, distribute, gapsLeft, lastClass, marksFor, report, fmtDay, peruToday, cloudLoad };
 })();

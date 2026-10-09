@@ -160,7 +160,6 @@ function ClassPlanner({ onBack, onGoExams }) {
         <button className={`mm-tab ${screen === 'class' ? 'on' : ''}`} onClick={() => goNewClass()}>📘 Plan de clase</button>
         <button className={`mm-tab ${screen === 'practice' ? 'on' : ''}`} onClick={() => goNewPractice()}>📝 Set de práctica</button>
         {window.PlanImport && <button className={`mm-tab ${screen === 'import' ? 'on' : ''}`} onClick={() => goImport()}>📄 Subir plan del teacher</button>}
-        {window.RoutinesManager && <button className={`mm-tab ${screen === 'routines' ? 'on' : ''}`} onClick={() => setScreen('routines')}>⭐ Mis rutinas</button>}
         <button className={`mm-tab ${screen === 'tareas' ? 'on' : ''}`} onClick={() => setScreen('tareas')}>📋 Tareas</button>
         <button className={`mm-tab ${screen === 'saved' ? 'on' : ''}`} onClick={() => setScreen('saved')}>📁 Guardados</button>
       </div>
@@ -182,7 +181,6 @@ function ClassPlanner({ onBack, onGoExams }) {
       {screen === 'practice' && (
         <PracticePlanEditor key={editPractice ? editPractice.id || 'tpl' : 'new'} date={selDate} initial={editPractice} defaultGroupId={defaultGroup || curGroup} onGroupSeen={setCurGroup} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
       )}
-      {screen === 'routines' && window.RoutinesManager && <RoutinesManager defaultLevel={((GROUPS || []).find(g => g.id === curGroup) || {}).level} />}
       {screen === 'tareas' && (
         <TeacherAssignments embedded onBack={() => setScreen('calendar')} />
       )}
@@ -786,7 +784,6 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
           <div style={lblStyle}>{plan ? '¿Empezar de nuevo desde…?' : '¿Cómo quieres empezar?'}</div>
           <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))', gap:9}}>
             {[
-              ['tpl', '⭐ ' + (baseTpl ? 'Mi plantilla ' : 'Plantilla JUCUM ') + cfg.level.toUpperCase(), baseTpl ? 'La que tú guardaste para este nivel.' : 'La secuencia de siempre. Puedes guardar la tuya.', true],
               ['last', '📋 Copiar la última clase', lastPlan ? (lastPlan.sessionLabel || 'Clase') + ' · ' + fmtDateLong(lastPlan.date) : 'Este grupo aún no tiene clases guardadas.', !!lastPlan],
               ['blank', '⬜ Empezar en blanco', 'Sin nada escrito: escribe o pega lo tuyo.', true],
               ['pdf', '📄 Subir mis PDF', 'Plan de clase + práctica de la semana, palabra por palabra.', !!onImport]
@@ -827,10 +824,8 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
                   ))}
                   <button onClick={() => addStep(b.id)} style={{alignSelf:'flex-start', whiteSpace:'nowrap', border:'1px dashed #cdb86a', background:'none', color:'#8a7320', borderRadius:8, padding:'4px 10px', fontSize:11.5, fontWeight:700, cursor:'pointer', marginTop:2}}>+ paso</button>
                 </div>
-                {window.RoutinePicker && <RoutinePicker block={plan.blocks.find(x => x.id === b.id)} level={cfg.level} groupId={cfg.groupId} date={cfg.date || date} onApply={patch => upd(b.id, patch)} />}
                 <div style={{marginTop:8, display:'flex', gap:6, flexWrap:'wrap', alignItems:'center'}}>
                   {(plan.blocks.find(x => x.id === b.id).mats || []).map((m, k) => { const f = cpMatInfo(m, MODULE_CATALOG); return <span key={k} style={{display:'inline-flex', alignItems:'center', gap:6, whiteSpace:'nowrap', fontSize:11.5, fontWeight:800, padding:'4px 10px', borderRadius:20, background:'#EEF2FC', color:'#1F3A8A', border:'1px solid #C9D4F0'}}>{typeIcon(f ? f.a.type : '')} {cpMatLabel(m, MODULE_CATALOG)}<span onClick={() => delMat(b.id, k)} title="Quitar" style={{cursor:'pointer', color:'#C0392B'}}>✕</span></span>; })}
-                  {window.rtTypeOf && window.rtTypeOf(plan.blocks.find(x => x.id === b.id), MODULE_CATALOG) && (b.steps || []).some(x => String(x).trim()) && <button onClick={() => { const blk = plan.blocks.find(x => x.id === b.id); const ty = window.rtTypeOf(blk, MODULE_CATALOG); const name = window.prompt('Nombre para esta rutina:', blk.title); if (!name) return; const list = window.rtList(cfg.level, ty).concat([{ name: name.trim(), steps: blk.steps.filter(x => String(x).trim()) }]); const L = String.fromCharCode(64 + list.length); window.JUCUM_RT_SAVE(cfg.level, ty, list); upd(b.id, { routine: { type: ty, letter: L, name: name.trim() } }); alert('⭐ Guardada como rutina ' + L + '. La encuentras en ⭐ Mis rutinas.'); }} style={{whiteSpace:'nowrap', border:'1px dashed #cdb86a', background:'none', color:'#8a7320', borderRadius:8, padding:'4px 10px', fontSize:11.5, fontWeight:800, cursor:'pointer'}}>⭐ Guardar como rutina</button>}
                   <button onClick={() => setPickFor(pickFor === b.id ? null : b.id)} style={{whiteSpace:'nowrap', border:'1px dashed #9FB0DA', background:'none', color:'#3F5BB8', borderRadius:8, padding:'4px 10px', fontSize:11.5, fontWeight:800, cursor:'pointer'}}>＋ material</button>
                 </div>
                 {pickFor === b.id && <CpMatPicker level={cfg.level} classModId={mod ? mod.id : null} onPick={m => addMat(b.id, m)} onClose={() => setPickFor(null)} />}
@@ -843,9 +838,6 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
           <div style={{display:'flex', gap:10, flexWrap:'wrap', marginTop:16}}>
             <button onClick={() => save(false)} style={btnPrimary}>💾 Guardar en el calendario</button>
             <button onClick={() => { if (onClassMode) onClassMode({ ...plan, groupId: cfg.groupId, startTime: cfg.startTime, sessionLabel: cfg.sessionLabel, date: cfg.date || date }); }} style={{...btnGhost, borderColor:'#9FB0DA', color:'#3F5BB8'}}>▶ Modo clase</button>
-            <button onClick={() => save(true)} style={btnGhost}>⭐ Plantilla</button>
-            <button onClick={saveBase} title="Lo que aparecerá al elegir “⭐ Mi plantilla” en los planes nuevos de este nivel" style={btnGhost}>⭐ Guardar como mi plantilla {cfg.level.toUpperCase()}</button>
-            {baseTpl && <button onClick={resetBase} style={{...btnGhost, color:'#8a7f6a'}}>↺ Plantilla de fábrica</button>}
             <button onClick={printPlan} style={btnGhost}>🖨️ Imprimir / PDF</button>
           </div>
         </div>
@@ -1583,18 +1575,6 @@ function SavedItems({ onOpenClass, onOpenPractice, onChange, refreshKey }) {
               <button onClick={() => onOpenPractice(p)} style={mini}>Abrir</button>
               <button onClick={() => dupPractice(p)} style={mini}>⧉ Duplicar</button>
               <button onClick={() => { if (window.confirm('¿Eliminar este set de práctica?')) { TT.deletePracticePlan(p.id); onChange(); } }} style={{...iconBtn, color:'#C0392B'}}>×</button>
-            </Row>)}
-      </div>
-
-      <div className="scard" style={{marginBottom:16}}>
-        <div className="sec-head"><div className="sec-title">⭐ Plantillas de clase <span style={{fontSize:12, color:'#8a7f6a'}}>({classTpls.length})</span></div></div>
-        {classTpls.length === 0 ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">📭</div>Guarda un plan como plantilla (botón ⭐ en el editor) para reutilizarlo.</div>
-          : classTpls.map(t => <Row key={t.id} icon="⭐" tint="#FBF7FF" title={<>{t.name}<Lvl lv={t.level} /></>} sub={`Plantilla de clase · ${(t.payload.blocks || []).length} bloques · ${t.payload.lengthMin || '—'} min`}>
-              <button onClick={() => useTpl(t)} style={{...mini, borderColor:'#9FB0DA', color:'#3F5BB8'}}>Usar</button>
-              <button onClick={() => dupTpl(t)} style={mini}>⧉ Duplicar</button>
-              <button onClick={() => renameTpl(t)} style={mini}>✎ Renombrar</button>
-              <select value={t.level || ''} onChange={e => setTplLevel(t, e.target.value)} style={{...selStyle, width:'auto', padding:'4px 7px', fontSize:11}}><option value="">Nivel —</option>{levels.map(lv => <option key={lv} value={lv}>{lv.toUpperCase()}</option>)}</select>
-              <button onClick={() => { if (window.confirm('¿Eliminar esta plantilla?')) { TT.deleteTemplate(t.id); onChange(); } }} style={{...iconBtn, color:'#C0392B'}}>×</button>
             </Row>)}
       </div>
 
