@@ -296,13 +296,14 @@ function PiEdit({ rec, mod, eff, update }) {
   const total = d.blocks.reduce((s, b) => s + (Number(b.mins) || 0), 0);
   const actName = id => { const a = acts.find(x => x.id === id); return a ? a.name : id; };
   const [addAct, setAddAct] = React.useState('');
+  const [dayOpen, setDayOpen] = React.useState(null);
   const mv = (i, dir) => update(r => { const b = r.draft.blocks; const k = i + dir; if (k < 0 || k >= b.length) return; [b[i], b[k]] = [b[k], b[i]]; });
   const restore = (i) => { const v = rec.versions[i]; if (!window.confirm('¿Volver a la versión ' + v.n + ' (' + v.label + ')? Antes guardo una copia de cómo está ahora.')) return; update(r => { const PI = window.JUCUM_PLANIMPORT; const keepAns = r.draft.answers; const r2 = PI.addVersion(r, 'Copia antes de volver a v' + v.n); r.versions = r2.versions; r.draft = JSON.parse(JSON.stringify(v.draft)); r.draft.answers = keepAns; }, { redistribute: true }); };
   const saveVer = () => update(r => { const r2 = window.JUCUM_PLANIMPORT.addVersion(r, 'Guardada por el teacher'); r.versions = r2.versions; }, { keepStatus: true });
   return (
     <>
-      <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(420px,1fr))', gap:14, alignItems:'start'}}>
-        <div className="scard">
+      <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(min(420px,100%),1fr))', gap:14, alignItems:'start'}}>
+        {d.kind !== 'practice' && <div className="scard">
           <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10}}><div className="sec-title">🕒 Bloques de la clase</div><span style={piChip(total === d.lengthMin ? '#E8F5E9' : '#FDECEA', total === d.lengthMin ? '#2E7D32' : '#C0392B')}>{total} / {d.lengthMin} min</span></div>
           {d.blocks.map((b, i) => (
             <div key={b.id} style={{border:'1px solid #E3DCC9', borderRadius:11, padding:'9px 10px', background:'#FCFAF4', marginBottom:8, display:'flex', flexDirection:'column', gap:6}}>
@@ -322,8 +323,8 @@ function PiEdit({ rec, mod, eff, update }) {
               </div>
             </div>))}
           <button onClick={() => update(r => { r.draft.blocks.push({ id: 'b_' + Math.random().toString(36).slice(2, 7), emoji: '•', title: 'Nuevo bloque', mins: 10, steps: [], mats: [], en: '(agregado por el teacher)' }); })} style={piBtn}>＋ Agregar bloque</button>
-        </div>
-        <div className="scard">
+        </div>}
+        {d.kind === 'classOnly' && !d.practice.length ? <div className="scard" style={{fontSize:13, fontWeight:700, color:'#5f5540'}}>📘 Solo plan de clase: sin práctica para los alumnos. Si después quieres darles práctica, súbela aparte con “📝 Solo práctica”.</div> : <div className="scard">
           <div className="sec-title" style={{marginBottom:4}}>📝 {d.mode === 'jucum' ? (d.setTitle || 'Práctica de la semana') : 'Práctica diaria de los alumnos'}</div>
           <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', background:'#EEF2FC', border:'1px solid #C9D4F0', borderRadius:10, padding:'8px 11px', marginBottom:10}}>
             <b style={{fontSize:12.5, color:'#1F3A8A'}}>📅 Práctica en casa:</b>
@@ -332,13 +333,13 @@ function PiEdit({ rec, mod, eff, update }) {
             <span style={{fontSize:11.5, fontWeight:700, color:'#5f6b85'}}>{eff.pHow === 'doc' ? '· leído del documento' : eff.pHow === 'teacher' ? '· elegido por ti' : rec.draft.kind === 'practice' ? '· sugerido' : '· de la clase hasta el día antes de la próxima'} · {eff.practiceDays.length} día(s)</span>
             {eff.pHow === 'teacher' && <button onClick={() => update(r => { delete r.draft.answers.prange; }, { redistribute: true })} style={{...piBtn, padding:'3px 9px', fontSize:11.5}}>↺ Volver a lo automático</button>}
           </div>
-          <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginBottom:10}}>Toca una casilla para mover una tarea de día. Los alumnos ven el set solo en esos días.</div>
-          <div style={{overflowX:'auto'}}>
-            <table style={{borderCollapse:'collapse', width:'100%', minWidth:460}}>
-              <thead><tr><th style={{...piLbl, textAlign:'left', padding:4}}>Tarea</th>{eff.practiceDays.map(day => <th key={day} style={{...piLbl, padding:4, textAlign:'center'}}>{window.JUCUM_PLANIMPORT.fmtDay(day)}</th>)}<th></th></tr></thead>
-              <tbody>{d.practice.map((p, i) => (
-                <tr key={p.id} style={{borderTop:'1px solid #F2ECDD'}}>
-                  <td style={{padding:'7px 4px', verticalAlign:'top'}}>
+          <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginBottom:10}}>Cada actividad sale <b>todos los días del rango</b>. Si quieres que una sea solo ciertos días, toca “Cambiar días”.</div>
+          {!d.practice.length && <div style={{display:'flex', gap:9, background:'#FFF4E5', border:'1px solid #FFCC80', borderRadius:10, padding:'10px 12px', fontSize:12.5, fontWeight:700, color:'#7A4A00', lineHeight:1.45, marginBottom:6}}>⚠<span>{rec.found && rec.found.practice ? 'No encontré actividades en el PDF de la práctica. Agrégalas abajo desde el catálogo.' : 'Este plan no tiene práctica para los alumnos. Si quieres darles una, agrégala abajo o súbela aparte con “📝 Solo práctica”.'}</span></div>}
+          <div style={{display:'flex', flexDirection:'column', gap:10}}>
+            {d.practice.map((p, i) => { const all = eff.practiceDays.every(x => (p.days || []).includes(x)); const open = dayOpen === p.id; return (
+              <div key={p.id} style={{border:'1px solid #E3DCC9', borderRadius:12, padding:'10px 12px', display:'flex', flexDirection:'column', gap:2}}>
+                <div style={{display:'flex', gap:8, alignItems:'flex-start'}}>
+                  <div style={{flex:1, minWidth:0}}>
                     <input value={p.label} onChange={e => update(r => { r.draft.practice[i].label = e.target.value; })} style={{...piIn, width:'100%', fontWeight:800, fontSize:12.5}} />
                     {d.mode === 'jucum' ? <>
                       <textarea value={(p.steps || []).join('\n')} onChange={e => update(r => { r.draft.practice[i].steps = e.target.value.split('\n'); })} rows={Math.min(6, Math.max(2, (p.steps || []).length))} placeholder="Pasos para el alumno (uno por línea)" style={{...piIn, width:'100%', fontSize:12, marginTop:4, resize:'vertical'}} />
@@ -350,17 +351,24 @@ function PiEdit({ rec, mod, eff, update }) {
                       <select value={p.onlyPending ? 'pend' : 'all'} onChange={e => update(r => { r.draft.practice[i].onlyPending = e.target.value === 'pend'; })} style={{...piIn, fontSize:11.5, padding:'2px 5px'}}><option value="all">Para todos</option><option value="pend">Solo quienes no lo terminaron</option></select>
                       <label style={{fontSize:11.5, fontWeight:800, color:'#9C5D00', display:'flex', gap:4, alignItems:'center'}}><input type="checkbox" checked={!!p.prio} onChange={e => update(r => { r.draft.practice[i].prio = e.target.checked ? 1 : 0; })} /> prioridad</label>
                     </div>
-                  </td>
-                  {eff.practiceDays.map(day => { const on = (p.days || []).includes(day); return <td key={day} style={{textAlign:'center', verticalAlign:'top', paddingTop:9}}><button onClick={() => update(r => { const q = r.draft.practice[i]; q.manual = true; q.days = q.days || []; const k = q.days.indexOf(day); if (k < 0) q.days.push(day); else q.days.splice(k, 1); })} style={{width:30, height:30, borderRadius:8, border:'1.5px solid ' + (on ? '#3F5BB8' : '#E3DCC9'), background: on ? '#3F5BB8' : '#fff', color:'#fff', fontWeight:900, cursor:'pointer'}}>{on ? '✓' : ''}</button></td>; })}
-                  <td style={{verticalAlign:'top', paddingTop:9}}><button onClick={() => { if (window.confirm('¿Quitar esta tarea? Si algún alumno ya la hizo, su nota y su XP se quedan.')) update(r => { r.draft.practice.splice(i, 1); }); }} style={{...piBtn, padding:'3px 8px', color:'#C0392B', borderColor:'#F0C0BA'}}>✕</button></td>
-                </tr>))}</tbody>
-            </table>
+                  </div>
+                  <button onClick={() => { if (window.confirm('¿Quitar esta actividad? Si algún alumno ya la hizo, su nota y su XP se quedan.')) update(r => { r.draft.practice.splice(i, 1); }); }} title="Quitar" style={{...piBtn, padding:'3px 8px', color:'#C0392B', borderColor:'#F0C0BA'}}>✕</button>
+                </div>
+                <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center', marginTop:6}}>
+                  <span style={piChip(all ? '#E8F5E9' : '#FFF4E5', all ? '#1B5E20' : '#7A4A00')}>📅 {all ? 'Todos los días (' + eff.practiceDays.length + ')' : (p.days || []).length ? (p.days || []).slice().sort().map(x => window.JUCUM_PLANIMPORT.fmtDay(x)).join(' · ') : 'ningún día (no la verán)'}</span>
+                  <button onClick={() => setDayOpen(open ? null : p.id)} style={{...piBtn, padding:'3px 9px', fontSize:11.5}}>{open ? 'Listo' : 'Cambiar días'}</button>
+                  {!all && <button onClick={() => update(r => { const q = r.draft.practice[i]; q.manual = true; q.days = eff.practiceDays.slice(); })} style={{...piBtn, padding:'3px 9px', fontSize:11.5}}>Todos los días</button>}
+                </div>
+                {open && <div style={{display:'flex', gap:6, flexWrap:'wrap', marginTop:6}}>
+                  {eff.practiceDays.map(day => { const on = (p.days || []).includes(day); return <button key={day} onClick={() => update(r => { const q = r.draft.practice[i]; q.manual = true; q.days = q.days || []; const k = q.days.indexOf(day); if (k < 0) q.days.push(day); else q.days.splice(k, 1); })} style={{...piBtn, padding:'4px 10px', fontSize:12, background: on ? '#3F5BB8' : '#fff', color: on ? '#fff' : '#3F5BB8', borderColor: on ? '#3F5BB8' : '#9FB0DA'}}>{on ? '✓ ' : ''}{window.JUCUM_PLANIMPORT.fmtDay(day)}</button>; })}
+                </div>}
+              </div>); })}
           </div>
           <div style={{display:'flex', gap:6, marginTop:10, flexWrap:'wrap'}}>
-            <select value={addAct} onChange={e => setAddAct(e.target.value)} style={{...piIn, flex:1, minWidth:200}}><option value="">＋ agregar tarea del catálogo…</option>{acts.map(a => <option key={a.id} value={a.id}>{a.name}{a.group ? ' · ' + a.group : ''}</option>)}</select>
-            <button onClick={() => { const a = acts.find(x => x.id === addAct); if (!a) return; update(r => { r.draft.practice.push({ id: 'p_' + Math.random().toString(36).slice(2, 7), moduleId: mod.id, activityId: a.id, type: a.type, quizKey: a.type === 'quizlet' ? 'vocabulario' : null, label: a.name, note: '', noteEs: true, en: '(agregado por el teacher)', onlyPending: false, prio: 0, daily: 0, ai: 0, days: eff.practiceDays.slice(0, 1), manual: true }); }); setAddAct(''); }} style={piBtn}>Agregar</button>
+            <select value={addAct} onChange={e => setAddAct(e.target.value)} style={{...piIn, flex:1, minWidth:200}}><option value="">＋ Agregar otra actividad del módulo…</option>{acts.map(a => <option key={a.id} value={a.id}>{a.name}{a.group ? ' · ' + a.group : ''}</option>)}</select>
+            <button onClick={() => { const a = acts.find(x => x.id === addAct); if (!a) return; update(r => { r.draft.practice.push({ id: 'p_' + Math.random().toString(36).slice(2, 7), moduleId: mod.id, activityId: a.id, type: a.type, quizKey: a.type === 'quizlet' ? 'vocabulario' : null, label: a.name, note: '', noteEs: true, en: '(agregado por el teacher)', onlyPending: false, prio: 0, daily: 1, ai: 0, days: eff.practiceDays.slice(), manual: true }); }); setAddAct(''); }} style={piBtn}>Agregar</button>
           </div>
-        </div>
+        </div>}
       </div>
     </>
   );

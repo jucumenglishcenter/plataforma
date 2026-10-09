@@ -410,18 +410,26 @@
   const jClean = s => String(s || '').replace(/[\u3400-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF\uE000-\uF8FF]/g, '').replace(/\s+/g, ' ').trim();
   const jLines = f => (f.lines || plain(f.blocks).split('\n')).map(jClean).filter(l => l && !/^-- \d+ of \d+ --$/.test(l));
   const jOpen = s => !/[.!?)]$/.test(s);
-  const RE_PLAN = /^Plan de clase\s*·\s*(.+)$/i, RE_SET = /^(Práctica de la semana|Cómo practicar hoy)\b/i;
-  const RE_ROW = /^(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})\s+(\d+)\s*(?:['’′]|min\b)\s*(.+)$/;
-  function jKind(f) { const L = jLines(f).slice(0, 6); if (L.some(l => RE_PLAN.test(l))) return 'jplan'; if (L.some(l => RE_SET.test(l))) return 'jset'; return null; }
+  /* DETECCION-V2 (09-oct): el PDF puede traer “Plan de clase – …”, “PLAN DE CLASE: …”, el título partido en dos
+   * líneas o la hora / minutos / título en renglones separados. Antes caía al lector viejo y salía sin bloques. */
+  const RE_PLAN = /^plan de clase\b\s*[·:\-–—|]?\s*(.*)$/i, RE_SET = /^(pr[aá]ctica\s+(de\s+la\s+semana|semanal|en\s+casa|diaria|fuera\s+de\s+clase)|c[oó]mo\s+practicar(\s+hoy)?)\b/i;
+  const RE_ROW = /^(\d{1,2}:\d{2})\s*(?:[–\-—]|a)\s*(\d{1,2}:\d{2})\s*[·|]?\s*(?:(\d+)\s*(?:['’′]|min\.?)\s*[·|]?\s*)?(\S.*)$/;
+  const RE_TR = /^(\d{1,2}:\d{2})\s*(?:[–\-—]|a)\s*(\d{1,2}:\d{2})\s*$/;
+  const jMin = (a, b) => { const t = s => { const [h, m] = s.split(':').map(Number); return h * 60 + m; }; const d = t(b) - t(a); return d > 0 ? d : 0; };
+  function jKind(f) { const L = jLines(f).slice(0, 15); const iP = L.findIndex(l => RE_PLAN.test(l)), iS = L.findIndex(l => RE_SET.test(l));
+    if (iP >= 0 && (iS < 0 || iP <= iS)) return 'jplan'; if (iS >= 0) return 'jset';
+    const all = jLines(f); if (all.filter(l => RE_ROW.test(l) || RE_TR.test(l)).length >= 2) return 'jplan'; return null; }
   const J_EMO = [[/quizlet/i, '🗂️'], [/stor(y|ies)|historia|lectura|reading/i, '📖'], [/di[aá]logo|dialogue/i, '💬'], [/listening|audio/i, '🎧'], [/repaso de gram|resumen|summary/i, '🧠'], [/fill|identif|transform|pr[aá]ctica.*gram|\bP[123]\b/i, '✍️'], [/cierre|wrap/i, '✅']];
   function jEmo(t) { const m = t.match(/^(\p{Extended_Pictographic}[\uFE0F\u200D\p{Extended_Pictographic}]*)\s*/u); if (m) return [m[1], t.slice(m[0].length)]; const e = J_EMO.find(([r]) => r.test(t)); return [e ? e[1] : '•', t]; }
   function parsePlanJ(L0) {
     const P = { module: '', level: '', session: '', date: '', minutes: 0, emph: '', theme: '', blocks: [], src: [] };
     const cut = L0.findIndex(l => /COPIAR HASTA AQU/i.test(l)); const L = (cut < 0 ? L0 : L0.slice(0, cut)).filter(l => !/planificador$/i.test(l) && !/^Horario\b/i.test(l));
     let m, cur = null;
-    L.slice(0, 5).forEach(l => { if ((m = l.match(RE_PLAN))) P.module = m[1]; if ((m = l.match(/^(PRE-?A1|A1|A2)\s*·\s*(Sesi[oó]n\s*\d+)?\s*·?\s*(\d{4}-\d{2}-\d{2})?/i))) { P.level = m[1].toLowerCase().replace('prea1', 'pre-a1'); P.session = m[2] || ''; P.date = m[3] || ''; } if ((m = l.match(/^(\d+)\s*min\s*(.*?)(?:\s(T\d+\s*·.+))?$/))) { P.minutes = +m[1]; P.emph = m[2]; P.theme = m[3] || ''; } });
+    /* une “16:30–16:45” + “15'” + “Título” cuando el PDF los separa */
+    for (let i = 0; i < L.length; i++) { if (RE_TR.test(L[i]) && L[i + 1]) { let s = L[i] + ' ' + L[i + 1]; let k = 1; if (/^\d+\s*(?:['’′]|min\.?)$/.test(L[i + 1]) && L[i + 2]) { s += ' ' + L[i + 2]; k = 2; } L.splice(i, k + 1, s); } }
+    L.slice(0, 8).forEach((l, li) => { if ((m = l.match(RE_PLAN))) P.module = m[1] || (L[li + 1] && !/^(PRE-?A1|A1|A2)\b/i.test(L[li + 1]) ? L[li + 1] : ''); if ((m = l.match(/^(PRE-?A1|A1|A2)\s*·\s*(Sesi[oó]n\s*\d+)?\s*·?\s*(\d{4}-\d{2}-\d{2})?/i))) { P.level = m[1].toLowerCase().replace('prea1', 'pre-a1'); P.session = m[2] || ''; P.date = m[3] || ''; } if ((m = l.match(/^(\d+)\s*min\s*(.*?)(?:\s(T\d+\s*·.+))?$/))) { P.minutes = +m[1]; P.emph = m[2]; P.theme = m[3] || ''; } });
     L.forEach(l => {
-      if ((m = l.match(RE_ROW))) { const [e, ti] = jEmo(m[4].trim()); cur = { start: m[1], end: m[2], min: +m[3], e, title: ti, steps: [] }; P.blocks.push(cur); P.src.push(m[4]); return; }
+      if ((m = l.match(RE_ROW))) { const [e, ti] = jEmo(m[4].trim()); cur = { start: m[1], end: m[2], min: +m[3] || jMin(m[1], m[2]) || 10, e, title: ti, steps: [] }; P.blocks.push(cur); P.src.push(m[4]); return; }
       if (!cur) return; P.src.push(l); const st = cur.steps; if (st.length && jOpen(st[st.length - 1]) && /^[a-záéíóúñ(]/.test(l)) st[st.length - 1] += ' ' + l; else st.push(l);
     });
     return P;
@@ -429,6 +437,7 @@
   function parseSetJ(L) {
     const S = { level: '', module: '', title: '', intro: '', acts: [], outro: '', src: [] }; let m;
     const idx = L.findIndex(l => RE_SET.test(l)); S.title = L[idx] || 'Práctica de la semana';
+    if ((m = (L[idx - 1] || '').match(/^(PRE-?A1|A1|A2)\s*[·:\-–]\s*(.+)$/i)) || (m = (L[idx + 1] || '').match(/^(PRE-?A1|A1|A2)\s*[·:\-–]\s*(.+)$/i))) { S.level = m[1].toLowerCase().replace('prea1', 'pre-a1'); S.module = m[2]; }
     if ((m = (L[idx - 1] || '').match(/^(PRE-?A1|A1|A2)\s*·\s*(.+)$/i))) { S.level = m[1].toLowerCase().replace('prea1', 'pre-a1'); S.module = m[2]; }
     let cur = null, end = false; const intro = [], out = []; S.head = L.slice(0, Math.max(0, idx + 1)).slice(-6);
     L.slice(idx + 1).forEach(l => {
@@ -546,6 +555,7 @@
       gaps.push({ id: 'prange', sev: pRange ? 'check' : 'need', t: onlyP ? '¿Qué días hacen esta práctica?' : 'Días de la práctica en casa', why: pRange ? 'Lo leí del documento: ' + fmtDay(pRange.from) + ' → ' + fmtDay(pRange.to) + '. Confírmalo o cámbialo.' : 'El documento no dice fechas. Sugiero ' + fmtDay(date) + ' → ' + fmtDay(defTo) + (onlyP ? ' (hasta el día antes de la próxima clase).' : ' (de la clase al día antes de la próxima).') + ' Elige el rango.', type: 'range', sug: pRange ? [pRange.from, pRange.to] : [date, defTo] }); }
     const noMat = practice.filter(p => !p.activityId);
     if (noMat.length) gaps.push({ id: 'nomat', sev: 'check', t: noMat.length + ' actividad(es) sin material enlazado', why: 'No supe a qué material del módulo corresponde: ' + noMat.map(p => '“' + p.label + '”').join(', ') + '. Se muestran igual en el instructivo, pero sin botón ▶. Puedes elegir el material en “Revisar y editar”.', type: 'info' });
+    if (P && !P.blocks.length) gaps.push({ id: 'noblocks', sev: 'need', t: 'No pude leer los bloques del plan de clase', why: 'Encontré el plan, pero no las filas con hora y minutos (ej. “16:30–16:45 · 15′ · Story”). Agrega los bloques a mano en “Revisar y editar” o mándame el PDF para ajustar la lectura.', type: 'select', opts: ['ok'], optLabels: ['Entendido, los agrego yo'], sug: 'ok' });
     if (!P && !onlyP) gaps.push({ id: 'nooutline', sev: 'check', t: 'No subiste el plan de clase', why: 'Vuelve y sube también el PDF del plan.', type: 'info' });
     if (!S && !opts.classOnly) gaps.push({ id: 'nopractice', sev: 'check', t: 'No subiste la práctica de la semana', why: 'Se publica solo el plan de clase. Si después quieres práctica, súbela aparte con “📝 Solo práctica”.', type: 'info' });
     /* Comprobador: cada renglón del documento debe estar en lo guardado */
