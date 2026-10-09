@@ -537,7 +537,11 @@ function PSMark({ s, size }) {
 function PracticeSetProgress({ plan, onClose }) {
   const D = window.JUCUM_DATA;
   const group = (D.GROUPS || []).find(g => g.id === plan.groupId);
-  const students = (D.STUDENTS || []).filter(s => s.group === plan.groupId).sort((a, b) => a.fullName.localeCompare(b.fullName));
+  /* AVANCE-ACTIVOS-V1 (09-oct): fuera retirados, inactivos, avance cerrado y egresados */
+  const psOut = (s) => { const st = String(s.status || '').toLowerCase(); if (['retirado','retirada','retired','inactivo','inactiva','inactive','baja','withdrawn'].includes(st)) return true; if (s.closedAt) return true; try { const G = window.JUCUM_GRAD; if (G && G.isGraduated && G.isGraduated(s.id)) return true; } catch (e) {} return false; };
+  const allInGroup = (D.STUDENTS || []).filter(s => s.group === plan.groupId);
+  const students = allInGroup.filter(s => !psOut(s)).sort((a, b) => a.fullName.localeCompare(b.fullName));
+  const hiddenOut = allInGroup.length - students.length;
   const acts = plan.activities || [];
   const dates = plan.dates || [];
   const dayOf = (iso) => { const t = Date.parse(iso || ''); return t ? new Date(t - 5 * 3600000).toISOString().slice(0, 10) : null; };
@@ -572,7 +576,7 @@ function PracticeSetProgress({ plan, onClose }) {
           <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginTop:3}}>
             {group ? group.name : ''} · {acts.length} actividad(es) · {dates.length ? 'día(s): ' + dates.map(fmtD).join(' · ') : 'sin fecha fija'}
           </div>
-          <div style={{fontSize:12.5, fontWeight:800, color: full ? '#2E7D32' : '#8a7f6a', marginTop:4}}>{full} de {students.length} completaron todo en la fecha</div>
+          <div style={{fontSize:12.5, fontWeight:800, color: full ? '#2E7D32' : '#8a7f6a', marginTop:4}}>{full} de {students.length} completaron todo en la fecha{hiddenOut > 0 ? <span style={{color:'#a39a85', fontWeight:700}}> · {hiddenOut} retirado(s)/inactivo(s) no se cuentan</span> : null}</div>
           <button onClick={onClose} style={{position:'absolute', top:14, right:14, width:32, height:32, borderRadius:'50%', border:'none', background:'#FAFAF6', color:'#8a7f6a', fontSize:14, fontWeight:800, cursor:'pointer'}}>✕</button>
         </div>
         <div style={{padding:'12px 16px 6px', overflowY:'auto', overflowX:'auto'}}>
@@ -1265,7 +1269,8 @@ function ClassMode({ plan, onBack }) {
   const blocks = withClock(plan.blocks || [], plan.startTime);
   const mats = (plan.materials || []).slice().sort((a, b) => matRank(a.type) - matRank(b.type));
   const group = (GROUPS || []).find(g => g.id === plan.groupId);
-  const students = (STUDENTS || []).filter(s => s.group === plan.groupId);
+  /* AVANCE-ACTIVOS-V1: modo clase solo con activos */ const cmOut = (s) => { const st = String(s.status || '').toLowerCase(); if (['retirado','retirada','retired','inactivo','inactiva','inactive','baja','withdrawn'].includes(st)) return true; if (s.closedAt) return true; try { const G = window.JUCUM_GRAD; if (G && G.isGraduated && G.isGraduated(s.id)) return true; } catch (e) {} return false; };
+  const students = (STUDENTS || []).filter(s => s.group === plan.groupId && !cmOut(s));
   const startTimer = () => { const lengthMin = plan.lengthMin || 60; const t = { endMs: Date.now() + lengthMin * 60000, lengthMin }; try { localStorage.setItem(timerKey, JSON.stringify(t)); } catch {} setTimer(t); };
   const resetTimer = () => { try { localStorage.removeItem(timerKey); } catch {} setTimer(null); };
   const cd = timer ? liveCountdown(timer, nowMs) : null;

@@ -380,7 +380,8 @@ function LiveClassroom({ groupId, embedded, lockGroup, focusKeys, planId }) {
   const activeIds = (settings.activeModuleIds && settings.activeModuleIds.length)
     ? settings.activeModuleIds : (settings.activeModuleId ? [settings.activeModuleId] : []);
   const mods = (D.MODULE_CATALOG[group.level] || []).filter(m => activeIds.includes(m.id));
-  const members = (D.STUDENTS || []).filter(s => s.group === group.id && !s.closedAt);
+  /* AVANCE-ACTIVOS-V1 */ const lcOut = (s) => { const st = String(s.status || '').toLowerCase(); if (['retirado','retirada','retired','inactivo','inactiva','inactive','baja','withdrawn'].includes(st)) return true; if (s.closedAt) return true; try { const G = window.JUCUM_GRAD; if (G && G.isGraduated && G.isGraduated(s.id)) return true; } catch (e) {} return false; };
+  const members = (D.STUDENTS || []).filter(s => s.group === group.id && !lcOut(s));
   const k = big ? 1.35 : 1;
   const now = Date.now();
 
