@@ -53,6 +53,7 @@
   /* [{ mod, index, earned, score, date, via:'exam'|'acts' }] para todo el nivel */
   function list(student) {
     if (!enabledFor(student)) return [];
+    if (student.closedGroup && student.closedGroup !== student.group) student = Object.assign({}, student, { group: student.closedGroup });  // PAUSA-GRUPO-V1: notas con su grupo real
     var mods = (D().MODULE_CATALOG || {})[student.level] || [];
     return mods.map(function (m, i) {
       var ex = examScore(student, m);

@@ -35,7 +35,7 @@ function applyRoster(groups, users) {
     lastActiveDays: 0, totalMinutes: 0, achievements: [],
     lastSeenAt: u.last_seen_at || null,   // 📶 último ingreso real (script 22)
     // ⏸ avance cerrado (script 29) — sin columnas → null → activo
-    closedAt: u.closed_at || null, closedModule: u.closed_module || '', closedMsg: u.closed_msg || '', closedReason: u.closed_reason || '',
+    closedGroup: u.closed_group || '', closedAt: u.closed_at || null, closedModule: u.closed_module || '', closedMsg: u.closed_msg || '', closedReason: u.closed_reason || '',
   }));
   window.JUCUM_DATA.STUDENTS.length = 0;
   students.forEach(s => window.JUCUM_DATA.STUDENTS.push(s));

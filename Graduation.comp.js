@@ -33,7 +33,7 @@ function grdStudentStats(student) {
 function StudentGraduated({ user, onLogout }) {
   const D = window.JUCUM_DATA, G = window.JUCUM_GRAD;
   const student = (D.STUDENTS || []).find(s => s.id === user.studentId);
-  const group = student ? (D.GROUPS || []).find(g => g.id === student.group) : null;
+  const group = student ? ((D.GROUPS || []).find(g => g.id === (student.closedGroup || student.group)) || (D.GROUPS || []).find(g => g.id === student.group)) : null;  // PAUSA-GRUPO-V1
   const level = (student && D.LEVELS[student.level]) || { code:'', color:'#F9A825', dark:'#E65100' };
   const [view, setView] = React.useState('home');
   const [menu, setMenu] = React.useState(false);
@@ -80,6 +80,7 @@ function StudentGraduated({ user, onLogout }) {
                 {window.StudentAvance && <button type="button" className={`st-um-it ${view==='avance'?'on':''}`} onClick={() => go('avance')}><span className="st-ico">📈</span>Mi avance</button>}
                 {window.StudentBoletin && <button type="button" className={`st-um-it ${view==='boletin'?'on':''}`} onClick={() => go('boletin')}><span className="st-ico">📔</span>Boletín</button>}
                 {window.StudentProfile && <button type="button" className={`st-um-it ${view==='profile'?'on':''}`} onClick={() => go('profile')}><span className="st-ico">👤</span>Mi perfil</button>}
+                {closed && window.StudentPayments && <button type="button" className={`st-um-it ${view==='payments'?'on':''}`} onClick={() => go('payments')}><span className="st-ico">💳</span>Pagos</button>}
                 <div className="st-um-sep"></div>
                 <button type="button" className="st-um-it st-um-out" onClick={() => { setMenu(false); setConfirm(true); }}><span className="st-ico">⎋</span>Cerrar sesión</button>
               </div>
@@ -99,6 +100,7 @@ function StudentGraduated({ user, onLogout }) {
       {view === 'avance' && window.StudentAvance ? <StudentAvance user={user} student={student} onBack={() => go('home')} />
       : view === 'boletin' && window.StudentBoletin ? <StudentBoletin user={user} student={student} onBack={() => go('home')} />
       : view === 'profile' && window.StudentProfile ? <StudentProfile user={user} onBack={() => go('home')} />
+      : view === 'payments' && closed && window.StudentPayments ? <StudentPayments user={user} onBack={() => go('home')} />
       : view === 'survey' ? (
         <main className="main" style={{maxWidth:640,margin:'0 auto'}}>
           {back}
@@ -549,6 +551,7 @@ function CloseProgressModal({ student, onClose, onDone }) {
     const r = await G.closeStudent(student.id, { moduleId: mod, reason, msg: msg.trim() });
     setBusy(false);
     if (!r.ok) { setErr(r.error || 'No se pudo guardar.'); return; }
+    if (r.warn) alert(r.warn); else if (r.moved) alert(`${student.fullName} salió del grupo y quedó en espera (sin grupo). Su avance sigue guardado y vuelve solo a su grupo si reabres su avance.`);
     onDone();
   };
   return (
@@ -619,9 +622,10 @@ function ClosedAllView({ onBack, onOpen }) {
   const needle = q.trim().toLowerCase();
   const closed = (D.STUDENTS || []).filter(s => s.closedAt && (!needle || s.fullName.toLowerCase().includes(needle)));
   const byGroup = {};
-  closed.forEach(s => { (byGroup[s.group] = byGroup[s.group] || []).push(s); });
+  const hgOf = s => s.closedGroup || s.group;  // PAUSA-GRUPO-V1: se listan bajo el grupo del que salieron
+  closed.forEach(s => { (byGroup[hgOf(s)] = byGroup[hgOf(s)] || []).push(s); });
   const groups = (D.GROUPS || []).filter(g => byGroup[g.id]);
-  const orphan = closed.filter(s => !(D.GROUPS || []).some(g => g.id === s.group));
+  const orphan = closed.filter(s => !(D.GROUPS || []).some(g => g.id === hgOf(s)));
   return (
     <main className="main">
       <button className="back-btn" onClick={onBack}>← Volver a grupos</button>

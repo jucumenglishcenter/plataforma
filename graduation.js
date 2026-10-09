@@ -57,21 +57,41 @@
   /* ⏸ Cierre de avance POR ALUMNO (A1/A2, inscripción por módulo · 29-sep · script 29):
    * users.closed_at / closed_module / closed_msg / closed_reason. Siempre a mano, reversible. */
   function isClosed(studentId) { var s = stu(studentId); return !!(s && s.closedAt); }
+  /* PAUSA-SIN-GRUPO-V1 (09-oct · script 33): al cerrar, el alumno sale AUTOMÁTICAMENTE de su grupo y
+   * queda SIN grupo (área de espera = group_id null). Misma cuenta → todo su avance intacto.
+   * users.closed_group recuerda de dónde salió; al reabrir vuelve solo a ese grupo.
+   * NO existe un «grupo de pausa»: no crear uno. homeGroup() = su grupo real (insignias, notas, vitrinas). */
+  function homeGroup(s) { if (typeof s === 'string') s = stu(s); return s ? (s.closedGroup || s.group) : null; }
   async function closeStudent(studentId, o) {
     var s = stu(studentId); if (!s) return { ok: false, error: 'Alumno no encontrado' };
     var today = new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
     var patch = { closed_at: today, closed_module: o.moduleId || null, closed_msg: o.msg || null, closed_reason: o.reason || null };
+    var from = s.closedGroup || s.group, moved = false, warn = '';
+    if (from) { patch.closed_group = from; patch.group_id = null; moved = true; }
     var sb = SBc();
-    if (sb) { var r = await sb.from('users').update(patch).eq('id', studentId); if (r.error) return { ok: false, error: colErr29(r.error) }; }
+    if (sb) {
+      var r = await sb.from('users').update(patch).eq('id', studentId);
+      if (r.error && moved && /closed_group|column|schema cache/i.test(String(r.error.message || ''))) {
+        delete patch.closed_group; delete patch.group_id; moved = false;
+        warn = 'Falta ejecutar el script 33 en Supabase: el alumno quedó cerrado pero en su grupo.';
+        r = await sb.from('users').update(patch).eq('id', studentId);
+      }
+      if (r.error) return { ok: false, error: colErr29(r.error) };
+    }
     Object.assign(s, { closedAt: today, closedModule: o.moduleId || '', closedMsg: o.msg || '', closedReason: o.reason || '' });
-    return { ok: true };
+    if (moved) { s.closedGroup = from; s.group = null; }
+    return { ok: true, moved: moved, warn: warn };
   }
   async function reopenStudent(studentId) {
     var s = stu(studentId); if (!s) return { ok: false };
     var sb = SBc();
-    if (sb) { var r = await sb.from('users').update({ closed_at: null, closed_module: null, closed_msg: null, closed_reason: null }).eq('id', studentId); if (r.error) return { ok: false, error: colErr29(r.error) }; }
+    var back = s.closedGroup && grp(s.closedGroup) ? s.closedGroup : null;
+    var patch = { closed_at: null, closed_module: null, closed_msg: null, closed_reason: null };
+    if (back) { patch.group_id = back; patch.closed_group = null; }
+    if (sb) { var r = await sb.from('users').update(patch).eq('id', studentId); if (r.error) return { ok: false, error: colErr29(r.error) }; }
     Object.assign(s, { closedAt: null, closedModule: '', closedMsg: '', closedReason: '' });
-    return { ok: true };
+    if (back) { s.group = back; s.closedGroup = ''; }
+    return { ok: true, back: back };
   }
   function colErr29(e) {
     var m = String((e && e.message) || e || '');
