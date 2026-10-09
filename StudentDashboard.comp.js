@@ -2299,6 +2299,7 @@ function TodayPracticeCard({ student }) {
     const links = (g.steps || []).map(s => {
       const mod = mods.find(m => m.id === s.moduleId);
       const a = mod && (mod.activities || []).find(x => x.id === s.activityId);
+      if (mod && a && a.type === 'quizlet') { const gs = quizletGames(a); const q = gs.find(x => x.key === s.quizKey) || gs[0]; return s.quizUrl || (q && q.url) || null; }
       return (mod && a) ? linkFor(a, mod, student.id) : null;
     });
     window.JUCUM_GUIDE.openOverlay(g, { links, studentName: (student.fullName || '').split(' ')[0] });

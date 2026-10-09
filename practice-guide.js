@@ -200,6 +200,22 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' })[c]; }); }
   var LV = { 'pre-a1':{ c:'#F9A825', d:'#E65100', code:'Pre-A1' }, 'a1':{ c:'#2196F3', d:'#0D47A1', code:'A1' }, 'a2':{ c:'#2EA84B', d:'#1B5E20', code:'A2' } };
 
+  /* PRACTICE-LINKS (09-oct): rango de días + enlace directo de cada paso (también en el PDF impreso). */
+  var GDN = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'], GMN = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  function gDay(s) { var p = String(s).split('-').map(Number); var d = new Date(p[0], p[1] - 1, p[2]); return GDN[d.getDay()] + ' ' + p[2] + ' ' + GMN[p[1] - 1]; }
+  function fmtRange(a, b) { if (!a) return ''; if (!b || a === b) return 'Solo el ' + gDay(a); return 'Del ' + gDay(a) + ' al ' + gDay(b); }
+  /* Enlace “simple” de cada paso (vista del profesor / impresión): url del material o el juego de Quizlet pedido */
+  function linksFor(guide) {
+    var D = window.JUCUM_DATA; if (!D || !guide) return [];
+    return (guide.steps || []).map(function (s) {
+      if (s.quizUrl) return s.quizUrl;
+      if (!s.moduleId || !s.activityId) return null; var a = null;
+      Object.keys(D.MODULE_CATALOG || {}).some(function (lv) { var m = (D.MODULE_CATALOG[lv] || []).filter(function (x) { return x.id === s.moduleId; })[0]; if (m) { a = (m.activities || []).filter(function (x) { return x.id === s.activityId; })[0] || null; return true; } return false; });
+      if (!a) return null;
+      if (a.type === 'quizlet') { var q = { vocabulario: a.quizVocabulario, vocabulario2: a.quizVocabulario2, traducir: a.quizTraducir, ordenar: a.quizOrdenar }; return q[s.quizKey] || a.quizVocabulario || a.quizTraducir || a.quizOrdenar || a.url || null; }
+      return a.url || null;
+    });
+  }
   function innerHTML(guide, opts) {
     opts = opts || {};
     var lv = LV[(guide.level || '').toLowerCase()] || LV['a1'];
@@ -235,7 +251,7 @@
       var review = s.review ? '<div class="jg-review">🔁 Repasamos nuevamente el módulo ' + esc(s.reviewModule || 'anterior') + '</div>' : '';
       var focus = s.focus ? '<div class="jg-focus">🎯 ' + esc(s.focus) + '</div>' : '';
       var goTxt = lang === 'en' ? '▶ Start this activity' : '▶ Empezar esta actividad';
-      var go = href ? '<a class="jg-go" href="' + esc(href) + '" target="_blank" rel="noopener">' + goTxt + '</a>' : '';
+      var go = href ? '<a class="jg-go" href="' + esc(href) + '" target="_blank" rel="noopener">' + goTxt + '</a>' + (opts.showUrl ? '<a class="jg-go-u" href="' + esc(href) + '">' + esc(href) + '</a>' : '') : '';
       return '<div class="jg-step">' +
         '<div class="jg-num">' + (i + 1) + '</div>' +
         '<div class="jg-sb">' +
@@ -258,7 +274,7 @@
         '<div class="jg-kick">' + esc(lv.code) + (guide.moduleName ? ' · ' + esc(guide.moduleName) : '') + '</div>' +
         '<h1>' + esc(guide.title) + '</h1>' +
         '<p>' + hi + esc(intro) + '</p>' +
-        '<div class="jg-chips"><span class="jg-chip">📋 ' + guide.steps.length + stepsLbl + '</span><span class="jg-chip">⏱️ ~' + (guide.totalMin || 0) + totLbl + '</span></div>' +
+        '<div class="jg-chips"><span class="jg-chip">📋 ' + guide.steps.length + stepsLbl + '</span><span class="jg-chip">⏱️ ~' + (guide.totalMin || 0) + totLbl + '</span>' + (guide.from ? '<span class="jg-chip">📅 ' + esc(fmtRange(guide.from, guide.to)) + '</span>' : '') + '</div>' +
       '</div>' +
       '<div class="jg-body">' +
         (guide.steps.length ? stepsHTML : '<div class="jg-empty">Aún no hay actividades en este instructivo.</div>') +
@@ -298,6 +314,7 @@
     '.jg-review{display:block;margin:2px 0 7px;font-size:13px;font-weight:800;color:#9c4a00;background:#FFF1E0;border:1px solid #F2C99A;border-radius:9px;padding:7px 12px;}' +
     '.jg-tips{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px;}' +
     '.jg-tip{font-size:12px;font-weight:700;color:#9c6a00;background:#FFF7E6;border:1px solid #F2DFB0;border-radius:9px;padding:5px 10px;}' +
+    '.jg-go-u{display:block;margin-top:4px;font-size:10.5px;color:#3F5BB8;word-break:break-all;}' + '@media print{.jg-go{border:1.5px solid #1F3A8A;}}' +
     '.jg-go{display:inline-block;margin-top:11px;font-size:13px;font-weight:800;color:#fff;background:linear-gradient(135deg,#3F5BB8,#1F3A8A);border-radius:10px;padding:9px 15px;text-decoration:none;}' +
     '.jg-note{display:flex;gap:11px;align-items:flex-start;background:#EAF2FF;border:1.5px solid #BBD3F5;border-radius:14px;padding:14px 16px;margin-top:18px;font-size:13.5px;color:#15356b;}' +
     '.jg-note .ic{font-size:20px;line-height:1;}' +
@@ -308,7 +325,7 @@
 
   /* Overlay dentro de la app (lo que ve el alumno y la vista previa del profe). */
   function openOverlay(guide, opts) {
-    opts = opts || {};
+    opts = opts || {}; if (!opts.links) opts.links = linksFor(guide);
     var prev = document.getElementById('jg-overlay'); if (prev) prev.remove();
     var ov = document.createElement('div');
     ov.id = 'jg-overlay';
@@ -337,10 +354,10 @@
     w.document.write('<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(guide.title) + '</title>' +
       '<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">' +
       '<style>body{margin:0;background:#ECEAE3;padding:18px;}' + CSS + ' @media print{body{background:#fff;padding:0;}.jg-card{box-shadow:none;}}</style></head>' +
-      '<body class="jg-scope"><div class="jg-card">' + innerHTML(guide, { studentName: opts && opts.studentName }) + '</div>' +
+      '<body class="jg-scope"><div class="jg-card">' + innerHTML(guide, { showUrl: true, studentName: opts && opts.studentName, links: (opts && opts.links) || linksFor(guide) }) + '</div>' +
       '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.print();},350);}</scr' + 'ipt></body></html>');
     w.document.close();
   }
 
-  window.JUCUM_GUIDE = { build: build, openOverlay: openOverlay, printDoc: printDoc, innerHTML: innerHTML };
+  window.JUCUM_GUIDE = { linksFor: linksFor, fmtRange: fmtRange, build: build, openOverlay: openOverlay, printDoc: printDoc, innerHTML: innerHTML };
 })();

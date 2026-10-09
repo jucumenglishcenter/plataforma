@@ -430,7 +430,7 @@
     const S = { level: '', module: '', title: '', intro: '', acts: [], outro: '', src: [] }; let m;
     const idx = L.findIndex(l => RE_SET.test(l)); S.title = L[idx] || 'Práctica de la semana';
     if ((m = (L[idx - 1] || '').match(/^(PRE-?A1|A1|A2)\s*·\s*(.+)$/i))) { S.level = m[1].toLowerCase().replace('prea1', 'pre-a1'); S.module = m[2]; }
-    let cur = null, end = false; const intro = [], out = [];
+    let cur = null, end = false; const intro = [], out = []; S.head = L.slice(0, Math.max(0, idx + 1)).slice(-6);
     L.slice(idx + 1).forEach(l => {
       S.src.push(l.replace(/^\d+\.?\s/, ''));
       if (end) { out.push(l); return; }
@@ -441,9 +441,32 @@
       const st = cur.steps; if (st.length && jOpen(st[st.length - 1]) && !cur.tips.length) { st[st.length - 1] += ' ' + l; return; }
       if (st.length) cur.tips.push(l); else cur.sub.push(l);
     });
-    S.intro = intro.join(' '); S.outro = out.join(' ');
+    S.intro = intro.join(' '); S.outro = out.join(' '); S.headAll = S.head.concat(intro);
     return S;
   }
+  /* PRACTICE-RANGE (09-oct): días de práctica escritos en el documento.
+   * Entiende “del 7 al 9 de octubre”, “lunes 6 oct – jueves 9 oct”, “07/10 al 09/10”, “de martes a jueves”. */
+  const J_MON = { ene: 0, feb: 1, mar: 2, abr: 3, may: 4, jun: 5, jul: 6, ago: 7, sep: 8, set: 8, oct: 9, nov: 10, dic: 11, jan: 0, apr: 3, aug: 7, dec: 11 };
+  const J_WD = { dom: 0, lun: 1, mar: 2, mie: 3, jue: 4, vie: 5, sab: 6, sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+  function jRange(lines, classDate) {
+    const txt = norm((lines || []).join(' · ')); if (!txt) return null;
+    const base = parseYMD(classDate); const y0 = base.getFullYear();
+    const mk = (d, m) => { let y = y0; if (m < base.getMonth() - 6) y++; if (m > base.getMonth() + 6) y--; const x = new Date(y, m, d); return isNaN(x) || x.getDate() !== d ? null : ymd(x); };
+    const found = []; let m;
+    const reDM = /\b(\d{1,2})\s*(?:de\s+)?(ene|feb|mar|abr|may|jun|jul|ago|sep|set|oct|nov|dic|jan|apr|aug|dec)[a-z]*\b/g;
+    while ((m = reDM.exec(txt))) { const r = mk(+m[1], J_MON[m[2]]); if (r) found.push([m.index, r]); }
+    const reNum = /\b(\d{1,2})\/(\d{1,2})(?:\/\d{2,4})?\b/g;
+    const raw = (lines || []).join(' · ').toLowerCase();
+    while ((m = reNum.exec(raw))) { const r = mk(+m[1], +m[2] - 1); if (r) found.push([m.index, r]); }
+    /* “del 7 al 9 de octubre”: el primer número toma el mes del segundo */
+    const reSpan = /\b(?:del?|desde)\s+(?:[a-z]+\s+)?(\d{1,2})\s+(?:al?|hasta|-)\s+(?:[a-z]+\s+)?(\d{1,2})\s*(?:de\s+)?(ene|feb|mar|abr|may|jun|jul|ago|sep|set|oct|nov|dic)[a-z]*/;
+    if ((m = txt.match(reSpan))) { const mo = J_MON[m[3]]; const a = mk(+m[1], mo), b = mk(+m[2], mo); if (a && b) return { from: a <= b ? a : b, to: a <= b ? b : a, how: 'doc' }; }
+    if (found.length) { const ds = found.sort((a, b) => a[0] - b[0]).map(x => x[1]); const sorted = ds.slice().sort(); return { from: sorted[0], to: sorted[sorted.length - 1], how: 'doc' }; }
+    const reWD = /\b(?:de|del|desde)?\s*(dom|lun|mar|mie|jue|vie|sab)[a-z]*\s+(?:a|al|hasta|-)\s+(?:el\s+)?(dom|lun|mar|mie|jue|vie|sab)[a-z]*/;
+    if ((m = txt.match(reWD))) { const w1 = J_WD[m[1]], w2 = J_WD[m[2]]; const d1 = new Date(base); while (d1.getDay() !== w1) d1.setDate(d1.getDate() + 1); const d2 = new Date(d1); while (d2.getDay() !== w2) d2.setDate(d2.getDate() + 1); return { from: ymd(d1), to: ymd(d2), how: 'doc' }; }
+    return null;
+  }
+  function daysBetween(a, b) { const out = []; if (!a || !b || a > b) return out; const d = parseYMD(a); let n = 0; while (ymd(d) <= b && n < 40) { out.push(ymd(d)); d.setDate(d.getDate() + 1); n++; } return out; }
   function matchJ(mod, text, ctxGroup) {
     const s = String(text || ''); const out = []; const push = (a, x) => { if (a && !out.some(o => o.a.id === a.id)) out.push({ a, ...(x || {}) }); };
     const tm = s.match(/\bT(\d+)\b/); const tg = tm ? groupsOf(mod).find(g => new RegExp('^T' + tm[1] + '\\b').test(g)) : null;
@@ -467,8 +490,12 @@
     let days = daysFromPattern(txt.split('·')[0] + ' ' + (g.schedule || '')); if (!days.length) days = hist.days;
     const tm = txt.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
     const start = tm ? to24(tm[1], tm[2], tm[3]) : ((hist.last && hist.last.startTime) || '');
+    /* Duración = fin − inicio del horario del grupo (“4:30 pm - 6:10 pm” → 100 min) */
+    const tt = txt.match(/(\d{1,2}):(\d{2})\s*(am|pm)?\s*[-–a]+\s*(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+    let mins = 0; if (tt) { const s = to24(tt[1], tt[2], tt[3] || tt[6]), e = to24(tt[4], tt[5], tt[6] || tt[3]); const [sh, sm] = s.split(':').map(Number), [eh, em] = e.split(':').map(Number); mins = (eh * 60 + em) - (sh * 60 + sm); if (mins < 30 || mins > 300) mins = 0; }
+    if (!mins && hist.last && hist.last.lengthMin) mins = Number(hist.last.lengthMin) || 0;
     const today = peruToday(); const next = []; if (days.length) { const d0 = parseYMD(today); for (let i = 0; i < 21 && next.length < 3; i++) { const d = new Date(d0); d.setDate(d0.getDate() + i); if (days.includes(d.getDay())) next.push(ymd(d)); } }
-    return { group: g, days, start, next, today, sessionFor: date => sessionFor(groupId, date), last: hist.last };
+    return { group: g, days, start, mins, next, today, sessionFor: date => sessionFor(groupId, date), last: hist.last };
   }
   function sessionFor(groupId, date) { const ds = new Set(); groupHistory(groupId).plans.forEach(p => { if (p.date && p.date < date) ds.add(p.date); }); return ds.size + 1; }
   function buildJ(files, groupId, opts) {
@@ -500,6 +527,9 @@
       return { id: 'p' + i + '_' + Math.random().toString(36).slice(2, 5), moduleId: mod.id, activityId: f ? f.a.id : null, type: f ? f.a.type : 'custom', quizKey: (f && f.quizKey) || null,
         label: x.title, emoji: x.e, sub: x.sub.slice(), steps: x.steps.slice(), tips: x.tips.slice(), note: '', noteEs: true, en: [x.title].concat(x.sub, x.steps, x.tips).join(' · '),
         onlyPending: false, prio: 0, daily: 1, ai: 0, days: null, manual: false }; });
+    const pRange = S ? jRange(S.headAll || [], date) : null;
+    if (S) { const nx = nextClassAfter(date, meta.days); const defTo = nx ? (() => { const x = parseYMD(nx); x.setDate(x.getDate() - 1); return ymd(x); })() : date;
+      gaps.push({ id: 'prange', sev: 'check', t: 'Días de la práctica en casa', why: pRange ? 'Lo leí del documento: ' + fmtDay(pRange.from) + ' → ' + fmtDay(pRange.to) + '. Confírmalo o cámbialo.' : 'El documento no dice fechas. Sugiero desde el día de la clase hasta el día antes de la próxima (' + fmtDay(date) + ' → ' + fmtDay(defTo) + ').', type: 'range', sug: pRange ? [pRange.from, pRange.to] : [date, defTo] }); }
     const noMat = practice.filter(p => !p.activityId);
     if (noMat.length) gaps.push({ id: 'nomat', sev: 'check', t: noMat.length + ' actividad(es) sin material enlazado', why: 'No supe a qué material del módulo corresponde: ' + noMat.map(p => '“' + p.label + '”').join(', ') + '. Se muestran igual en el instructivo, pero sin botón ▶. Puedes elegir el material en “Revisar y editar”.', type: 'info' });
     if (!P) gaps.push({ id: 'nooutline', sev: 'check', t: 'No subiste el plan de clase', why: 'Puedes publicar solo la práctica de la semana, o volver y subir también el PDF del plan.', type: 'info' });
@@ -519,7 +549,7 @@
     if ((P && P.session) && P.session.replace(/\D/g, '') !== String(sNum)) ctx.push(['Sesión', 'El PDF dice “' + P.session + '”; la plataforma la registra como Sesión ' + sNum + ' de este grupo.']);
     if (P && P.date && P.date !== date) ctx.push(['Fecha', 'El PDF dice ' + P.date + '; se usa el día que elegiste (' + fmtDay(date) + ').']);
     const draft = { mode: 'jucum', level, groupId, moduleId: mod.id, moduleName: mod.name, sessionNum: sNum, sessionLabel: 'Sesión ' + sNum,
-      docDate: '', date, startTime: meta.start, classDays: meta.days, lengthMin: (P && P.minutes) || blocks.reduce((a, b) => a + b.mins, 0) || 100,
+      docDate: '', date, startTime: meta.start, classDays: meta.days, pRange, lengthMin: (P && P.minutes) || meta.mins || blocks.reduce((a, b) => a + b.mins, 0) || 100,
       blocks, practice, ctx, ctxGroup, emphasis: (P && P.emph) || '', setTitle: (S && S.title) || 'Práctica de la semana', setIntro: (S && S.intro) || '', setOutro: (S && S.outro) || '',
       fidelity: { kept, total }, nonneg: [], adapt: [], carry: [], open: [], lastReport: [], intro: [], notesPractice: [], unparsed: [], answers: {}, how: {}, carryDone: {}, myNotes: [], extLink: '' };
     distribute(draft);
@@ -537,7 +567,9 @@
     const next = nextClassAfter(date, days);
     const list = []; if (next) { const d = parseYMD(date); if (draft.mode !== 'jucum') d.setDate(d.getDate() + 1); while (ymd(d) < next) { list.push(ymd(d)); d.setDate(d.getDate() + 1); } }
     if (!list.length) list.push(next ? date : date);
-    return { date, next, practiceDays: list, startTime: a.start || draft.startTime || '' };
+    const pr = (Array.isArray(a.prange) && a.prange[0] && a.prange[1]) ? { from: a.prange[0], to: a.prange[1], how: 'teacher' } : draft.pRange;
+    const custom = pr ? daysBetween(pr.from, pr.to) : null;
+    return { date, next, practiceDays: custom && custom.length ? custom : list, pFrom: custom && custom.length ? custom[0] : list[0], pTo: custom && custom.length ? custom[custom.length - 1] : list[list.length - 1], pHow: custom && custom.length ? pr.how : 'auto', startTime: a.start || draft.startTime || '' };
   }
   function distribute(draft, gaps) {
     const e = effective(draft, gaps); const n = e.practiceDays.length; let i = 0;
@@ -634,9 +666,10 @@
   function guideJ(d, mod) {
     const steps = d.practice.map(p => ({ emoji: p.emoji || '•', title: p.label, type: p.type || 'custom', kind: p.type || 'custom', min: J_MIN[p.type] || 10,
       linesEs: (p.steps || []).filter(x => String(x).trim()), linesEn: [], noteEs: (p.tips || []).join(' '), noteEn: '', focus: (p.sub || []).join(' · '),
-      group: null, moduleId: p.activityId ? p.moduleId : null, activityId: p.activityId || null }));
+      group: null, moduleId: p.activityId ? p.moduleId : null, activityId: p.activityId || null, quizKey: p.quizKey || null, quizUrl: (p.quizKey && d.answers && d.answers['qz-' + p.quizKey]) || null }));
+    const ef = d.date ? effective(d, null) : null;
     return { v: 2, lang: 'es', title: d.setTitle || 'Práctica de la semana', moduleName: mod.name, level: d.level, introEs: d.setIntro || '', introEn: d.setIntro || '', steps,
-      totalMin: steps.reduce((s, x) => s + (x.min || 0), 0), note: '', closingEs: d.setOutro || '', closingEn: d.setOutro || '', fromImport: true };
+      totalMin: steps.reduce((s, x) => s + (x.min || 0), 0), note: '', closingEs: d.setOutro || '', closingEn: d.setOutro || '', fromImport: true, from: ef ? ef.pFrom : null, to: ef ? ef.pTo : null };
   }
   function publishSetJ(rec, mod, e, a, drop, cpId) {
     const TT = window.JUCUM_TT; const d = rec.draft;
@@ -713,5 +746,5 @@
   }
 
   setTimeout(cloudLoad, 2500);
-  window.JUCUM_PLANIMPORT = { version: 'PLAN-IMPORT-V2', matchJ, groupMeta, sessionFor, guideJ, jKind, readFile, blocksFromText, build, create, save, get, list, remove, addVersion, publish, verifyCloud, effective, distribute, gapsLeft, lastClass, marksFor, report, fmtDay, peruToday, cloudLoad };
+  window.JUCUM_PLANIMPORT = { version: 'PLAN-IMPORT-V2', matchJ, jRange, daysBetween, effective, groupMeta, sessionFor, guideJ, jKind, readFile, blocksFromText, build, create, save, get, list, remove, addVersion, publish, verifyCloud, effective, distribute, gapsLeft, lastClass, marksFor, report, fmtDay, peruToday, cloudLoad };
 })();

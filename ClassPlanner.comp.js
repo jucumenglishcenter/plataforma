@@ -644,6 +644,7 @@ function cpNewId() { return 'b_' + Math.random().toString(36).slice(2, 8); }
 function cpCloneBlocks(bl) { return (bl || []).map(b => ({ id: cpNewId(), emoji: b.emoji || '•', title: b.title || '', mins: Number(b.mins) || 10, steps: (b.steps || []).slice(), ...(Array.isArray(b.mats) ? { mats: b.mats.map(m => ({ ...m })) } : {}) })); }
 function cpBaseTpl(level) { const TT = window.JUCUM_TT; return ((TT && TT.getTemplates) ? TT.getTemplates() : []).find(t => t.kind === 'base-class' && t.level === level) || null; }
 function cpAutoSession(groupId, d) { const PI = window.JUCUM_PLANIMPORT; return (PI && PI.sessionFor && groupId && d) ? 'Sesión ' + PI.sessionFor(groupId, d) : null; }
+function cpAutoLen(groupId) { const PI = window.JUCUM_PLANIMPORT; const m = PI && PI.groupMeta && groupId ? PI.groupMeta(groupId) : null; return (m && m.mins) || null; }
 function cpAutoStart(groupId) { const PI = window.JUCUM_PLANIMPORT; const m = PI && PI.groupMeta && groupId ? PI.groupMeta(groupId) : null; return (m && m.start) || null; }
 /* MATS-POR-BLOQUE (07-oct): cada bloque trae su material (detectado del título) y “＋ material” agrega uno olvidado. */
 function cpDetectMats(mod, b, themeGroup) { const PI = window.JUCUM_PLANIMPORT; if (!mod || !PI || !PI.matchJ) return []; return PI.matchJ(mod, b.title || '', themeGroup || null).map(x => ({ moduleId: mod.id, activityId: x.a.id, quizKey: x.quizKey || null })); }
@@ -680,10 +681,14 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
     const grp = GROUPS.find(g => g.id === gid);
     const lvl = (grp && grp.level) || 'pre-a1'; const mods = MODULE_CATALOG[lvl] || [];
     const cm = window.JUCUM_DATA.getClassModuleId ? window.JUCUM_DATA.getClassModuleId(gid) : null;
-    return { level: lvl, groupId: gid, moduleId: (mods.find(m => m.id === cm) || mods[0] || {}).id || null, themeGroup: '', lengthMin: 100, sessionLabel: cpAutoSession(gid, date) || 'Sesión 1', startTime: cpAutoStart(gid) || '09:00', emphasis: 'Vocabulario · Story/Diálogo · Gramática', date };
+    return { level: lvl, groupId: gid, moduleId: (mods.find(m => m.id === cm) || mods[0] || {}).id || null, themeGroup: '', lengthMin: cpAutoLen(gid) || 100, sessionLabel: cpAutoSession(gid, date) || 'Sesión 1', startTime: cpAutoStart(gid) || '09:00', emphasis: 'Vocabulario · Story/Diálogo · Gramática', date };
   });
-  const [autoSess, setAutoSess] = React.useState(!initial || !!initial._tpl);
-  React.useEffect(() => { if (!autoSess) return; const sl = cpAutoSession(cfg.groupId, cfg.date || date); const st = cpAutoStart(cfg.groupId); setCfg(c => ({ ...c, sessionLabel: sl || c.sessionLabel, startTime: st || c.startTime })); }, [cfg.groupId, cfg.date, autoSess]);
+  /* GROUP-AUTO (09-oct): sesión, hora y duración salen del grupo (nombre “Nivel - Días · h:mm - h:mm” + sus planes).
+   * Se recalculan al cambiar grupo/fecha hasta que el teacher escriba algo a mano en ese campo. */
+  const [autoSess, setAutoSess] = React.useState(!initial || !!initial._tpl || !String(initial.sessionLabel || '').trim());
+  const [autoTime, setAutoTime] = React.useState(!initial || !!initial._tpl);
+  React.useEffect(() => { if (!autoSess) return; const sl = cpAutoSession(cfg.groupId, cfg.date || date); setCfg(c => ({ ...c, sessionLabel: sl || c.sessionLabel || 'Sesión 1' })); }, [cfg.groupId, cfg.date, autoSess]);
+  React.useEffect(() => { if (!autoTime) return; const st = cpAutoStart(cfg.groupId); const ln = cpAutoLen(cfg.groupId); setCfg(c => ({ ...c, startTime: st || c.startTime, lengthMin: ln || c.lengthMin })); }, [cfg.groupId, autoTime]);
   React.useEffect(() => { if (onGroupSeen && cfg.groupId) onGroupSeen(cfg.groupId); }, [cfg.groupId]);
   const [plan, setPlan] = React.useState(() => {
     if (!initial) return null;
@@ -773,8 +778,8 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
           <Field label="Grupo">{(() => { const onG = e => { const g = GROUPS.find(x => x.id === e.target.value); const lvl = g ? g.level : cfg.level; const cmid = window.JUCUM_DATA.getClassModuleId ? window.JUCUM_DATA.getClassModuleId(e.target.value) : null; const m = (MODULE_CATALOG[lvl] || []).find(x => x.id === cmid) || (MODULE_CATALOG[lvl] || [])[0]; setCfg(c => ({ ...c, groupId: e.target.value, level: lvl, moduleId: m ? m.id : c.moduleId, themeGroup: '' })); };
             return window.GroupPicker ? <GroupPicker value={cfg.groupId || ''} onChange={onG} /> : <select value={cfg.groupId || ''} onChange={onG} style={selStyle}>{groupsSorted().map(g => <option key={g.id} value={g.id}>{groupOptionLabel(g)}</option>)}</select>; })()}</Field>
           <Field label={autoSess ? 'Sesión (la cuenta la plataforma)' : 'Sesión'}><input value={cfg.sessionLabel} onChange={e => { setAutoSess(false); setCfg(c => ({ ...c, sessionLabel: e.target.value })); }} style={selStyle} /></Field>
-          <Field label="Duración (min)"><input type="number" min="40" max="180" step="5" value={cfg.lengthMin} onChange={e => setCfg(c => ({ ...c, lengthMin: Number(e.target.value) }))} style={selStyle} /></Field>
-          <Field label="Hora de inicio"><input type="time" value={cfg.startTime} onChange={e => setCfg(c => ({ ...c, startTime: e.target.value }))} style={selStyle} /></Field>
+          <Field label={autoTime && cpAutoLen(cfg.groupId) ? 'Duración (del horario del grupo)' : 'Duración (min)'}><input type="number" min="40" max="180" step="5" value={cfg.lengthMin} onChange={e => { setAutoTime(false); setCfg(c => ({ ...c, lengthMin: Number(e.target.value) })); }} style={selStyle} /></Field>
+          <Field label={autoTime && cpAutoStart(cfg.groupId) ? 'Hora de inicio (del grupo)' : 'Hora de inicio'}><input type="time" value={cfg.startTime} onChange={e => { setAutoTime(false); setCfg(c => ({ ...c, startTime: e.target.value })); }} style={selStyle} /></Field>
         </div>
         <div style={{display:'flex', gap:8, alignItems:'flex-start', background:'#EEF2FC', border:'1px solid #C9D4F0', borderRadius:10, padding:'8px 11px', fontSize:12.5, fontWeight:700, color:'#1F3A8A', lineHeight:1.45, marginTop:12}}>ℹ️ <span>Módulo: <b>{mod ? mod.name : '—'}</b> (el ▶ En clase del grupo · {cfg.level.toUpperCase()}). Los materiales van dentro de cada bloque.</span></div>
         <div style={{marginTop:16}}>
@@ -925,7 +930,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
     if (!picked.length) { alert('Elige al menos una actividad.'); return; }
     if (!dates.length) { alert('Elige al menos un día en el calendario.'); return; }
     const finalGuide = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang });
-    const rec = { groupId, level, themeGroup, title, activities: picked, dates, assignToStudents: assign, note, guide: finalGuide };
+    const ds = dates.slice().sort(); const rec = { groupId, level, themeGroup, title, activities: picked, dates, assignToStudents: assign, note, guide: { ...finalGuide, from: ds[0], to: ds[ds.length - 1] } };
     const destino = '“' + groupReal.name + '”' + (groupReal.schedule ? ' (' + groupReal.schedule + ')' : '') + ' · ' + nAlumnos + ' alumno' + (nAlumnos === 1 ? '' : 's');
     if (initial && !initial._tpl) { TT.updatePracticePlan(initial.id, rec); alert('✅ Set actualizado para ' + destino); }
     else { TT.addPracticePlan(rec); alert(assign ? '✅ Set guardado y asignado a ' + destino + ' en ' + dates.length + ' día(s)' : '✅ Set guardado (solo para ti) · ' + destino); }

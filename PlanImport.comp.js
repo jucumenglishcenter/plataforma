@@ -249,9 +249,9 @@ function PiGaps({ rec, update, setTab }) {
   const [vals, setVals] = React.useState({});
   const val = g => vals[g.id] !== undefined ? vals[g.id] : (a[g.id] !== undefined ? a[g.id] : g.sug);
   const set = (id, v) => setVals(s => ({ ...s, [id]: v }));
-  const confirm = g => { const v = val(g); if (g.type === 'days' && (!Array.isArray(v) || !v.length)) { window.alert('Elige al menos un día.'); return; } update(r => { r.draft.answers[g.id] = v; if (g.id === 'days' || g.id === 'date' || g.id === 'past') r.draft.practice.forEach(p => { p.manual = false; }); }, { redistribute: ['days', 'date', 'past'].includes(g.id) }); };
-  const undo = g => update(r => { delete r.draft.answers[g.id]; }, { redistribute: ['days', 'date', 'past'].includes(g.id) });
-  const shown = (g, v) => Array.isArray(v) ? v.map(x => PI_DN[x]).join(' y ') : (g.optLabels && g.opts ? g.optLabels[g.opts.indexOf(v)] || v : (v === '' ? '(lo dejo para después)' : v));
+  const confirm = g => { const v = val(g); if (g.type === 'days' && (!Array.isArray(v) || !v.length)) { window.alert('Elige al menos un día.'); return; } update(r => { r.draft.answers[g.id] = v; if (g.id === 'days' || g.id === 'date' || g.id === 'past') r.draft.practice.forEach(p => { p.manual = false; }); }, { redistribute: ['days', 'date', 'past', 'prange'].includes(g.id) }); };
+  const undo = g => update(r => { delete r.draft.answers[g.id]; }, { redistribute: ['days', 'date', 'past', 'prange'].includes(g.id) });
+  const shown = (g, v) => g.type === 'range' && Array.isArray(v) ? window.JUCUM_GUIDE.fmtRange(v[0], v[1]) : Array.isArray(v) ? v.map(x => PI_DN[x]).join(' y ') : (g.optLabels && g.opts ? g.optLabels[g.opts.indexOf(v)] || v : (v === '' ? '(lo dejo para después)' : v));
   return (
     <div className="scard">
       <div style={{background:'#FFF8E1', border:'1px solid #FFE082', borderRadius:12, padding:'10px 13px', fontSize:13, color:'#5D4200', lineHeight:1.5, marginBottom:12}}>Cada dato viene con una <b>sugerencia</b> sacada del documento, del tracker o de la plataforma; solo confirma o corrige. Los marcados “Falta” no dejan publicar.</div>
@@ -269,6 +269,7 @@ function PiGaps({ rec, update, setTab }) {
                   <div style={{display:'flex', gap:8, flexWrap:'wrap', alignItems:'center'}}>
                     {g.type === 'select' && <select value={v} onChange={e => set(g.id, e.target.value)} style={piIn}>{g.opts.map((o, i) => <option key={o} value={o}>{(g.optLabels || g.opts)[i]}</option>)}</select>}
                     {g.type === 'days' && <span style={{display:'flex', gap:4, flexWrap:'wrap'}}>{[1, 2, 3, 4, 5, 6, 0].map(dd => { const on = Array.isArray(v) && v.includes(dd); return <button key={dd} onClick={() => set(g.id, on ? v.filter(x => x !== dd) : [...(Array.isArray(v) ? v : []), dd].sort())} style={{...piBtn, padding:'5px 9px', background: on ? '#3F5BB8' : '#fff', color: on ? '#fff' : '#6b5a1f', borderColor: on ? '#3F5BB8' : '#cdb86a'}}>{PI_DN[dd]}</button>; })}</span>}
+                    {g.type === 'range' && <span style={{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap'}}><span style={{fontSize:12, fontWeight:800, color:'#8a7f6a'}}>Desde</span><input type="date" value={(v || [])[0] || ''} onChange={e => set(g.id, [e.target.value, (v || [])[1] || e.target.value])} style={piIn} /><span style={{fontSize:12, fontWeight:800, color:'#8a7f6a'}}>hasta</span><input type="date" value={(v || [])[1] || ''} min={(v || [])[0] || ''} onChange={e => set(g.id, [(v || [])[0] || e.target.value, e.target.value])} style={piIn} /></span>}
                     {(g.type === 'time' || g.type === 'date') && <input type={g.type} value={v || ''} onChange={e => set(g.id, e.target.value)} style={piIn} />}
                     {g.type === 'url' && <input type="url" value={v || ''} onChange={e => set(g.id, e.target.value)} placeholder="https://…" style={{...piIn, flex:1, minWidth:220}} />}
                     {g.type === 'text' && <textarea value={v || ''} onChange={e => set(g.id, e.target.value)} rows={2} style={{...piIn, width:'100%', resize:'vertical'}} />}
@@ -317,7 +318,14 @@ function PiEdit({ rec, mod, eff, update }) {
         </div>
         <div className="scard">
           <div className="sec-title" style={{marginBottom:4}}>📝 {d.mode === 'jucum' ? (d.setTitle || 'Práctica de la semana') : 'Práctica diaria de los alumnos'}</div>
-          <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginBottom:10}}>Días entre la clase ({eff.date ? window.JUCUM_PLANIMPORT.fmtDay(eff.date) : '—'}) y la próxima ({eff.next ? window.JUCUM_PLANIMPORT.fmtDay(eff.next) : 'confirma los días de clase'}). Toca una casilla para mover una tarea de día.</div>
+          <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', background:'#EEF2FC', border:'1px solid #C9D4F0', borderRadius:10, padding:'8px 11px', marginBottom:10}}>
+            <b style={{fontSize:12.5, color:'#1F3A8A'}}>📅 Práctica en casa:</b>
+            <span style={{fontSize:12, fontWeight:800, color:'#8a7f6a'}}>desde</span><input type="date" value={eff.pFrom || ''} onChange={e => { const f = e.target.value; if (!f) return; update(r => { r.draft.answers.prange = [f, (eff.pTo && eff.pTo >= f) ? eff.pTo : f]; }, { redistribute: true }); }} style={{...piIn, padding:'4px 7px'}} />
+            <span style={{fontSize:12, fontWeight:800, color:'#8a7f6a'}}>hasta</span><input type="date" value={eff.pTo || ''} min={eff.pFrom || ''} onChange={e => { const t = e.target.value; if (!t) return; update(r => { r.draft.answers.prange = [eff.pFrom && eff.pFrom <= t ? eff.pFrom : t, t]; }, { redistribute: true }); }} style={{...piIn, padding:'4px 7px'}} />
+            <span style={{fontSize:11.5, fontWeight:700, color:'#5f6b85'}}>{eff.pHow === 'doc' ? '· leído del documento' : eff.pHow === 'teacher' ? '· elegido por ti' : '· de la clase hasta el día antes de la próxima'} · {eff.practiceDays.length} día(s)</span>
+            {eff.pHow === 'teacher' && <button onClick={() => update(r => { delete r.draft.answers.prange; }, { redistribute: true })} style={{...piBtn, padding:'3px 9px', fontSize:11.5}}>↺ Volver a lo automático</button>}
+          </div>
+          <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginBottom:10}}>Toca una casilla para mover una tarea de día. Los alumnos ven el set solo en esos días.</div>
           <div style={{overflowX:'auto'}}>
             <table style={{borderCollapse:'collapse', width:'100%', minWidth:460}}>
               <thead><tr><th style={{...piLbl, textAlign:'left', padding:4}}>Tarea</th>{eff.practiceDays.map(day => <th key={day} style={{...piLbl, padding:4, textAlign:'center'}}>{window.JUCUM_PLANIMPORT.fmtDay(day)}</th>)}<th></th></tr></thead>
