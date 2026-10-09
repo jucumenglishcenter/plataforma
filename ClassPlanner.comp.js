@@ -157,11 +157,8 @@ function ClassPlanner({ onBack, onGoExams }) {
 
       <div className="mm-tabs" style={{flexWrap:'wrap'}}>
         <button className={`mm-tab ${screen === 'calendar' ? 'on' : ''}`} onClick={() => setScreen('calendar')}>📅 Calendario</button>
-        <button className={`mm-tab ${screen === 'class' ? 'on' : ''}`} onClick={() => goNewClass()}>📘 Plan de clase</button>
-        <button className={`mm-tab ${screen === 'practice' ? 'on' : ''}`} onClick={() => goNewPractice()}>📝 Set de práctica</button>
         {window.PlanImport && <button className={`mm-tab ${screen === 'import' ? 'on' : ''}`} onClick={() => goImport()}>📄 Subir plan del teacher</button>}
         <button className={`mm-tab ${screen === 'tareas' ? 'on' : ''}`} onClick={() => setScreen('tareas')}>📋 Tareas</button>
-        <button className={`mm-tab ${screen === 'saved' ? 'on' : ''}`} onClick={() => setScreen('saved')}>📁 Guardados</button>
       </div>
 
       {screen === 'calendar' && (
@@ -1244,7 +1241,6 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
         <Field label="Nota para los alumnos (opcional)" style={{marginTop:12}}><input value={note} onChange={e => setNote(e.target.value)} placeholder="Ej: enfócate en la pronunciación" style={selStyle} /></Field>
         <div style={{display:'flex', gap:10, flexWrap:'wrap', marginTop:16}}>
           <button onClick={save} style={btnPrimary}>💾 Guardar set de práctica</button>
-          <button onClick={saveAsTemplate} style={{...btnGhost, borderColor:'#C9A8E8', color:'#5B3FA0'}}>⭐ Plantilla</button>
           <button onClick={printSet} style={btnGhost}>🖨️ Archivos / PDF</button>
           <button onClick={onCancel} style={btnGhost}>Cancelar</button>
         </div>

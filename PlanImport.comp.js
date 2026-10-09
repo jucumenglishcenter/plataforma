@@ -44,7 +44,8 @@ function PiStart({ onBack, onOpen }) {
   const [showPaste, setShowPaste] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState('');
-  const drafts = PI.list().slice(0, 12);
+  const [, setTick] = React.useState(0);
+  const drafts = PI.list().slice(0, 30);
   const gName = id => { const g = (D.GROUPS || []).find(x => x.id === id); return g ? g.name : '⚠ grupo inexistente'; };
   const addFiles = (fl) => setFiles(prev => { const out = prev.slice(); Array.from(fl || []).forEach(f => { if (!out.some(x => x.name === f.name)) out.push(f); }); return out; });
   const go = async () => {
@@ -58,18 +59,7 @@ function PiStart({ onBack, onOpen }) {
   };
   return (
     <>
-      {drafts.length > 0 && (
-        <div className="scard" style={{marginBottom:16}}>
-          <div className="sec-title" style={{marginBottom:10}}>🗂️ Planes subidos</div>
-          {drafts.map(r => { const PIu = window.JUCUM_PLANIMPORT; const left = PIu.gapsLeft(r); const e = PIu.effective(r.draft, r.gaps);
-            return (
-              <div key={r.id} style={{display:'flex', alignItems:'center', gap:10, border:'1px solid #E3DCC9', borderRadius:11, padding:'9px 12px', marginBottom:7, background: r.status === 'published' ? '#F3FAF4' : '#FFFBF2', flexWrap:'wrap'}}>
-                <span style={{fontSize:18}}>{r.status === 'published' ? '✅' : '📝'}</span>
-                <div style={{flex:1, minWidth:180}}><div style={{fontWeight:800, fontSize:13.5}}>{r.draft.moduleName} · {r.draft.sessionLabel}</div><div style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700}}>{gName(r.groupId)} · {e.date ? PIu.fmtDay(e.date) : 'sin fecha'} · {r.status === 'published' ? 'publicado' : (left ? 'borrador · faltan ' + left + ' datos' : 'borrador listo para publicar')}</div></div>
-                <button onClick={() => onOpen(r)} style={piBtn}>{r.status === 'published' ? 'Abrir' : 'Seguir editando'}</button>
-              </div>); })}
-        </div>
-      )}
+      {drafts.length > 0 && <PiUploadsBar drafts={drafts} gName={gName} onOpen={onOpen} onChanged={() => setTick(t => t + 1)} />}
       <div className="scard" style={{marginBottom:16}}>
         <div className="sec-title" style={{marginBottom:4}}>1 · ¿Para qué grupo es este plan?</div>
         <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginBottom:10}}>Los materiales, los links de Quizlet y la práctica de los alumnos salen del módulo de este grupo.</div>
@@ -366,4 +356,30 @@ function PiReport({ rec }) {
   return window.FollowUpPanel ? <FollowUpPanel plan={cp} where="cal" startOpen /> : null;
 }
 
+/* UPLOADS-BAR (09-oct): los planes subidos ya no se listan completos — un selector arriba + Abrir + 🗑.
+ * Borrar un borrador lo quita y listo; uno publicado también quita su plan de clase y su set de práctica. */
+function PiUploadsBar({ drafts, gName, onOpen, onChanged }) {
+  const PI = window.JUCUM_PLANIMPORT; const TT = window.JUCUM_TT;
+  const [sel, setSel] = React.useState('');
+  const r = drafts.find(x => x.id === sel) || null;
+  const lab = x => { const e = PI.effective(x.draft, x.gaps); const left = PI.gapsLeft(x); return (x.status === 'published' ? '✅ ' : '📝 ') + x.draft.moduleName + ' · ' + x.draft.sessionLabel + ' — ' + gName(x.groupId) + ' · ' + (e.date ? PI.fmtDay(e.date) : 'sin fecha') + ' · ' + (x.status === 'published' ? 'publicado' : (left ? 'borrador (faltan ' + left + ')' : 'borrador listo')); };
+  const del = () => {
+    if (!r) return; const pub = r.published && (r.published.classPlanId || Object.keys(r.published.practicePlanIds || {}).length);
+    if (!window.confirm(pub ? '¿Eliminar “' + r.draft.moduleName + ' · ' + r.draft.sessionLabel + '”?\n\nEstá PUBLICADO: también se quitan del calendario su plan de clase y su set de práctica (los alumnos dejan de verlo).' : '¿Eliminar el borrador “' + r.draft.moduleName + ' · ' + r.draft.sessionLabel + '”?')) return;
+    if (pub) { if (r.published.classPlanId) TT.deleteClassPlan(r.published.classPlanId); Object.values(r.published.practicePlanIds || {}).forEach(id => { try { TT.deletePracticePlan(id); } catch (e) {} }); }
+    PI.remove(r.id); setSel(''); onChanged && onChanged();
+  };
+  const nDraft = drafts.filter(x => x.status !== 'published').length;
+  return (
+    <div className="scard" style={{marginBottom:16, display:'flex', gap:10, alignItems:'center', flexWrap:'wrap'}}>
+      <b style={{fontSize:13.5, color:'#0D1B5A', whiteSpace:'nowrap'}}>🗂️ Planes subidos <span style={{fontSize:11.5, color:'#8a7f6a'}}>({drafts.length}{nDraft ? ' · ' + nDraft + ' sin publicar' : ''})</span></b>
+      <select value={sel} onChange={e => setSel(e.target.value)} style={{...piIn, flex:1, minWidth:240, fontWeight:700}}>
+        <option value="">Elige un plan para abrirlo o eliminarlo…</option>
+        {drafts.map(x => <option key={x.id} value={x.id}>{lab(x)}</option>)}
+      </select>
+      <button disabled={!r} onClick={() => r && onOpen(r)} style={{...piBtn, opacity: r ? 1 : .5}}>{r && r.status !== 'published' ? 'Seguir editando' : 'Abrir'}</button>
+      <button disabled={!r} onClick={del} title="Eliminar este plan subido" style={{...piBtn, opacity: r ? 1 : .5, color:'#C0392B', borderColor:'#F0C0BA'}}>🗑 Eliminar</button>
+    </div>
+  );
+}
 Object.assign(window, { PlanImport });
