@@ -539,8 +539,8 @@ function CloseProgressModal({ student, onClose, onDone }) {
   const lastEarned = mods.map(m => m.id).filter(id => earned.includes(id)).slice(-1)[0];
   const noNum = student.level === 'a1' || student.level === 'a2';
   const clsMod = D.getClassModuleId ? D.getClassModuleId(student.group) : null;
-  const [mod, setMod] = React.useState((noNum && clsMod && mods.some(m => m.id === clsMod)) ? clsMod : (lastEarned || (mods[0] && mods[0].id) || ''));
-  const [reason, setReason] = React.useState('No se inscribió al siguiente módulo');
+  const [mod, setMod] = React.useState((clsMod && mods.some(m => m.id === clsMod)) ? clsMod : (lastEarned || (mods[0] && mods[0].id) || ''));   // PAUSA-PREA1-V1: todos los niveles preeligen el módulo de clase
+  const [reason, setReason] = React.useState(noNum ? 'No se inscribió al siguiente módulo' : 'Se retiró del programa');
   const [msg, setMsg] = React.useState('Gracias por ser parte de JUCUM. Tu avance quedó guardado: cuando quieras retomar, escríbenos y te contamos los horarios del siguiente módulo.');
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState('');
@@ -558,7 +558,7 @@ function CloseProgressModal({ student, onClose, onDone }) {
     <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(13,27,90,.42)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'32px 14px',overflow:'auto'}}>
       <div onClick={e => e.stopPropagation()} style={{background:'#fff',borderRadius:18,width:'100%',maxWidth:540,padding:20,display:'flex',flexDirection:'column',gap:12}}>
         <h3 style={{fontFamily:GRD_FONT_T,fontWeight:600,fontSize:19,color:'#0D1B5A',margin:0}}>⏸ Cerrar avance · {student.fullName}</h3>
-        <label style={fld}>{noNum ? 'Módulo que cursaba al cerrar' : 'Último módulo que llevó'}<select value={mod} onChange={e => setMod(e.target.value)} style={inp}>{mods.map((m, i) => <option key={m.id} value={m.id}>{noNum ? `${m.id === clsMod ? '▶ ' : ''}${m.emoji || ''} ${m.name}${m.id === clsMod ? ' (el de clase)' : ''}` : `M${i + 1} · ${m.name}`}{earned.includes(m.id) ? ' (🏅 conseguido)' : ''}</option>)}</select></label>
+        <label style={fld}>{noNum ? 'Módulo que cursaba al cerrar' : 'Último módulo que llevó'}<select value={mod} onChange={e => setMod(e.target.value)} style={inp}>{mods.map((m, i) => <option key={m.id} value={m.id}>{noNum ? `${m.id === clsMod ? '▶ ' : ''}${m.emoji || ''} ${m.name}${m.id === clsMod ? ' (el de clase)' : ''}` : `M${i + 1} · ${m.name}${m.id === clsMod ? ' (el de clase)' : ''}`}{earned.includes(m.id) ? ' (🏅 conseguido)' : ''}</option>)}</select></label>
         <label style={fld}>Motivo (solo lo ves tú)<select value={reason} onChange={e => setReason(e.target.value)} style={inp}>{['No se inscribió al siguiente módulo','Se retiró del programa','Cambio de horario / viaje','Otro'].map(x => <option key={x}>{x}</option>)}</select></label>
         <label style={fld}>Mensaje para el alumno<textarea value={msg} onChange={e => setMsg(e.target.value)} style={{...inp,minHeight:62,resize:'vertical'}}></textarea></label>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:10}}>

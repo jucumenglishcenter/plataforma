@@ -688,7 +688,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
           <div className="col-status">Última práctica</div>
           <div></div>
         </div>
-        {shown.map((s, i) => <StudentRow key={s.id} stu={s} rank={i+1} level={level} onClick={() => onSelectStudent(s.id)} onDelete={() => setDeleting(s)} onCloseProgress={(group.level === 'a1' || group.level === 'a2') && window.CloseProgressModal ? () => setClosing(s) : null} />)}
+        {shown.map((s, i) => <StudentRow key={s.id} stu={s} rank={i+1} level={level} onClick={() => onSelectStudent(s.id)} onDelete={() => setDeleting(s)} onCloseProgress={window.CloseProgressModal ? () => setClosing(s) : null} />)}
         {shown.length === 0 && <div style={{padding:'26px',textAlign:'center',color:'#999',fontWeight:700}}>Sin resultados para «{q}»</div>}
       </div>
 
@@ -1053,7 +1053,7 @@ function StudentDetail({ studentId, onBack, onContact }) {
           <button className="btn-soft" onClick={() => setShowReport(true)}>📄 Reporte de avance</button>
           <button className="btn-soft" onClick={() => onContact && onContact(stu.id)}>💬 Contactar</button>
           <button className="btn-soft" onClick={() => setResetting(true)}>🔑 Resetear contraseña</button>
-          {(stu.level === 'a1' || stu.level === 'a2') && window.CloseProgressModal && !stu.closedAt && <button className="btn-soft" onClick={() => setClosingMe(true)}>⏸ Cerrar avance</button>}
+          {/* PAUSA-PREA1-V1: ⏸ en todos los niveles */ window.CloseProgressModal && !stu.closedAt && <button className="btn-soft" onClick={() => setClosingMe(true)}>⏸ Cerrar avance</button>}
           {stu.closedAt && window.JUCUM_GRAD && <button className="btn-soft" onClick={async () => { if (!window.confirm('¿Reabrir el avance de ' + stu.fullName + '?')) return; const r = await window.JUCUM_GRAD.reopenStudent(stu.id); if (!r.ok) alert(r.error || 'No se pudo reabrir.'); setMeTick(t => t + 1); }}>↩ Reabrir avance</button>}
         </div>
       </div>
