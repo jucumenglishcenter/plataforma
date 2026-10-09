@@ -39,6 +39,8 @@ function PiStart({ onBack, onOpen }) {
   const [day, setDay] = React.useState('');
   const meta = gid && PI.groupMeta ? PI.groupMeta(gid) : null;
   const dayEff = day || (meta && meta.next[0]) || '';
+  const [what, setWhat] = React.useState('class');   // 'class' = plan + práctica · 'classOnly' = solo plan · 'practice' = solo práctica
+  const [pFrom, setPFrom] = React.useState(''); const [pTo, setPTo] = React.useState('');
   const [files, setFiles] = React.useState([]);
   const [paste, setPaste] = React.useState('');
   const [showPaste, setShowPaste] = React.useState(false);
@@ -53,7 +55,7 @@ function PiStart({ onBack, onOpen }) {
     const src = files.slice(); if (paste.trim()) src.push(new File([paste], 'texto-pegado.txt', { type:'text/plain' }));
     if (!src.length) { setErr('Sube al menos el plan de clase o la práctica.'); return; }
     setBusy(true);
-    try { const read = []; for (const f of src) read.push(await PI.readFile(f)); const r = PI.create(read, gid, { date: dayEff }); onOpen(r); }
+    try { const read = []; for (const f of src) read.push(await PI.readFile(f)); const r = PI.create(read, gid, what === 'practice' ? { practiceOnly: true, from: pFrom || '', to: pTo || pFrom || '' } : { date: dayEff, classOnly: what === 'classOnly' }); onOpen(r); }
     catch (e) { setErr(e && e.message ? e.message : 'No se pudo leer.'); }
     setBusy(false);
   };
@@ -77,6 +79,19 @@ function PiStart({ onBack, onOpen }) {
         {meta && (
           <div style={{marginTop:12, borderTop:'1px dashed #E3DCC9', paddingTop:12, display:'flex', flexDirection:'column', gap:8}}>
             <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center'}}>
+              <b style={{fontSize:13}}>¿Qué vas a subir?</b>
+              {[['class', '📘 Plan de clase + práctica'], ['classOnly', '📘 Solo plan de clase'], ['practice', '📝 Solo práctica']].map(([k, l]) => { const on = what === k; return <button key={k} onClick={() => setWhat(k)} style={{...piBtn, background: on ? '#3F5BB8' : '#fff', color: on ? '#fff' : '#3F5BB8', borderColor: on ? '#3F5BB8' : '#9FB0DA'}}>{l}</button>; })}
+            </div>
+            {what === 'practice' ? (<>
+              <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center'}}>
+                <b style={{fontSize:13}}>📅 La practican</b>
+                <span style={{fontSize:12, fontWeight:800, color:'#8a7f6a'}}>desde</span><input type="date" value={pFrom} onChange={e => { setPFrom(e.target.value); if (!pTo || pTo < e.target.value) setPTo(e.target.value); }} style={piIn} />
+                <span style={{fontSize:12, fontWeight:800, color:'#8a7f6a'}}>hasta</span><input type="date" value={pTo} min={pFrom || ''} onChange={e => setPTo(e.target.value)} style={piIn} />
+                {(pFrom || pTo) && <button onClick={() => { setPFrom(''); setPTo(''); }} style={{...piBtn, padding:'4px 9px', fontSize:11.5}}>Borrar</button>}
+              </div>
+              <div style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700}}>Solo práctica: no se crea plan de clase ni sesión. {pFrom ? 'Se usan estos días (ganan a lo que diga el documento).' : 'Si lo dejas vacío, leo los días del documento; si no los trae, te los pregunto.'}</div>
+            </>) : (<>
+            <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center'}}>
               <b style={{fontSize:13}}>Día de la clase:</b>
               {meta.next.map((d0, i) => { const on = dayEff === d0; return <button key={d0} onClick={() => setDay(d0)} style={{...piBtn, background: on ? '#3F5BB8' : '#fff', color: on ? '#fff' : '#3F5BB8', borderColor: on ? '#3F5BB8' : '#9FB0DA'}}>{d0 === meta.today ? 'Hoy · ' : ''}{PI.fmtDay(d0)}</button>; })}
               <input type="date" value={dayEff} onChange={e => setDay(e.target.value)} style={piIn} title="Otro día" />
@@ -84,9 +99,11 @@ function PiStart({ onBack, onOpen }) {
             {dayEff && <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
               <span style={piChip('#EEF2FC', '#1F3A8A')}>🔢 Sesión {meta.sessionFor(dayEff)} de este grupo</span>
               {meta.start && <span style={piChip('#EEF2FC', '#1F3A8A')}>🕒 {meta.start} (horario del grupo)</span>}
-              {meta.days.length > 0 && <span style={piChip('#EEF2FC', '#1F3A8A')}>📱 Práctica hasta el día antes de la próxima clase</span>}
+              {meta.days.length > 0 && what === 'class' && <span style={piChip('#EEF2FC', '#1F3A8A')}>📱 Práctica hasta el día antes de la próxima clase</span>}
+              {what === 'classOnly' && <span style={piChip('#F4F1E8', '#5f5540')}>Sin práctica para los alumnos</span>}
             </div>}
-            <div style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700}}>La sesión y las fechas las pone la plataforma con el seguimiento del grupo: lo que diga el documento no cuenta.</div>
+            <div style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700}}>La sesión y las fechas las pone la plataforma con el seguimiento del grupo. Los días de la práctica los puedes cambiar después.</div>
+            </>)}
           </div>)}
       </div>
       <div className="scard">
@@ -143,9 +160,9 @@ function PiReview({ rec, setRec, tab, setTab, onBack, onExit, onClassMode }) {
     <>
       <div style={{background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)', color:'#fff', borderRadius:16, padding:'16px 20px', marginBottom:14, display:'flex', gap:14, alignItems:'center', flexWrap:'wrap'}}>
         <div style={{flex:1, minWidth:220}}>
-          <div style={{fontSize:11, fontWeight:800, letterSpacing:'0.07em', textTransform:'uppercase', opacity:.75}}>📄 Plan del teacher</div>
+          <div style={{fontSize:11, fontWeight:800, letterSpacing:'0.07em', textTransform:'uppercase', opacity:.75}}>{rec.draft.kind === 'practice' ? '📝 Solo práctica' : rec.draft.kind === 'classOnly' ? '📘 Solo plan de clase' : '📄 Plan del teacher'}</div>
           <div style={{fontFamily:"'Fredoka',sans-serif", fontSize:21, fontWeight:600}}>{mod ? mod.name : rec.draft.moduleName} · {rec.draft.sessionLabel}</div>
-          <div style={{fontSize:12.5, opacity:.9}}>{group ? group.name : '⚠ grupo inexistente'} · {eff.date ? PI.fmtDay(eff.date) : 'sin fecha'}{eff.startTime ? ' · ' + eff.startTime : ''} · próxima clase {eff.next ? PI.fmtDay(eff.next) : '—'}</div>
+          <div style={{fontSize:12.5, opacity:.9}}>{group ? group.name : '⚠ grupo inexistente'} · {rec.draft.kind === 'practice' ? '📅 ' + window.JUCUM_GUIDE.fmtRange(eff.pFrom, eff.pTo) + ' (' + eff.practiceDays.length + ' día' + (eff.practiceDays.length === 1 ? '' : 's') + ')' : (eff.date ? PI.fmtDay(eff.date) : 'sin fecha') + (eff.startTime ? ' · ' + eff.startTime : '') + ' · próxima clase ' + (eff.next ? PI.fmtDay(eff.next) : '—')}</div>
         </div>
         <div style={{display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end'}}>
           <span style={piChip(status[1], status[2])}>{status[0]}</span>
@@ -239,7 +256,7 @@ function PiGaps({ rec, update, setTab }) {
   const [vals, setVals] = React.useState({});
   const val = g => vals[g.id] !== undefined ? vals[g.id] : (a[g.id] !== undefined ? a[g.id] : g.sug);
   const set = (id, v) => setVals(s => ({ ...s, [id]: v }));
-  const confirm = g => { const v = val(g); if (g.type === 'days' && (!Array.isArray(v) || !v.length)) { window.alert('Elige al menos un día.'); return; } update(r => { r.draft.answers[g.id] = v; if (g.id === 'days' || g.id === 'date' || g.id === 'past') r.draft.practice.forEach(p => { p.manual = false; }); }, { redistribute: ['days', 'date', 'past', 'prange'].includes(g.id) }); };
+  const confirm = g => { const v = val(g); if (g.type === 'days' && (!Array.isArray(v) || !v.length)) { window.alert('Elige al menos un día.'); return; } update(r => { r.draft.answers[g.id] = v; if (g.id === 'days' || g.id === 'date' || g.id === 'past' || g.id === 'prange') r.draft.practice.forEach(p => { p.manual = false; }); }, { redistribute: ['days', 'date', 'past', 'prange'].includes(g.id) }); };
   const undo = g => update(r => { delete r.draft.answers[g.id]; }, { redistribute: ['days', 'date', 'past', 'prange'].includes(g.id) });
   const shown = (g, v) => g.type === 'range' && Array.isArray(v) ? window.JUCUM_GUIDE.fmtRange(v[0], v[1]) : Array.isArray(v) ? v.map(x => PI_DN[x]).join(' y ') : (g.optLabels && g.opts ? g.optLabels[g.opts.indexOf(v)] || v : (v === '' ? '(lo dejo para después)' : v));
   return (
@@ -312,7 +329,7 @@ function PiEdit({ rec, mod, eff, update }) {
             <b style={{fontSize:12.5, color:'#1F3A8A'}}>📅 Práctica en casa:</b>
             <span style={{fontSize:12, fontWeight:800, color:'#8a7f6a'}}>desde</span><input type="date" value={eff.pFrom || ''} onChange={e => { const f = e.target.value; if (!f) return; update(r => { r.draft.answers.prange = [f, (eff.pTo && eff.pTo >= f) ? eff.pTo : f]; }, { redistribute: true }); }} style={{...piIn, padding:'4px 7px'}} />
             <span style={{fontSize:12, fontWeight:800, color:'#8a7f6a'}}>hasta</span><input type="date" value={eff.pTo || ''} min={eff.pFrom || ''} onChange={e => { const t = e.target.value; if (!t) return; update(r => { r.draft.answers.prange = [eff.pFrom && eff.pFrom <= t ? eff.pFrom : t, t]; }, { redistribute: true }); }} style={{...piIn, padding:'4px 7px'}} />
-            <span style={{fontSize:11.5, fontWeight:700, color:'#5f6b85'}}>{eff.pHow === 'doc' ? '· leído del documento' : eff.pHow === 'teacher' ? '· elegido por ti' : '· de la clase hasta el día antes de la próxima'} · {eff.practiceDays.length} día(s)</span>
+            <span style={{fontSize:11.5, fontWeight:700, color:'#5f6b85'}}>{eff.pHow === 'doc' ? '· leído del documento' : eff.pHow === 'teacher' ? '· elegido por ti' : rec.draft.kind === 'practice' ? '· sugerido' : '· de la clase hasta el día antes de la próxima'} · {eff.practiceDays.length} día(s)</span>
             {eff.pHow === 'teacher' && <button onClick={() => update(r => { delete r.draft.answers.prange; }, { redistribute: true })} style={{...piBtn, padding:'3px 9px', fontSize:11.5}}>↺ Volver a lo automático</button>}
           </div>
           <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginBottom:10}}>Toca una casilla para mover una tarea de día. Los alumnos ven el set solo en esos días.</div>
@@ -362,7 +379,7 @@ function PiUploadsBar({ drafts, gName, onOpen, onChanged }) {
   const PI = window.JUCUM_PLANIMPORT; const TT = window.JUCUM_TT;
   const [sel, setSel] = React.useState('');
   const r = drafts.find(x => x.id === sel) || null;
-  const lab = x => { const e = PI.effective(x.draft, x.gaps); const left = PI.gapsLeft(x); return (x.status === 'published' ? '✅ ' : '📝 ') + x.draft.moduleName + ' · ' + x.draft.sessionLabel + ' — ' + gName(x.groupId) + ' · ' + (e.date ? PI.fmtDay(e.date) : 'sin fecha') + ' · ' + (x.status === 'published' ? 'publicado' : (left ? 'borrador (faltan ' + left + ')' : 'borrador listo')); };
+  const lab = x => { const e = PI.effective(x.draft, x.gaps); const left = PI.gapsLeft(x); return (x.status === 'published' ? '✅ ' : '📝 ') + (x.draft.kind === 'practice' ? '📝 ' + x.draft.sessionLabel + ' · ' + x.draft.moduleName : x.draft.moduleName + ' · ' + x.draft.sessionLabel) + ' — ' + gName(x.groupId) + ' · ' + (x.draft.kind === 'practice' ? window.JUCUM_GUIDE.fmtRange(e.pFrom, e.pTo) : (e.date ? PI.fmtDay(e.date) : 'sin fecha')) + ' · ' + (x.status === 'published' ? 'publicado' : (left ? 'borrador (faltan ' + left + ')' : 'borrador listo')); };
   const del = () => {
     if (!r) return; const pub = r.published && (r.published.classPlanId || Object.keys(r.published.practicePlanIds || {}).length);
     if (!window.confirm(pub ? '¿Eliminar “' + r.draft.moduleName + ' · ' + r.draft.sessionLabel + '”?\n\nEstá PUBLICADO: también se quitan del calendario su plan de clase y su set de práctica (los alumnos dejan de verlo).' : '¿Eliminar el borrador “' + r.draft.moduleName + ' · ' + r.draft.sessionLabel + '”?')) return;

@@ -449,10 +449,16 @@
   const J_MON = { ene: 0, feb: 1, mar: 2, abr: 3, may: 4, jun: 5, jul: 6, ago: 7, sep: 8, set: 8, oct: 9, nov: 10, dic: 11, jan: 0, apr: 3, aug: 7, dec: 11 };
   const J_WD = { dom: 0, lun: 1, mar: 2, mie: 3, jue: 4, vie: 5, sab: 6, sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
   function jRange(lines, classDate) {
-    const txt = norm((lines || []).join(' · ')); if (!txt) return null;
+    const txt = String((lines || []).join(' · ')).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[–—]/g, '-').replace(/[^a-z0-9\/\- ]+/g, ' ').replace(/\s+/g, ' ').trim(); if (!txt) return null;
     const base = parseYMD(classDate); const y0 = base.getFullYear();
     const mk = (d, m) => { let y = y0; if (m < base.getMonth() - 6) y++; if (m > base.getMonth() + 6) y--; const x = new Date(y, m, d); return isNaN(x) || x.getDate() !== d ? null : ymd(x); };
     const found = []; let m;
+    /* “7 al 9 de octubre” · “7-9 oct” · “del lunes 6 al jueves 9 de octubre” · “6 y 9 oct” */
+    const reSpan2 = /\b(\d{1,2})\s*(?:de\s+(ene|feb|mar|abr|may|jun|jul|ago|sep|set|oct|nov|dic)[a-z]*\s*)?(?:al?|hasta|-|y)\s*(?:el\s+)?(?:[a-z]+\s+)?(\d{1,2})\s*(?:de\s+)?(ene|feb|mar|abr|may|jun|jul|ago|sep|set|oct|nov|dic)[a-z]*\b/;
+    if ((m = txt.match(reSpan2))) { const a = mk(+m[1], J_MON[m[2] || m[4]]), b = mk(+m[3], J_MON[m[4]]); if (a && b) return { from: a <= b ? a : b, to: a <= b ? b : a, how: 'doc' }; }
+    /* “Oct 7 - 9” · “October 7 to October 9” */
+    const reEn = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})\s*(?:-|to|al?|hasta)\s*(?:(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+)?(\d{1,2})\b/;
+    if ((m = txt.match(reEn))) { const a = mk(+m[2], J_MON[m[1]]), b = mk(+m[4], J_MON[m[3] || m[1]]); if (a && b) return { from: a <= b ? a : b, to: a <= b ? b : a, how: 'doc' }; }
     const reDM = /\b(\d{1,2})\s*(?:de\s+)?(ene|feb|mar|abr|may|jun|jul|ago|sep|set|oct|nov|dic|jan|apr|aug|dec)[a-z]*\b/g;
     while ((m = reDM.exec(txt))) { const r = mk(+m[1], J_MON[m[2]]); if (r) found.push([m.index, r]); }
     const reNum = /\b(\d{1,2})\/(\d{1,2})(?:\/\d{2,4})?\b/g;
@@ -503,8 +509,13 @@
     const level = meta.group.level; const mods = D.MODULE_CATALOG[level] || []; if (!mods.length) throw new Error('El nivel del grupo no tiene módulos en el catálogo.');
     let pf = null, sf = null; const unknown = [];
     files.forEach(f => { const k = jKind(f); if (k === 'jplan' && !pf) pf = f; else if (k === 'jset' && !sf) sf = f; else unknown.push(f.name); });
-    const P = pf ? parsePlanJ(jLines(pf)) : null; const S = sf ? parseSetJ(jLines(sf)) : null;
+    const P = (pf && !opts.practiceOnly) ? parsePlanJ(jLines(pf)) : null; const S = (sf && !opts.classOnly) ? parseSetJ(jLines(sf)) : null;
+    if (opts.classOnly && !P) throw new Error('No encontré el PDF del plan de clase (debe empezar con “Plan de clase · …”).');
     const gaps = [];
+    /* SOLO-PRACTICA (09-oct): sin plan de clase = práctica independiente. No hay sesión, ni hora,
+     * ni “plan del mismo día”: solo el rango de días (el del teacher > el del documento > sugerido). */
+    const onlyP = !P && !!S;
+    if (opts.practiceOnly && !S) throw new Error('No encontré el PDF de la práctica (debe empezar con “Práctica de la semana” o “Cómo practicar hoy”).');
     /* Módulo: el del documento si existe en el catálogo; si no, el de clase. */
     const docMod = (P && P.module) || (S && S.module) || '';
     const classModId = D.getClassModuleId ? D.getClassModuleId(groupId) : null;
@@ -516,10 +527,13 @@
     if (docLv && docLv !== level) gaps.push({ id: 'level', sev: 'need', t: 'El documento es de ' + docLv.toUpperCase() + ' y el grupo es ' + String(level).toUpperCase(), why: 'Los materiales salen del catálogo del grupo y no coincidirían. Lo normal es volver y elegir un grupo ' + docLv.toUpperCase() + '.', type: 'select', opts: ['ok'], optLabels: ['Sí, es para este grupo (lo adapto yo)'], sug: 'ok' });
     const ctxGroup = bestGroup(mod, (P && P.theme) || '', groupsOf(mod).find(g => (mod.activities || []).some(a => a.group === g && a.type === 'grammar')));
     /* Día (lo elige el teacher), hora y días del grupo */
-    const date = opts.date || meta.next[0] || meta.today;
+    const tRange = onlyP && opts.from ? { from: opts.from, to: opts.to && opts.to >= opts.from ? opts.to : opts.from, how: 'teacher' } : null;
+    const base0 = onlyP ? (opts.from || meta.today) : (opts.date || meta.next[0] || meta.today);
+    const docR = S ? (jRange(S.headAll || [], base0) || (onlyP ? jRange((S.src || []).slice(0, 40), base0) : null)) : null;
+    const date = onlyP ? ((tRange && tRange.from) || (docR && docR.from) || base0) : base0;
     const sNum = sessionFor(groupId, date);
     if (!meta.days.length) gaps.push({ id: 'days', sev: 'need', t: 'Días de clase del grupo', why: 'El nombre del grupo no dice los días y no tiene planes anteriores. Con esto sé hasta cuándo dura la práctica.', type: 'days', sug: [] });
-    if (!meta.start) gaps.push({ id: 'start', sev: 'need', t: 'Hora de inicio', why: 'El nombre del grupo no trae el horario.', type: 'time', sug: '09:00' });
+    if (!meta.start && !onlyP) gaps.push({ id: 'start', sev: 'need', t: 'Hora de inicio', why: 'El nombre del grupo no trae el horario.', type: 'time', sug: '09:00' });
     /* Bloques: texto tal cual */
     const blocks = (P ? P.blocks : []).map((b, i) => ({ id: 'b' + i + '_' + Math.random().toString(36).slice(2, 6), emoji: b.e, title: b.title, mins: b.min, steps: b.steps.slice(), en: [b.title].concat(b.steps).join(' · '), mats: matchJ(mod, b.title, ctxGroup).map(x => ({ activityId: x.a.id, quizKey: x.quizKey || null })) }));
     /* Práctica de la semana: una tarea por actividad, todos los días */
@@ -527,13 +541,13 @@
       return { id: 'p' + i + '_' + Math.random().toString(36).slice(2, 5), moduleId: mod.id, activityId: f ? f.a.id : null, type: f ? f.a.type : 'custom', quizKey: (f && f.quizKey) || null,
         label: x.title, emoji: x.e, sub: x.sub.slice(), steps: x.steps.slice(), tips: x.tips.slice(), note: '', noteEs: true, en: [x.title].concat(x.sub, x.steps, x.tips).join(' · '),
         onlyPending: false, prio: 0, daily: 1, ai: 0, days: null, manual: false }; });
-    const pRange = S ? jRange(S.headAll || [], date) : null;
-    if (S) { const nx = nextClassAfter(date, meta.days); const defTo = nx ? (() => { const x = parseYMD(nx); x.setDate(x.getDate() - 1); return ymd(x); })() : date;
-      gaps.push({ id: 'prange', sev: 'check', t: 'Días de la práctica en casa', why: pRange ? 'Lo leí del documento: ' + fmtDay(pRange.from) + ' → ' + fmtDay(pRange.to) + '. Confírmalo o cámbialo.' : 'El documento no dice fechas. Sugiero desde el día de la clase hasta el día antes de la próxima (' + fmtDay(date) + ' → ' + fmtDay(defTo) + ').', type: 'range', sug: pRange ? [pRange.from, pRange.to] : [date, defTo] }); }
+    const pRange = tRange || (S ? (onlyP ? docR : jRange(S.headAll || [], date)) : null);
+    if (S && !tRange) { const nx = nextClassAfter(date, meta.days); const defTo = nx ? (() => { const x = parseYMD(nx); x.setDate(x.getDate() - 1); return ymd(x); })() : (() => { const x = parseYMD(date); x.setDate(x.getDate() + 6); return ymd(x); })();
+      gaps.push({ id: 'prange', sev: pRange ? 'check' : 'need', t: onlyP ? '¿Qué días hacen esta práctica?' : 'Días de la práctica en casa', why: pRange ? 'Lo leí del documento: ' + fmtDay(pRange.from) + ' → ' + fmtDay(pRange.to) + '. Confírmalo o cámbialo.' : 'El documento no dice fechas. Sugiero ' + fmtDay(date) + ' → ' + fmtDay(defTo) + (onlyP ? ' (hasta el día antes de la próxima clase).' : ' (de la clase al día antes de la próxima).') + ' Elige el rango.', type: 'range', sug: pRange ? [pRange.from, pRange.to] : [date, defTo] }); }
     const noMat = practice.filter(p => !p.activityId);
     if (noMat.length) gaps.push({ id: 'nomat', sev: 'check', t: noMat.length + ' actividad(es) sin material enlazado', why: 'No supe a qué material del módulo corresponde: ' + noMat.map(p => '“' + p.label + '”').join(', ') + '. Se muestran igual en el instructivo, pero sin botón ▶. Puedes elegir el material en “Revisar y editar”.', type: 'info' });
-    if (!P) gaps.push({ id: 'nooutline', sev: 'check', t: 'No subiste el plan de clase', why: 'Puedes publicar solo la práctica de la semana, o volver y subir también el PDF del plan.', type: 'info' });
-    if (!S) gaps.push({ id: 'nopractice', sev: 'check', t: 'No subiste la práctica de la semana', why: 'Los alumnos no recibirán práctica con este plan. Vuelve y sube también el PDF de la práctica si la quieres publicar.', type: 'info' });
+    if (!P && !onlyP) gaps.push({ id: 'nooutline', sev: 'check', t: 'No subiste el plan de clase', why: 'Vuelve y sube también el PDF del plan.', type: 'info' });
+    if (!S && !opts.classOnly) gaps.push({ id: 'nopractice', sev: 'check', t: 'No subiste la práctica de la semana', why: 'Se publica solo el plan de clase. Si después quieres práctica, súbela aparte con “📝 Solo práctica”.', type: 'info' });
     /* Comprobador: cada renglón del documento debe estar en lo guardado */
     const nw = t => norm(t).split(' ').filter(Boolean);
     const outTxt = ' ' + nw([].concat(blocks.flatMap(b => [b.title].concat(b.steps)), S ? [S.intro] : [], practice.flatMap(p => [p.label].concat(p.sub, p.steps, p.tips)), S ? [S.outro] : []).join(' | ')).join(' ') + ' ';
@@ -541,15 +555,17 @@
     [].concat(P ? P.src : [], S ? S.src : []).forEach(l => { const w0 = nw(l); if (!w0.length) return; total += w0.length; if (outTxt.includes(' ' + w0.join(' ') + ' ')) kept += w0.length; else lost.push(l); });
     if (lost.length) gaps.push({ id: 'lost', sev: 'need', t: lost.length + ' renglón(es) del documento no quedaron en el plan', why: 'Para no cambiar tu texto, revísalos en “Revisar y editar”: ' + lost.map(l => '“' + l.slice(0, 90) + '”').join(' · '), type: 'select', opts: ['ok'], optLabels: ['Ya lo revisé'], sug: 'ok' });
     /* Plan del mismo día */
-    const dup = groupHistory(groupId).plans.find(p => p.date === date);
+    const dup = onlyP ? null : groupHistory(groupId).plans.find(p => p.date === date);
     if (dup) gaps.push({ id: 'dup', sev: 'need', t: 'Ya hay un plan de clase de este grupo ese día', why: '“' + (dup.moduleName || '') + ' · ' + (dup.sessionLabel || '') + '” (' + fmtDay(dup.date) + '). No se reemplaza nada sin tu permiso.', type: 'select', opts: ['new', 'replace'], optLabels: ['Guardar como plan aparte (el otro queda igual)', 'Usar el mismo plan (el anterior queda en el historial de versiones)'], sug: 'new', dupId: dup.id });
     const q = byType(mod, 'quizlet'); const qField = { vocabulario: 'quizVocabulario', traducir: 'quizTraducir', ordenar: 'quizOrdenar' };
     [...new Set(practice.filter(p => p.quizKey).map(p => p.quizKey))].filter(k => !(q && q[qField[k]])).forEach(k => gaps.push({ id: 'qz-' + k, sev: 'need', t: 'Link de Quizlet “' + k + '”', why: 'La práctica pide este juego y el catálogo del módulo no tiene el link.', type: 'url', sug: '' }));
     const ctx = []; if (P && P.emph) ctx.push(['Énfasis', P.emph]); if (P && P.theme) ctx.push(['Tema', P.theme]);
+    if (!S && P) ctx.push(['Tipo', 'Solo plan de clase: no se crea práctica para los alumnos.']);
+    if (onlyP) ctx.push(['Tipo', 'Solo práctica: no se crea plan de clase ni sesión. Los alumnos la ven en los días elegidos.']);
     if ((P && P.session) && P.session.replace(/\D/g, '') !== String(sNum)) ctx.push(['Sesión', 'El PDF dice “' + P.session + '”; la plataforma la registra como Sesión ' + sNum + ' de este grupo.']);
     if (P && P.date && P.date !== date) ctx.push(['Fecha', 'El PDF dice ' + P.date + '; se usa el día que elegiste (' + fmtDay(date) + ').']);
-    const draft = { mode: 'jucum', level, groupId, moduleId: mod.id, moduleName: mod.name, sessionNum: sNum, sessionLabel: 'Sesión ' + sNum,
-      docDate: '', date, startTime: meta.start, classDays: meta.days, pRange, lengthMin: (P && P.minutes) || meta.mins || blocks.reduce((a, b) => a + b.mins, 0) || 100,
+    const draft = { mode: 'jucum', kind: onlyP ? 'practice' : (S ? 'class' : 'classOnly'), level, groupId, moduleId: mod.id, moduleName: mod.name, sessionNum: onlyP ? null : sNum, sessionLabel: onlyP ? ((S && S.title) || 'Práctica de la semana') : 'Sesión ' + sNum,
+      docDate: '', date, startTime: onlyP ? '' : meta.start, classDays: meta.days, pRange, lengthMin: (P && P.minutes) || meta.mins || blocks.reduce((a, b) => a + b.mins, 0) || 100,
       blocks, practice, ctx, ctxGroup, emphasis: (P && P.emph) || '', setTitle: (S && S.title) || 'Práctica de la semana', setIntro: (S && S.intro) || '', setOutro: (S && S.outro) || '',
       fidelity: { kept, total }, nonneg: [], adapt: [], carry: [], open: [], lastReport: [], intro: [], notesPractice: [], unparsed: [], answers: {}, how: {}, carryDone: {}, myNotes: [], extLink: '' };
     distribute(draft);
@@ -569,7 +585,8 @@
     if (!list.length) list.push(next ? date : date);
     const pr = (Array.isArray(a.prange) && a.prange[0] && a.prange[1]) ? { from: a.prange[0], to: a.prange[1], how: 'teacher' } : draft.pRange;
     const custom = pr ? daysBetween(pr.from, pr.to) : null;
-    return { date, next, practiceDays: custom && custom.length ? custom : list, pFrom: custom && custom.length ? custom[0] : list[0], pTo: custom && custom.length ? custom[custom.length - 1] : list[list.length - 1], pHow: custom && custom.length ? pr.how : 'auto', startTime: a.start || draft.startTime || '' };
+    if (draft.kind === 'practice' && custom && custom.length) { date = custom[0]; }
+    return { date, next: draft.kind === 'practice' ? nextClassAfter(custom && custom.length ? custom[custom.length - 1] : date, days) : next, practiceDays: custom && custom.length ? custom : list, pFrom: custom && custom.length ? custom[0] : list[0], pTo: custom && custom.length ? custom[custom.length - 1] : list[list.length - 1], pHow: custom && custom.length ? pr.how : 'auto', startTime: a.start || draft.startTime || '' };
   }
   function distribute(draft, gaps) {
     const e = effective(draft, gaps); const n = e.practiceDays.length; let i = 0;
@@ -678,7 +695,7 @@
     const acts = items.filter(p => p.activityId).map(p => ({ moduleId: p.moduleId, activityId: p.activityId, label: p.label, type: p.type, note: '', quizKey: p.quizKey || null, quizUrl: (p.quizKey && qz[p.quizKey]) || null, onlyPending: !!p.onlyPending, prio: p.prio || 0, fromImport: true }));
     const oldIds = (rec.published && rec.published.practicePlanIds) || {}; const newIds = {};
     if (items.length && e.practiceDays.length) {
-      const days = e.practiceDays; const title = '📌 ' + mod.name + ' · ' + d.sessionLabel + ' · ' + fmtDay(days[0]) + (days.length > 1 ? ' → ' + fmtDay(days[days.length - 1]) : '');
+      const days = e.practiceDays; const title = (d.kind === 'practice' ? '📝 ' + (d.setTitle || 'Práctica') + ' · ' + mod.name + ' · ' : '📌 ' + mod.name + ' · ' + d.sessionLabel + ' · ') + fmtDay(days[0]) + (days.length > 1 ? ' → ' + fmtDay(days[days.length - 1]) : '');
       const body = { title, activities: acts, dates: days, assignToStudents: true, guide: guideJ(Object.assign({}, d, { practice: items }), mod) };
       if (oldIds.set) { TT.updatePracticePlan(oldIds.set, body); newIds.set = oldIds.set; }
       else newIds.set = TT.addPracticePlan(Object.assign({ groupId: rec.groupId, note: 'Plan del teacher (PDF)', source: { importId: rec.id } }, body));
