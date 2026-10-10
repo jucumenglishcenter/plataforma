@@ -1259,8 +1259,11 @@ function ClassMode({ plan, onBack }) {
   const [timer, setTimer] = React.useState(() => { try { return JSON.parse(localStorage.getItem(timerKey) || 'null'); } catch { return null; } });
   React.useEffect(() => { const id = setInterval(() => setNowMs(Date.now()), 1000); return () => clearInterval(id); }, []);
   if (!plan) return (<main><button className="back-btn" onClick={onBack}>← Volver</button><div className="scard">No hay plan para mostrar.</div></main>);
-  const blocks = withClock(plan.blocks || [], plan.startTime);
-  const mats = (plan.materials || []).slice().sort((a, b) => matRank(a.type) - matRank(b.type));
+  /* LINKS-BLOQUE (09-oct): cada bloque trae sus materiales (guardados en el bloque o detectados del título).
+   * Si el plan no guardó la lista de materiales (planes importados), se arma con los de los bloques. */
+  const cmMod = (MODULE_CATALOG[plan.level] || []).find(m => m.id === plan.moduleId) || Object.values(MODULE_CATALOG).flat().find(m => m.id === plan.moduleId);
+  const blocks = withClock(plan.blocks || [], plan.startTime).map(b => { const raw = Array.isArray(b.mats) && b.mats.length ? b.mats.map(m => ({ ...m, moduleId: m.moduleId || plan.moduleId })) : cpDetectMats(cmMod, b, plan.themeGroup); return { ...b, _mats: cpMatsToMaterials([{ mats: raw }], [], MODULE_CATALOG).map((m, k) => ({ ...m, quizKey: (raw[k] && raw[k].quizKey) || null })) }; });
+  const mats = ((plan.materials || []).length ? plan.materials : cpMatsToMaterials(blocks.map(b => ({ mats: b._mats })), [], MODULE_CATALOG)).slice().sort((a, b) => matRank(a.type) - matRank(b.type));
   const group = (GROUPS || []).find(g => g.id === plan.groupId);
   /* AVANCE-ACTIVOS-V1: modo clase solo con activos */ const cmOut = (s) => { const st = String(s.status || '').toLowerCase(); if (['retirado','retirada','retired','inactivo','inactiva','inactive','baja','withdrawn'].includes(st)) return true; if (s.closedAt) return true; try { const G = window.JUCUM_GRAD; if (G && G.isGraduated && G.isGraduated(s.id)) return true; } catch (e) {} return false; };
   const students = (STUDENTS || []).filter(s => s.group === plan.groupId && !cmOut(s));
@@ -1272,7 +1275,7 @@ function ClassMode({ plan, onBack }) {
   const [evalOn, setEvalOn] = React.useState(false);
   const [closeOn, setCloseOn] = React.useState(false);
   const [closedPlan, setClosedPlan] = React.useState(plan.closing ? plan : null);
-  const focusKeys = (plan.materials || []).filter(m => m.moduleId && m.activityId).map(m => m.moduleId + ':' + m.activityId);
+  const focusKeys = mats.filter(m => m.moduleId && m.activityId).map(m => m.moduleId + ':' + m.activityId);
   const open = (m) => {
     if (m.type === 'quizlet') { setQuizPick({ ...m, quizLinks: cpQuizLinks(m, MODULE_CATALOG) }); return; }
     askTimer();
@@ -1359,6 +1362,11 @@ function ClassMode({ plan, onBack }) {
                 </div>
                 {b.steps && b.steps.length > 0 && (
                   <ul style={{margin:'7px 0 0', paddingLeft:20, color:'#666', fontSize:12.5, lineHeight:1.5}}>{b.steps.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                )}
+                {b._mats.length > 0 && (
+                  <div style={{display:'flex', gap:6, flexWrap:'wrap', marginTop:8}}>
+                    {b._mats.map((m, i) => <button key={i} onClick={() => open(m)} title="Abrir en pestaña nueva" style={{display:'inline-flex', alignItems:'center', gap:6, whiteSpace:'nowrap', border:'1.5px solid #9FB0DA', background:'#EEF2FC', color:'#1F3A8A', borderRadius:20, padding:'5px 12px', fontFamily:'inherit', fontWeight:800, fontSize:12, cursor:'pointer'}}>▶ {typeIcon(m.type)} {m.type === 'quizlet' ? 'Quizlet' : m.name}{m.group ? ' · ' + m.group.replace(/^(T\d+)\s*·\s*/, '$1 ') : ''}</button>)}
+                  </div>
                 )}
               </div>
             ))}

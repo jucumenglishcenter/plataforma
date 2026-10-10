@@ -514,7 +514,7 @@
     if (/fill|\bP1\b|pr[aá]ctica\s*#?\s*1/i.test(s)) actOfKind(mod, grp, 'fill').slice(0, 1).forEach(a => push(a));
     if (/identif|\bP2\b|pr[aá]ctica\s*#?\s*2/i.test(s)) actOfKind(mod, grp, 'id').slice(0, 1).forEach(a => push(a));
     if (/transform|\bP3\b|pr[aá]ctica\s*#?\s*3/i.test(s)) actOfKind(mod, grp, 'tr').slice(0, 1).forEach(a => push(a));
-    if (/resumen|summary|repaso de gram/i.test(s)) actOfKind(mod, grp, 'summary').slice(0, 1).forEach(a => push(a));
+    if (/resumen|summary|repaso de gram/i.test(s) || (tg && /revis|repas|review/i.test(s))) actOfKind(mod, grp, 'summary').slice(0, 1).forEach(a => push(a));
     if (out.length) return out;
     if (/listening|audio/i.test(s)) push(byType(mod, 'listening'));
     else if (/reading|comprensi[oó]n lectora/i.test(s)) push(byType(mod, 'reading'));
@@ -692,7 +692,7 @@
     const planId = (rec.published && rec.published.classPlanId) || (dupG && a.dup === 'replace' ? dupG.dupId : undefined);
     const classPlan = { id: planId, kind: 'class', level: d.level, groupId: rec.groupId, moduleId: mod.id, moduleName: mod.name, themeGroup: d.ctxGroup || '', lengthMin: total || d.lengthMin,
       date: e.date, startTime: e.startTime || '09:00', sessionLabel: d.sessionLabel, emphasis: d.emphasis || (d.blocks.map(b => b.title).slice(0, 3).join(' · ')),
-      blocks: d.blocks.map(b => ({ id: b.id, emoji: b.emoji, title: b.title, mins: Number(b.mins) || 0, steps: (b.steps || []).concat(b.warn && !(b.steps || []).some(s => s.includes(b.warn)) ? ['⚠ ' + b.warn] : []) })),
+      blocks: d.blocks.map(b => ({ id: b.id, emoji: b.emoji, title: b.title, mins: Number(b.mins) || 0, mats: (b.mats || []).map(m => ({ moduleId: mod.id, activityId: m.activityId, quizKey: m.quizKey || null })), steps: (b.steps || []).concat(b.warn && !(b.steps || []).some(s => s.includes(b.warn)) ? ['⚠ ' + b.warn] : []) })),
       materials, source: { importId: rec.id, files: rec.files, importedAt: rec.createdAt }, carry: d.carry, nextNotes: d.myNotes || [] };
     const cpId = TT.upsertClassPlan(classPlan);
     if (d.mode === 'jucum') return publishSetJ(rec, mod, e, a, drop, cpId);
