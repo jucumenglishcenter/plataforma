@@ -781,13 +781,15 @@ function ModuleProgress({ mod, progress, pct, doneCount, studentId, freeUnlock, 
               const teacherOpen = freeUnlock || unlockMode === 'free' ||
                 (unlockMode === 'custom' && enabledSet.has(`${mod.id}:${a.id}`));
               const alwaysOpen = a.open === true; // marcado en el catálogo ("open": true)
-              const locked = !done && !prevDone && !teacherOpen && !alwaysOpen;
+              // 🔒 CANDADO-NOTA-V1: la anterior debe estar APROBADA (no solo hecha)
+              const lk = stu ? D.getActivityLock(stu, mod, a, progress) : { locked: false };
+              const locked = !done && lk.locked && !teacherOpen && !alwaysOpen;
               // PASO 5 · ★ estructura latente: aprobó la previa pero el Transform madura con reposo
               const lg = D.latentGate(mod, a, i, progress, lvl);
               const latentLocked = !done && !teacherOpen && lg.latent && !lg.ready && prevDone;
               // PASO 2 · hecho pero bajo el umbral → "a mejorar" (redo), no cuenta como ✓
               const status = done ? (passed ? 'done' : 'redo') : latentLocked ? 'latent' : locked ? 'locked' : 'open';
-              return { a, i, done, passed, status, latent: latentLocked ? lg : null };
+              return { a, i, done, passed, status, latent: latentLocked ? lg : null, lockMsg: locked ? lk.msg : null };
             });
             // group consecutive items that share a.group into expandable topics
             const segments = [];
@@ -945,10 +947,10 @@ function ChecklistRow({ it, mod, studentId }) {
   }
   return (
     <a href={status!=='locked' ? (href || undefined) : undefined}
-       className={`al-item ${status}`}>
+       className={`al-item ${status}`} title={it.lockMsg || undefined}>
       <span className="al-num">{status==='done' ? '✓' : status==='locked' ? '🔒' : i+1}</span>
       <span className="al-ico">{typeIcon(a.type)}</span>
-      <span className="al-name">{a.name}</span>
+      <span className="al-name">{a.name}{status==='locked' && it.lockMsg ? <span style={{display:'block', fontSize:11.5, fontWeight:700, color:'#8A7F6A', marginTop:1}}>🔒 {it.lockMsg}</span> : null}</span>
       <PhaseTags a={a} />
       {done && <span className="al-score">{done.score}{typeof done.score === 'number' && done.score <= 10 ? '' : '%'}</span>}
       {status==='open' && <span className="al-arr">→</span>}
@@ -1015,12 +1017,13 @@ function DirectedPracticeCard({ dp, student }) {
           const done = !!(prog.completed && prog.completed[`${it.moduleId}:${it.activityId}`]);
           const href = a ? linkFor(a, mod, student.id) : null;
           const Tag = href ? 'a' : 'div';
+          const lkd = isLockHref(href);
           return (
-            <Tag key={idx} href={href||undefined} className={`al-item ${done?'done':'open'}`}>
-              <span className="al-num">{done?'✓':idx+1}</span>
+            <Tag key={idx} href={href||undefined} className={`al-item ${done?'done':lkd?'locked':'open'}`}>
+              <span className="al-num">{done?'✓':lkd?'🔒':idx+1}</span>
               <span className="al-ico">{typeIcon(it.type)}</span>
-              <span className="al-name">{it.label || (a&&a.name) || 'Actividad'}</span>
-              {!done && href && <span className="al-arr">→</span>}
+              <span className="al-name">{it.label || (a&&a.name) || 'Actividad'}{lkd ? <span style={{display:'block', fontSize:11.5, fontWeight:700, color:'#8A7F6A', marginTop:1}}>🔒 {lockMsgOf(href)}</span> : null}</span>
+              {!done && href && !lkd && <span className="al-arr">→</span>}
             </Tag>
           );
         })}
@@ -1132,6 +1135,17 @@ function linkFor(a, mod, studentId) {
   // al importar el catálogo). Sin url, el material aún NO está disponible: no
   // generamos enlace para no mandar al alumno a una página inexistente (404).
   if (!a.url) return null;
+  // 🔒 CANDADO-NOTA-V1: TODOS los accesos respetan el candado secuencial por nota.
+  // Bloqueada → enlace '#jlock:<mensaje>' (no navega; muestra el aviso). Abierta
+  // con previa → jucum_prev para que el material lo re-verifique (enlaces guardados).
+  let lockQ = '';
+  try {
+    const D = window.JUCUM_DATA;
+    const stu0 = (D.STUDENTS || []).find(s => s.id === studentId);
+    const lk = (stu0 && D.getActivityLock) ? D.getActivityLock(stu0, mod, a) : null;
+    if (lk && lk.locked) return '#jlock:' + encodeURIComponent(lk.msg || 'Primero completa la actividad anterior');
+    if (lk && lk.prev) lockQ = `&jucum_prev=${encodeURIComponent(lk.prev.id)}&jucum_prevname=${encodeURIComponent(lk.prev.name || '')}&jucum_prevlow=${lk.low ? 1 : 0}&jucum_pass=${lk.need}`;
+  } catch (e) {}
   const base = a.url;
   // Adjunta la identidad para que jucum-connect.js registre el progreso
   const sep = base.includes('?') ? '&' : '?';
@@ -1144,7 +1158,28 @@ function linkFor(a, mod, studentId) {
     const t = modTagFor(mod.id, stu);
     if (t) free += '&jucum_mtag=' + encodeURIComponent(t.label + (t.review ? ' · repaso' : ''));
   } catch (e) {}
-  return `${base}${sep}jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent(mod.id)}&jucum_act=${encodeURIComponent(a.id)}&jucum_kind=${encodeURIComponent(a.type||'')}${free}`;
+  return `${base}${sep}jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent(mod.id)}&jucum_act=${encodeURIComponent(a.id)}&jucum_kind=${encodeURIComponent(a.type||'')}${free}${lockQ}`;
+}
+function isLockHref(h) { return typeof h === 'string' && h.indexOf('#jlock:') === 0; }
+function lockMsgOf(h) { try { return decodeURIComponent(h.slice(7)); } catch (e) { return 'Primero completa la actividad anterior'; } }
+function showLockToast(msg) {
+  try {
+    const old = document.getElementById('jec-lock-toast'); if (old) old.remove();
+    const t = document.createElement('div'); t.id = 'jec-lock-toast';
+    t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:100000;background:#1B3B6F;color:#fff;font:700 14px/1.4 Nunito,system-ui,sans-serif;padding:12px 18px;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:min(92vw,440px);text-align:center;';
+    t.textContent = '🔒 ' + msg;
+    document.body.appendChild(t);
+    setTimeout(() => { try { t.remove(); } catch (e) {} }, 4200);
+  } catch (e) {}
+}
+if (!window.__JEC_LOCK_CLICK) {
+  window.__JEC_LOCK_CLICK = true;
+  document.addEventListener('click', e => {
+    const el = e.target && e.target.closest ? e.target.closest('a[href^="#jlock:"]') : null;
+    if (!el) return;
+    e.preventDefault(); e.stopPropagation();
+    showLockToast(lockMsgOf(el.getAttribute('href')));
+  }, true);
 }
 
 /* Abrir un material desde el panel. Pasa por el aviso de "nota en espera"
@@ -1153,6 +1188,7 @@ function linkFor(a, mod, studentId) {
  * guardián cargado, navega igual: nunca bloquea. */
 function openMat(href) {
   if (!href) return;
+  if (isLockHref(href)) return showLockToast(lockMsgOf(href));
   if (window.JUCUM_GATE) return window.JUCUM_GATE.go(href);
   window.location.href = href;
 }
@@ -2334,7 +2370,10 @@ function TodayPracticeCard({ student }) {
           /* 📄 Plan del teacher: Quizlet abre el juego exacto que pidió (vocabulario/traducir/ordenar) */
           const qGame = (mod && a && a.type === 'quizlet') ? (() => { const gs = quizletGames(a); const g = gs.find(x => x.key === it.quizKey) || gs[0]; return g ? { ...g, url: it.quizUrl || g.url } : (it.quizUrl ? { key: it.quizKey, url: it.quizUrl } : null); })() : null;
           const tint = st.st === 'ok' ? {background:'#F2FAF3', borderColor:'#BFE3C3'} : st.st === 'low' ? {background:'#FFFBF0', borderColor:'#F0DDB0'} : null;
-          const sub = st.st === 'ok'
+          const lkd = isLockHref(href) && st.st !== 'ok' && st.st !== 'low';
+          const sub = lkd
+            ? <span style={{color:'#8A7F6A', fontWeight:800}}>🔒 {lockMsgOf(href)}</span>
+            : st.st === 'ok'
             ? <span style={{color:'#2E7D32', fontWeight:800}}>✓ Hecha hoy{st.pct != null ? ` · ${st.pct}%` : ''} — ¡bien ahí!</span>
             : st.st === 'low'
               ? <span style={{color:'#92510F', fontWeight:800}}>Hecha hoy · {st.pct}% — vuelve a intentarla (la nota cambia tras ½ hora)</span>
@@ -2343,11 +2382,11 @@ function TodayPracticeCard({ student }) {
             {badge(st)}
             <span className="next-ico">{typeIcon(it.type)}</span>
             <div className="next-info"><b>{it.label}<ModChip student={student} moduleId={it.moduleId} onlyReview /></b>{it.note ? <span style={{display:'block', fontSize:12, color:'#555', fontWeight:600, lineHeight:1.4, margin:'2px 0'}}>{it.note}</span> : null}{sub}</div>
-            {(href || qGame) && <span className="next-arr">→</span>}
+            {(href || qGame) && !lkd && <span className="next-arr">→</span>}
           </>);
           if (qGame) return <a key={i} className="next-card" href={qGame.url} target="_blank" rel="noopener" style={tint} onClick={() => { try { D.markActivityComplete(student.id, mod.id, a.id, null, 0, { quizlet: qGame.key }); } catch (e) {} }}>{inner}</a>;
           return href
-            ? <a key={i} className="next-card" href={href} style={tint}>{inner}</a>
+            ? <a key={i} className="next-card" href={href} style={lkd ? {opacity:.75} : tint}>{inner}</a>
             : <div key={i} className="next-card" style={{cursor:'default', ...(tint || {})}}>{inner}</div>;
         })}
       </div>

@@ -1023,8 +1023,73 @@
     document.body.appendChild(st);
   }
 
+  /* 🔒 CANDADO-NOTA-V1 (12-oct-2026). La plataforma manda jucum_prev (actividad
+   * anterior) cuando el grupo está en Secuencial/Personalizado. Aquí se re-verifica
+   * en la NUBE (sirve para enlaces guardados): si esta actividad aún no se hizo y la
+   * anterior no está aprobada (o hecha, si es resumen) → cartel de candado y el
+   * material NO arranca (no registra nada). Sin red / error / 4 s → no bloquea. */
+  function seqGate(cb) {
+    var prevId = q.get('jucum_prev');
+    if (!prevId || !uid || teacher || exam) return cb(false);
+    var low = q.get('jucum_prevlow') === '1';
+    var need = Number(q.get('jucum_pass')) || 0;
+    var prevName = q.get('jucum_prevname') || 'la actividad anterior';
+    var fin = false;
+    function end(b, pct) { if (fin) return; fin = true; if (b) { try { seqLockedUI(prevName, low, need, pct); } catch (e) {} } cb(!!b); }
+    setTimeout(function () { end(false); }, 4000);
+    try {
+      var H = { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY };
+      var get = function (p) { return fetch(SUPABASE_URL + '/rest/v1/' + p, { headers: H }).then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); }); };
+      var e = encodeURIComponent;
+      var ids = '("' + String(prevId).replace(/"/g, '') + '","' + String(actId).replace(/"/g, '') + '")';
+      Promise.all([
+        get('progress?select=activity_id,score&user_id=eq.' + e(uid) + '&module_id=eq.' + e(modId) + '&activity_id=in.' + e(ids)),
+        get('users?id=eq.' + e(uid) + '&select=group_id')
+      ]).then(function (a) {
+        var rows = a[0] || [];
+        if (rows.some(function (r) { return r.activity_id === actId; })) return end(false);
+        var pr = rows.filter(function (r) { return r.activity_id === prevId; })[0] || null;
+        var best = pr ? (pr.score == null ? null : Number(pr.score)) : undefined;
+        try {
+          (JSON.parse(localStorage.getItem('jucum_outbox_v1') || '[]') || []).forEach(function (it) {
+            if (it && it.uid === uid && it.mod === modId && it.act === prevId) best = (best == null ? it.score : Math.max(best, it.score == null ? 0 : it.score));
+          });
+        } catch (x) {}
+        var ok = best !== undefined && (low || best == null || Math.round(best) >= need);
+        if (ok) return end(false);
+        var gid = a[1] && a[1][0] && a[1][0].group_id;
+        if (!gid) return end(true, best);
+        get('groups?id=eq.' + e(gid) + '&select=unlock_mode,unlocked_activities').then(function (g) {
+          var row = g && g[0] || {};
+          var mode = row.unlock_mode || 'sequential';
+          var en = row.unlocked_activities || [];
+          if (mode === 'free' || (mode === 'custom' && en.indexOf(modId + ':' + actId) >= 0)) return end(false);
+          end(true, best);
+        }, function () { end(true, best); });
+      }, function () { end(false); });
+    } catch (x) { end(false); }
+  }
+  function seqLockedUI(prevName, low, need, pct) {
+    function ui() {
+      var me = document.querySelector('script[src*="jucum-connect.js"]');
+      var home = me && me.src ? me.src.replace(/jucum-connect\.js.*$/, '') : 'https://jucum-english-center.netlify.app/';
+      var why = (pct === undefined || low)
+        ? 'Primero completa <b>«' + prevName + '»</b>.'
+        : 'Primero aprueba <b>«' + prevName + '»</b>: necesitas <b>' + need + '%</b>' + (pct != null ? ' y tienes <b>' + Math.round(pct) + '%</b>' : '') + '.';
+      var ov = document.createElement('div');
+      ov.id = 'jec-seq-lock';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:1000002;background:rgba(15,23,42,.88);display:flex;align-items:center;justify-content:center;padding:20px;font-family:system-ui,sans-serif;';
+      ov.innerHTML = '<div style="background:#fff;border-radius:18px;max-width:420px;width:100%;padding:24px;text-align:center;border-top:6px solid #1B3B6F">' +
+        '<div style="font-size:42px;line-height:1">🔒</div><div style="font:800 19px system-ui;color:#1B3B6F;margin:8px 0 6px">Esta actividad aún está cerrada</div>' +
+        '<div style="font-size:14.5px;line-height:1.5;color:#333">' + why + ' Las actividades se abren en orden.</div>' +
+        '<a href="' + home + '" style="display:inline-block;margin-top:16px;background:#1B3B6F;color:#fff;font-weight:800;padding:11px 18px;border-radius:12px;text-decoration:none">← Volver a mi panel</a></div>';
+      document.body.appendChild(ov);
+    }
+    if (document.body) ui(); else document.addEventListener('DOMContentLoaded', ui);
+  }
+
   payGate(function (paused) {
-    if (!paused) return load(start);
+    if (!paused) return seqGate(function (blocked) { if (!blocked) load(start); });
     payPaused = true; demo = true;
     function ui() { try { payPausedUI(); } catch (e) {} }
     if (document.body) ui(); else document.addEventListener('DOMContentLoaded', ui);

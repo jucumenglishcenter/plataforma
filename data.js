@@ -2295,9 +2295,46 @@ function latentGate(mod, a, i, progress, level) {
   return { latent: true, ready: now >= avail, daysLeft: Math.max(0, daysLeft), availableOn: avail.toISOString().slice(0, 10) };
 }
 
+/* 🔒 CANDADO-NOTA-V1 (12-oct-2026) · Desbloqueo secuencial POR NOTA.
+ * En modo Secuencial/Personalizado la actividad se abre solo si la ANTERIOR está
+ * APROBADA con la nota mínima del nivel/grupo (passThreshold). Resumen/Quizlet:
+ * basta con hacerlos. Ya hecha = siempre abierta (puede repetir). Libre, "open"
+ * del catálogo o habilitada a mano (Personalizado) = abierta. La usan TODOS los
+ * accesos (lista del módulo, Tu práctica de hoy, tareas, plan, repaso) vía
+ * linkFor, y el material lo re-verifica con jucum_prev (jucum-connect.js). */
+function isLowStakesActivity(a) { return !!a && (a.type === 'summary' || a.type === 'quizlet'); }
+function getActivityLock(student, mod, a, progress) {
+  const open = { locked: false, prev: null };
+  if (!student || !mod || !a) return open;
+  const grp = student.group || student.closedGroup || null;
+  const gs = (grp && getGroupSettings(grp)) || {};
+  const mode = gs.unlockMode || 'sequential';
+  if (mode === 'free' || a.open === true) return open;
+  if (mode === 'custom' && (gs.unlockedActivities || []).includes(`${mod.id}:${a.id}`)) return open;
+  progress = progress || getStudentProgress(student.id) || { completed: {} };
+  const comp = progress.completed || {};
+  if (comp[`${mod.id}:${a.id}`]) return open;
+  const FX = window.JUCUM_EXAMFLOW;
+  const vis = (mod.activities || []).filter(x => {
+    if (!FX || !FX.isPreexamActivity || !FX.isPreexamActivity(x)) return true;
+    if (comp[`${mod.id}:${x.id}`]) return true;
+    try { return FX.preexamVisibleFor(student, mod); } catch (e) { return false; }
+  });
+  const i = vis.findIndex(x => x.id === a.id);
+  if (i <= 0) return open;
+  const prev = vis[i - 1];
+  const pe = comp[`${mod.id}:${prev.id}`];
+  const low = isLowStakesActivity(prev);
+  const ok = !!pe && (low || entryPassed(pe, student.level, grp));
+  const need = passThreshold(student.level || 'pre-a1', grp);
+  const pct = pe ? scorePct(pe.score) : null;
+  const msg = !pe ? `Primero completa «${prev.name}»` : `Primero aprueba «${prev.name}» (necesitas ${need}%${pct != null ? ', tienes ' + pct + '%' : ''})`;
+  return { locked: !ok, prev, low, need, msg };
+}
+
 window.JUCUM_DATA = { getDailyConstancy, getModuleOpenedAt, LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, remapGroupId, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getAchievementAlert, achievementDecayFactor, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness, getStudentGrades, getStudentMonthlyPractice, getStudentTrends,
   /* PASO 2 · umbral + anti-farmeo */
-  passThreshold, getPassThresholds, setPassThreshold, setGroupThreshold, getGroupThreshold, loadPassThresholdsFromCloud, scorePct, entryPassed, getDirectedBonusXP, getFarmingFlag, getActivitiesToImprove,
+  passThreshold, getActivityLock, isLowStakesActivity, getPassThresholds, setPassThreshold, setGroupThreshold, getGroupThreshold, loadPassThresholdsFromCloud, scorePct, entryPassed, getDirectedBonusXP, getFarmingFlag, getActivitiesToImprove,
   /* Modo mantenimiento (rol dev) */
   getMaintenance, setMaintenance, loadMaintenanceFromCloud,
   /* PASO 3 · repaso espaciado + retención + explicación al bajar */
