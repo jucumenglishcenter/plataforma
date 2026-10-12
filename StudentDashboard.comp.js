@@ -783,7 +783,7 @@ function ModuleProgress({ mod, progress, pct, doneCount, studentId, freeUnlock, 
               const alwaysOpen = a.open === true; // marcado en el catálogo ("open": true)
               // 🔒 CANDADO-NOTA-V1: la anterior debe estar APROBADA (no solo hecha)
               const lk = stu ? D.getActivityLock(stu, mod, a, progress) : { locked: false };
-              const locked = !done && lk.locked && !teacherOpen && !alwaysOpen;
+              const locked = !done && lk.locked && (lk.sum && lk.prev === lk.sum ? !freeUnlock : (!teacherOpen && !alwaysOpen));
               // PASO 5 · ★ estructura latente: aprobó la previa pero el Transform madura con reposo
               const lg = D.latentGate(mod, a, i, progress, lvl);
               const latentLocked = !done && !teacherOpen && lg.latent && !lg.ready && prevDone;
@@ -1144,7 +1144,8 @@ function linkFor(a, mod, studentId) {
     const stu0 = (D.STUDENTS || []).find(s => s.id === studentId);
     const lk = (stu0 && D.getActivityLock) ? D.getActivityLock(stu0, mod, a) : null;
     if (lk && lk.locked) return '#jlock:' + encodeURIComponent(lk.msg || 'Primero completa la actividad anterior');
-    if (lk && lk.prev) lockQ = `&jucum_prev=${encodeURIComponent(lk.prev.id)}&jucum_prevname=${encodeURIComponent(lk.prev.name || '')}&jucum_prevlow=${lk.low ? 1 : 0}&jucum_pass=${lk.need}`;
+    if (lk && lk.sum) lockQ += `&jucum_sum=${encodeURIComponent(lk.sum.id)}&jucum_sumname=${encodeURIComponent(lk.sum.name || '')}`;
+    if (lk && lk.prev) lockQ += `&jucum_prev=${encodeURIComponent(lk.prev.id)}&jucum_prevname=${encodeURIComponent(lk.prev.name || '')}&jucum_prevlow=${lk.low ? 1 : 0}&jucum_pass=${lk.need}`;
   } catch (e) {}
   const base = a.url;
   // Adjunta la identidad para que jucum-connect.js registre el progreso

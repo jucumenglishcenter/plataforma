@@ -1030,50 +1030,61 @@
    * material NO arranca (no registra nada). Sin red / error / 4 s → no bloquea. */
   function seqGate(cb) {
     var prevId = q.get('jucum_prev');
-    if (!prevId || !uid || teacher || exam) return cb(false);
+    var sumId = q.get('jucum_sum');
+    if ((!prevId && !sumId) || !uid || teacher || exam) return cb(false);
     var low = q.get('jucum_prevlow') === '1';
     var need = Number(q.get('jucum_pass')) || 0;
     var prevName = q.get('jucum_prevname') || 'la actividad anterior';
+    var sumName = q.get('jucum_sumname') || 'el resumen del tema';
     var fin = false;
-    function end(b, pct) { if (fin) return; fin = true; if (b) { try { seqLockedUI(prevName, low, need, pct); } catch (e) {} } cb(!!b); }
+    function end(b, pct, isSum) { if (fin) return; fin = true; if (b) { try { if (isSum) seqLockedUI(sumName, true, 0, undefined, true); else seqLockedUI(prevName, low, need, pct); } catch (e) {} } cb(!!b); }
     setTimeout(function () { end(false); }, 4000);
     try {
       var H = { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY };
       var get = function (p) { return fetch(SUPABASE_URL + '/rest/v1/' + p, { headers: H }).then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); }); };
       var e = encodeURIComponent;
-      var ids = '("' + String(prevId).replace(/"/g, '') + '","' + String(actId).replace(/"/g, '') + '")';
+      var cl = function (s) { return '"' + String(s).replace(/"/g, '') + '"'; };
+      var idl = [actId]; if (prevId) idl.push(prevId); if (sumId && sumId !== prevId) idl.push(sumId);
+      var ids = '(' + idl.map(cl).join(',') + ')';
+      var outbox = []; try { outbox = JSON.parse(localStorage.getItem('jucum_outbox_v1') || '[]') || []; } catch (x) {}
       Promise.all([
         get('progress?select=activity_id,score&user_id=eq.' + e(uid) + '&module_id=eq.' + e(modId) + '&activity_id=in.' + e(ids)),
         get('users?id=eq.' + e(uid) + '&select=group_id')
       ]).then(function (a) {
         var rows = a[0] || [];
         if (rows.some(function (r) { return r.activity_id === actId; })) return end(false);
-        var pr = rows.filter(function (r) { return r.activity_id === prevId; })[0] || null;
-        var best = pr ? (pr.score == null ? null : Number(pr.score)) : undefined;
-        try {
-          (JSON.parse(localStorage.getItem('jucum_outbox_v1') || '[]') || []).forEach(function (it) {
-            if (it && it.uid === uid && it.mod === modId && it.act === prevId) best = (best == null ? it.score : Math.max(best, it.score == null ? 0 : it.score));
-          });
-        } catch (x) {}
-        var ok = best !== undefined && (low || best == null || Math.round(best) >= need);
-        if (ok) return end(false);
+        function bestOf(id) {
+          var pr = rows.filter(function (r) { return r.activity_id === id; })[0] || null;
+          var best = pr ? (pr.score == null ? null : Number(pr.score)) : undefined;
+          outbox.forEach(function (it) { if (it && it.uid === uid && it.mod === modId && it.act === id) best = (best == null ? it.score : Math.max(best, it.score == null ? 0 : it.score)); });
+          return best;
+        }
+        var sumMissing = !!sumId && bestOf(sumId) === undefined;
+        var pb = prevId ? bestOf(prevId) : null;
+        var prevBad = !!prevId && !(pb !== undefined && (low || pb == null || Math.round(pb) >= need));
+        if (!sumMissing && !prevBad) return end(false);
         var gid = a[1] && a[1][0] && a[1][0].group_id;
-        if (!gid) return end(true, best);
+        function decide(mode, en) {
+          if (mode === 'free') return end(false);
+          if (sumMissing) return end(true, undefined, true);
+          if (mode === 'custom' && en.indexOf(modId + ':' + actId) >= 0) return end(false);
+          end(true, pb);
+        }
+        if (!gid) return decide('sequential', []);
         get('groups?id=eq.' + e(gid) + '&select=unlock_mode,unlocked_activities').then(function (g) {
           var row = g && g[0] || {};
-          var mode = row.unlock_mode || 'sequential';
-          var en = row.unlocked_activities || [];
-          if (mode === 'free' || (mode === 'custom' && en.indexOf(modId + ':' + actId) >= 0)) return end(false);
-          end(true, best);
-        }, function () { end(true, best); });
+          decide(row.unlock_mode || 'sequential', row.unlocked_activities || []);
+        }, function () { decide('sequential', []); });
       }, function () { end(false); });
     } catch (x) { end(false); }
   }
-  function seqLockedUI(prevName, low, need, pct) {
+  function seqLockedUI(prevName, low, need, pct, isSum) {
     function ui() {
       var me = document.querySelector('script[src*="jucum-connect.js"]');
       var home = me && me.src ? me.src.replace(/jucum-connect\.js.*$/, '') : 'https://jucum-english-center.netlify.app/';
-      var why = (pct === undefined || low)
+      var why = isSum
+        ? 'Primero haz el resumen <b>«' + prevName + '»</b>: así repasas el tema antes de practicar.'
+        : (pct === undefined || low)
         ? 'Primero completa <b>«' + prevName + '»</b>.'
         : 'Primero aprueba <b>«' + prevName + '»</b>: necesitas <b>' + need + '%</b>' + (pct != null ? ' y tienes <b>' + Math.round(pct) + '%</b>' : '') + '.';
       var ov = document.createElement('div');

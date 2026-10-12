@@ -2309,11 +2309,18 @@ function getActivityLock(student, mod, a, progress) {
   const grp = student.group || student.closedGroup || null;
   const gs = (grp && getGroupSettings(grp)) || {};
   const mode = gs.unlockMode || 'sequential';
-  if (mode === 'free' || a.open === true) return open;
-  if (mode === 'custom' && (gs.unlockedActivities || []).includes(`${mod.id}:${a.id}`)) return open;
+  if (mode === 'free') return open;
   progress = progress || getStudentProgress(student.id) || { completed: {} };
   const comp = progress.completed || {};
   if (comp[`${mod.id}:${a.id}`]) return open;
+  /* 📘 RESUMEN-PRIMERO (12-oct): dentro de un tema, ninguna práctica se abre sin
+   * HABER HECHO el resumen del tema — aunque el profesor la habilite a mano o el
+   * catálogo la marque "open". Solo el modo Libre lo omite. */
+  const sum = (a.group && a.type !== 'summary') ? (mod.activities || []).find(x => x.group === a.group && x.type === 'summary') : null;
+  if (sum && !comp[`${mod.id}:${sum.id}`]) return { locked: true, prev: sum, low: true, need: 0, sum, msg: `Primero haz el resumen «${sum.name}»` };
+  const sumQ = sum || null;
+  if (a.open === true) return { ...open, sum: sumQ };
+  if (mode === 'custom' && (gs.unlockedActivities || []).includes(`${mod.id}:${a.id}`)) return { ...open, sum: sumQ };
   const FX = window.JUCUM_EXAMFLOW;
   const vis = (mod.activities || []).filter(x => {
     if (!FX || !FX.isPreexamActivity || !FX.isPreexamActivity(x)) return true;
@@ -2321,7 +2328,7 @@ function getActivityLock(student, mod, a, progress) {
     try { return FX.preexamVisibleFor(student, mod); } catch (e) { return false; }
   });
   const i = vis.findIndex(x => x.id === a.id);
-  if (i <= 0) return open;
+  if (i <= 0) return { ...open, sum: sumQ };
   const prev = vis[i - 1];
   const pe = comp[`${mod.id}:${prev.id}`];
   const low = isLowStakesActivity(prev);
@@ -2329,7 +2336,7 @@ function getActivityLock(student, mod, a, progress) {
   const need = passThreshold(student.level || 'pre-a1', grp);
   const pct = pe ? scorePct(pe.score) : null;
   const msg = !pe ? `Primero completa «${prev.name}»` : `Primero aprueba «${prev.name}» (necesitas ${need}%${pct != null ? ', tienes ' + pct + '%' : ''})`;
-  return { locked: !ok, prev, low, need, msg };
+  return { locked: !ok, prev, low, need, msg, sum: sumQ };
 }
 
 window.JUCUM_DATA = { getDailyConstancy, getModuleOpenedAt, LEVELS, GROUPS, STUDENTS, ACTIVITY_LOG, ACHIEVEMENT_DEFS, DEMO_CREDS, dailyData, MODULE_CATALOG, getGroupSettings, setGroupSettings, getStudentProgress, markActivityComplete, getStudentXP, getStudentLevel, getGroupRanking, MEDAL_RARITY, RARITY_STYLE, addGroup, updateGroup, removeGroup, remapGroupId, saveGroups, promoteStudent, isEligibleForExam, saveStudents, getWeeklyXP, addWeeklyXP, getWeeklyRanking, daysUntilMonday, medalProgress, earnedMedals, nextMedals, getAchievementAlert, achievementDecayFactor, getMotivation, getStudentMastery, getComplianceRanking, COMPETENCIES, getStudentReadiness, getStudentGrades, getStudentMonthlyPractice, getStudentTrends,
