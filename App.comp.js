@@ -50,6 +50,7 @@ function App() {
   const DEMO = !!(window.JUCUM_DEMO && window.JUCUM_DEMO.isDemo());
   const [ready, setReady] = React.useState(!window.JUCUM_SB || DEMO); // local/demo = ready immediately
   const [bootErr, setBootErr] = React.useState('');
+  const [rosterReady, setRosterReady] = React.useState(false); // ⚡ lista de alumnos lista → el login ya puede mostrarse
   const [staleMsg, setStaleMsg] = React.useState(false); // sesión de una cuenta que ya no existe
   // Modo mantenimiento (lo activa el dev). Se consulta a la nube y se sondea.
   const [maint, setMaint] = React.useState(() => (window.JUCUM_DATA.getMaintenance ? window.JUCUM_DATA.getMaintenance() : { active:false }));
@@ -87,14 +88,18 @@ function App() {
     (async () => {
       try {
         const sb = window.JUCUM_SB.getClient();
-        const [{ data: groups, error: gE }, { data: users, error: uE }] = await Promise.all([
+        // ⚡ CARGA-RAPIDA-V1 (13-oct-2026): grupos + usuarios ya vienen en camino desde
+        // fast-loader (JUCUM_SYNC.prefetch), en paralelo con la preparación del código.
+        const SY = window.JUCUM_SYNC;
+        const [{ data: groups, error: gE }, { data: users, error: uE }] = await (SY && SY.roster ? SY.roster() : Promise.all([
           sb.from('groups').select('*'),
           sb.from('users').select('*'),
-        ]);
+        ]));
         if (gE) throw gE; if (uE) throw uE;
 
         // Roster (grupos + alumnos) → window.JUCUM_DATA
         applyRoster(groups, users);
+        try { (window.__JUCUM_BOOT = window.__JUCUM_BOOT || {}).roster = Math.round(performance.now()); } catch (e) {}
         /* 🔐 25-sep-2026 · Sesión de una cuenta BORRADA (p. ej. al pasar a un alumno de
          * Pre-A1 a A1 se le creó una cuenta nueva): el equipo seguía con el id viejo y el
          * panel mostraba al PRIMER alumno de la lista (caso Yoel → “perfil de Dylan”).
@@ -107,6 +112,8 @@ function App() {
             setUser(null); setStaleMsg(true);
           }
         } catch (e) {}
+
+        setRosterReady(true);
 
         // Hydrate localStorage cache from cloud (settings, progress, notifs, evals, forum)
         if (window.JUCUM_SYNC) {
@@ -174,6 +181,7 @@ function App() {
         }
 
         setReady(true);
+        try { const BT = window.__JUCUM_BOOT || (window.__JUCUM_BOOT = {}); BT.ready = Math.round(performance.now()); console.info('⚡ arranque (ms desde que abrió la página):', JSON.stringify(BT)); } catch (e) {}
       } catch (e) {
         setBootErr('No se pudieron cargar los datos: ' + e.message);
         setReady(true);
@@ -229,7 +237,11 @@ function App() {
     return () => { alive = false; clearInterval(iv); document.removeEventListener('visibilitychange', onVis); window.removeEventListener('focus', refresh); };
   }, [ready]);
 
-  const onLogin = (u) => { setUser(u); localStorage.setItem('jucum_user', JSON.stringify(u)); };
+  const onLogin = (u) => {
+    setUser(u); localStorage.setItem('jucum_user', JSON.stringify(u));
+    // ⚡ Al arrancar sin sesión no se pidieron notificaciones: se traen ahora (solo las suyas).
+    try { if (window.JUCUM_SYNC && window.JUCUM_SYNC.pullNotifs) window.JUCUM_SYNC.pullNotifs(u); } catch (e) {}
+  };
   const onLogout = () => {
     if (window.JUCUM_NAV) window.JUCUM_NAV.clearAll();
     setUser(null);
@@ -237,7 +249,8 @@ function App() {
     document.body.removeAttribute('data-level');
   };
 
-  if (!ready) {
+  // ⚡ Sin sesión, el formulario de ingreso NO espera a que bajen todos los datos.
+  if (!ready && !(rosterReady && !user)) {
     return (
       <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:14,fontFamily:'Nunito,sans-serif',color:'#777'}}>
         <img src={window.JUCUM_LOGO || 'logo-jucum.png'} alt="JUCUM EC" style={{height:80}} />

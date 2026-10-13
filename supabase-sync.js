@@ -42,14 +42,37 @@
    * ya también A1/A2) no aparecía como completado ni en su perfil ni en el
    * panel del profesor. Este helper trae TODAS las filas en páginas de 1000,
    * con orden estable (requisito de .range para no saltar ni duplicar filas). */
-  async function selectAll(table, cols, orderCols) {
+  async function selectAll(table, cols, orderCols, filt) {
     const sb = SB();
     const PAGE = 1000;
-    let all = [], from = 0;
-    while (true) {
-      let q = sb.from(table).select(cols || '*');
+    const base = (withCount) => {
+      let q = withCount ? sb.from(table).select(cols || '*', { count: 'exact' }) : sb.from(table).select(cols || '*');
+      if (filt) q = filt(q);
       (orderCols && orderCols.length ? orderCols : ['id']).forEach(c => { q = q.order(c, { ascending: true }); });
-      const { data, error } = await q.range(from, from + PAGE - 1);
+      return q;
+    };
+    /* ⚡ 13-oct-2026 · CARGA-RAPIDA-V1: la 1.ª página trae también el TOTAL de filas
+     * y el resto de páginas se pide TODO A LA VEZ (antes iban una tras otra: las
+     * notificaciones eran 14 viajes seguidos). Mismo resultado, mismo orden. */
+    const first = await base(true).range(0, PAGE - 1);
+    if (first.error) return { data: null, error: first.error };
+    let all = first.data || [];
+    if (all.length < PAGE) return { data: all, error: null };
+    let from = PAGE;
+    const total = typeof first.count === 'number' ? first.count : 0;
+    if (total > PAGE) {
+      const pages = [];
+      for (; from < total; from += PAGE) pages.push(base(false).range(from, from + PAGE - 1));
+      const rs = await Promise.all(pages);
+      for (const r of rs) {
+        if (r.error) return { data: all.length ? all : null, error: r.error };
+        all = all.concat(r.data || []);
+      }
+      if ((rs[rs.length - 1].data || []).length < PAGE) return { data: all, error: null };
+    }
+    // Sin total, o con filas nuevas mientras se leía: sigue de a una página, como antes.
+    while (true) {
+      const { data, error } = await base(false).range(from, from + PAGE - 1);
       if (error) return { data: all.length ? all : null, error };
       all = all.concat(data || []);
       if (!data || data.length < PAGE) return { data: all, error: null };
@@ -57,10 +80,125 @@
     }
   }
 
+  /* ── ⚡ PRECARGA + LECTURAS EN PARALELO (13-oct-2026 · CARGA-RAPIDA-V1) ──────
+   * Medido el 13-oct: al abrir, CADA equipo hacía ~30 viajes SEGUIDOS a la nube y
+   * bajaba ~6.7 MB (13 700 notificaciones de toda la escuela = 4.5 MB) antes de
+   * mostrar nada ("Conectando con la base de datos…"). Ahora:
+   *   · fast-loader llama a prefetch() apenas cargan los scripts: los datos viajan
+   *     MIENTRAS se prepara el código, y roster()/hydrate() usan esas mismas
+   *     respuestas (si tienen < 90 s; si no, se piden de nuevo);
+   *   · todas las tablas se piden a la vez (antes, una por una);
+   *   · notificaciones: SOLO las de la campanita del alumno que entró, ya podadas en
+   *     la nube (sin leer o de los últimos 10 días). La columna user_id es uuid, así
+   *     que las de 'teacher'/'admin' nunca llegaron a la nube: no se piden;
+   *   · avance y asistencia: solo las columnas que se usan;
+   *   · una lectura que FALLA ya no vacía el caché local (se conserva lo que había).
+   * Solo cambia CÓMO se lee: lo que se guarda en el caché es lo mismo de siempre. */
+  const PROG_COLS = 'user_id,module_id,activity_id,score,minutes,completed_at';
+  const ATT_COLS = 'date,student_id,status,participation,note,group_id';
+  const NOTIF_COLS = 'id,user_id,type,title,body,link,read,created_at';
+  const NOTIF_DAYS = 10;
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let lastProgAt = 0;
+  const sessionUser = () => { try { return JSON.parse(localStorage.getItem('jucum_user') || 'null'); } catch (e) { return null; } };
+  function notifIdsFor(sess) {
+    if (!sess || !sess.role) return [];
+    const ids = [];
+    if (sess.role === 'student' && sess.studentId) ids.push(sess.studentId);
+    // 👁 “Ver como alumno” (iframe del profesor): también las del alumno que se mira.
+    try { const pv = new URLSearchParams(location.search).get('jucum_pv'); if (pv) ids.push(pv); } catch (e) {}
+    return Array.from(new Set(ids.map(String).filter(x => UUID_RE.test(x)))).sort();
+  }
+  function qNotifs(ids) {
+    const cut = new Date(Date.now() - NOTIF_DAYS * 86400000).toISOString();
+    return selectAll('notifications', NOTIF_COLS, ['id'],
+      q => q.in('user_id', ids).or('read.is.null,read.eq.false,created_at.gte."' + cut + '"'));
+  }
+  /* Agrupa por usuario + la poda de siempre (leídas de +10 días fuera · 15 por persona). */
+  function groupNotifs(notifs) {
+    const nByUser = {};
+    (notifs || []).forEach(n => {
+      nByUser[n.user_id] = nByUser[n.user_id] || [];
+      nByUser[n.user_id].push({ id:n.id, type:n.type, title:n.title, body:n.body, link:n.link, read:n.read, date:n.created_at });
+    });
+    Object.values(nByUser).forEach(arr => arr.sort((a,b)=>String(b.date || '').localeCompare(String(a.date || ''))));
+    try {
+      const corteN = Date.now() - NOTIF_DAYS * 86400000;
+      Object.keys(nByUser).forEach(u => {
+        const arr = nByUser[u].filter(n => !(n.read && n.date && Date.parse(n.date) < corteN)).slice(0, 15);
+        if (arr.length) nByUser[u] = arr; else delete nByUser[u];
+      });
+    } catch (e) {}
+    return nByUser;
+  }
+  const Q = {
+    groups:      () => SB().from('groups').select('*'),
+    users:       () => SB().from('users').select('*'),
+    progress:    () => selectAll('progress', PROG_COLS, ['user_id', 'module_id', 'activity_id']),
+    evals:       () => SB().from('evaluations').select('*'),
+    posts:       () => selectAll('forum_posts', '*', ['id']),
+    replies:     () => selectAll('forum_replies', '*', ['id']),
+    likes:       () => selectAll('forum_likes', '*', ['post_id', 'user_id']),
+    mutes:       () => SB().from('forum_mutes').select('*'),
+    flags:       () => SB().from('forum_flags').select('*').order('created_at', { ascending: false }).limit(300),
+    assignments: () => selectAll('assignments', '*', ['id']),
+    submissions: () => selectAll('submissions', '*', ['id']),
+    exams:       () => SB().from('exams').select('*'),
+    windows:     () => SB().from('exam_windows').select('*'),
+    attendance:  () => selectAll('attendance', ATT_COLS, ['date', 'student_id']),
+    modules:     () => SB().from('module_catalog').select('*').order('sort'),
+  };
+  const PF = {};
+  const PF_TTL = 90000;
+  const settle = (p) => Promise.resolve(p).then(r => r || { data: null, error: new Error('sin respuesta') }, e => ({ data: null, error: e || new Error('sin conexión') }));
+  /* Usa la respuesta precargada (una sola vez y si es reciente) o pide de nuevo. */
+  function take(name, make) {
+    const e = PF[name];
+    delete PF[name];
+    if (e && Date.now() - e.at < PF_TTL) return e.p;
+    return settle(make());
+  }
+  function prefetch() {
+    try {
+      if (!SB()) return false;
+      const at = Date.now();
+      const put = (name, make) => { if (!PF[name]) PF[name] = { at, p: settle(make()) }; };
+      Object.keys(Q).forEach(k => put(k, Q[k]));
+      const ids = notifIdsFor(sessionUser());
+      if (ids.length) put('notifs:' + ids.join(','), () => qNotifs(ids));
+      return true;
+    } catch (e) { return false; }
+  }
+  /* Lista de grupos + usuarios para App (precargada si fast-loader ya la pidió). */
+  function roster() { return Promise.all([take('groups', Q.groups), take('users', Q.users)]); }
+  /* Notificaciones de quien ACABA de entrar (al arrancar sin sesión no se pidieron). */
+  async function pullNotifs(sess) {
+    const ids = notifIdsFor(sess || sessionUser());
+    if (!ids.length) return false;
+    const { data, error } = await settle(qNotifs(ids));
+    if (error || !data) return false;
+    const fresh = groupNotifs(data);
+    const cur = read(KEYS.notifs);
+    ids.forEach(id => { if (fresh[id]) cur[id] = fresh[id]; else delete cur[id]; });
+    write(KEYS.notifs, cur);
+    return true;
+  }
+
   /* ── HYDRATE: pull all cloud data into localStorage ── */
   async function hydrate(groups, users) {
     const sb = SB();
     const studentIds = users.filter(u => u.role === 'student').map(u => u.id);
+    // ⚡ Todas las lecturas salen A LA VEZ (o ya venían en camino desde prefetch);
+    // abajo se aplican en el MISMO orden de siempre.
+    const nIds = notifIdsFor(sessionUser());
+    const pProg = take('progress', Q.progress);
+    const pNotif = nIds.length ? take('notifs:' + nIds.join(','), () => qNotifs(nIds)) : null;
+    const pEvals = take('evals', Q.evals);
+    const pForum = Promise.all([take('posts', Q.posts), take('replies', Q.replies), take('likes', Q.likes), take('mutes', Q.mutes)]);
+    const pFlags = take('flags', Q.flags);
+    const pTasks = pullTasks();
+    const pExams = Promise.all([take('exams', Q.exams), take('windows', Q.windows)]);
+    const pAtt = take('attendance', Q.attendance);
 
     // group settings — from groups columns
     const settings = {};
@@ -80,7 +218,7 @@
     // → la caché quedaba en {} y el alumno veía 0% con TODO re-bloqueado hasta
     // la siguiente hidratación buena. Una tabla real nunca está vacía, así que
     // ante error o 0 filas conservamos la copia local intacta.
-    const { data: prog, error: progErr } = await selectAll('progress', '*', ['user_id', 'module_id', 'activity_id']);
+    const { data: prog, error: progErr } = await pProg;
     if (progErr || !prog || prog.length === 0) {
       console.warn('hydrate progress: descarga incompleta o vacía; se conserva la caché local', progErr && progErr.message);
     } else {
@@ -96,30 +234,19 @@
         if (day && (!progByUser[p.user_id].lastDay || day > progByUser[p.user_id].lastDay)) progByUser[p.user_id].lastDay = day;
       });
       write(KEYS.progress, progByUser);
+      lastProgAt = Date.now();
     }
 
-    // notifications (paginado: crece rápido)
-    const { data: notifs } = await selectAll('notifications', '*', ['id']);
-    const nByUser = {};
-    (notifs || []).forEach(n => {
-      nByUser[n.user_id] = nByUser[n.user_id] || [];
-      nByUser[n.user_id].push({ id:n.id, type:n.type, title:n.title, body:n.body, link:n.link, read:n.read, date:n.created_at });
-    });
-    Object.values(nByUser).forEach(arr => arr.sort((a,b)=>b.date.localeCompare(a.date)));
-    // Poda ANTES de guardar: bajarse las notificaciones de todos los alumnos
-    // llenaba el cupo del navegador del profesor (3.3 MB) y a partir de ahí
-    // nada más se podía guardar (planes, sets de práctica…).
-    try {
-      const corteN = Date.now() - 10 * 86400000;
-      Object.keys(nByUser).forEach(u => {
-        const arr = nByUser[u].filter(n => !(n.read && n.date && Date.parse(n.date) < corteN)).slice(0, 15);
-        if (arr.length) nByUser[u] = arr; else delete nByUser[u];
-      });
-    } catch (e) {}
-    write(KEYS.notifs, nByUser);
+    // notificaciones · SOLO las de quien entró (ver notifIdsFor). Sin sesión de alumno
+    // no se pide nada y el caché local se queda como está.
+    if (pNotif) {
+      const { data: notifs, error: nErr } = await pNotif;
+      if (nErr || !notifs) console.warn('hydrate notifs: sin respuesta; se conserva la caché local', nErr && nErr.message);
+      else write(KEYS.notifs, groupNotifs(notifs));
+    }
 
     // evaluations
-    const { data: evals } = await sb.from('evaluations').select('*');
+    const { data: evals, error: evErr } = await pEvals;
     const eByStudent = {};
     (evals || []).forEach(e => {
       eByStudent[e.student_id] = eByStudent[e.student_id] || [];
@@ -129,15 +256,10 @@
         feedback:e.feedback, attachments:e.attachments || [],
       });
     });
-    write(KEYS.evals, eByStudent);
+    if (!evErr) write(KEYS.evals, eByStudent);
 
     // forum (posts + replies + likes + mutes)
-    const [{ data: posts }, { data: replies }, { data: likes }, { data: mutes }] = await Promise.all([
-      selectAll('forum_posts', '*', ['id']),
-      selectAll('forum_replies', '*', ['id']),
-      selectAll('forum_likes', '*', ['post_id', 'user_id']),
-      sb.from('forum_mutes').select('*'),
-    ]);
+    const [{ data: posts, error: poErr }, { data: replies, error: reErr }, { data: likes, error: liErr }, { data: mutes, error: muErr }] = await pForum;
     const forum = {};
     (posts || []).forEach(p => {
       forum[p.group_id] = forum[p.group_id] || { posts: [] };
@@ -154,36 +276,33 @@
       if (p) p.replies.push({ id:r.id, date:r.created_at, authorId:r.author_id, authorName:r.author_name, authorRole:r.author_role, body:r.body, parentId:r.parent_id || null, mediaUrl:r.media_url || null, mediaKind:r.media_kind || null });
     });
     Object.values(forum).forEach(g => g.posts.sort((a,b)=>b.date.localeCompare(a.date)));
-    write(KEYS.forum, forum);
+    if (!poErr && !reErr) write(KEYS.forum, forum);
 
     const likesMap = {};
     (likes || []).forEach(l => { likesMap[l.post_id] = likesMap[l.post_id] || []; likesMap[l.post_id].push({ u: l.user_id, e: l.emoji || '❤️' }); });
-    write(KEYS.likes, likesMap);
+    if (!liErr) write(KEYS.likes, likesMap);
 
     const mutesMap = {};
     (mutes || []).forEach(m => mutesMap[m.user_id] = { until: m.until, reason: m.reason || null, since: m.created_at || null });
-    write(KEYS.mutes, mutesMap);
+    if (!muErr) write(KEYS.mutes, mutesMap);
 
     // 🚩 Moderación · registro de intentos de lenguaje inapropiado (script 27).
     // Si la tabla aún no existe, se conserva la copia local tal cual.
     try {
-      const { data: flags, error: flagErr } = await sb.from('forum_flags').select('*').order('created_at', { ascending: false }).limit(300);
+      const { data: flags, error: flagErr } = await pFlags;
       if (!flagErr && flags) write(KEYS.flags, flags.map(f => ({ id: f.id, studentId: f.student_id, studentName: f.student_name || '', groupId: f.group_id, content: f.content || '', date: f.created_at })));
     } catch (e) {}
 
     // tareas (assignments + submissions) · lectura CON FUSIÓN — ver pullTasks
-    await pullTasks();
+    await pTasks;
 
     // exámenes (definiciones + ventanas)
     try {
-      const [{ data: exs }, { data: wins }] = await Promise.all([
-        sb.from('exams').select('*'),
-        sb.from('exam_windows').select('*'),
-      ]);
-      write('jucum_exams_v1', (exs || []).map(e => ({
+      const [{ data: exs, error: exErr }, { data: wins, error: wiErr }] = await pExams;
+      if (!exErr) write('jucum_exams_v1', (exs || []).map(e => ({
         id: e.id, level: e.level, moduleIds: e.module_ids || [], title: e.title, parts: e.parts || [], date: e.created_at,
       })));
-      write('jucum_exam_windows_v1', (wins || []).map(w => ({
+      if (!wiErr) write('jucum_exam_windows_v1', (wins || []).map(w => ({
         id: w.id, examId: w.exam_id, groupId: w.group_id, targetStudentIds: w.target_student_ids || [],
         isOpen: w.is_open, closesAt: w.closes_at, allowOverrides: w.allow_overrides || [],
         results: w.results || {}, submissions: w.submissions || {}, published: w.published || false, date: w.created_at,
@@ -192,7 +311,8 @@
 
     // asistencia
     try {
-      const { data: att } = await selectAll('attendance', '*', ['id']);
+      const { data: att, error: atErr } = await pAtt;
+      if (atErr) throw atErr;   // sin respuesta → se conserva la asistencia local
       const map = {};
       (att || []).forEach(r => {
         map[r.date] = map[r.date] || {};
@@ -302,7 +422,7 @@
   function deleteFlagsDb(studentId) { safe(SB().from('forum_flags').delete().eq('student_id', studentId)); }
 
   window.JUCUM_SYNC = {
-    hydrate, pushSettings, pushProgress, pushNotif, markNotifRead, markAllNotifRead,
+    hydrate, prefetch, roster, pullNotifs, pushSettings, pushProgress, pushNotif, markNotifRead, markAllNotifRead,
     pushEvaluation, pushPost, pushReply, pushPin, deletePostDb, deleteReplyDb, pushLike, pushMute, pushFlag, deleteFlagsDb,
     pushModule, deleteModuleDb, fetchModules, fetchActivityParts, fetchModuleProgress, fetchModuleParts, computeStats,    pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb, uploadAttachments, refreshTasks, refreshProgress,
     pushExam, deleteExamDb, pushWindow, deleteWindowDb,
@@ -358,8 +478,8 @@
     let enNube = null, bien = true;
     try {
       const [ra, rs] = await Promise.all([
-        selectAll('assignments', '*', ['id']),
-        selectAll('submissions', '*', ['id']),
+        take('assignments', Q.assignments),
+        take('submissions', Q.submissions),
       ]);
       // ── Tareas ──
       if (ra.error || !ra.data) {
@@ -430,9 +550,11 @@
    * que los materiales que el alumno acaba de hacer aparezcan como completados
    * y sus puntos suban sin tener que recargar toda la plataforma. */
   async function refreshProgress() {
+    // ⚡ Recién hidratado (≤45 s): el avance acaba de llegar fresco al arrancar → no bajarlo dos veces seguidas.
+    if (Date.now() - lastProgAt < 45000) return false;
     try {
       const sb = SB();
-      const { data: prog, error } = await selectAll('progress', '*', ['user_id', 'module_id', 'activity_id']);
+      const { data: prog, error } = await selectAll('progress', PROG_COLS, ['user_id', 'module_id', 'activity_id']);
       if (error) return false;
       const today = dayStr(Date.now());   // día en hora Perú
       const cloud = {};
@@ -662,7 +784,7 @@
   }
   function deleteModuleDb(id) { safe(SB().from('module_catalog').delete().eq('id', id)); }
   async function fetchModules() {
-    const { data, error } = await SB().from('module_catalog').select('*').order('sort');
+    const { data, error } = await take('modules', Q.modules);
     if (error) { console.warn('fetchModules:', error.message); return null; }
     return data;
   }

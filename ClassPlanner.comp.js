@@ -288,7 +288,7 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
           <DayRow key={p.id} icon={isImported && isImported(p) ? '📄' : '📘'} tint="#EEF2FC" border="#C9D6F5" title={`${p.moduleName} · ${p.sessionLabel}`}
             sub={`Plan de clase · ${p.lengthMin} min · ${(p.blocks || []).length} bloques${isImported && isImported(p) ? ' · 📄 del plan del teacher' : ''}${p.closing ? ' · 🏁 terminada' : (p.date && p.date <= todayYMD() ? ' · 🏁 sin cierre' : '')}`}
             onFollow={window.FollowUpModal && p.date && p.date <= todayYMD() ? () => setFollowPlan(p) : null}
-            onPlay={() => onClassMode(p)} onOpen={() => onEditClass(p)} onDup={() => setDupPlan(p)} onDelete={() => { TT.deleteClassPlan(p.id); onChange(); }} />
+            onPlay={() => onClassMode(p)} onOpen={() => onEditClass(p)} onPrint={() => printClassPlan(p)} onDup={() => setDupPlan(p)} onDelete={() => { TT.deleteClassPlan(p.id); onChange(); }} />
         ))}
         {sel.practicePlans.map(p => (
           <DayRow key={p.id} icon="📝" tint="#F4EEFB" border="#D9CEEC" title={p.title}
@@ -499,7 +499,7 @@ function DuplicateClassModal({ plan, onClose, onDone }) {
   );
 }
 
-function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDup, onTrack, onReport, onFollow }) {
+function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDup, onTrack, onReport, onFollow, onPrint }) {
   return (
     <div style={{display:'flex', alignItems:'center', gap:11, border:'1px solid ' + border, background: tint, borderRadius:11, padding:'10px 12px', marginBottom:8, flexWrap:'wrap'}}>
       <span style={{fontSize:19}}>{icon}</span>
@@ -512,6 +512,7 @@ function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDu
       {onFollow && <button onClick={onFollow} title="Cómo va: en clase y en casa" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>🔎 Seguimiento</button>}
       {onReport && <button onClick={onReport} title="Reporte de cumplimiento para devolver a Claude" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>📤 Reporte</button>}
       <button onClick={onOpen} style={{...btnGhost, padding:'6px 12px', fontSize:12.5}}>Abrir</button>
+      {onPrint && <button onClick={onPrint} title="Imprimir / guardar en PDF" style={{...btnGhost, padding:'6px 12px', fontSize:12.5}}>🖨️ Imprimir</button>}
       {onDup && <button onClick={onDup} title="Duplicar a otro grupo" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>⧉ Duplicar</button>}
       <button onClick={onDelete} title="Eliminar" style={{...iconBtn, color:'#C0392B'}}>×</button>
     </div>
@@ -751,7 +752,7 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
     const rec = { ...plan, blocks: clean, materials: cpMatsToMaterials(clean, plan.extraMats || [], MODULE_CATALOG), extraMats: undefined, groupId: cfg.groupId, date: cfg.date || date, sessionLabel: cfg.sessionLabel, startTime: cfg.startTime, lengthMin: totalMin, id: initial && !initial._tpl ? initial.id : undefined };
     TT.upsertClassPlan(rec); alert('✅ Plan de clase guardado en el calendario'); onSaved();
   };
-  const printPlan = () => printClassPlan(plan, cfg, totalMin);
+  const printPlan = () => printClassPlan(plan, { ...cfg, date: cfg.date || date }, totalMin);
 
   return (
     <>
@@ -1567,6 +1568,7 @@ function SavedItems({ onOpenClass, onOpenPractice, onChange, refreshKey }) {
         {classPlans.length === 0 ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">📭</div>Sin planes de clase con este filtro.</div>
           : classPlans.map(p => <Row key={p.id} icon="📘" tint="#EEF2FC" title={<>{p.moduleName} · {p.sessionLabel}<Lvl lv={p.level} /></>} sub={`${gName(p.groupId)} · ${p.date || 's/fecha'} · ${p.lengthMin} min`}>
               <button onClick={() => onOpenClass(p)} style={mini}>Abrir</button>
+              <button onClick={() => printClassPlan(p)} style={mini}>🖨️ Imprimir</button>
               <button onClick={() => dupClass(p)} style={mini}>⧉ Duplicar</button>
               <button onClick={() => { if (window.confirm('¿Eliminar este plan de clase?')) { TT.deleteClassPlan(p.id); onChange(); } }} style={{...iconBtn, color:'#C0392B'}}>×</button>
             </Row>)}
@@ -1598,14 +1600,33 @@ function SavedItems({ onOpenClass, onOpenPractice, onChange, refreshKey }) {
 }
 
 /* ════════ Impresión ════════ */
+/* PRINT-PLAN-V2 (13-oct-2026): se imprime tanto el plan en edición (con los cambios
+ * sin guardar) como un plan ya publicado (🖨️ en el calendario y en Guardados).
+ * Robusto ante planes viejos/importados (sin steps, sin emphasis, sin hora). */
 function printClassPlan(plan, cfg, totalMin) {
   if (!plan) return;
-  const rows = withClock(plan.blocks, cfg.startTime).map(b => `<tr><td class="t">${b.from}–${b.to}</td><td class="m">${b.mins}'</td><td><div class="bt">${b.emoji} ${esc(b.title)}</div>${b.steps.length ? '<ul>' + b.steps.map(s => '<li>' + esc(s) + '</li>').join('') + '</ul>' : ''}</td></tr>`).join('');
-  openPrint(`Plan de clase · ${esc(plan.moduleName)}`, `
-    <h1>Plan de clase · ${esc(plan.moduleName)}</h1>
-    <div class="meta">${plan.level.toUpperCase()} · ${esc(cfg.sessionLabel)} · ${cfg.date || ''}</div>
-    <div class="chips"><span class="chip">⏱️ ${totalMin} min</span><span class="chip">🎯 ${esc(plan.emphasis)}</span>${plan.themeGroup ? '<span class="chip">📚 ' + esc(plan.themeGroup) + '</span>' : ''}</div>
-    <table><tbody>${rows}</tbody></table>`);
+  cfg = cfg || {};
+  const D = window.JUCUM_DATA || {};
+  const CAT = D.MODULE_CATALOG || {};
+  const blocks = (plan.blocks || []).map(b => ({ ...b, steps: (Array.isArray(b.steps) ? b.steps : []).filter(x => String(x || '').trim()) }));
+  const start = cfg.startTime || plan.startTime || '09:00';
+  const total = totalMin || blocks.reduce((a, b) => a + (Number(b.mins) || 0), 0) || plan.lengthMin || 0;
+  const date = cfg.date || plan.date || '';
+  const sess = cfg.sessionLabel || plan.sessionLabel || '';
+  const gid = cfg.groupId || plan.groupId;
+  const grp = (D.GROUPS || []).find(g => g.id === gid);
+  const lvl = String(plan.level || cfg.level || (grp && grp.level) || '').toUpperCase();
+  const matsOf = b => (Array.isArray(b.mats) ? b.mats : []).map(m => { try { return cpMatLabel(m, CAT); } catch (e) { return m.name || m.activityId; } }).filter(Boolean);
+  const rows = withClock(blocks, start).map(b => { const ms = matsOf(b);
+    return `<tr><td class="t">${b.from}–${b.to}</td><td class="m">${Number(b.mins) || 0}'</td><td><div class="bt">${esc(b.emoji || '•')} ${esc(b.title || '(sin título)')}</div>${b.steps.length ? '<ul>' + b.steps.map(s => '<li>' + esc(s) + '</li>').join('') + '</ul>' : ''}${ms.length ? '<div class="mt">📎 ' + ms.map(esc).join(' · ') + '</div>' : ''}</td></tr>`; }).join('');
+  const extra = (plan.extraMats || []).map(m => { try { return cpMatLabel(m, CAT); } catch (e) { return ''; } }).filter(Boolean);
+  const title = `Plan de clase · ${esc(plan.moduleName || 'Clase')}`;
+  openPrint(title, `
+    <h1>${title}</h1>
+    <div class="meta">${[lvl, grp ? esc(grp.name) : '', esc(sess), date ? esc(fmtDateLong(date)) : ''].filter(Boolean).join(' · ')}</div>
+    <div class="chips"><span class="chip">⏱️ ${total} min · desde ${esc(start)}</span>${plan.emphasis ? '<span class="chip">🎯 ' + esc(plan.emphasis) + '</span>' : ''}${plan.themeGroup ? '<span class="chip">📚 ' + esc(plan.themeGroup) + '</span>' : ''}</div>
+    ${blocks.length ? '<table><tbody>' + rows + '</tbody></table>' : '<div class="meta">Este plan aún no tiene bloques.</div>'}
+    ${extra.length ? '<div class="mt" style="margin-top:12px">📎 Otros materiales: ' + extra.map(esc).join(' · ') + '</div>' : ''}`);
 }
 function printPracticeSet(s, catalog) {
   const mod = s.mod;
@@ -1621,19 +1642,37 @@ function printPracticeSet(s, catalog) {
     <div class="chips"><span class="chip">📅 ${dl || 'sin fechas'}</span><span class="chip">${s.picked.length} actividad(es)</span></div>
     <table><tbody>${rows}</tbody></table>`);
 }
+/* Imprime desde un iframe oculto en la MISMA página: ya no depende de ventanas
+ * emergentes (el navegador las bloqueaba y “Imprimir” no hacía nada). */
 function openPrint(title, body) {
+  const html = cpPrintHtml(title, body);
+  try {
+    const old = document.getElementById('cp-print-frame'); if (old) old.remove();
+    const f = document.createElement('iframe');
+    f.id = 'cp-print-frame'; f.setAttribute('aria-hidden', 'true');
+    f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+    document.body.appendChild(f);
+    const d = f.contentWindow.document; d.open(); d.write(html); d.close();
+    setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { cpPrintPopup(html); } }, 350);
+  } catch (e) { cpPrintPopup(html); }
+}
+function cpPrintPopup(html) {
   const w = window.open('', '_blank');
-  w.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>${title}</title><style>
+  if (!w) { alert('No se pudo abrir la impresión. Permite las ventanas emergentes para esta página e inténtalo otra vez.'); return; }
+  w.document.write(html.replace('</body>', '<script>window.onload=function(){setTimeout(function(){window.print();},250);}<\/script></body>'));
+  w.document.close();
+}
+function cpPrintHtml(title, body) {
+  return (`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>${title}</title><style>
     *{box-sizing:border-box;} body{font-family:'Segoe UI',system-ui,sans-serif;color:#2b2b2b;margin:0;padding:32px 38px;}
     h1{font-size:22px;margin:0 0 2px;} .meta{color:#666;font-size:13px;margin-bottom:4px;}
     .chips{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 18px;} .chip{background:#F0EAD9;border:1px solid #E3DCC9;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;color:#6b5a2f;}
     table{width:100%;border-collapse:collapse;} td{border-bottom:1px solid #eee;padding:11px 8px;vertical-align:top;font-size:13.5px;}
     td.t{white-space:nowrap;font-weight:700;color:#1F3A8A;width:96px;} td.m{white-space:nowrap;color:#999;width:42px;font-weight:700;}
     .bt{font-weight:800;font-size:14px;margin-bottom:3px;} .sub{color:#888;font-size:12px;margin-bottom:3px;} ul{margin:4px 0 0;padding-left:18px;color:#555;} li{margin:2px 0;}
-    .lk{font-size:11px;color:#1565C0;word-break:break-all;} .lk.muted{color:#aaa;} @media print{body{padding:12px;}}
-  </style></head><body>${body}<div style="margin-top:22px;color:#aaa;font-size:11px;border-top:1px solid #eee;padding-top:10px;">JUCUM English Center · planificador</div>
-  <script>window.onload=function(){setTimeout(function(){window.print();},250);}<\/script></body></html>`);
-  w.document.close();
+    .lk{font-size:11px;color:#1565C0;word-break:break-all;} .lk.muted{color:#aaa;} .mt{font-size:12px;color:#3F5BB8;font-weight:700;margin-top:6px;}
+    tr{break-inside:avoid;page-break-inside:avoid;} @media print{body{padding:12px;}}
+  </style></head><body>${body}<div style="margin-top:22px;color:#aaa;font-size:11px;border-top:1px solid #eee;padding-top:10px;">JUCUM English Center · planificador</div></body></html>`);
 }
 
 /* ════════ Helpers UI / estilo ════════ */
