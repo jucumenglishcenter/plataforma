@@ -2635,3 +2635,4 @@ function addPracticeMinutes(studentId, minutes) {
   } catch (e) {}
 }
 try { window.JUCUM_DATA.addPracticeMinutes = addPracticeMinutes; } catch (e) {}
+try { window.JUCUM_DATA.getExtraActiveDays = getExtraActiveDays; } catch (e) {}   /* NEURO-HOY-V1: días encendidos de la racha (L-M-Mi…) */

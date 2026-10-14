@@ -233,6 +233,14 @@
   function answer(uid, mats, step, chosen, mode) {
     var u = getU(uid), mk = step.mat, id = step.id, r = rec(u, mk, id) || { s: null, f: null, a: 0, r: 0, due: 0, at: 0 };
     var ok = chosen === step.ans, mat = mats.filter(function (m) { return m.key === mk; })[0];
+    if (mode === 'bonus') { // ⭐ repaso de la semana: solo se guardan los aciertos (los errores vuelven en otra ronda de la semana, NO van a la caja)
+      if (ok) {
+        setRec(u, mk, id, { s: 'ok', f: r.f != null ? r.f : true, a: (r.a || 0) + 1, r: 0, due: 0, at: AD.now() });
+        if (u.wk && u.wk.id === weekMonday()) { var di = weekDayIdx(); u.wk.log = u.wk.log || {}; u.wk.log[di] = (u.wk.log[di] || 0) + 1; }
+        putU(uid, u); if (Object.keys(u.out).length >= 4) flush(uid);
+      }
+      return { ok: ok, matDone: false, score: null, due: 0, bonus: true };
+    }
     var before = mat ? matProgress(uid, mat).pct : 0;
     var nr = { s: r.s, f: r.f, a: (r.a || 0) + 1, r: r.r || 0, due: r.due || 0, at: AD.now() };
     if (nr.f == null) nr.f = ok;
@@ -324,6 +332,84 @@
       .then(function (ms) { return ms.filter(function (m) { return m.ok; }); });
   }
 
+  /* ── ⭐ REPASOS DE LA SEMANA (NEURO-HOY-V1) ──────────────────────────────
+   * Tope semanal = % del nivel × preguntas que el alumno TIENE para repasar
+   * (Fill in / Identification ya hechos en sus módulos abiertos, sin el de clase),
+   * con techo por nivel y mínimo 10. Se elige el LUNES (curva del olvido: lo más
+   * antiguo y con nota más baja primero), hasta 8 preguntas por material, y queda
+   * CONGELADO toda la semana. Lo resuelto queda completo; el lunes se renueva sin deuda. */
+  var LVREV = { 'pre-a1': { cap: 0.20, max: 40, n: 'Pre-A1' }, a1: { cap: 0.30, max: 80, n: 'A1' }, a2: { cap: 0.40, max: 120, n: 'A2' } };
+  var REV_PER_MAT = 8, REV_MAX_MATS = 24;
+  function weekMonday(t) { var p = new Date((t == null ? AD.now() : t) - 5 * 3600e3); var d = (p.getUTCDay() + 6) % 7; p.setUTCDate(p.getUTCDate() - d); return p.toISOString().slice(0, 10); }
+  function weekDayIdx(t) { var p = new Date((t == null ? AD.now() : t) - 5 * 3600e3); return (p.getUTCDay() + 6) % 7; }
+  function reviewCandidates(student) {
+    var D = window.JUCUM_DATA; if (!D || !student) return [];
+    var mods = D.MODULE_CATALOG[student.level] || [];
+    var allowed = D.getStudentModuleIds ? D.getStudentModuleIds(student) : mods.map(function (m) { return m.id; });
+    var cls = D.getClassModuleId ? D.getClassModuleId(student.group || student.closedGroup) : null;
+    var comp = ((D.getStudentProgress && D.getStudentProgress(student.id)) || {}).completed || {};
+    var out = [];
+    mods.forEach(function (m) {
+      if (allowed.indexOf(m.id) < 0 || m.id === cls) return;
+      var num = D.getModuleNumber ? D.getModuleNumber(student.level, m.id) : null;
+      (m.activities || []).forEach(function (a) {
+        var k = m.id + ':' + a.id, e = comp[k], kd = kindOf(a.url); if (!e || !kd) return;
+        var short = (a.group ? a.group.split('·')[0].trim() + ' · ' : '') + a.name;
+        out.push({ key: k, moduleId: m.id, activityId: a.id, url: a.url, kind: kd, short: short, name: (num ? 'M' + num + ' · ' : '') + short,
+          at: Date.parse(e.date) || 0, sc: D.scorePct ? D.scorePct(e.score) : (e.score || 0) });
+      });
+    });
+    out.sort(function (x, y) { return (x.at - y.at) || (x.sc - y.sc); });
+    return out.slice(0, REV_MAX_MATS);
+  }
+  function weekReviews(student) {
+    var uid = student.id, wk = weekMonday(), u0 = getU(uid), lv = LVREV[student.level] || LVREV['pre-a1'];
+    var plan = (u0.wk && u0.wk.id === wk && u0.wk.plan) ? u0.wk.plan : null;
+    var cands = reviewCandidates(student), byKey = {};
+    cands.forEach(function (c) { byKey[c.key] = c; });
+    var list = plan ? plan.map(function (p) { var c = byKey[p.key]; if (!c) return null; var o = {}; Object.keys(c).forEach(function (k) { o[k] = c[k]; }); o.ids = p.ids; return o; }).filter(Boolean) : cands;
+    return Promise.all(list.map(function (c) { return loadMaterial(c.url).then(function (r) { c.all = r.ok ? r.items : []; return c; }); })).then(function (ls) {
+      ls = ls.filter(function (c) { return c.all.length; });
+      if (!plan) {
+        var pool = ls.reduce(function (a, c) { return a + c.all.length; }, 0);
+        var cap = pool ? Math.min(lv.max, Math.max(Math.min(10, pool), Math.round(pool * lv.cap))) : 0;
+        var tot = 0, pl = [], u1 = getU(uid);
+        var per = cap ? Math.ceil(cap / Math.ceil(cap / REV_PER_MAT)) : 0; // reparte parejo: 10 → 5+5 · 23 → 8+8+7 · 40 → 5×8
+        for (var i = 0; i < ls.length && tot < cap; i++) {
+          var c = ls[i], take = Math.min(per, c.all.length, cap - tot);
+          var ids = shuffle(c.all.map(function (q) { return q.id; }));
+          ids.sort(function (a, b) { var ra = rec(u1, c.key, a), rb = rec(u1, c.key, b); return ((ra && ra.f === false) ? 0 : 1) - ((rb && rb.f === false) ? 0 : 1); });
+          c.ids = ids.slice(0, take); pl.push({ key: c.key, ids: c.ids }); tot += take;
+        }
+        Object.keys(u1.m).forEach(function (k) { if (/^rv:/.test(k) && k.indexOf('rv:' + wk + ':') !== 0) delete u1.m[k]; });
+        u1.wk = { id: wk, plan: pl, cap: tot, pool: pool, log: {}, at: AD.now() }; putU(uid, u1);
+        ls = ls.filter(function (c) { return pl.some(function (p) { return p.key === c.key; }); });
+      }
+      var mats = ls.map(function (c) { return { key: 'rv:' + wk + ':' + c.key, base: c.key, moduleId: c.moduleId, activityId: c.activityId, name: c.name, short: c.short, kind: c.kind, url: c.url,
+        items: c.all.filter(function (q) { return (c.ids || []).indexOf(q.id) >= 0; }) }; }).filter(function (m) { return m.items.length; });
+      var w = getU(uid).wk || {};
+      return { wk: wk, mats: mats, cap: w.cap || 0, pool: w.pool || 0, pct: lv.cap, levelName: lv.n, isNew: !!(w.at && AD.now() - w.at < 60e3) };
+    });
+  }
+
+  /* ── 🟢 Clase en vivo (live_presence, script 26) — MISMA fila única por alumno que
+   * usa jucum-connect.js. Mientras hace la sesión mixta, el alumno aparece en la mesa
+   * del material de la pregunta actual. Nunca escribe en vista previa ni sin nube. */
+  var LIVE = { started: null };
+  function live(student, state, mat, minutes, score) {
+    var c = AD.client(); if (!c || !student || isPreview(student.id)) return;
+    if (state === 'start' || !LIVE.started) LIVE.started = new Date(AD.now()).toISOString();
+    var bonus = !!(mat && /^rv:/.test(mat.key));
+    try {
+      Promise.resolve(c.from('live_presence').upsert({
+        user_id: student.id, group_id: student.group || '', module_id: mat ? mat.moduleId : '', activity_id: mat ? mat.activityId : '',
+        kind: 'grammar', material_name: (bonus ? '⭐ Repaso bonus' : '🧠 Sesión mixta') + (mat ? ' · ' + (mat.short || mat.name) : ''),
+        part: null, state: state, minutes: Math.max(0, Math.round(minutes || 0)), score: score == null ? null : score,
+        exam: false, started_at: LIVE.started, updated_at: new Date(AD.now()).toISOString()
+      }, { onConflict: 'user_id' })).then(function () {}, function () {});
+    } catch (e) {}
+  }
+
   /* registro de nota al 100 % (una sola vez por material) */
   hooks.onMaterialDone = function (uid, mat, score) {
     try { var D = window.JUCUM_DATA; if (D && D.markActivityComplete) D.markActivityComplete(uid, mat.moduleId, mat.activityId, score, 0, { total: mat.items.length, mixed: true }); } catch (e) {}
@@ -337,6 +423,7 @@
     todayMaterials: todayMaterials, matProgress: matProgress, buildSession: buildSession, arrange: arrange, metrics: metrics, runs: runs,
     answer: answer, flush: flush, pull: pull, refreshReady: refreshReady, boxStatus: boxStatus, addSeconds: addSeconds, merge: merge,
     hooks: hooks, plain: plain, _lastUid: null,
+    weekReviews: weekReviews, weekState: function (uid) { return getU(uid).wk || null; }, live: live, weekMonday: weekMonday, weekDayIdx: weekDayIdx, LVREV: LVREV,
     _setAdapter: function (o) { Object.keys(o || {}).forEach(function (k) { AD[k] = o[k]; }); mem = {}; },
     _keys: { STATE_KEY: STATE_KEY, CACHE_KEY: CACHE_KEY }
   };

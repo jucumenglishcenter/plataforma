@@ -1,5 +1,5 @@
-/* MixedSession · SESION-MIXTA-V1 (14-oct-2026) — Parte 1 · Pre-A1
- * Tarjeta "🧠 Sesión mixta" en Mi práctica + reproductor de ejercicios mezclados.
+/* MixedSession · SESION-MIXTA-V1 (14-oct-2026) — Parte 1 · Pre-A1 · NEURO-HOY-V1: la tarjeta pasó a NeuroHoy.jsx
+ * Reproductor de ejercicios mezclados (mix · caja de errores · ⭐ repaso bonus) + resumen.
  * Toda la lógica (lector, azar, caja de errores, guardado) vive en mixed.js (window.JUCUM_MIX).
  * Retroalimentación = la de cada material (En la historia · Regla · Español↔Inglés · explicación del error). */
 const MIX_CSS = `
@@ -25,7 +25,7 @@ const MIX_CSS = `
 .mx-rb{border:0;border-radius:11px;background:linear-gradient(180deg,#9C7BE0,#5B3FA0);color:#fff;font-family:'Fredoka',sans-serif;font-weight:600;font-size:13px;padding:9px 12px;cursor:pointer;white-space:nowrap}
 .mx-lock{font-size:11px;font-weight:900;color:#5B3FA0;background:#EEE7F9;border-radius:10px;padding:4px 9px;white-space:nowrap}
 .mx-ov{position:fixed;inset:0;z-index:9000;background:#FFFDF7;display:flex;flex-direction:column;max-width:640px;margin:0 auto;box-shadow:0 0 0 100vmax rgba(20,26,40,.5)}
-.mx-ov.box{background:#F7F3FD}
+.mx-ov.box{background:#F7F3FD}.mx-ov.bon{background:#FFFBEA}.mx-ov.bon .mx-bar i{background:linear-gradient(90deg,#FFCA28,#F59E00)}.mx-tag.bon{background:#FFF0B3;color:#7A5200}
 .mx-top{display:flex;align-items:center;gap:10px;padding:14px 14px 6px}
 .mx-x{width:40px;height:40px;border-radius:50%;border:0;background:#EEE9DD;font-size:15px;cursor:pointer;flex-shrink:0;color:#5B4A3A}
 .mx-bar{flex:1;height:12px;border-radius:7px;background:#EDE6D6;overflow:hidden}.mx-bar i{display:block;height:100%;background:var(--lg,linear-gradient(135deg,#F9A825,#FF8F00));border-radius:7px;transition:width .5s}
@@ -93,80 +93,7 @@ function MxRing({ m, color, size, pct, small }) {
   );
 }
 
-function MixedPracticeCard({ student }) {
-  const MIX = window.JUCUM_MIX;
-  const uid = student && student.id;
-  const enabled = !!(MIX && MIX.enabledFor(student));
-  const [mats, setMats] = React.useState(null);
-  const [, setTick] = React.useState(0);
-  const [run, setRun] = React.useState(null);     // sesión en curso
-  const [sum, setSum] = React.useState(null);     // resumen
-  const refresh = () => setTick(t => t + 1);
-  React.useEffect(() => {
-    if (!enabled) return;
-    let alive = true; MIX._lastUid = uid;
-    MIX.todayMaterials(student).then(ms => {
-      if (!alive) return; setMats(ms);
-      MIX.pull(uid, ms).then(() => MIX.refreshReady(uid)).then(() => alive && refresh());
-      MIX.flush(uid);
-    });
-    const iv = setInterval(() => alive && refresh(), 60000);
-    return () => { alive = false; clearInterval(iv); };
-  }, [uid, enabled]);
-  React.useEffect(() => { if (run || sum) { const o = document.body.style.overflow; document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = o; }; } }, [!!(run || sum)]);
-  if (!enabled || (mats && !mats.length)) return null;
-  if (!mats) return <div className="mx-card"><div className="mx-h"><b>🧠 Sesión mixta</b></div><div className="mx-sub">Preparando tus ejercicios…</div></div>;
-  const color = (k) => MX_COLORS[mats.findIndex(m => m.key === k) % MX_COLORS.length];
-  const prog = mats.map(m => ({ m, p: MIX.matProgress(uid, m) }));
-  const pending = prog.reduce((a, x) => a + x.p.pending, 0);
-  const done = prog.filter(x => x.p.pct >= 100).length;
-  const box = MIX.boxStatus(uid, mats);
-  const start = (mode) => {
-    const seq = MIX.buildSession(uid, mats, mode);
-    if (!seq.length) { refresh(); return; }
-    const before = {}; mats.forEach(m => { before[m.key] = MIX.matProgress(uid, m).pct; });
-    setSum(null); setRun({ mode, seq, k: 0, chosen: null, res: [], before, shownAt: Date.now(), secs: 0, won: [], sup: {} });
-  };
-  const startBox = () => { MIX.refreshReady(uid).then(() => { refresh(); start('box'); }); };
-  const finish = (r) => {
-    const secs = r.secs + (r.chosen === null ? Math.min(MIX.CFG.maxSecQ, (Date.now() - r.shownAt) / 1000) : 0);
-    MIX.addSeconds(uid, Math.round(secs), mats[0] && mats[0].moduleId);
-    MIX.flush(uid);
-    if (r.res.length) { const after = {}; mats.forEach(m => { after[m.key] = MIX.matProgress(uid, m).pct; }); setSum({ mode: r.mode, res: r.res, before: r.before, after, won: r.won }); }
-    setRun(null); refresh();
-  };
-  return (
-    <>
-      <div className="mx-card">
-        <div className="mx-h"><b>🧠 Sesión mixta · tu cerebro hoy</b><span>{done} de {mats.length} completos</span></div>
-        <div className="mx-sub">Ejercicios mezclados de tus prácticas de hoy. Cada círculo se llena con lo que aciertas.</div>
-        <div className="mx-mats">
-          {prog.map(({ m, p }) => (
-            <div className="mx-m" key={m.key}>
-              <MxRing m={m} color={color(m.key)} size={60} pct={p.pct} />
-              <div className="mx-ml"><b>{p.pct >= 100 ? (p.graded != null ? '✓ ' + p.graded + '%' : '✓') : p.pct + '%'}</b>{m.name}</div>
-            </div>
-          ))}
-        </div>
-        {pending > 0
-          ? <button type="button" className="mx-go" onClick={() => start('mix')}>▶ Empezar · {Math.min(MIX.CFG.size, pending)} ejercicios mezclados</button>
-          : <div className="mx-note" style={{ color: '#9FF0FF', fontSize: 13 }}>¡Respondiste todo lo de hoy! {box.total ? 'Solo falta tu caja de errores.' : ''}</div>}
-        {box.total > 0 && (
-          <div className="mx-box">
-            <span className="bi">🧠<b>{box.total}</b></span>
-            <span className="tx">Caja de errores<small>{box.ready ? `${box.ready} listo${box.ready > 1 ? 's' : ''} para repasar` : `Se abre a las ${mxTime(box.next)} (en ${mxDur(box.next - Date.now())})`}{box.tomorrow ? ` · ${box.tomorrow} vuelve${box.tomorrow > 1 ? 'n' : ''} mañana` : ''}</small></span>
-            {box.ready ? <button type="button" className="mx-rb" onClick={startBox}>Repasar {Math.min(10, box.ready)}</button> : <span className="mx-lock">🔒 {mxDur(box.next - Date.now())}</span>}
-          </div>
-        )}
-        <div className="mx-note">Lo que falles vuelve 2 horas después: repasar tras un descanso ayuda a que tu cerebro lo guarde. Las demás actividades de hoy se abren como siempre, en la lista.</div>
-      </div>
-      {run && <MixedPlayer uid={uid} mats={mats} run={run} setRun={setRun} color={color} onFinish={finish} />}
-      {sum && <MixedSummary uid={uid} mats={mats} sum={sum} color={color} pending={pending} onAgain={() => start('mix')} onClose={() => { setSum(null); refresh(); }} />}
-    </>
-  );
-}
-
-function MixedPlayer({ uid, mats, run, setRun, color, onFinish }) {
+function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
   const MIX = window.JUCUM_MIX;
   const st = run.seq[run.k], q = st.q, mat = mats.find(m => m.key === st.mat) || {};
   const ids = [...new Set(run.seq.map(x => x.mat))];
@@ -180,6 +107,7 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish }) {
     const r = MIX.answer(uid, mats, st, i, run.mode);
     const secs = run.secs + Math.min(MIX.CFG.maxSecQ, (Date.now() - run.shownAt) / 1000);
     setRun({ ...run, chosen: i, secs, res: run.res.concat([{ mat: st.mat, ok: r.ok }]), won: r.matDone ? run.won.concat([{ key: st.mat, score: r.score }]) : run.won, lastWon: r.matDone ? { key: st.mat, score: r.score } : null });
+    try { onAnswered && onAnswered(run, r, secs); } catch (e) {}
   };
   const next = () => {
     if (run.k + 1 >= run.seq.length) { onFinish(run); return; }
@@ -191,13 +119,14 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish }) {
   const chosenText = answered ? st.opts[run.chosen] : null;
   const html = (s) => ({ __html: s || '' });
   return (
-    <div className={'mx-ov' + (run.mode === 'box' ? ' box' : '')} role="dialog" aria-label="Sesión mixta">
+    <div className={'mx-ov' + (run.mode === 'box' ? ' box' : run.mode === 'bonus' ? ' bon' : '')} role="dialog" aria-label="Sesión mixta">
       <div className="mx-top">
         <button type="button" className="mx-x" title="Salir" onClick={() => onFinish(run)}>✕</button>
         <div className="mx-bar"><i style={{ width: ((run.k + (answered ? 1 : 0)) / run.seq.length * 100) + '%' }}></i></div>
         <span className="mx-cnt">{run.k + 1} / {run.seq.length}</span>
       </div>
       {run.mode === 'box' && <span className="mx-tag">🧠 Caja de errores · repaso 2 h después</span>}
+      {run.mode === 'bonus' && <span className="mx-tag bon">⭐ Repaso bonus · opcional · cada acierto x2 XP · puedes salir cuando quieras</span>}
       <div className="mx-mini">
         {ids.map(k => { const m = mats.find(x => x.key === k); const p = MIX.matProgress(uid, m).pct; return <div key={k} className={k === st.mat ? 'cur' : ''} style={{ transform: k === st.mat ? 'scale(1.15)' : 'none', transition: 'transform .3s' }} title={m.name + ' · ' + p + '%'}><MxRing m={m} color={color(k)} size={38} pct={p} small /></div>; })}
       </div>
@@ -224,7 +153,7 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish }) {
         </div>
       {answered && (
         <div className={'mx-fb ' + (ok ? 'ok' : 'no')} ref={fbRef}>
-          <div className="mx-ft">{ok ? '✅ ¡Correcto!' : 'Casi… veamos por qué'}</div>
+          <div className="mx-ft">{ok ? (run.mode === 'bonus' ? '✅ ¡Correcto! +2 XP' : '✅ ¡Correcto!') : 'Casi… veamos por qué'}</div>
           {!ok && <div className="mx-cmp"><span className="yo">Tu respuesta<b>{chosenText}</b></span><span className="ok2">Correcta<b>{st.opts[st.ans]}</b></span></div>}
           {q.kind === 'fill' ? (
             <>
@@ -243,7 +172,7 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish }) {
               </>
             );
           })()}
-          {!ok && <div className="mx-cajanote">🧠 {run.mode === 'box' ? 'Vuelve mañana a tu caja, sin problema' : 'Va a tu caja de errores · la verás en 2 h'}</div>}
+          {!ok && <div className="mx-cajanote">{run.mode === 'bonus' ? '⭐ Sin problema: vuelve en otra ronda de esta semana' : run.mode === 'box' ? '🧠 Vuelve mañana a tu caja, sin problema' : '🧠 Va a tu caja de errores · la verás en 2 h'}</div>}
           {run.lastWon && <div className="mx-won">🎉 ¡Completaste {(mats.find(m => m.key === run.lastWon.key) || {}).name}! Tu nota: {run.lastWon.score}%</div>}
         </div>
       )}
@@ -263,8 +192,9 @@ function MixedSummary({ uid, mats, sum, color, pending, onAgain, onClose }) {
   return (
     <div className="mx-ov" role="dialog" aria-label="Resultado de la sesión">
       <div className="mx-sum">
-        <div className="big">{sum.mode === 'box' ? '🧠' : '🎉'}</div>
-        <h2>{sum.mode === 'box' ? '¡Errores repasados!' : '¡Sesión completada!'}</h2>
+        <div className="big">{sum.mode === 'box' ? '🧠' : sum.mode === 'bonus' ? '⭐' : '🎉'}</div>
+        <h2>{sum.mode === 'box' ? '¡Errores repasados!' : sum.mode === 'bonus' ? '¡Repaso bonus hecho!' : '¡Sesión completada!'}</h2>
+        {sum.mode === 'bonus' && sum.xp > 0 && <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 22, color: '#B87400' }}>+{sum.xp} XP</div>}
         <div style={{ fontSize: 14, fontWeight: 800, color: '#5B4A3A' }}>{ok} de {sum.res.length} bien{sum.mode === 'box' && ok ? ' · lo que acertaste ya cuenta para tu avance' : ''}</div>
         {keys.map(k => { const m = mats.find(x => x.key === k); const b = sum.before[k] || 0, a = sum.after[k] || 0; return (
           <div className="mx-srow" key={k}><span style={{ fontSize: 16 }}>{mxIcon(m)}</span><span className="sn">{m.name}</span><div className="pb"><i style={{ width: (anim ? a : b) + '%', background: color(k) }}></i></div><em>{a}%{a > b ? <small style={{ display: 'block', fontSize: 10, color: '#2EA84B' }}>+{a - b}</small> : null}</em></div>
@@ -272,8 +202,9 @@ function MixedSummary({ uid, mats, sum, color, pending, onAgain, onClose }) {
         {sum.won.map(w => <div className="mx-srow" key={'w' + w.key} style={{ borderColor: '#A5D6A7', background: '#F1FAF2', color: '#1B5E20' }}>🎉 ¡Completaste {(mats.find(m => m.key === w.key) || {}).name}! Nota registrada: {w.score}%</div>)}
         {wrong > 0 && sum.mode === 'mix' && <div className="mx-sbox">🧠 {wrong} a tu caja de errores. Se abre a las <b>{mxTime(box.next || (Date.now() + MIX.CFG.boxMs))}</b>: repasar después de un descanso ayuda a que tu cerebro lo guarde.</div>}
         {wrong > 0 && sum.mode === 'box' && <div className="mx-sbox">🌙 {wrong} vuelve{wrong > 1 ? 'n' : ''} mañana a tu caja. ¡Paso a paso!</div>}
+        {wrong > 0 && sum.mode === 'bonus' && <div className="mx-sbox" style={{ background: '#FFFBEA', borderColor: '#E9C45A', color: '#5A3E00' }}>⭐ {wrong} vuelve{wrong > 1 ? 'n' : ''} en otra ronda de esta semana. No te quita puntos.</div>}
         <div className="mx-sbtn">
-          {pending > 0 && sum.mode === 'mix' && <button type="button" className="mx-b1" onClick={onAgain}>▶ Otra ronda</button>}
+          {pending > 0 && (sum.mode === 'mix' || sum.mode === 'bonus') && <button type="button" className="mx-b1" style={sum.mode === 'bonus' ? { background: 'linear-gradient(180deg,#FFCA28,#F59E00)', color: '#3D2A00' } : null} onClick={onAgain}>{sum.mode === 'bonus' ? '⭐ Otra ronda bonus' : '▶ Otra ronda'}</button>}
           <button type="button" className="mx-b2" onClick={onClose}>Volver a Mi práctica</button>
         </div>
       </div>
@@ -281,4 +212,4 @@ function MixedSummary({ uid, mats, sum, color, pending, onAgain, onClose }) {
   );
 }
 
-Object.assign(window, { MixedPracticeCard, MixedPlayer, MixedSummary });
+Object.assign(window, { MixedPlayer, MixedSummary });

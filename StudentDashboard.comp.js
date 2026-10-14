@@ -1934,8 +1934,8 @@ function PracHead({ emoji, title, color, tint, line }) {
 }
 
 /* ════════ Vista "Mi práctica" — ruta + temas + repaso + por mejorar ════════ */
-function NeuroCoach({ student }) {
-  const [open, setOpen] = React.useState(false);
+function NeuroCoach({ student, defaultOpen }) {
+  const [open, setOpen] = React.useState(!!defaultOpen);
   const [topic, setTopic] = React.useState(null);
   /* 🎯 El mínimo para aprobar NO es 75% en todos los niveles (Pre-A1 73 · A1 78 ·
    * A2 85). Decirle 75% al alumno hacía que un 80% en A2 se sintiera un error de
@@ -2009,32 +2009,14 @@ function StudentPractice({ student, settings, onBack }) {
 
   const selMod = sel ? sel.mod : null;
 
-  return (
-    <main>
-      <div style={{display:'flex', alignItems:'center', gap:14, marginBottom:4}}>
-        <button className="back-btn" onClick={onBack} style={{marginBottom:0}}>← Mi panel</button>
-        <div style={{flex:1}}>
-          <h1 style={{fontFamily:"'Fredoka',sans-serif", fontSize:24, margin:0}}>Mi práctica</h1>
-          <div style={{fontSize:12.5, color:'var(--text-soft)', fontWeight:700}}>Sigue tu ruta de módulos</div>
-        </div>
-        <MiniRing done={todayMin} target={targetMin} />
-      </div>
-
-      <MetaSmartMessage metaMet={metaMet} hasPending={hasPending} minsLeft={Math.max(0, targetMin - todayMin)} onReview={pastReview ? () => goReviewModule(pastReview.moduleId) : null} />
-
-      <NeuroCoach student={student} />
-
+  const routeBlock = (<>
       {/* ── 1) Tu ruta de módulos ── */}
       <div style={{marginTop:16}}>
         <ModuleRoute student={student} selectedId={selectedId} onSelect={setSelectedId} />
       </div>
 
-      {/* ── 2) Tu práctica de hoy ── */}
-      <PracHead emoji="🎯" title="Tu práctica de hoy" color="#1B3B6F" tint="#E4EDFB" line="#D2E0F5" />
-      {window.StudentRhythmNotice && <StudentRhythmNotice student={student} />}
-      <div style={{marginTop:10}}><TodayPracticeCard student={student} /></div>
-      {/* 🧠 SESION-MIXTA-V1 · sesión mixta de los materiales de hoy (Pre-A1) */}
-      {window.MixedPracticeCard && <MixedPracticeCard student={student} />}
+  </>);
+  const extrasBlock = (<>
       {(() => {
         const F2 = window.JUCUM_EXAMFLOW;
         const solos = (F2 && F2.standaloneExams ? F2.standaloneExams(student.level) : []);
@@ -2045,6 +2027,8 @@ function StudentPractice({ student, settings, onBack }) {
         return dps.length ? <div style={{marginTop:14, display:'flex', flexDirection:'column', gap:12}}>{dps.map(dp => <DirectedPracticeCard key={dp.id} dp={dp} student={student} />)}</div> : null;
       })()}
 
+  </>);
+  const restBlock = (<>
       {/* ── 3) Tu repaso de hoy ── */}
       {showReview && (
         <>
@@ -2088,6 +2072,41 @@ function StudentPractice({ student, settings, onBack }) {
 
       {/* ── 5) Refuerzo opcional — realzado si falta meta y no hay pendientes ── */}
       <RefuerzoSection student={student} highlight={!metaMet && !hasPending} />
+  </>);
+  /* 🧠 NEURO-HOY-V1 (14-oct-2026) · Pre-A1: Mi práctica = 🎯 Hoy (Conexiones de Neuro: lo del profe + caja de errores
+   * + ⭐ repasos de la semana) y 🧭 Explorar (ruta, repaso y actividades de siempre). Otros niveles: sin cambios. */
+  if (window.NeuroPractice && window.JUCUM_MIX && window.JUCUM_MIX.enabledFor(student)) {
+    return <NeuroPractice student={student} settings={settings} onBack={onBack}
+      helpers={{ linkFor, openMat, isLockHref, lockMsgOf, showLockToast, quizletGames }}
+      coach={<NeuroCoach student={student} defaultOpen />}
+      extras={<>{window.StudentRhythmNotice && <StudentRhythmNotice student={student} />}{extrasBlock}</>}
+      explore={<>{routeBlock}{restBlock}</>} />;
+  }
+
+  return (
+    <main>
+      <div style={{display:'flex', alignItems:'center', gap:14, marginBottom:4}}>
+        <button className="back-btn" onClick={onBack} style={{marginBottom:0}}>← Mi panel</button>
+        <div style={{flex:1}}>
+          <h1 style={{fontFamily:"'Fredoka',sans-serif", fontSize:24, margin:0}}>Mi práctica</h1>
+          <div style={{fontSize:12.5, color:'var(--text-soft)', fontWeight:700}}>Sigue tu ruta de módulos</div>
+        </div>
+        <MiniRing done={todayMin} target={targetMin} />
+      </div>
+
+      <MetaSmartMessage metaMet={metaMet} hasPending={hasPending} minsLeft={Math.max(0, targetMin - todayMin)} onReview={pastReview ? () => goReviewModule(pastReview.moduleId) : null} />
+
+      <NeuroCoach student={student} />
+
+      {routeBlock}
+
+      {/* ── 2) Tu práctica de hoy ── */}
+      <PracHead emoji="🎯" title="Tu práctica de hoy" color="#1B3B6F" tint="#E4EDFB" line="#D2E0F5" />
+      {window.StudentRhythmNotice && <StudentRhythmNotice student={student} />}
+      <div style={{marginTop:10}}><TodayPracticeCard student={student} /></div>
+      {extrasBlock}
+
+      {restBlock}
     </main>
   );
 }
