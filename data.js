@@ -2614,3 +2614,24 @@ window.JUCUM_DATA.getMaterialReview = getMaterialReview;
 window.JUCUM_DATA.setMaterialReview = setMaterialReview;
 window.JUCUM_DATA.loadMaterialReviewsFromCloud = loadMaterialReviewsFromCloud;
 window.JUCUM_DATA.sendMaterialReport = sendMaterialReport;
+
+/* 🧠 SESION-MIXTA-V1 (14-oct-2026) · minutos de la sesión mixta (sin nota): suman a la
+ * meta del día y a la racha local. La nota de cada material la registra
+ * markActivityComplete UNA vez, cuando ese material llega al 100 % en mixed.js. */
+function addPracticeMinutes(studentId, minutes) {
+  if (!studentId || !(minutes > 0)) return;
+  let all = {};
+  try { all = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); } catch {}
+  const prev = all[studentId] || { completed: {}, todayMinutes: 0, lastDay: null };
+  const today = peruDayStr();
+  if (prev.lastDay !== today) { prev.todayMinutes = 0; prev.lastDay = today; }
+  prev.todayMinutes += minutes;
+  all[studentId] = prev;
+  try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(all)); } catch (e) {}
+  try {
+    const adAll = JSON.parse(localStorage.getItem(ACTIVE_DAYS_KEY) || '{}');
+    const l = adAll[studentId] || [];
+    if (l[l.length - 1] !== today) { l.push(today); adAll[studentId] = l.slice(-120); localStorage.setItem(ACTIVE_DAYS_KEY, JSON.stringify(adAll)); }
+  } catch (e) {}
+}
+try { window.JUCUM_DATA.addPracticeMinutes = addPracticeMinutes; } catch (e) {}

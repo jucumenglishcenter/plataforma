@@ -64,7 +64,8 @@ if (window.JUCUM_CONFIG.SUPABASE_ANON_KEY === 'PEGA_TU_PUBLISHABLE_KEY_AQUI') {
     jucum_class_log_v1: 1, jucum_teacher_notes_v1: 1, jucum_forum_v1: 1,
     jucum_evaluations_v1: 1, jucum_messages_v1: 1, jucum_forum_flags_v1: 1,
     jucum_attendance_v1: 1, jucum_diagnostics_v1: 1, jucum_error_reports_v1: 1,
-    jucum_plan_imports_v1: 1   /* 📄 planes del teacher importados: crecen por sesión (texto + versiones) */
+    jucum_plan_imports_v1: 1,  /* 📄 planes del teacher importados: crecen por sesión (texto + versiones) */
+    jucum_mix_v1: 1, jucum_mix_cache_v1: 1   /* 🧠 SESION-MIXTA-V1: avance por pregunta + preguntas leídas de los materiales */
   };
   var LS = window.localStorage;
   if (!LS || !window.Storage || !window.indexedDB) { window.JUCUM_BIG = { ok: false, ready: Promise.resolve(false) }; return; }

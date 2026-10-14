@@ -2033,6 +2033,8 @@ function StudentPractice({ student, settings, onBack }) {
       <PracHead emoji="🎯" title="Tu práctica de hoy" color="#1B3B6F" tint="#E4EDFB" line="#D2E0F5" />
       {window.StudentRhythmNotice && <StudentRhythmNotice student={student} />}
       <div style={{marginTop:10}}><TodayPracticeCard student={student} /></div>
+      {/* 🧠 SESION-MIXTA-V1 · sesión mixta de los materiales de hoy (Pre-A1) */}
+      {window.MixedPracticeCard && <MixedPracticeCard student={student} />}
       {(() => {
         const F2 = window.JUCUM_EXAMFLOW;
         const solos = (F2 && F2.standaloneExams ? F2.standaloneExams(student.level) : []);
