@@ -229,7 +229,7 @@
   function merge(a, b) { // a = local, b = otra copia (nube); ok gana · first inmutable · attempts máx
     if (!a) return b; if (!b) return a;
     var ok = a.s === 'ok' || b.s === 'ok';
-    return { s: ok ? 'ok' : (a.s || b.s), f: a.f != null ? a.f : b.f, a: Math.max(a.a || 0, b.a || 0), r: Math.max(a.r || 0, b.r || 0), due: ok ? 0 : (b.due || a.due || 0), at: Math.max(a.at || 0, b.at || 0) };
+    return { s: ok ? 'ok' : (a.s || b.s), f: a.f != null ? a.f : b.f, a: Math.max(a.a || 0, b.a || 0), r: Math.max(a.r || 0, b.r || 0), due: ok ? 0 : (b.due || a.due || 0), at: Math.max(a.at || 0, b.at || 0), fa: a.fa != null ? a.fa : b.fa, la: a.la != null ? a.la : b.la };
   }
   function matProgress(uid, mat) {
     var u = getU(uid), ok = 0, box = 0, first = 0, ans = 0;
@@ -334,7 +334,8 @@
       return { ok: ok, matDone: false, score: null, due: 0, bonus: true };
     }
     var before = mat ? matProgress(uid, mat).pct : 0;
-    var nr = { s: r.s, f: r.f, a: (r.a || 0) + 1, r: r.r || 0, due: r.due || 0, at: AD.now() };
+    var atext = (step.q && step.q.kind === 'transform') ? transNorm(chosen) : (step.opts && step.opts[chosen] != null ? String(step.opts[chosen]) : '');
+    var nr = { s: r.s, f: r.f, a: (r.a || 0) + 1, r: r.r || 0, due: r.due || 0, at: AD.now(), fa: r.fa != null ? r.fa : atext, la: atext }; // NT-V1: qué respondió (1.ª vez y última)
     if (nr.f == null) nr.f = ok;
     if (ok) { nr.s = 'ok'; nr.due = 0; }
     else if (r.s !== 'ok') { if (mode === 'box') nr.r = (r.r || 0) + 1; nr.s = 'box'; nr.due = AD.now() + (nr.r > 0 ? CFG.retryMs : CFG.boxMs); }
@@ -346,15 +347,21 @@
   }
 
   /* ── NUBE: subir (bandeja con versión) / bajar / caja lista ─────────────── */
-  var flushing = {};
+  var flushing = {}, NOANS = false;
   function flush(uid) {
     if (flushing[uid]) return flushing[uid];
     var c = AD.client(); if (!c || isPreview(uid)) return Promise.resolve(false);
     var u = getU(uid), keys = Object.keys(u.out); if (!keys.length) return Promise.resolve(true);
     var sent = {}, rows = [];
     keys.forEach(function (k) { var p = k.split('|'), r = rec(u, p[0], p[1]); if (!r) return; sent[k] = u.out[k];
-      rows.push({ user_id: uid, mat_key: p[0], item_id: p[1], level: u.level || '', status: r.s || 'box', first_ok: r.f, attempts: r.a || 0, box_round: r.r || 0 }); });
-    flushing[uid] = Promise.resolve(c.from('practice_items').upsert(rows, { onConflict: 'user_id,mat_key,item_id' }).select('mat_key,item_id,status,due_at')).then(function (res) {
+      var row = { user_id: uid, mat_key: p[0], item_id: p[1], level: u.level || '', status: r.s || 'box', first_ok: r.f, attempts: r.a || 0, box_round: r.r || 0 };
+      if (!NOANS && (r.fa != null || r.la != null)) { row.first_answer = r.fa != null ? String(r.fa).slice(0, 300) : null; row.last_answer = r.la != null ? String(r.la).slice(0, 300) : null; }
+      rows.push(row); });
+    var send = function (rs) { return Promise.resolve(c.from('practice_items').upsert(rs, { onConflict: 'user_id,mat_key,item_id' }).select('mat_key,item_id,status,due_at')); };
+    flushing[uid] = send(rows).then(function (res) { // sin script 37 → reintenta sin las columnas de respuesta (nunca se pierde lo demás)
+      if (res && res.error && !NOANS && /first_answer|last_answer|column/i.test(String(res.error.message || res.error))) { NOANS = true; return send(rows.map(function (x) { var y = {}; Object.keys(x).forEach(function (k) { if (k !== 'first_answer' && k !== 'last_answer') y[k] = x[k]; }); return y; })); }
+      return res;
+    }).then(function (res) {
       if (res && res.error) throw res.error;
       var u2 = getU(uid);
       Object.keys(sent).forEach(function (k) { if (u2.out[k] === sent[k]) delete u2.out[k]; });
@@ -526,6 +533,28 @@
     });
   }
 
+  /* ── 👩‍🏫 PROFESOR (NT-V1, 15-oct): lee practice_items + week_reviews de VARIOS alumnos. Solo lectura.
+   * Trae lo de los últimos `days` días más todo lo que siga en la caja, paginado de 1000 en 1000. */
+  function teacherFetch(ids, days) {
+    var c = AD.client(); if (!c || !ids || !ids.length) return Promise.resolve({ ok: false, rows: [], weeks: [], err: c ? null : 'sin conexión' });
+    var since = new Date(AD.now() - (days || 21) * 86400e3).toISOString(), wk = weekMonday();
+    var cols = 'user_id,mat_key,item_id,status,first_ok,attempts,box_round,due_at,updated_at,ok_at,last_wrong_at,first_answer,last_answer';
+    var colsNoAns = 'user_id,mat_key,item_id,status,first_ok,attempts,box_round,due_at,updated_at,ok_at,last_wrong_at';
+    function page(sel, from, acc) {
+      return Promise.resolve(c.from('practice_items').select(sel).in('user_id', ids).or('status.eq.box,updated_at.gte.' + since).range(from, from + 999)).then(function (res) {
+        if (res && res.error) throw res.error; var d = (res && res.data) || []; acc = acc.concat(d);
+        return d.length === 1000 && acc.length < 20000 ? page(sel, from + 1000, acc) : acc;
+      });
+    }
+    var rowsP = page(cols, 0, []).then(function (r) { return { rows: r, answers: true }; }, function (e) {
+      if (!/first_answer|last_answer|column/i.test(String(e && (e.message || e)))) throw e;
+      return page(colsNoAns, 0, []).then(function (r) { return { rows: r, answers: false }; });
+    });
+    var wkP = Promise.resolve(c.from('week_reviews').select('user_id,week,plan,cap').in('user_id', ids).eq('week', wk)).then(function (res) { return (res && !res.error && res.data) || []; }, function () { return []; });
+    return Promise.all([rowsP, wkP]).then(function (a) { return { ok: true, rows: a[0].rows, answers: a[0].answers, weeks: a[1], wk: wk }; })
+      .catch(function (e) { return { ok: false, rows: [], weeks: [], err: String(e && e.message || e) }; });
+  }
+
   /* ── 🟢 Clase en vivo (live_presence, script 26) — MISMA fila única por alumno que
    * usa jucum-connect.js. Mientras hace la sesión mixta, el alumno aparece en la mesa
    * del material de la pregunta actual. Nunca escribe en vista previa ni sin nube. */
@@ -556,7 +585,7 @@
     VERSION: 'SESION-MIXTA-V1', CFG: CFG, enabledFor: enabledFor, kindOf: kindOf, parseHtml: parseHtml, loadMaterial: loadMaterial,
     todayMaterials: todayMaterials, matProgress: matProgress, buildSession: buildSession, arrange: arrange, metrics: metrics, runs: runs,
     answer: answer, flush: flush, pull: pull, refreshReady: refreshReady, boxStatus: boxStatus, addSeconds: addSeconds, merge: merge,
-    hooks: hooks, plain: plain, _lastUid: null, transOk: transOk, bankOrder: bankOrder,
+    hooks: hooks, plain: plain, _lastUid: null, transOk: transOk, bankOrder: bankOrder, teacherFetch: teacherFetch,
     weekReviews: weekReviews, weekState: function (uid) { return getU(uid).wk || null; }, live: live, weekMonday: weekMonday, weekDayIdx: weekDayIdx, LVREV: LVREV,
     _setAdapter: function (o) { Object.keys(o || {}).forEach(function (k) { AD[k] = o[k]; }); mem = {}; },
     _keys: { STATE_KEY: STATE_KEY, CACHE_KEY: CACHE_KEY }

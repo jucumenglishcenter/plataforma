@@ -640,6 +640,7 @@ function GroupDetail({ groupId, onBack, onSelectStudent }) {
       {showFinish && <FinishGroupModal groupId={groupId} onClose={() => setShowFinish(false)} onDone={() => { setShowFinish(false); setGrdTick(t => t + 1); }} />}
 
       <GroupModulesQuick key={'gmq' + modTick} groupId={groupId} onChanged={() => setGrdTick(t => t + 1)} />
+      {/* 🧠 NT-V1 · práctica con Neuro de todo el grupo (niveles con sesión mixta) */ window.NeuroGroupCard && window.JUCUM_MIX && window.JUCUM_MIX.enabledFor({ level: group.level }) && <NeuroGroupCard group={group} students={members} onOpen={onSelectStudent} />}
 
       <TeacherChampions groupId={groupId} levelColor={level.dark} />
 
@@ -1075,6 +1076,7 @@ function StudentDetail({ studentId, onBack, onContact }) {
       </div>
 
       <ModuleTracker stu={stu} group={group} />
+      {/* 🧠 NT-V1 · práctica con Neuro del alumno */ window.NeuroStudentCard && window.JUCUM_MIX && window.JUCUM_MIX.enabledFor(stu) && <NeuroStudentCard student={stu} />}
 
       <div style={{marginTop:18}}><ReadinessCard student={stu} forTeacher /></div>
 
