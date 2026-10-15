@@ -1,5 +1,8 @@
 /* MixedSession · SESION-MIXTA-V1 (14-oct-2026) — Parte 1 · Pre-A1 · NEURO-HOY-V1: la tarjeta pasó a NeuroHoy.jsx
  * Reproductor de ejercicios mezclados (mix · caja de errores · ⭐ repaso bonus) + resumen.
+ * MIX-TRANSFORM-V1 (15-oct): Transform = armar la oración con fichas (bandeja + banco + Comprobar).
+ * MIX-RL-V1 (15-oct): Comprensión lectora (párrafo con la prueba + vecino, 🔊 y español) y auditiva
+ * (🔊 / 🐢 con la voz del navegador; “Ver el texto” tras 2 escuchas).
  * Toda la lógica (lector, azar, caja de errores, guardado) vive en mixed.js (window.JUCUM_MIX).
  * Retroalimentación = la de cada material (En la historia · Regla · Español↔Inglés · explicación del error). */
 const MIX_CSS = `
@@ -43,6 +46,29 @@ const MIX_CSS = `
 .mx-sup button.tr{border-color:#CE93D8;color:#7B1FA2;background:#F3E5F5}
 .mx-rev{border-radius:0 11px 11px 0;padding:9px 12px;font-size:13px;line-height:1.5;background:#FAF7EE;border-left:3px solid var(--lp,#F9A825)}.mx-rev.tr{background:#F3E5F5;border-left-color:#7B1FA2;color:#5A2A66;font-style:italic}
 .mx-opts{display:flex;flex-direction:column;gap:9px}
+.mx-src{background:#fff;border:1.5px solid #E3DCCB;border-radius:12px;padding:9px 12px;font-family:'Fredoka',sans-serif;font-weight:600;font-size:18px;color:#1E2433;line-height:1.35}
+.mx-src small{display:block;font-family:'Nunito',sans-serif;font-size:10px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#7A6A55;margin-bottom:2px}
+.mx-task{font-size:13.5px;font-weight:700;color:#1E2433;line-height:1.45}
+.mx-tray{min-height:60px;border:2px dashed #CFC6B2;border-radius:14px;padding:8px;display:flex;flex-wrap:wrap;gap:7px;align-items:center;background:#FFFDF7}
+.mx-tray.ok{border-style:solid;border-color:#2EA84B;background:#E9F7EC}.mx-tray.no{border-style:solid;border-color:#F0B44A;background:#FFF5E1}
+.mx-tray .ph{font-size:12.5px;font-weight:700;color:#A89E88;padding:0 4px}
+.mx-bank{display:flex;flex-wrap:wrap;gap:8px}
+.mx-tile{border:2px solid #E3DCCB;background:#fff;border-radius:11px;padding:8px 13px;min-height:44px;min-width:44px;font-family:'Fredoka',sans-serif;font-weight:600;font-size:16px;color:#1E2433;cursor:pointer;box-shadow:0 3px 0 #E3DCCB;transition:transform .12s}
+.mx-tile:active{transform:translateY(2px);box-shadow:0 1px 0 #E3DCCB}.mx-tile.used{opacity:0;pointer-events:none}.mx-tile:disabled{cursor:default}
+.mx-tray .mx-tile{border-color:var(--lp,#F9A825);box-shadow:0 3px 0 var(--lp,#F9A825)}
+.mx-trtools{display:flex;justify-content:flex-end}.mx-trtools button{border:0;background:none;font:inherit;font-size:12px;font-weight:800;color:#7A6A55;cursor:pointer;padding:4px 6px}
+.mx-check{background:linear-gradient(180deg,#5C7CFA,#3B5BDB);box-shadow:0 4px 0 #2C44A8;width:100%}.mx-check:disabled{opacity:.45;cursor:default}
+.mx-pass{background:#fff;border:1.5px solid #E3DCCB;border-radius:14px;padding:11px 13px;display:flex;flex-direction:column;gap:8px}
+.mx-pass .tt{font-size:10px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#7A6A55;display:flex;align-items:center;gap:8px}
+.mx-pass p{margin:0;font-family:'Atkinson Hyperlegible','Nunito',sans-serif;font-size:15.5px;line-height:1.6;color:#1E2433}.mx-pass p.es{font-size:13px;color:#7A6A55;font-style:italic;margin-top:-4px}
+.mx-pass b{background:#FFF1B8;border-radius:4px;padding:0 2px}
+.mx-qq{font-family:'Fredoka',sans-serif;font-weight:600;font-size:17.5px;color:#1E2433;line-height:1.35}.mx-qq small{display:block;font-family:'Nunito',sans-serif;font-size:12.5px;font-weight:700;color:#8A7F6A;margin-top:2px}
+.mx-play{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.mx-pbtn{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:16px;padding:12px 18px;min-height:52px;font-family:'Fredoka',sans-serif;font-weight:600;font-size:17px;color:#fff;background:linear-gradient(180deg,#4FC3F7,#0288D1);box-shadow:0 4px 0 #01579B;cursor:pointer}
+.mx-pbtn.on{animation:mxPulse 1s ease-in-out infinite}@keyframes mxPulse{50%{transform:scale(1.05)}}
+.mx-sbtn{border:1.5px solid #B3E5FC;background:#fff;color:#0277BD;border-radius:12px;padding:9px 12px;min-height:44px;font:inherit;font-weight:800;font-size:13px;cursor:pointer}
+.mx-say{background:#E1F5FE;border-radius:11px;padding:8px 11px;font-size:14.5px;line-height:1.5;color:#01579B}.mx-say b{background:#FFF1B8;color:#1E2433;border-radius:4px;padding:0 2px}
+.mx-exrow{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}.mx-ex{background:#EEF3FF;border-radius:8px;padding:2px 7px;font-size:12px;font-weight:800;color:#1D4ED8}
 .mx-opt{border:2px solid #E3DCCB;background:#fff;border-radius:14px;padding:13px 14px;font:inherit;font-weight:800;font-size:15px;color:#1E2433;text-align:left;cursor:pointer;min-height:52px;box-shadow:0 3px 0 #E3DCCB;display:flex;gap:10px;align-items:center}
 .mx-opt .lt{width:24px;height:24px;border-radius:7px;background:#F3EEE2;color:#7A6A55;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .mx-opt:hover:not(:disabled){border-color:var(--lp,#F9A825)}.mx-opt:disabled{cursor:default}
@@ -75,7 +101,18 @@ const MIX_CSS = `
 (function injectMixCSS() { if (typeof document === 'undefined' || document.getElementById('mx-css')) return; const st = document.createElement('style'); st.id = 'mx-css'; st.textContent = MIX_CSS; document.head.appendChild(st); })();
 
 const MX_COLORS = ['#FFB300', '#4FC3F7', '#F06292', '#81C784', '#BA68C8', '#FF8A65', '#4DB6AC', '#9575CD'];
-const mxIcon = (m) => m.kind === 'identify' ? '🔎' : '📝';
+const mxIcon = (m) => m.kind === 'identify' ? '🔎' : m.kind === 'transform' ? '🔄' : m.kind === 'read' ? '📖' : m.kind === 'listen' ? '🎧' : '📝';
+/* 🔊 voz del navegador (la misma que usan los materiales de lectura y listening) */
+function mxSpeak(text, rate, onEnd) {
+  try {
+    const S = window.speechSynthesis; if (!S || !text) { onEnd && onEnd(); return false; }
+    S.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'en-US'; u.rate = rate || .9;
+    const vs = S.getVoices ? S.getVoices() : []; const v = vs.find(z => /en[-_]US/i.test(z.lang) && /female|samantha|google us|zira|jenny|aria/i.test(z.name)) || vs.find(z => /en[-_]US/i.test(z.lang)) || vs.find(z => /^en/i.test(z.lang));
+    if (v) u.voice = v; u.onend = () => onEnd && onEnd(); u.onerror = () => onEnd && onEnd(); S.speak(u); return true;
+  } catch (e) { onEnd && onEnd(); return false; }
+}
+const mxStop = () => { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} };
+const mxHeard = (txt, key) => { const t = String(txt || ''), k = String(key || '').trim(); if (!k) return t; const i = t.toLowerCase().indexOf(k.toLowerCase()); return i < 0 ? t : t.slice(0, i) + '<b>' + t.slice(i, i + k.length) + '</b>' + t.slice(i + k.length); };
 const mxRing = (c, p) => `conic-gradient(${c} ${p}%, rgba(160,180,240,.22) ${p}%)`;
 const mxTime = (t) => new Date(t).toLocaleTimeString('es-PE', { hour: 'numeric', minute: '2-digit' });
 function mxDur(ms) { const m = Math.max(1, Math.ceil(ms / 60000)), h = Math.floor(m / 60); return (h ? h + ' h ' : '') + (m % 60 ? (m % 60) + ' min' : ''); }
@@ -99,8 +136,14 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
   const ids = [...new Set(run.seq.map(x => x.mat))];
   const answered = run.chosen !== null;
   const [show, setShow] = React.useState({});
+  const [tray, setTray] = React.useState([]);
   const fbRef = React.useRef(null);
-  React.useEffect(() => { setShow({}); }, [run.k]);
+  React.useEffect(() => { setShow({}); setTray([]); }, [run.k]);
+  const isTr = q.kind === 'transform', isRL = q.kind === 'read' || q.kind === 'listen';
+  const [plays, setPlays] = React.useState(0), [speaking, setSpeaking] = React.useState(false);
+  React.useEffect(() => { setPlays(0); setSpeaking(false); mxStop(); }, [run.k]);
+  React.useEffect(() => () => mxStop(), []);
+  const speak = (text, rate, count) => { setSpeaking(true); if (count) setPlays(p => p + 1); if (!mxSpeak(text, rate, () => setSpeaking(false))) setSpeaking(false); };
   React.useEffect(() => { if (answered && fbRef.current && fbRef.current.parentNode) { const p = fbRef.current.parentNode; p.scrollTop = Math.max(0, fbRef.current.offsetTop - 140); } }, [answered, run.k]);
   const choose = (i) => {
     if (answered) return;
@@ -114,9 +157,11 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
     setRun({ ...run, k: run.k + 1, chosen: null, shownAt: Date.now(), lastWon: null });
   };
   const L = 'ABCD';
-  const ok = answered && run.chosen === st.ans;
+  const ok = answered && (isTr ? MIX.transOk(q, run.chosen) : run.chosen === st.ans);
   const cls = (i) => !answered ? '' : i === st.ans ? 'ok' : i === run.chosen ? 'no' : 'dim';
-  const chosenText = answered ? st.opts[run.chosen] : null;
+  const chosenText = answered ? (isTr ? (run.chosen || []).join(' ') : st.opts[run.chosen]) : null;
+  const rightText = isTr ? q.answer.join(' ') : st.opts[st.ans];
+  const checkTr = () => { if (!tray.length) return; choose(tray.map(i => q.tiles[i])); };
   const html = (s) => ({ __html: s || '' });
   return (
     <div className={'mx-ov' + (run.mode === 'box' ? ' box' : run.mode === 'bonus' ? ' bon' : '')} role="dialog" aria-label="Sesión mixta">
@@ -145,20 +190,83 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
             {!answered && show.hint && <div className="mx-rev" dangerouslySetInnerHTML={html(q.hint)}></div>}
             {!answered && show.tr && <div className="mx-rev tr" dangerouslySetInnerHTML={html(q.tr)}></div>}
           </>
+        ) : q.kind === 'read' ? (
+          <>
+            <div className="mx-hint">Lee y responde</div>
+            <div className="mx-pass">
+              <div className="tt"><span style={{ flex: 1 }}>📖 {q.storyTitle}</span><button type="button" className="mx-sbtn" style={{ minHeight: 36, padding: '5px 10px' }} onClick={() => speaking ? (mxStop(), setSpeaking(false)) : speak(q.paras.map(p => p.en).join(' '), .9)}>{speaking ? '⏸ Parar' : '🔊 Escuchar'}</button></div>
+              {q.paras.map((p, i) => <React.Fragment key={i}><p dangerouslySetInnerHTML={html(answered ? mxHeard(p.en, q.proof.replace(/[.!?]+$/, '')) : p.en)}></p>{show.es && <p className="es">{p.es}</p>}</React.Fragment>)}
+            </div>
+            {!answered && <div className="mx-sup"><button type="button" className="tr" onClick={() => setShow({ ...show, es: !show.es })}>🔤 {show.es ? 'Ocultar español' : 'Ver en español'}</button></div>}
+            <div className="mx-qq">{q.q}{q.qEn && q.qEn !== q.q && <small>{q.qEn}</small>}</div>
+          </>
+        ) : q.kind === 'listen' ? (
+          <>
+            <div className="mx-hint">Escucha y responde · {q.storyTitle}</div>
+            <div className="mx-play">
+              <button type="button" className={'mx-pbtn' + (speaking ? ' on' : '')} onClick={() => speak(q.audio, .9, true)}>🔊 {plays ? 'Escuchar otra vez' : 'Escuchar'}</button>
+              <button type="button" className="mx-sbtn" onClick={() => speak(q.audio, .62, true)}>🐢 Lento</button>
+            </div>
+            {!answered && plays >= 2 && <div className="mx-sup"><button type="button" className="tr" onClick={() => setShow({ ...show, txt: !show.txt })}>📝 {show.txt ? 'Ocultar el texto' : 'Ver el texto'}</button></div>}
+            {!answered && show.txt && <div className="mx-say">{q.audio}</div>}
+            <div className="mx-qq">{q.q}{q.qEn && q.qEn !== q.q && <small>{q.qEn}</small>}</div>
+          </>
+        ) : isTr ? (
+          <>
+            <div className="mx-hint">Arma la oración nueva</div>
+            {q.task && <div className="mx-task" dangerouslySetInnerHTML={html(q.task)}></div>}
+            <div className="mx-src"><small>Oración de partida</small>{q.src}</div>
+            {!answered && (q.hint || q.tr) && (
+              <div className="mx-sup">
+                {q.hint && <button type="button" onClick={() => setShow({ ...show, hint: !show.hint })}>💡 Pista</button>}
+                {q.tr && <button type="button" className="tr" onClick={() => setShow({ ...show, tr: !show.tr })}>🔤 Traducción</button>}
+              </div>
+            )}
+            {!answered && show.hint && <div className="mx-rev" dangerouslySetInnerHTML={html(q.hint)}></div>}
+            {!answered && show.tr && <div className="mx-rev tr" dangerouslySetInnerHTML={html(q.tr)}></div>}
+            <div className={'mx-tray' + (answered ? (ok ? ' ok' : ' no') : '')} aria-label="Tu oración">
+              {answered ? (run.chosen || []).map((w, i) => <span key={i} className="mx-tile" style={{ cursor: 'default' }}>{w}</span>)
+                : tray.length ? tray.map((ti, i) => <button type="button" key={ti} className="mx-tile" title="Quitar" onClick={() => setTray(tray.filter(z => z !== ti))}>{q.tiles[ti]}</button>)
+                : <span className="ph">Toca las fichas en orden para armar la oración</span>}
+            </div>
+            {!answered && <>
+              <div className="mx-bank">{(st.bank || q.tiles.map((w, i) => i)).map(ti => <button type="button" key={ti} className={'mx-tile' + (tray.includes(ti) ? ' used' : '')} onClick={() => setTray(tray.concat([ti]))}>{q.tiles[ti]}</button>)}</div>
+              {tray.length > 0 && <div className="mx-trtools"><button type="button" onClick={() => setTray(tray.slice(0, -1))}>↶ Quitar la última</button><button type="button" onClick={() => setTray([])}>↺ Empezar de nuevo</button></div>}
+            </>}
+          </>
         ) : (
           <div className="mx-hint" style={{ fontSize: 15, color: '#1E2433', fontFamily: "'Fredoka',sans-serif", fontWeight: 600 }}>¿Cuál oración está bien escrita?</div>
         )}
-        <div className="mx-opts">
+        {!isTr && <div className="mx-opts">
           {st.opts.map((o, i) => <button type="button" key={i} className={'mx-opt ' + cls(i)} disabled={answered} onClick={() => choose(i)}><span className="lt">{L[i]}</span><span>{o}</span></button>)}
-        </div>
+        </div>}
       {answered && (
         <div className={'mx-fb ' + (ok ? 'ok' : 'no')} ref={fbRef}>
           <div className="mx-ft">{ok ? (run.mode === 'bonus' ? '✅ ¡Correcto! +2 XP' : '✅ ¡Correcto!') : 'Casi… veamos por qué'}</div>
-          {!ok && <div className="mx-cmp"><span className="yo">Tu respuesta<b>{chosenText}</b></span><span className="ok2">Correcta<b>{st.opts[st.ans]}</b></span></div>}
+          {!ok && <div className="mx-cmp"><span className="yo">Tu respuesta<b>{chosenText}</b></span><span className="ok2">Correcta<b>{rightText}</b></span></div>}
           {q.kind === 'fill' ? (
             <>
               {(q.story || q.why) && <div className="mx-blk story"><small>📖 En la historia</small>{q.story && <i style={{ display: 'block', marginBottom: 3 }} dangerouslySetInnerHTML={html(q.story)}></i>}<span dangerouslySetInnerHTML={html(q.why)}></span></div>}
               {!ok && q.rule && <div className="mx-blk rule"><small>📐 Regla</small><span dangerouslySetInnerHTML={html(q.rule)}></span></div>}
+              {!ok && q.es && <div className="mx-blk es"><small>Español ↔ Inglés</small><span dangerouslySetInnerHTML={html(q.es)}></span></div>}
+              {!ok && q.lit && <div className="mx-blk es"><small>🔤 Literal vs natural</small><span dangerouslySetInnerHTML={html(q.lit)}></span></div>}
+              {!ok && q.tr && <div className="mx-blk"><small style={{ color: '#7B1FA2' }}>Traducción</small><span dangerouslySetInnerHTML={html(q.tr)}></span></div>}
+            </>
+          ) : isRL ? (
+            <>
+              {q.kind === 'listen'
+                ? <div className="mx-blk"><small style={{ color: '#0277BD' }}>🎧 Lo que dice el audio</small><div className="mx-say" style={{ marginTop: 4 }} dangerouslySetInnerHTML={html(mxHeard(q.audio, q.heard))}></div>{q.audioEs && <div style={{ fontSize: 12.5, color: '#7A6A55', fontStyle: 'italic', marginTop: 4 }}>{q.audioEs}</div>}<div style={{ marginTop: 6 }}><button type="button" className="mx-sbtn" style={{ minHeight: 36, padding: '5px 10px' }} onClick={() => speak(q.audio, .8)}>🔊 Escuchar otra vez</button></div></div>
+                : q.proof && <div className="mx-blk story"><small>📍 La prueba en el texto</small><i>{q.proof}</i></div>}
+              {(q.skill || q.tip) && <div className="mx-blk rule"><small>💡 Cómo encontrar la respuesta</small>{q.skill && <span dangerouslySetInnerHTML={html(q.skill)}></span>}{q.tip && <div style={{ marginTop: 3 }} dangerouslySetInnerHTML={html(q.tip)}></div>}</div>}
+              {!ok && q.note && <div className="mx-blk es"><small>📐 Para recordar</small><span dangerouslySetInnerHTML={html(q.note)}></span></div>}
+              {q.correctEn && q.correctEn !== q.correct && <div className="mx-blk"><small style={{ color: '#7B1FA2' }}>En inglés</small>{q.qEn} → <b>{q.correctEn}</b></div>}
+            </>
+          ) : isTr ? (
+            <>
+              {q.story && <div className="mx-blk story"><small>📖 En la historia</small><i style={{ display: 'block' }} dangerouslySetInnerHTML={html(q.story.q)}></i>{q.story.es && <span style={{ fontSize: 12, color: '#8a6f3a' }} dangerouslySetInnerHTML={html(q.story.es)}></span>}</div>}
+              {q.change && <div className="mx-blk rule"><small>🔧 El cambio paso a paso</small><span dangerouslySetInnerHTML={html(q.change)}></span></div>}
+              {!ok && q.formula && <div className="mx-blk"><small style={{ color: '#5B3FA0' }}>🧩 Estructura</small><span dangerouslySetInnerHTML={html(q.formula)}></span></div>}
+              {!ok && q.rule && <div className="mx-blk rule"><small>📐 Regla</small><span dangerouslySetInnerHTML={html(q.rule)}></span>{q.examples && q.examples.length > 0 && <div className="mx-exrow">{q.examples.map((e, i) => <span key={i} className="mx-ex">{e}</span>)}</div>}</div>}
               {!ok && q.es && <div className="mx-blk es"><small>Español ↔ Inglés</small><span dangerouslySetInnerHTML={html(q.es)}></span></div>}
               {!ok && q.lit && <div className="mx-blk es"><small>🔤 Literal vs natural</small><span dangerouslySetInnerHTML={html(q.lit)}></span></div>}
               {!ok && q.tr && <div className="mx-blk"><small style={{ color: '#7B1FA2' }}>Traducción</small><span dangerouslySetInnerHTML={html(q.tr)}></span></div>}
@@ -177,6 +285,7 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
         </div>
       )}
       </div>
+      {!answered && isTr && <div className="mx-foot"><button type="button" className="mx-next mx-check" disabled={!tray.length} onClick={checkTr}>Comprobar</button></div>}
       {answered && <div className={'mx-foot ' + (ok ? 'ok' : 'no')}><button type="button" className="mx-next" onClick={next}>{run.k + 1 >= run.seq.length ? 'Ver resultado' : ok ? 'Seguir' : 'Entendido, seguir'}</button></div>}
     </div>
   );

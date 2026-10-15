@@ -3,7 +3,9 @@
  * window.JUCUM_MIX = motor de la SESIÓN MIXTA de "Mi práctica":
  *  · LECTOR: lee (solo lectura) las preguntas que YA viven dentro de cada material
  *    en GitHub Pages — Fill in (`const QS = [...]`) e Identification
- *    (`const quizData = [...]`). Los materiales NO se modifican. Si un material no
+ *    (`const quizData = [...]`) y Transform (`const QS = [...]` con answer/distractors ·
+ *    MIX-TRANSFORM-V1, 15-oct), Comprensión lectora y auditiva (`const STORIES = {…}` ·
+ *    MIX-RL-V1, 15-oct). Los materiales NO se modifican. Si un material no
  *    se puede leer, simplemente se abre como siempre.
  *  · SESIÓN: 12 ejercicios mezclados de varios materiales (2–4 de cada uno, máx. 6
  *    materiales), azar criptográfico, opciones reordenadas en cada aparición, la
@@ -50,12 +52,16 @@
     if (!HOST.test(String(url || ''))) return null;
     if (/\/fill\.html(\?|#|$)/i.test(url)) return 'fill';
     if (/\/identify\.html(\?|#|$)/i.test(url)) return 'identify';
+    if (/\/transform\.html(\?|#|$)/i.test(url)) return 'transform';
+    if (/\/m\d+\/reading\.html(\?|#|$)/i.test(url)) return 'read';
+    if (/\/m\d+\/listening\.html(\?|#|$)/i.test(url)) return 'listen';
     return null;
   }
-  function extractArray(html, name) {
-    var m = new RegExp('(?:const|var|let)\\s+' + name + '\\s*=\\s*\\[').exec(html);
+  function extractArray(html, name, open) {
+    open = open || '[';
+    var m = new RegExp('(?:const|var|let)\\s+' + name + '\\s*=\\s*\\' + open).exec(html);
     if (!m) return null;
-    var s = html.indexOf('[', m.index), d = 0, q = null, esc = false;
+    var s = html.indexOf(open, m.index), d = 0, q = null, esc = false;
     for (var k = s; k < html.length; k++) {
       var c = html[k];
       if (q) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === q) q = null; continue; }
@@ -108,10 +114,94 @@
     });
     return out;
   }
+  /* 🔄 Transform: armar la oración con fichas (answer + distractors). Se acepta como correcta
+   * CUALQUIER orden cuyo TEXTO sea igual a la respuesta (fichas repetidas son intercambiables)
+   * y, si el material algún día trae `alts` / `answers` (listas de fichas), también esas. */
+  function normTrans(arr, warn) {
+    var out = [], seen = {};
+    (Array.isArray(arr) ? arr : []).forEach(function (q, i) {
+      var ans = (q && Array.isArray(q.answer) ? q.answer : []).map(function (x) { return String(x); });
+      var dis = (q && Array.isArray(q.distractors) ? q.distractors : []).map(function (x) { return String(x); });
+      var alts = [].concat(q && Array.isArray(q.alts) ? q.alts : [], q && Array.isArray(q.answers) ? q.answers : []).filter(Array.isArray).map(function (a) { return a.map(String); });
+      var why = [];
+      if (!q || !q.src) why.push('sin oración de partida');
+      if (ans.length < 2 || ans.some(function (w) { return !w.trim(); })) why.push('respuesta vacía o de una sola ficha');
+      if (why.length) { warn.push('Pregunta ' + (i + 1) + ': ' + why.join(', ')); return; }
+      var tiles = ans.concat(dis), cnt = {};
+      tiles.forEach(function (w) { cnt[w] = (cnt[w] || 0) + 1; });
+      alts = alts.filter(function (a) { var c = {}; a.forEach(function (w) { c[w] = (c[w] || 0) + 1; }); return a.length && Object.keys(c).every(function (w) { return (cnt[w] || 0) >= c[w]; }); });
+      var id = hash('t|' + q.src + '|' + ans.join(' '));
+      if (seen[id]) { warn.push('Pregunta ' + (i + 1) + ': repetida'); return; } seen[id] = 1;
+      if (!pickLang(q.change) && !pickLang(q.rule)) warn.push('Pregunta ' + (i + 1) + ': sin explicación (change/rule)');
+      var ex = q.examples ? (Array.isArray(q.examples) ? q.examples : (q.examples.es || q.examples.en || [])) : [];
+      out.push({ id: id, kind: 'transform', n: i + 1, src: String(q.src), task: pickLang(q.task), answer: ans, alts: alts, tiles: tiles, opts: [], correct: ans.join(' '),
+        tr: pickLang(q.tr), hint: pickLang(q.hint), story: q.story && q.story.q ? { q: String(q.story.q), es: String(q.story.es || '') } : null,
+        change: pickLang(q.change), formula: pickLang(q.formula), rule: pickLang(q.rule), examples: (Array.isArray(ex) ? ex : []).map(String), es: pickLang(q.es), lit: pickLang(q.lit), tag: pickLang(q.reinf) });
+    });
+    return out;
+  }
+  /* 📖🎧 Comprensión lectora / auditiva (MIX-RL-V1, 15-oct): `const STORIES = {n:{title, paras|items, qs}}`.
+   * Solo las preguntas que CUENTAN para la nota (1..SCORED de cada historia). Pregunta y opciones en
+   * español (modo Pre-A1 del material) con el inglés guardado para la retroalimentación. Lectora: se
+   * muestran el párrafo con la prueba + uno vecino. Auditiva: la oración se escucha (voz del navegador). */
+  function rlOpts(q, i, warn) {
+    var en = (q.opts || []).map(String), es = (Array.isArray(q.oes) && q.oes.length === en.length) ? q.oes.map(String) : null;
+    var ci = typeof q.correct === 'number' ? q.correct : en.indexOf(String(q.correct));
+    var why = [];
+    if (en.length < 2) why.push('menos de 2 opciones');
+    if (!(ci >= 0 && ci < en.length)) why.push('sin respuesta correcta válida');
+    var show = es && Object.keys(es.reduce(function (o, x) { o[x.toLowerCase()] = 1; return o; }, {})).length === es.length ? es : en;
+    if (Object.keys(show.reduce(function (o, x) { o[x.toLowerCase()] = 1; return o; }, {})).length !== show.length) why.push('opciones repetidas');
+    if (why.length) { warn.push('Pregunta ' + i + ': ' + why.join(', ')); return null; }
+    var map = {}; show.forEach(function (o, k) { map[o] = en[k]; });
+    return { opts: show, correct: show[ci], correctEn: en[ci], en: map };
+  }
+  function normRL(stories, kind, scored, warn) {
+    var out = [], seen = {}, keys = Object.keys(stories || {}).sort(function (a, b) { return (+a || 0) - (+b || 0); });
+    keys.forEach(function (sk) {
+      var S = stories[sk] || {}, list = kind === 'read' ? (S.qs || []) : (S.items || []), paras = S.paras || [];
+      list.slice(0, scored).forEach(function (q, j) {
+        var tag = 'Historia ' + sk + ' · pregunta ' + (j + 1), o = rlOpts(q || {}, tag, warn); if (!o) return;
+        var qes = String(q.qes || q.q || ''), qen = String(q.q || '');
+        if (!qes) { warn.push(tag + ': sin pregunta'); return; }
+        var id = hash((kind === 'read' ? 'r|' : 'l|') + sk + '|' + qen + '|' + o.correctEn);
+        if (seen[id]) { warn.push(tag + ': repetida'); return; } seen[id] = 1;
+        var it = { id: id, kind: kind, n: out.length + 1, storyN: sk, storyTitle: String(S.title || ''), q: qes, qEn: qen, opts: o.opts, correct: o.correct, correctEn: o.correctEn, optEn: o.en,
+          skill: pickLang(q.skill), tip: pickLang(q.tip), tag: pickLang(q.reinf) };
+        if (kind === 'listen') {
+          if (!q.audio) { warn.push(tag + ': sin audio'); return; }
+          it.audio = String(q.audio); it.audioEs = String(q.es || ''); it.heard = String(q.heard || ''); it.note = pickLang(q.note);
+        } else {
+          var proof = String(q.proof || ''), pi = -1, low = proof.toLowerCase().replace(/[.!?]+$/, '');
+          if (low) for (var k = 0; k < paras.length; k++) if (String(paras[k].en || '').toLowerCase().indexOf(low) >= 0) { pi = k; break; }
+          if (pi < 0) warn.push(tag + ': la prueba no aparece en el texto (se muestra el inicio)');
+          var a = pi < 0 ? 0 : pi, b = a + 1 < paras.length ? a + 1 : a - 1, ix = [a, b].filter(function (x) { return x >= 0 && x < paras.length; }).sort(function (x, y) { return x - y; });
+          it.paras = ix.filter(function (x, z) { return ix.indexOf(x) === z; }).map(function (x) { return { en: String(paras[x].en || ''), es: String(paras[x].es || '') }; });
+          it.proof = proof; it.qtype = String(q.type || '');
+        }
+        out.push(it);
+      });
+    });
+    return out;
+  }
+  function transNorm(a) { return (Array.isArray(a) ? a : String(a || '').split(' ')).map(String).join(' ').replace(/\s+/g, ' ').trim(); }
+  function transOk(q, chosen) { var s = transNorm(chosen); if (!s) return false; return [q.answer].concat(q.alts || []).some(function (a) { return transNorm(a) === s; }); }
+  function bankOrder(q) { // fichas en orden aleatorio, nunca dejando la respuesta ya armada al inicio
+    var idx = q.tiles.map(function (w, i) { return i; }), want = transNorm(q.answer);
+    for (var t = 0; t < 20; t++) { shuffle(idx); if (transNorm(idx.slice(0, q.answer.length).map(function (i) { return q.tiles[i]; })) !== want) break; }
+    return idx.slice();
+  }
   function parseHtml(html, kind) {
-    var warn = [], arr = parseArr(extractArray(html, kind === 'fill' ? 'QS' : 'quizData'));
+    if (kind === 'read' || kind === 'listen') {
+      var w0 = [], st = parseArr(extractArray(html, 'STORIES', '{'));
+      if (!st) return { items: [], warn: ['No se encontraron las historias dentro del material'] };
+      var sm = /const\s+SCORED\s*=\s*(\d+)/.exec(html), sc = sm ? +sm[1] : 7;
+      var its = normRL(st, kind, sc, w0);
+      return { items: its, warn: w0, raw: its.length };
+    }
+    var warn = [], arr = parseArr(extractArray(html, kind === 'identify' ? 'quizData' : 'QS'));
     if (!arr) return { items: [], warn: ['No se encontraron las preguntas dentro del material'] };
-    var items = kind === 'fill' ? normFill(arr, warn) : normIdent(arr, warn);
+    var items = kind === 'fill' ? normFill(arr, warn) : kind === 'transform' ? normTrans(arr, warn) : normIdent(arr, warn);
     return { items: items, warn: warn, raw: arr.length };
   }
   var mem = {};
@@ -170,24 +260,26 @@
     }
     if (!best) best = shuffle(items.slice());
     var bags = {};
-    best.forEach(function (it) { var n = it.q.opts.length; bags[n] = (bags[n] || 0) + 1; });
+    best.forEach(function (it) { if (it.q.kind === 'transform') return; var n = it.q.opts.length; bags[n] = (bags[n] || 0) + 1; });
     Object.keys(bags).forEach(function (n) { var c = bags[n], off = Math.floor(rnd() * n), b = []; for (var i = 0; i < c; i++) b.push((i + off) % n); bags[n] = shuffle(b); });
     var pos = [];
     best.forEach(function (it, k) {
-      var n = it.q.opts.length, bag = bags[n], forb = {};
-      if (k >= 2 && pos[k - 1] === pos[k - 2]) forb[pos[k - 1]] = 1;
+      if (it.q.kind === 'transform') { pos.push(null); return; }
+      var n = it.q.opts.length, bag = bags[n], forb = {}, pp = pos.filter(function (x) { return x != null; });
+      if (pp.length >= 2 && pp[pp.length - 1] === pp[pp.length - 2]) forb[pp[pp.length - 1]] = 1;
       var idx = -1; for (var i = 0; i < bag.length; i++) if (!forb[bag[i]]) { idx = i; break; }
       var p = bag.length ? bag.splice(idx < 0 ? 0 : idx, 1)[0] : Math.floor(rnd() * n);
       if (forb[p]) { var alt = []; for (var q = 0; q < n; q++) if (!forb[q]) alt.push(q); if (alt.length) p = alt[Math.floor(rnd() * alt.length)]; }
       pos.push(p);
     });
     return best.map(function (it, k) {
+      if (it.q.kind === 'transform') return { mat: it.mat, id: it.q.id, q: it.q, opts: null, ans: null, bank: bankOrder(it.q) };
       var cor = it.q.correct, dis = shuffle(it.q.opts.filter(function (o) { return o !== cor; })), opts = [], di = 0;
       for (var p = 0; p < it.q.opts.length; p++) opts.push(p === pos[k] ? cor : dis[di++]);
       return { mat: it.mat, id: it.q.id, q: it.q, opts: opts, ans: pos[k] };
     });
   }
-  function arrange(items) { var r = null; for (var t = 0; t < 80; t++) { r = arrangeOnce(items); if (runs(r.map(function (x) { return x.ans; })) <= 2) return r; } return r; }
+  function arrange(items) { var r = null; for (var t = 0; t < 80; t++) { r = arrangeOnce(items); if (runs(r.filter(function (x) { return x.ans != null; }).map(function (x) { return x.ans; })) <= 2) return r; } return r; }
   function interleaveByKey(list) { // reparte las respuestas (some/any/…) antes de elegir
     var g = {}; list.forEach(function (it) { var k = String(it.correct).toLowerCase(); (g[k] = g[k] || []).push(it); });
     var keys = shuffle(Object.keys(g)), out = [], any = true;
@@ -225,14 +317,14 @@
     var by = {}; seq.forEach(function (x) { (by[x.mat] = by[x.mat] || []).push(ansKeyText(x)); });
     var inMat = 0; Object.keys(by).forEach(function (k) { inMat = Math.max(inMat, runs(by[k])); });
     var ids = seq.map(function (x) { return x.mat + '|' + x.id; });
-    return { pos: runs(seq.map(function (x) { return x.ans; })), mat: runs(seq.map(function (x) { return x.mat; })), key: runs(seq.map(ansKeyText)), inMat: inMat, dup: ids.length - Object.keys(ids.reduce(function (o, k) { o[k] = 1; return o; }, {})).length };
+    return { pos: runs(seq.filter(function (x) { return x.ans != null; }).map(function (x) { return x.ans; })), mat: runs(seq.map(function (x) { return x.mat; })), key: runs(seq.map(ansKeyText)), inMat: inMat, dup: ids.length - Object.keys(ids.reduce(function (o, k) { o[k] = 1; return o; }, {})).length };
   }
 
   /* ── RESPONDER ──────────────────────────────────────────────────────────── */
   var hooks = { onMaterialDone: null };
   function answer(uid, mats, step, chosen, mode) {
     var u = getU(uid), mk = step.mat, id = step.id, r = rec(u, mk, id) || { s: null, f: null, a: 0, r: 0, due: 0, at: 0 };
-    var ok = chosen === step.ans, mat = mats.filter(function (m) { return m.key === mk; })[0];
+    var ok = (step.q && step.q.kind === 'transform') ? transOk(step.q, chosen) : chosen === step.ans, mat = mats.filter(function (m) { return m.key === mk; })[0];
     if (mode === 'bonus') { // ⭐ repaso de la semana: solo se guardan los aciertos (los errores vuelven en otra ronda de la semana, NO van a la caja)
       if (ok) {
         setRec(u, mk, id, { s: 'ok', f: r.f != null ? r.f : true, a: (r.a || 0) + 1, r: 0, due: 0, at: AD.now() });
@@ -464,7 +556,7 @@
     VERSION: 'SESION-MIXTA-V1', CFG: CFG, enabledFor: enabledFor, kindOf: kindOf, parseHtml: parseHtml, loadMaterial: loadMaterial,
     todayMaterials: todayMaterials, matProgress: matProgress, buildSession: buildSession, arrange: arrange, metrics: metrics, runs: runs,
     answer: answer, flush: flush, pull: pull, refreshReady: refreshReady, boxStatus: boxStatus, addSeconds: addSeconds, merge: merge,
-    hooks: hooks, plain: plain, _lastUid: null,
+    hooks: hooks, plain: plain, _lastUid: null, transOk: transOk, bankOrder: bankOrder,
     weekReviews: weekReviews, weekState: function (uid) { return getU(uid).wk || null; }, live: live, weekMonday: weekMonday, weekDayIdx: weekDayIdx, LVREV: LVREV,
     _setAdapter: function (o) { Object.keys(o || {}).forEach(function (k) { AD[k] = o[k]; }); mem = {}; },
     _keys: { STATE_KEY: STATE_KEY, CACHE_KEY: CACHE_KEY }
