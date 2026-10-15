@@ -1994,7 +1994,7 @@ function StudentPractice({ student, settings, onBack }) {
   const sel = route.find(x => x.mod.id === selectedId) || route.find(x => x.state === 'cur') || route[0];
   const due = getDueReviews(student) || [];
   const improve = D.getActivitiesToImprove(student) || [];
-  const showReview = due.length > 0 || !!(D.getLastReviewResult && D.getLastReviewResult(student));
+  const showReview = !(window.JUCUM_MIX && window.JUCUM_MIX.enabledFor && window.JUCUM_MIX.enabledFor(student)) && (due.length > 0 || !!(D.getLastReviewResult && D.getLastReviewResult(student)));
   const targetMin = settings.dailyTargetMin || 15;
   const todayMin = progress.todayMinutes || 0;
   const metaMet = todayMin >= targetMin;

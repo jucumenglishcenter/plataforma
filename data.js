@@ -1961,6 +1961,9 @@ function recordReviewAttempt(studentId, moduleId, activityId, score, groupId, le
 /* Repasos que YA tocan hoy (due <= hoy). Para el panel del alumno. */
 function getDueReviews(student) {
   if (!student) return [];
+  /* WEEK-PLAN-NUBE-V1 (15-oct): en los niveles con Neuro (JUCUM_MIX.enabledFor, hoy Pre-A1) el repaso
+   * antiguo de material completo se ELIMINA para el alumno: lo reemplazan los ⭐ Repasos de la semana. */
+  if (window.JUCUM_MIX && window.JUCUM_MIX.enabledFor && window.JUCUM_MIX.enabledFor(student)) return [];
   const reviews = getReviews(student.id);
   const today = _todayStr();
   const mods = MODULE_CATALOG[student.level] || [];

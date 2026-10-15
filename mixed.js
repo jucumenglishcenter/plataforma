@@ -362,9 +362,42 @@
     out.sort(function (x, y) { return (x.at - y.at) || (x.sc - y.sc); });
     return out.slice(0, REV_MAX_MATS);
   }
+  /* ☁️ WEEK-PLAN-NUBE-V1 (15-oct-2026) · la lista semanal vive en Supabase (script 36, tabla week_reviews,
+   * PK user_id+week, el trigger impide cambiarla). LA PRIMERA LISTA GUARDADA GANA: se inserta con
+   * ignoreDuplicates y se relee; si otro equipo ganó, se adopta la suya. Sin conexión se usa la copia
+   * del celular y se sube en la próxima apertura. Lo resuelto ya está aparte en practice_items (rv:…). */
+  function planSig(p) { return (p || []).map(function (x) { return x.key + '=' + (x.ids || []).join(','); }).join(';'); }
+  function cloudWeekGet(uid, wk) {
+    var c = AD.client(); if (!c || isPreview(uid)) return Promise.resolve(undefined);
+    return Promise.resolve(c.from('week_reviews').select('plan,cap,pool').eq('user_id', uid).eq('week', wk)).then(function (r) {
+      if (r && r.error) throw r.error; var d = r && r.data && r.data[0];
+      return (d && Array.isArray(d.plan) && d.plan.length) ? d : null;
+    }).catch(function () { return undefined; });
+  }
+  function cloudWeekClaim(uid, wk, w, level) {
+    var c = AD.client(); if (!c || isPreview(uid)) return Promise.resolve(undefined);
+    return Promise.resolve(c.from('week_reviews').upsert({ user_id: uid, week: wk, level: level || '', plan: w.plan, cap: w.cap || 0, pool: w.pool || 0 }, { onConflict: 'user_id,week', ignoreDuplicates: true })).then(function (r) {
+      if (r && r.error) throw r.error; return cloudWeekGet(uid, wk);
+    }).catch(function () { return undefined; });
+  }
+  function adoptWeek(uid, wk, cw) {
+    var u = getU(uid), same = u.wk && u.wk.id === wk;
+    u.wk = { id: wk, plan: cw.plan, cap: cw.cap || 0, pool: cw.pool || 0, log: (same && u.wk.log) || {}, at: (same && u.wk.at) || AD.now(), cloud: true };
+    Object.keys(u.m).forEach(function (k) { if (/^rv:/.test(k) && k.indexOf('rv:' + wk + ':') !== 0) delete u.m[k]; });
+    putU(uid, u);
+  }
   function weekReviews(student) {
-    var uid = student.id, wk = weekMonday(), u0 = getU(uid), lv = LVREV[student.level] || LVREV['pre-a1'];
-    var plan = (u0.wk && u0.wk.id === wk && u0.wk.plan) ? u0.wk.plan : null;
+    var uid = student.id, wk = weekMonday();
+    return cloudWeekGet(uid, wk).then(function (cw) {
+      var u0 = getU(uid);
+      if (cw && !(u0.wk && u0.wk.id === wk && planSig(u0.wk.plan) === planSig(cw.plan))) adoptWeek(uid, wk, cw);
+      else if (cw && !u0.wk.cloud) { u0.wk.cloud = true; putU(uid, u0); }
+      return buildWeek(student, wk, cw, false);
+    });
+  }
+  function buildWeek(student, wk, cw, noClaim) {
+    var uid = student.id, u0 = getU(uid), lv = LVREV[student.level] || LVREV['pre-a1'];
+    var plan = (u0.wk && u0.wk.id === wk && u0.wk.plan && u0.wk.plan.length) ? u0.wk.plan : null;
     var cands = reviewCandidates(student), byKey = {};
     cands.forEach(function (c) { byKey[c.key] = c; });
     var list = plan ? plan.map(function (p) { var c = byKey[p.key]; if (!c) return null; var o = {}; Object.keys(c).forEach(function (k) { o[k] = c[k]; }); o.ids = p.ids; return o; }).filter(Boolean) : cands;
@@ -382,13 +415,22 @@
           c.ids = ids.slice(0, take); pl.push({ key: c.key, ids: c.ids }); tot += take;
         }
         Object.keys(u1.m).forEach(function (k) { if (/^rv:/.test(k) && k.indexOf('rv:' + wk + ':') !== 0) delete u1.m[k]; });
-        u1.wk = { id: wk, plan: pl, cap: tot, pool: pool, log: {}, at: AD.now() }; putU(uid, u1);
+        u1.wk = { id: wk, plan: pl, cap: tot, pool: pool, log: (u1.wk && u1.wk.id === wk && u1.wk.log) || {}, at: AD.now(), cloud: false }; putU(uid, u1);
         ls = ls.filter(function (c) { return pl.some(function (p) { return p.key === c.key; }); });
       }
-      var mats = ls.map(function (c) { return { key: 'rv:' + wk + ':' + c.key, base: c.key, moduleId: c.moduleId, activityId: c.activityId, name: c.name, short: c.short, kind: c.kind, url: c.url,
+      var finish = function () { var mats = ls.map(function (c) { return { key: 'rv:' + wk + ':' + c.key, base: c.key, moduleId: c.moduleId, activityId: c.activityId, name: c.name, short: c.short, kind: c.kind, url: c.url,
         items: c.all.filter(function (q) { return (c.ids || []).indexOf(q.id) >= 0; }) }; }).filter(function (m) { return m.items.length; });
       var w = getU(uid).wk || {};
-      return { wk: wk, mats: mats, cap: w.cap || 0, pool: w.pool || 0, pct: lv.cap, levelName: lv.n, isNew: !!(w.at && AD.now() - w.at < 60e3) };
+      return { wk: wk, mats: mats, cap: w.cap || 0, pool: w.pool || 0, pct: lv.cap, levelName: lv.n, isNew: !!(w.at && AD.now() - w.at < 60e3), cloud: !!w.cloud }; };
+      var w0 = getU(uid).wk;
+      if (cw === null && !noClaim && w0 && w0.id === wk && w0.plan && w0.plan.length) { // nube alcanzable y vacía → reclamar
+        return cloudWeekClaim(uid, wk, w0, student.level).then(function (win) {
+          if (!win) return finish();
+          if (planSig(win.plan) === planSig(w0.plan)) { var u2 = getU(uid); if (u2.wk) { u2.wk.cloud = true; putU(uid, u2); } return finish(); }
+          adoptWeek(uid, wk, win); return buildWeek(student, wk, win, true); // otro equipo ganó → misma lista para todos
+        });
+      }
+      return finish();
     });
   }
 
