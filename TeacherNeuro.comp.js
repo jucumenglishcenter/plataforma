@@ -181,10 +181,10 @@ function ntTopics(list, perStudent) {
 }
 
 /* ═════ 👥 GRUPO ═════ */
-function NeuroGroupCard({ group, students, onOpen }) {
+function NeuroGroupCard({ group, students, onOpen, only }) {   /* only='ga'|'gf' (GROUP-WS-V1): una sola pestaña, sin encabezado (dentro de una ventana) */
   const list0 = (students || []).filter(s => !ntOut(s)).sort((a, b) => a.fullName.localeCompare(b.fullName, 'es'));
   const [day, setDay] = React.useState(ntDay());
-  const [tab, setTab] = React.useState('ga');
+  const [tab, setTab] = React.useState(only || 'ga');
   const [st, reload] = useNtData(list0, day);
   const errs = useNtErrors(list0, (st.res && st.res.rows) || [], 14);
   if (!list0.length) return null;
@@ -195,15 +195,15 @@ function NeuroGroupCard({ group, students, onOpen }) {
   const topics = ntTopics(errs, false);
   return (
     <section className="nt" data-screen-label="Neuro grupo">
-      <div className="nt-h">
+      {!only && <div className="nt-h">
         <div className="t"><span>🧠 Práctica con Neuro · todo el grupo</span><small>Cada círculo se llena con lo que va respondiendo en ▶ Empezar. Toca un nombre para abrir su ficha.</small></div>
         {todayN > 0 && <span className="nt-live"><i></i>{todayN} practicaron hoy</span>}
         <button type="button" className="nt-ib" onClick={reload} title="Actualizar">↻</button>
-      </div>
-      <div className="nt-tabs" role="tablist">
+      </div>}
+      {!only && <div className="nt-tabs" role="tablist">
         <button type="button" className={tab === 'ga' ? 'on' : ''} onClick={() => setTab('ga')}>📊 Avance de todos</button>
         <button type="button" className={tab === 'gf' ? 'on' : ''} onClick={() => setTab('gf')}>❌ Lo que más falla el grupo{groups.length ? <span className="n">{groups.length}</span> : null}</button>
-      </div>
+      </div>}
       {st.loading ? <div className="nt-empty">Cargando la práctica del grupo…</div>
         : !res.ok ? <div className="nt-empty">⚠ No se pudo leer la práctica desde la nube ({res.err || 'sin conexión'}). <button type="button" className="nt-ib" onClick={reload}>Reintentar</button></div>
         : tab === 'ga' ? (
