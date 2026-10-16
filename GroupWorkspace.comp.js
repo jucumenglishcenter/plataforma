@@ -6,7 +6,8 @@
  *    ❌ Lo que más falla (Neuro: NeuroGroupCard only="gf"; otros niveles: actividades con nota más baja) ·
  *    🏆 Campeones (TeacherChampions).
  *  · Lista (Necesitan atención / Van bien, con el motivo) + ficha rápida con pestañas Resumen · Práctica ·
- *    Módulos · Historial. ↑ ↓ pasan de alumno. ⏸ y 🗑 viven en la ficha rápida (no en la fila).
+ *    Módulos · Historial. ↑ ↓ pasan de alumno. ⏸, 🗑 y 👥 Cambiar de grupo (GwMoveModal: users.group_id + level,
+ *    misma cuenta; primero la nube, si falla no cambia nada) viven en la ficha rápida (no en la fila).
  * Solo LEE datos (mismas fuentes que la tabla anterior). Lo anterior sigue como GroupDetailClassic
  * (⋯ → “Vista anterior”, se recuerda en localStorage jucum_group_view_v1). Prefijo gw* (scope global). */
 const GW_CSS = `
@@ -40,10 +41,13 @@ const GW_CSS = `
 .gw-menu hr{border:0;border-top:1px solid #EEE9DD;margin:4px 2px}
 .gw-tb{display:flex;gap:8px;flex-wrap:wrap}
 .gw-tw{display:flex;align-items:center;gap:9px;border:1.5px solid #E6E1D3;background:#fff;border-radius:12px;padding:6px 12px 6px 7px;text-align:left;min-width:0;position:relative}
+.gw-tw{flex:none;max-width:100%}
+.gw-wb>.scard>.sec-head .sec-title{display:none}
+.gw-wb>.scard span,.gw-wb>.scard button{white-space:nowrap}
 .gw-tw:hover{border-color:#1F3A8A;box-shadow:0 2px 8px rgba(31,58,138,.12)}
 .gw-ti{width:30px;height:30px;border-radius:9px;background:#F4F1EA;display:flex;align-items:center;justify-content:center;font-size:15px;flex:none}
 .gw-tw b{display:block;font-size:12.5px;font-weight:900;color:#1E2433;white-space:nowrap}
-.gw-tw small{display:block;font-size:11.5px;font-weight:700;color:#6B6252;white-space:nowrap;max-width:230px;overflow:hidden;text-overflow:ellipsis}
+.gw-tw>span:last-child{min-width:max-content}.gw-tw small{display:block;font-size:11.5px;font-weight:700;color:#6B6252;white-space:nowrap}
 .gw-sp{display:grid;grid-template-columns:330px minmax(0,1fr);gap:12px;height:clamp(520px,calc(100vh - 300px),860px)}
 .gw-cl,.gw-cp{background:#fff;border:1px solid #E6E1D3;border-radius:16px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .gw-clh{padding:10px 10px 8px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid #EEE9DD}
@@ -169,7 +173,7 @@ function gwModel(s, sugg) {
   const la = s.lastActiveDays;
   const upToDate = m.total > 0 && m.done >= m.total;
   let k, t;
-  if (la == null) { k = 'r'; t = 'Aún no ha practicado'; }
+  if (la == null) { k = 'r'; t = m.done > 0 ? 'Sin práctica reciente' : 'Aún no ha practicado'; }
   else if (la === 0) { k = 'g'; t = 'Practicó hoy'; }
   else if (upToDate) { k = 'g'; t = 'Al día · practicó hace ' + la + ' d'; }
   else if (la >= 7) { k = 'r'; t = la + ' días sin practicar'; }
@@ -273,7 +277,7 @@ function GwReinforce({ group, models, onPick }) {
   const weakActs = acts.filter(x => x.tried >= 2).sort((a, b) => a.avg - b.avg).slice(0, 4);
   const toAssign = acts.filter(x => x.done / models.length < 0.6).sort((a, b) => (b.cur - a.cur) || (a.done - b.done)).slice(0, 4);
   return (<>
-    <div className="gw-hl2">El grupo está más flojo en <b>{w.c.icon} {w.c.label}</b>: <b>{w.v}%</b> de promedio{nx ? <>, <b>{nx.v - w.v} puntos menos</b> que {nx.c.label.toLowerCase()} ({nx.v}%)</> : null}. <b>{w.low} de {w.n}</b> alumnos están por debajo de 60%.</div>
+    <div className="gw-hl2">El grupo está más flojo en <b>{w.c.icon} {w.c.label}</b>: <b>{w.v}%</b> de promedio{nx && nx.v - w.v >= 3 ? <>, <b>{nx.v - w.v} puntos menos</b> que {nx.c.label.toLowerCase()} ({nx.v}%)</> : null}. <b>{w.low} de {w.n}</b> alumnos están por debajo de 60%.</div>
     <div className="gw-card">
       <div className="gw-sub">Por qué lo digo <em>promedio del grupo por competencia · cuánto del nivel hizo × qué tan bien</em></div>
       {comps.map(x => <div key={x.c.key} className={'gw-cmp' + (x === w ? ' w' : '')}><span>{x.c.icon} {x.c.label}</span><span className="gw-bar"><u style={{ width: x.v + '%', background: x === w ? '#E53935' : gwCol(x.v) }}></u></span><b style={{ textAlign: 'right' }}>{x.v}%</b><small>{x.low} de {x.n} bajo 60%</small></div>)}
@@ -308,18 +312,55 @@ function GwFails({ group, models, onPick }) {
     <div key={x.k} className="gw-lr" style={{ alignItems: 'start' }}><span>{x.a.name}<small>{x.m.name} · prom. {x.avg}%</small><span className="gw-chips" style={{ marginTop: 5 }}>{x.below.map(s => <button type="button" key={s.id} className="r" onClick={() => onPick(s.id)}>{gwShort(s.fullName)}</button>)}</span></span><span className="gw-sc lo">{x.below.length} de {x.n}</span></div>))}</div>);
 }
 
+/* ── 👥 Cambiar de grupo (misma cuenta: avance, XP y racha intactos) ── */
+function GwMoveModal({ student, onClose, onDone }) {
+  const D = window.JUCUM_DATA;
+  const fin = (g) => !!(window.JUCUM_GRAD && window.JUCUM_GRAD.isFinished && window.JUCUM_GRAD.isFinished(g));
+  const opts = D.GROUPS.filter(g => g.id !== student.group && !fin(g));
+  const [to, setTo] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState('');
+  const dest = D.GROUPS.find(g => g.id === to);
+  const lvChange = dest && dest.level !== student.level;
+  const save = async () => {
+    if (!dest) { setErr('Elige el grupo nuevo.'); return; }
+    setBusy(true); setErr('');
+    if (window.JUCUM_SB) {
+      try { await window.JUCUM_SB.update('users', student.id, { group_id: dest.id, level: dest.level }); }
+      catch (e) { setBusy(false); setErr('No se pudo guardar en la nube (' + ((e && e.message) || 'sin conexión') + '). No se cambió nada: inténtalo de nuevo.'); return; }
+    }
+    const i = D.STUDENTS.findIndex(x => x.id === student.id);
+    if (i >= 0) { D.STUDENTS[i] = { ...D.STUDENTS[i], group: dest.id, level: dest.level }; D.saveStudents(D.STUDENTS); }
+    setBusy(false); onDone(dest);
+  };
+  const GP = window.GroupPicker;
+  return (
+    <GwWin ico="👥" title="Cambiar de grupo" sub={student.fullName} onClose={onClose}>
+      <div className="gw-card">
+        <div style={{ fontSize: 13, lineHeight: 1.5, color: '#33415C' }}>Se mueve con <b>la misma cuenta</b>: conserva su avance, notas, XP y racha. Sale de este grupo y aparece en el nuevo.</div>
+        <div className="gw-sub">Grupo nuevo</div>
+        {GP ? <GP groups={opts} value={to} onChange={(e) => setTo(e.target.value)} placeholder="Elige el grupo…" />
+          : <select className="gw-sel" style={{ maxWidth: '100%', width: '100%' }} value={to} onChange={e => setTo(e.target.value)}><option value="">Elige el grupo…</option>{opts.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select>}
+        {lvChange && <div className="gw-sg a"><span className="gw-dot a"></span><div>Ese grupo es de otro nivel: el alumno pasará a <b>{(D.LEVELS[dest.level] || {}).code || dest.level}</b>.</div></div>}
+        {err && <div className="gw-sg r"><span className="gw-dot r"></span><div>{err}</div></div>}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}><button type="button" className="gw-bt" onClick={onClose}>Cancelar</button><button type="button" className="gw-bt pr" disabled={busy || !dest} style={busy || !dest ? { opacity: .55 } : null} onClick={save}>{busy ? 'Guardando…' : 'Mover al grupo'}</button></div>
+      </div>
+    </GwWin>
+  );
+}
+
 /* ── ficha rápida ── */
 function gwSuggest(x, cls) {
   const s = x.s;
   if (x.k === 'r' && x.sugg) return <>Lleva <b>{s.lastActiveDays} días sin practicar</b> y aprobó un módulo anterior, pero no siguió con el actual. Si ya no continúa, puedes cerrar su avance: no pierde nada y se puede reabrir.</>;
-  if (x.k === 'r' && s.lastActiveDays == null) return <>Todavía <b>no ha practicado nunca</b> en la plataforma. Revisa que sepa entrar con su usuario <b>@{s.username}</b>.</>;
+  if (x.k === 'r' && s.lastActiveDays == null && !x.m.done) return <>Todavía <b>no ha practicado nunca</b> en la plataforma. Revisa que sepa entrar con su usuario <b>@{s.username}</b>.</>;
   if (x.k === 'r') return <>Lleva <b>{s.lastActiveDays} días sin practicar</b>{x.m.total > x.m.done ? <> y le faltan {x.m.total - x.m.done} actividades{cls ? ' de ' + cls.name : ''}</> : null}. Vale la pena escribirle hoy.</>;
   if (x.k === 'a' && s.lastActiveDays >= 3) return <>Lleva <b>{s.lastActiveDays} días sin practicar</b>. Aún va a tiempo: recuérdaselo en la próxima clase.</>;
   if (x.k === 'a') return <><b>{x.t}.</b> Revisa con él o ella sus notas bajas (pestaña Práctica).</>;
   if (x.r.apt) return <>Va bien y está <b>listo para el examen</b>.</>;
   return <>Va bien. Le falta subir su preparación para el examen ({x.r.overall}%, pide 75%{x.r.blocker === 'coverage' ? ' y hacer más actividades del módulo' : ''}).</>;
 }
-function GwPanel({ x, pos, total, onMove, group, level, onOpen, onClose, onDelete, tab, setTab }) {
+function GwPanel({ x, pos, total, onMove, group, level, onOpen, onClose, onDelete, onMoveGroup, tab, setTab }) {
   const D = window.JUCUM_DATA, TT = window.JUCUM_TT;
   if (!x) return <div className="gw-cp"><div className="gw-empty">Elige un alumno de la lista</div></div>;
   const s = x.s, gs = D.getGroupSettings(group.id) || {}, target = gs.dailyTargetMin || 15, thr = D.passThreshold ? D.passThreshold(s.level, s.group) : 75;
@@ -374,7 +415,7 @@ function GwPanel({ x, pos, total, onMove, group, level, onOpen, onClose, onDelet
       </div>
       <div className="gw-tabs" role="tablist">{[['res', 'Resumen'], ['pra', 'Práctica', improve.length], ['mod', 'Módulos'], ['his', 'Historial']].map(t => <button type="button" role="tab" aria-selected={tab === t[0]} key={t[0]} className={'gw-tab' + (tab === t[0] ? ' on' : '')} onClick={() => setTab(t[0])}>{t[1]}{t[2] ? <i>{t[2]}</i> : null}</button>)}</div>
       <div className="gw-pb">{body}</div>
-      <div className="gw-pf"><button type="button" className="gw-bt pr" onClick={onOpen}>Abrir ficha completa</button><span style={{ flex: 1 }}></span>{onClose && !x.sugg && <button type="button" className="gw-lk" onClick={onClose}>⏸ Cerrar avance</button>}{onDelete && <button type="button" className="gw-lk dang" onClick={onDelete}>Eliminar alumno…</button>}</div>
+      <div className="gw-pf"><button type="button" className="gw-bt pr" onClick={onOpen}>Abrir ficha completa</button><span style={{ flex: 1 }}></span>{onMoveGroup && <button type="button" className="gw-lk" onClick={onMoveGroup}>👥 Cambiar de grupo</button>}{onClose && !x.sugg && <button type="button" className="gw-lk" onClick={onClose}>⏸ Cerrar avance</button>}{onDelete && <button type="button" className="gw-lk dang" onClick={onDelete}>Eliminar alumno…</button>}</div>
     </div>
   );
 }
@@ -396,6 +437,8 @@ function GroupWorkspace({ groupId, onBack, onSelectStudent, onClassic }) {
   const [showFinish, setShowFinish] = React.useState(false);
   const [closing, setClosing] = React.useState(null);
   const [deleting, setDeleting] = React.useState(null);
+  const [moving, setMoving] = React.useState(null);
+  const [flash, setFlash] = React.useState('');
   const [f, setF] = React.useState('all');
   const [sort, setSort] = React.useState('urg');
   const [q, setQ] = React.useState('');
@@ -507,7 +550,8 @@ function GroupWorkspace({ groupId, onBack, onSelectStudent, onClassic }) {
         <GwPanel x={cur} tab={ptab} setTab={setPtab} pos={pos} total={list.length} onMove={move} group={group} level={level}
           onOpen={() => cur && onSelectStudent(cur.s.id)}
           onClose={window.CloseProgressModal && cur ? () => setClosing(cur.s) : null}
-          onDelete={window.TeacherPasswordGate && cur ? () => setDeleting(cur.s) : null} />
+          onDelete={window.TeacherPasswordGate && cur ? () => setDeleting(cur.s) : null}
+          onMoveGroup={cur ? () => setMoving(cur.s) : null} />
       </div>
 
       {W && <GwWin ico={(TB.find(b => b[0] === win) || [0, '⏸'])[1]} title={W.t} sub={W.s} onClose={() => setWin(null)}>{W.b}</GwWin>}
@@ -518,6 +562,8 @@ function GroupWorkspace({ groupId, onBack, onSelectStudent, onClassic }) {
         message: `Vas a eliminar a ${deleting.fullName} (@${deleting.username}). Esto borra PARA SIEMPRE su cuenta y acceso, todo su progreso, XP y racha, sus tareas y notas, y su historial de práctica. Esta acción NO se puede deshacer. Ingresa tu contraseña de profesor para confirmar.`,
         onConfirm: () => { const i = D.STUDENTS.findIndex(x => x.id === deleting.id); if (i >= 0) { D.STUDENTS.splice(i, 1); D.saveStudents(D.STUDENTS); } if (window.JUCUM_SB) window.JUCUM_SB.remove('users', deleting.id).catch(() => {}); setDeleting(null); setSel(null); refresh(); },
         onClose: () => setDeleting(null) })}
+      {moving && <GwMoveModal student={moving} onClose={() => setMoving(null)} onDone={(dest) => { const n = moving.fullName; setMoving(null); setSel(null); refresh(); setFlash('✓ ' + n + ' ahora está en ' + dest.name); setTimeout(() => setFlash(''), 4000); }} />}
+      {flash && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 22, transform: 'translateX(-50%)', background: '#1E2433', color: '#fff', borderRadius: 12, padding: '10px 16px', fontSize: 13, fontWeight: 800, zIndex: 1300, maxWidth: '90vw', textAlign: 'center' }}>{flash}</div>}
       {showSettings && GSM && <GSM groupId={groupId} level={level} onClose={() => { setShowSettings(false); refresh(); }} />}
     </div>
   );
