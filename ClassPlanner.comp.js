@@ -204,7 +204,9 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
   const nextM = () => setCursor(c => { const d = new Date(c.y, c.m + 1, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
   const day = (dstr) => { const p = TT.getPlannedForDay(dstr); return { classPlans: p.classPlans.filter(x => !groupId || x.groupId === groupId), practicePlans: p.practicePlans.filter(x => !groupId || x.groupId === groupId) }; };
   const logFor = (dstr) => (TT.getClassLogForDay ? TT.getClassLogForDay(dstr) : []).filter(e => !groupId || e.groupId === groupId);
-  const tasksFor = (dstr) => (window.JUCUM_TASKS ? window.JUCUM_TASKS.getAssignments() : []).filter(a => a.dueAt && ymd(new Date(a.dueAt)) === dstr && (!groupId || a.groupId === groupId));
+  /* DUE-DAY-V1 (17-oct): día LOCAL (Perú) de la fecha límite — ymd() usa UTC y una tarea del 20 a las 23:59 caía en el 21 */
+  const localDay = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  const tasksFor = (dstr) => (window.JUCUM_TASKS ? window.JUCUM_TASKS.getAssignments() : []).filter(a => a.dueAt && localDay(a.dueAt) === dstr && (!groupId || a.groupId === groupId));
 
   const sel = day(selDate); const selLog = logFor(selDate); const selTasks = tasksFor(selDate);
 
