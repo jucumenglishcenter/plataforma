@@ -25,7 +25,7 @@
     if (now - lastActive < WARN_MS) activeSeconds += dt;
     // Persist every 30s to avoid losing time on accidental close
     if (Math.floor(activeSeconds) % 30 === 0 && activeSeconds > 0) {
-      const key = `jucum_session_minutes_${user.studentId}_${new Date().toISOString().slice(0,10)}`;
+      const key = `jucum_session_minutes_${user.studentId}_${new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10)}`;
       localStorage.setItem(key, String(Math.floor(activeSeconds / 60)));
     }
   };

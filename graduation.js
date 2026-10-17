@@ -45,7 +45,7 @@
   function nextLevel(level) { return NEXT[level] || ''; }
   function fmtDate(iso) {
     if (!iso) return '';
-    var d = new Date(String(iso).slice(0, 10) + 'T12:00:00Z');
+    var d = new Date((window.JUCUM_DAY ? window.JUCUM_DAY.of(iso) : String(iso).slice(0, 10)) + 'T12:00:00Z');   // día Perú (cerrar a las 8 PM salía “mañana”)
     return d.toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
   }
   function colErr(e) {

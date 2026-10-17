@@ -8,7 +8,7 @@ const ATT_KEY = 'jucum_attendance_v1';
 function loadAtt() { try { const o = JSON.parse(localStorage.getItem(ATT_KEY) || '{}'); return o && typeof o === 'object' ? o : {}; } catch { return {}; } }
 function saveAtt(o) { localStorage.setItem(ATT_KEY, JSON.stringify(o)); }
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+function todayStr() { return new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10); } // día Perú (DIA-PERU-V1: la asistencia de una clase nocturna caía en el día siguiente)
 
 function getDay(date) { return loadAtt()[date] || {}; }
 function getStudentRecord(date, studentId) { return getDay(date)[studentId] || null; }
@@ -59,7 +59,7 @@ function getStudentSummary(studentId, days) {
  * (lun-dom) y ninguna falta. Devuelve {perfect, classes}. */
 function weekMondayStr() {
   const d = new Date(); const day = (d.getDay() + 6) % 7; d.setDate(d.getDate() - day);
-  return d.toISOString().slice(0, 10);
+  return window.JUCUM_DAY.local(d);
 }
 function getWeekAttendance(studentId) {
   const monday = weekMondayStr();

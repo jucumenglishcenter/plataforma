@@ -150,7 +150,7 @@
     const key = 'jucum_neuro_seen_' + student.id;
     let prev = null;
     try { prev = JSON.parse(localStorage.getItem(key) || 'null'); } catch {}
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10); // día Perú
     const practiced = (m.todayMin || 0) > 0;
     const next = m.next || {};
     const nextLabel = next.nextLabel || (next.stage != null && STAGES[next.stage] ? STAGES[next.stage].label : null);

@@ -369,7 +369,7 @@ function GradLeads({ onBack }) {
   const csv = () => {
     const H = ['Alumno','Grupo','Terminó','Resultado','Opinión (1-5)','Le gustó','Mejorar','¿Continuar?','Horario','Estado','Respondió'];
     const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-    const lines = [H.map(esc).join(';')].concat(list.map(r => [r.student_name, r.group_name, r.finished_label, r.result === 'reprobo' ? 'Reprobó' : r.result === 'cerrado' ? 'Avance cerrado' : 'Aprobó', r.rating, (r.liked || []).join(', '), r.improve, r.wants, (r.schedule || []).join(', '), r.status, String(r.updated_at || '').slice(0, 10)].map(esc).join(';')));
+    const lines = [H.map(esc).join(';')].concat(list.map(r => [r.student_name, r.group_name, r.finished_label, r.result === 'reprobo' ? 'Reprobó' : r.result === 'cerrado' ? 'Avance cerrado' : 'Aprobó', r.rating, (r.liked || []).join(', '), r.improve, r.wants, (r.schedule || []).join(', '), r.status, window.JUCUM_DAY.of(r.updated_at)].map(esc).join(';')));
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\n')], { type:'text/csv;charset=utf-8' }));
     a.download = 'interesados-en-continuar.csv'; a.click();
   };
@@ -430,7 +430,7 @@ function BadgeShelf({ student, title, only }) {
   const list = only === 'earned' ? all.filter(b => b.earned) : only === 'missing' ? all.filter(b => !b.earned) : all;
   const n = all.filter(b => b.earned).length;
   const lv = (window.JUCUM_DATA.LEVELS[student.level] || {}).code || '';
-  const fmt = d => { try { return d ? new Date(String(d).slice(0, 10) + 'T12:00:00Z').toLocaleDateString('es-PE', { month:'short', year:'numeric', timeZone:'UTC' }) : ''; } catch (e) { return ''; } };
+  const fmt = d => { try { return d ? new Date(window.JUCUM_DAY.of(d) + 'T12:00:00Z').toLocaleDateString('es-PE', { month:'short', year:'numeric', timeZone:'UTC' }) : ''; } catch (e) { return ''; } };
   return (
     <div style={{display:'flex',flexDirection:'column',gap:10}}>
       <div style={{fontFamily:GRD_FONT_T,fontWeight:600,fontSize:16,color:'#0D1B5A',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>{title || '🏅 Mis insignias'}{!only && <span style={{fontSize:12,color:'#8A94A6',fontWeight:700,fontFamily:'Nunito,sans-serif'}}>{n} de {all.length} · {lv}</span>}</div>

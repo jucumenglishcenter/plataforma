@@ -84,7 +84,7 @@ function SRStoriesCloud({ student }) {
   rows.forEach(x => {
     const k = `${x.module_id}·${x.activity_id}`;
     (groups[k] = groups[k] || { mod: x.module_id, act: x.activity_id, parts: {} }).parts[x.part] =
-      { score: x.score, date: (x.completed_at || '').slice(0, 10) };
+      { score: x.score, date: window.JUCUM_DAY.of(x.completed_at) };
   });
   const label = a => /read/i.test(a) ? '📖 Comprensión lectora' : /listen/i.test(a) ? '🎧 Comprensión auditiva' : /story/i.test(a) ? '📗 Stories y diálogos' : '📘 ' + a;
   return (

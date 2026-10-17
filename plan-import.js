@@ -23,6 +23,7 @@
   const MN = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   const nowISO = () => new Date().toISOString();
   const peruToday = () => new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
+  const peruDayOf = (x) => window.JUCUM_DAY.of(x);   // DIA-PERU-V1
   const j = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } };
   const w = (k, v) => { try { if (window.JUCUM_STORE) return window.JUCUM_STORE.setJSON(k, v); localStorage.setItem(k, JSON.stringify(v)); } catch (e) { try { console.warn('plan-import: no se pudo guardar', e && e.name); } catch (e2) {} } };
   const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -783,9 +784,9 @@
       let t = 0, ok = 0; const pend = [];
       sts.forEach(s => {
         const prog = D.getStudentProgress(s.id); const en = prog.completed && prog.completed[p.moduleId + ':' + p.activityId];
-        const passedBefore = en && en.date && String(en.date).slice(0, 10) < e.date && (['story', 'summary', 'quizlet'].includes(p.type) || D.entryPassed(en, s.level, s.group));
+        const passedBefore = en && en.date && peruDayOf(en.date) < e.date && (['story', 'summary', 'quizlet'].includes(p.type) || D.entryPassed(en, s.level, s.group));
         if (p.onlyPending && passedBefore) return;
-        t++; const done = en && en.date && String(en.date).slice(0, 10) >= e.date;
+        t++; const done = en && en.date && peruDayOf(en.date) >= e.date;
         if (done) ok++; else pend.push((s.fullName || s.username || '').split(' ')[0]);
       });
       return `- ${p.en.split(' (')[0]}: ${ok}/${t} completed${pend.length ? ' (pending: ' + pend.join(', ') + ')' : ''}`;

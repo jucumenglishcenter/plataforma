@@ -402,7 +402,7 @@ function GwPanel({ x, pos, total, onMove, group, level, onOpen, onClose, onDelet
     const log = (D.getStudentLog ? D.getStudentLog(s.id) : []).slice(0, 10);
     body = (<>
       <div className="gw-sub">Últimas prácticas</div>
-      {log.length ? <div>{log.map((e, i) => <div key={i} className="gw-lr"><span>{e.detail}<small>{e.module}{e.date ? ' · ' + gwDLbl(e.date.slice(0, 10)) + ' ' + e.date.slice(11, 16) : ''}</small></span>{typeof e.score === 'number' ? <span className={'gw-sc ' + gwScC(e.score, thr)}>{e.score}%</span> : <span className="gw-sc nn">hecha</span>}</div>)}</div> : <div className="gw-note">Todavía no hay prácticas registradas.</div>}
+      {log.length ? <div>{log.map((e, i) => <div key={i} className="gw-lr"><span>{e.detail}<small>{e.module}{e.date ? ' · ' + gwDLbl(e.date.slice(0, 10)) + ' ' + e.date.slice(11, 16) : ''}</small></span>{typeof e.score === 'number' ? <span className={'gw-sc ' + gwScC(e.score, thr)}>{e.score}%</span> : <span className="gw-sc nn">hecha</span>}</div>)}</div> : <div className="gw-note">Todavía no hay prácticas registradas.</div>}{/* día-ok: getStudentLog ya da hora Perú */}
     </>);
   }
   return (

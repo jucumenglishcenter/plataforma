@@ -125,7 +125,7 @@ function pcCss() { if (document.getElementById('pc3-css')) return; const s = doc
 const pcToday = () => window.JUCUM_PAYGATE.peruToday();
 function pcFmt(iso, long) {
   if (!iso) return '—';
-  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+  const [y, m, d] = (window.JUCUM_DAY.of(iso) || String(iso).slice(0, 10)).split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
   const DW = ['dom','lun','mar','mié','jue','vie','sáb'], MO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   return (long ? DW[dt.getUTCDay()] + ' ' : '') + d + ' ' + MO[m - 1];

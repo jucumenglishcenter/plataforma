@@ -88,7 +88,7 @@ function withClock(blocks, startHHMM) {
 /* ════════ Utilidades de fecha ════════ */
 const MONTHS_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 const DOW_ES = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
-function ymd(d) { return d.toISOString().slice(0, 10); }
+function ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); } // DIA-PERU-V1: día LOCAL (con toISOString, desde las 7 PM “hoy” ya era mañana)
 function parseYMD(s) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); }
 function monthMatrix(year, month) {        // month 0-11 → array of {date, inMonth}
   const first = new Date(year, month, 1);
@@ -350,7 +350,7 @@ function ClassSummaryModal({ date, groupId, onClose, onDuplicate }) {
   const marked = att.filter(a => a.st).length;
   // Comentarios de clase de ese día (notas con fecha = ese día, de este grupo o de sus alumnos)
   const sIds = new Set(students.map(s => s.id));
-  const notes = (TT.getNotes ? TT.getNotes() : []).filter(n => String(n.date).slice(0,10) === date && (n.groupId === groupId || (n.studentId && sIds.has(n.studentId)) || (!n.groupId && !n.studentId)));
+  const notes = (TT.getNotes ? TT.getNotes() : []).filter(n => window.JUCUM_DAY.of(n.date) === date && (n.groupId === groupId || (n.studentId && sIds.has(n.studentId)) || (!n.groupId && !n.studentId)));
   const generalNotes = notes.filter(n => !n.studentId);
   const studentNotes = notes.filter(n => n.studentId);
   const ATT_META = { asistio:{l:'P',c:'#2E7D32'}, tarde:{l:'T',c:'#F2820D'}, falto:{l:'A',c:'#C0392B'} };
@@ -1423,7 +1423,7 @@ function ClassMode({ plan, onBack }) {
 
 function RosterPanel({ students, group, planDate, onClose }) {
   const D = window.JUCUM_DATA; const TT = window.JUCUM_TT; const A = window.JUCUM_ATT;
-  const date = planDate || (A ? A.todayStr() : new Date().toISOString().slice(0, 10));
+  const date = planDate || (A ? A.todayStr() : window.JUCUM_DAY.today());
   const [noteFor, setNoteFor] = React.useState(null);
   const [txt, setTxt] = React.useState('');
   const [savedFor, setSavedFor] = React.useState(null);

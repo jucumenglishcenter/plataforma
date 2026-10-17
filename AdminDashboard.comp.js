@@ -478,7 +478,7 @@ function exportRosterCSV(list, D, regByKey) {
     const lvl = (D.LEVELS[s.level] || {}).code || s.level || '';
     const o = originOf(s, regByKey).l.includes('enlace') ? 'Por enlace' : 'Creado por ti';
     const st = P.getAccountStatus(s).state || '';
-    const fecha = s.createdAt ? new Date(s.createdAt).toISOString().slice(0,10) : '';
+    const fecha = s.createdAt ? window.JUCUM_DAY.of(s.createdAt) : '';
     const mastery = D.getStudentMastery ? D.getStudentMastery(s).pct : (s.avgScore||0);
     rows.push([s.fullName||'', s.username||'', s.dni||'', s.email||'', s.phone||'', s.guardianName||'', s.guardianDni||'', lvl, g?.name||'', o, fecha, s.streak||0, mastery, st]);
   });
@@ -486,7 +486,7 @@ function exportRosterCSV(list, D, regByKey) {
   const blob = new Blob(['\uFEFF'+csv], { type: 'text/csv;charset=utf-8;' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'alumnos-jucum-'+new Date().toISOString().slice(0,10)+'.csv';
+  a.download = 'alumnos-jucum-'+window.JUCUM_DAY.today()+'.csv';
   document.body.appendChild(a); a.click(); a.remove();
 }
 

@@ -24,7 +24,7 @@
   function peruToday() { return new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10); }
   function peruDayOf(iso) { if (!iso) return ''; var t = Date.parse(iso); return isNaN(t) ? String(iso).slice(0, 10) : new Date(t - 5 * 3600000).toISOString().slice(0, 10); }
   function pd(s) { var a = String(s).split('-').map(Number); return Date.UTC(a[0], a[1] - 1, a[2]); }
-  function iso(t) { return new Date(t).toISOString().slice(0, 10); }
+  function iso(t) { return new Date(t).toISOString().slice(0, 10); } /* día-ok */
   function addDays(s, n) { return iso(pd(s) + n * 864e5); }
   function diff(a, b) { return Math.round((pd(a) - pd(b)) / 864e5); }
   function onDay(y, m, d) { var last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate(); return iso(Date.UTC(y, m, Math.min(d, last))); }

@@ -92,7 +92,7 @@
     return g && g.startDate ? String(g.startDate).slice(0, 7) : null;
   }
 
-  function thisMonth() { return new Date().toISOString().slice(0, 7); }
+  function thisMonth() { return new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 7); } // mes Perú
 
   /* Altas y bajas + tasa de retención */
   function altasBajas() {

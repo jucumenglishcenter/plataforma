@@ -677,7 +677,7 @@ function ModuleExamBanner({ mod, studentId }) {
         ]);
         const data = res && res.data;
         if (dead) return;
-        const rows = (data || []).filter(r => (r.module_id === 'exam-' + inf.exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl)) && (!F0.examDesde || !F0.examDesde(inf.exam) || String(r.created_at || '').slice(0, 10) >= F0.examDesde(inf.exam)));
+        const rows = (data || []).filter(r => (r.module_id === 'exam-' + inf.exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl)) && (!F0.examDesde || !F0.examDesde(inf.exam) || window.JUCUM_DAY.of(r.created_at) >= F0.examDesde(inf.exam)));
         if (rows.length) {
           /* Vale el PRIMER intento; solo lo reemplaza una repetición hecha DENTRO de la ventana
              de recuperación que abrió la profesora (23-ago-2026). Antes se mostraba la mejor. */

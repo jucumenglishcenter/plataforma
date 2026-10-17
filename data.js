@@ -246,7 +246,7 @@ function dailyDataDemo(student) {
   for (let i = 13; i >= 0; i--) {
     const date = new Date();
     date.setDate(date.getDate() - i);
-    const dStr = date.toISOString().slice(0, 10);
+    const dStr = date.toISOString().slice(0, 10); /* día-ok */
     const baseActive = r();
     const active = i >= student.lastActiveDays && baseActive > (student.lastActiveDays > 7 ? 0.7 : 0.3);
     if (active) {
@@ -1197,7 +1197,7 @@ function weekId() {
   const p = peruNow();                       // "ahora" en Perú (campos UTC = hora Perú)
   const day = (p.getUTCDay() + 6) % 7;       // 0 = lunes
   p.setUTCDate(p.getUTCDate() - day);
-  return p.toISOString().slice(0, 10);       // lunes de esta semana (fecha Perú)
+  return p.toISOString().slice(0, 10);       // lunes de esta semana (fecha Perú) /* día-ok */
 }
 function getWeeklyXP(studentId) {
   let all = {};
@@ -1256,11 +1256,11 @@ const LEAGUE_SCENARIOS = ['theme-gold','theme-mountains','theme-night','theme-au
 function lastWeekId() {                       // lunes de la semana ANTERIOR (la cerrada)
   const p = peruNow(); const day = (p.getUTCDay() + 6) % 7;
   p.setUTCDate(p.getUTCDate() - day - 7);
-  return p.toISOString().slice(0, 10);
+  return p.toISOString().slice(0, 10); /* día-ok */
 }
 function _nextMonday(mondayStr) {
   const d = new Date(mondayStr + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 7);
-  return d.toISOString().slice(0, 10);
+  return d.toISOString().slice(0, 10); /* día-ok */
 }
 /* XP de un alumno DENTRO de una semana concreta [lunes, lunes+7) */
 function getWeeklyXPForWeek(student, mondayStr) {
@@ -1393,7 +1393,7 @@ function inGraceWeek(student) {
   if (!student) return false;
   const g = GROUPS.find(x => x.id === student.group);
   if (!g || !g.startDate) return false;
-  const start = new Date(g.startDate);
+  const start = window.JUCUM_DAY.parse(g.startDate);
   if (isNaN(start)) return false;
   const end = new Date(start); end.setDate(end.getDate() + 7);
   return new Date() < end;
@@ -1578,9 +1578,9 @@ function getStudentReadiness(student) {
     const limiteSinFecha = peruDayStr(Date.now() - 7 * 86400000);
     const cuentan = mine.filter(a => {
       if ((subs[a.id] || {})[student.id]) return true;
-      const due = String(a.dueAt || '').slice(0, 10);
+      const due = window.JUCUM_DAY.of(a.dueAt);   // día Perú (una tarea del 20 a las 23:59 era “del 21”)
       if (due) return due < hoyP;
-      const creada = String(a.date || '').slice(0, 10);
+      const creada = window.JUCUM_DAY.of(a.date);
       return !!creada && creada < limiteSinFecha;
     });
     if (cuentan.length) {
@@ -1811,7 +1811,7 @@ function getFarmingFlag(student) {
   Object.values(completed).forEach(e => {
     const pct = scorePct(e && e.score);
     if (pct === null || !e.date) return;          // solo actividades con nota
-    const d = String(e.date).slice(0, 10);
+    const d = window.JUCUM_DAY.of(e.date);
     (byDay[d] = byDay[d] || []).push(pct);
   });
   let worst = null;
@@ -2295,7 +2295,7 @@ function latentGate(mod, a, i, progress, level) {
   const avail = new Date(new Date(gate.date).getTime() + LATENT_DELAY_DAYS * 86400000);
   const now = new Date();
   const daysLeft = Math.ceil((avail - now) / 86400000);
-  return { latent: true, ready: now >= avail, daysLeft: Math.max(0, daysLeft), availableOn: avail.toISOString().slice(0, 10) };
+  return { latent: true, ready: now >= avail, daysLeft: Math.max(0, daysLeft), availableOn: peruDayStr(avail.getTime()) };
 }
 
 /* 🔒 CANDADO-NOTA-V1 (12-oct-2026) · Desbloqueo secuencial POR NOTA.
@@ -2507,7 +2507,7 @@ function jecPagedDaily(cols, applyFilter, done) {
     var d = new Date(dayStr + 'T00:00:00Z');
     var wd = (d.getUTCDay() + 6) % 7;            // 0 = lunes
     d.setUTCDate(d.getUTCDate() - wd);
-    return d.toISOString().slice(0, 10);
+    return d.toISOString().slice(0, 10); /* día-ok */
   }
   function load() {
     try {

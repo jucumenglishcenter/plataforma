@@ -13,7 +13,7 @@
 
   /* ── Hora de Perú ── */
   function pNow() { return new Date(Date.now() - 5 * 3600000); }        // campos UTC = hora Perú
-  function pDay() { return pNow().toISOString().slice(0, 10); }
+  function pDay() { return pNow().toISOString().slice(0, 10); } /* día-ok */
   function pMin() { const d = pNow(); return d.getUTCHours() * 60 + d.getUTCMinutes(); }
   function hm(s, fb) { if (!s || !/^\d{1,2}:\d{2}$/.test(s)) return fb; const [h, m] = s.split(':').map(Number); return h * 60 + m; }
   function fmtHora(s) { if (!s) return ''; const [h, m] = s.split(':').map(Number); const am = h < 12; const h12 = h % 12 || 12; return h12 + ':' + String(m).padStart(2, '0') + (am ? ' am' : ' pm'); }
@@ -95,7 +95,7 @@
    * descartan notas heredadas de OTRO examen cuando un equipo arrastra un mapeo viejo en su
    * caché (bug real: la nota del M2 del 22-jul salía como "examen rendido" del M3). */
   function examDesde(exam) {
-    try { const t = Date.parse((exam && exam.date) || ''); if (!t) return null; return new Date(t - 86400000).toISOString().slice(0, 10); } catch (e) { return null; }
+    try { const t = Date.parse((exam && exam.date) || ''); if (!t) return null; return new Date(t - 86400000).toISOString().slice(0, 10); } catch (e) { return null; } /* día-ok */
   }
   function minGradeFor(groupId) { const n = Number((load().cfg[groupId] || {}).minGrade); return (n >= 1 && n <= 100) ? n : 75; }
   /* 🎓 NOTA OFICIAL del examen (23-ago-2026) · regla fija, no volver a promediar ni "la mejor":
@@ -163,13 +163,15 @@
     const sum = det.reduce((a, d) => a + (d.score || 0), 0);
     return { score: Math.round(sum / total), parcial: true, falta: falta, total: total };
   }
-  function notaOficial(list, ret, desde) {
-    const rows = (list || []).filter(r => r && typeof r.score === 'number' && (!desde || String(r.date || '').slice(0, 10) >= desde))
+  /* DIA-PERU-V1: día Perú de una nota (un examen rendido a las 8 PM del último día de la recuperación contaba como del día siguiente) */
+function rDay(x) { if (!x) return ''; if (/^\d{4}-\d{2}-\d{2}$/.test(String(x))) return String(x); var t = Date.parse(x); return isFinite(t) ? pDayOf(t) : ''; }
+function notaOficial(list, ret, desde) {
+    const rows = (list || []).filter(r => r && typeof r.score === 'number' && (!desde || rDay(r.date) >= desde))
       .slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
     if (!rows.length) return null;
     const first = rows[0];
     let rec = null;
-    if (ret && ret.from && ret.to) rows.slice(1).forEach(r => { const d = String(r.date || '').slice(0, 10); if (d >= ret.from && d <= ret.to) rec = r; });
+    if (ret && ret.from && ret.to) rows.slice(1).forEach(r => { const d = rDay(r.date); if (d >= ret.from && d <= ret.to) rec = r; });
     const use = rec || first;
     return { score: use.score, date: use.date, isRecovery: !!rec, intentos: rows.length, primera: first.score, sinPermiso: rows.length - 1 - (rec ? 1 : 0) };
   }

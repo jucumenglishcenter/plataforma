@@ -19,7 +19,7 @@
     const x = new Date(d); const day = (x.getDay() + 6) % 7;
     x.setHours(0,0,0,0); x.setDate(x.getDate() - day); return x;
   }
-  function fmtWeek(d) { return d.toISOString().slice(0,10); }
+  function fmtWeek(d) { return window.JUCUM_DAY.local(d); }
 
   /* mapa actId→{type,comp} y total por competencia para el nivel del alumno */
   function levelMaps(student) {
@@ -59,7 +59,7 @@
   function enrollDate(student) {
     const D = window.JUCUM_DATA;
     const g = (D.GROUPS||[]).find(x => x.id === student.group);
-    if (g && g.startDate) return new Date(g.startDate);
+    if (g && g.startDate) return window.JUCUM_DAY.parse(g.startDate);
     const evs = gradedEvents(student);
     return evs.length ? evs[0].date : new Date();
   }

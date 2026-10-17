@@ -303,3 +303,26 @@ if (window.JUCUM_CONFIG.SUPABASE_ANON_KEY === 'PEGA_TU_PUBLISHABLE_KEY_AQUI') {
   // Higiene al arrancar: las notificaciones no deben crecer sin límite.
   try { pruneNotifs(25); } catch (e) {}
 })();
+
+// ════════ 🗓️ DÍA PERÚ · DIA-PERU-V1 (17-oct-2026) ════════
+// ÚNICA forma de pasar una fecha a "día" en la plataforma. toISOString() es UTC:
+// desde las 7 PM de Perú ya es "mañana" (bug real: una tarea del 20 a las 23:59 salía el 21
+// en el calendario; la asistencia/notas de una clase nocturna caían en el día siguiente).
+//   hoy (Perú) ............ JUCUM_DAY.today()        mes ......... JUCUM_DAY.month()
+//   instante ISO/ms → día . JUCUM_DAY.of(x)          ('aaaa-mm-dd' se devuelve tal cual)
+//   Date de calendario .... JUCUM_DAY.local(d)       (medianoche local → 'aaaa-mm-dd')
+//   'aaaa-mm-dd' → Date ... JUCUM_DAY.parse(s)       NUNCA new Date('aaaa-mm-dd') = 7 PM del día anterior
+// herramientas/compilar-plataforma.js NO compila si encuentra el patrón viejo
+// (si un caso es a propósito, ponle el comentario día-ok en esa línea).
+window.JUCUM_DAY = (function () {
+  var OFF = 5 * 3600000, RE = /^\d{4}-\d{2}-\d{2}$/;
+  function iso(ms) { return new Date(ms - OFF).toISOString().slice(0, 10); } // día-ok (es EL helper)
+  function of(x) { if (x == null || x === '') return ''; if (typeof x === 'string' && RE.test(x)) return x; var ms = typeof x === 'number' ? x : (x instanceof Date ? x.getTime() : Date.parse(x)); return isFinite(ms) ? iso(ms) : ''; }
+  function today() { return iso(Date.now()); }
+  function month() { return today().slice(0, 7); }
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function local(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function parse(s) { var a = String(s || '').slice(0, 10).split('-').map(Number); return new Date(a[0], (a[1] || 1) - 1, a[2] || 1); }
+  function add(s, n) { var d = parse(s); d.setDate(d.getDate() + n); return local(d); }
+  return { OFF: OFF, of: of, today: today, month: month, local: local, parse: parse, add: add };
+})();

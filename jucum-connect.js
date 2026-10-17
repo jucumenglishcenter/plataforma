@@ -274,7 +274,7 @@
       if (!classSb && teacher && window.supabase) { try { classSb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch (e) {} }
       if (!teacher || !classSb || activeSec < CLASS_MIN_SEC) return;
       classSb.from('teacher_class_log').upsert({
-        id: classId, date: new Date().toISOString().slice(0, 10),
+        id: classId, date: new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10), // día Perú (clase nocturna)
         started_at: classStartISO, ended_at: new Date().toISOString(),
         minutes: Math.round(activeSec / 60), group_id: groupId || null,
         material_name: matName || (modId + ' · ' + actId), module_id: modId,

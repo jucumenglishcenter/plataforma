@@ -446,7 +446,7 @@ function StudentDashboard({ user, onLogout }) {
     if (!D.isNewWeekFor(student.id)) return;
     const p = new Date(Date.now() - 5 * 3600000);              // lunes (hora Perú)
     const wd = (p.getUTCDay() + 6) % 7; p.setUTCDate(p.getUTCDate() - wd);
-    const wk = p.toISOString().slice(0, 10);
+    const wk = p.toISOString().slice(0, 10); /* día-ok */
     const seenKey = `jucum_weeknotif_${student.id}`;
     let last = null; try { last = localStorage.getItem(seenKey); } catch {}
     if (last === wk) return;

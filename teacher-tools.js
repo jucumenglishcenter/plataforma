@@ -269,7 +269,7 @@
     return { classPlans: getClassPlansForDay(date), practicePlans: getPracticePlansForDay(date) };
   }
   function getClassLogForGroupRecent(groupId, days) {
-    const cut = new Date(Date.now() - (days || 4) * 86400000).toISOString().slice(0, 10);
+    const cut = new Date(Date.now() - 5 * 3600000 - (days || 4) * 86400000).toISOString().slice(0, 10);
     return getClassLog().filter(e => (!groupId || e.groupId === groupId) && e.date >= cut)
       .sort((a, b) => String(b.date).localeCompare(String(a.date)));
   }
@@ -281,7 +281,7 @@
     const all = j(DPR_KEY, []);
     const e = { id: 'dp-' + Date.now() + '-' + Math.random().toString(36).slice(2,5),
       groupId: dp.groupId || null,
-      openDate: dp.openDate || new Date().toISOString().slice(0,10),
+      openDate: dp.openDate || todayStr(),
       dueDate: dp.dueDate || null,
       activities: dp.activities || [],          // [{moduleId, activityId, label, type}]
       bonusXp: dp.bonusXp != null ? dp.bonusXp : 30,
@@ -309,7 +309,7 @@
         if (e.date && (!lastDate || e.date > lastDate)) lastDate = e.date;
       }
     });
-    const today = new Date().toISOString().slice(0,10);
+    const today = todayStr();
     const overdue = !!dp.dueDate && today > dp.dueDate;
     const upcoming = !!dp.openDate && today < dp.openDate;
     const allPassed = total > 0 && passed >= total;
@@ -324,7 +324,7 @@
   /* Bloques visibles para el alumno (ya abiertos), más recientes primero. */
   function getActiveDirectedForStudent(student) {
     if (!student) return [];
-    const today = new Date().toISOString().slice(0,10);
+    const today = todayStr();
     return getDirectedForGroup(student.group).filter(d => !d.openDate || today >= d.openDate);
   }
 
@@ -334,7 +334,7 @@
   function logClassMaterial(entry) {
     const arr = getClassLog();
     const e = { id: 'cl-' + Date.now() + '-' + Math.random().toString(36).slice(2,5),
-      date: entry.date || new Date().toISOString().slice(0,10),
+      date: entry.date || todayStr(),
       from: entry.from || null, to: entry.to || null, minutes: entry.minutes || 0,
       groupId: entry.groupId || null, materialName: entry.materialName || 'Material',
       moduleId: entry.moduleId || null, activityId: entry.activityId || null,

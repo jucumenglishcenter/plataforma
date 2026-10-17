@@ -144,7 +144,7 @@ function DirectedPracticePanel({ onChange }) {
   const { GROUPS, LEVELS, MODULE_CATALOG } = window.JUCUM_DATA;
   const TT = window.JUCUM_TT;
   const [groupId, setGroupId] = React.useState(GROUPS[0]?.id || '');
-  const today = new Date().toISOString().slice(0,10);
+  const today = window.JUCUM_DAY.today();
   const [openDate, setOpenDate] = React.useState(today);
   const [dueDate, setDueDate] = React.useState('');
   const [picked, setPicked] = React.useState([]);
@@ -195,7 +195,7 @@ function DirectedPracticePanel({ onChange }) {
         {list.length===0 ? <div className="empty-state"><div className="icon">📌</div>Aún no creaste ninguna para este grupo.</div> : (
           <div className="sm-list">
             {list.map(d => {
-              const todayS = new Date().toISOString().slice(0,10);
+              const todayS = window.JUCUM_DAY.today();
               const st = d.openDate>todayS ? {t:'Próxima',c:'#7B1FA2'} : (d.dueDate && d.dueDate<todayS ? {t:'Cerrada',c:'#C0392B'} : {t:'Activa',c:'#B26A00'});
               return (
                 <div key={d.id} className="sm-row">
@@ -354,8 +354,8 @@ function ClassLogPanel({ onChange }) {
   const { GROUPS, LEVELS } = window.JUCUM_DATA;
   const TT = window.JUCUM_TT;
   const today = new Date();
-  const [ym, setYm] = React.useState(today.toISOString().slice(0,7));
-  const [selDay, setSelDay] = React.useState(today.toISOString().slice(0,10));
+  const [ym, setYm] = React.useState(window.JUCUM_DAY.month());
+  const [selDay, setSelDay] = React.useState(window.JUCUM_DAY.today());
   const [adding, setAdding] = React.useState(false);
   const entries = TT.getClassLogForMonth(ym);
   const byDay = {}; entries.forEach(e => { (byDay[e.date] = byDay[e.date] || []).push(e); });
@@ -368,7 +368,7 @@ function ClassLogPanel({ onChange }) {
   for (let i=0;i<startWd;i++) cells.push(null);
   for (let d=1; d<=daysInMonth; d++) cells.push(`${ym}-${String(d).padStart(2,'0')}`);
 
-  const shiftMonth = (delta) => { const dt = new Date(y, m-1+delta, 1); setYm(dt.toISOString().slice(0,7)); };
+  const shiftMonth = (delta) => { const dt = new Date(y, m-1+delta, 1); setYm(window.JUCUM_DAY.local(dt).slice(0,7)); };
   const dayEntries = TT.getClassLogForDay(selDay);
   const monthMin = entries.reduce((s,e)=>s+(e.minutes||0),0);
 
@@ -391,7 +391,7 @@ function ClassLogPanel({ onChange }) {
             const mins = es.reduce((s,e)=>s+(e.minutes||0),0);
             const dnum = Number(date.slice(8));
             return (
-              <button key={i} className={`cal-cell ${selDay===date?'sel':''} ${es.length?'has':''} ${date===today.toISOString().slice(0,10)?'today':''}`} onClick={()=>setSelDay(date)}>
+              <button key={i} className={`cal-cell ${selDay===date?'sel':''} ${es.length?'has':''} ${date===window.JUCUM_DAY.today()?'today':''}`} onClick={()=>setSelDay(date)}>
                 <span className="cal-num">{dnum}</span>
                 {es.length>0 && <span className="cal-dot">{es.length} · {mins}m</span>}
               </button>
@@ -561,7 +561,7 @@ function RemindersPanel({ onChange }) {
           <div className="sm-list">
             {reminders.map(r => {
               const g = GROUPS.find(g=>g.id===r.groupId);
-              const overdue = r.due && !r.done && r.due < new Date().toISOString().slice(0,10);
+              const overdue = r.due && !r.done && r.due < window.JUCUM_DAY.today();
               return (
                 <div key={r.id} className="sm-row" style={{opacity:r.done?0.55:1}}>
                   <input type="checkbox" checked={r.done} onChange={()=>{ TT.toggleReminder(r.id); onChange(); }} style={{width:18,height:18}} />
