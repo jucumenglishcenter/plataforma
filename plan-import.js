@@ -516,7 +516,10 @@
     if (/transform|\bP3\b|pr[aá]ctica\s*#?\s*3/i.test(s)) actOfKind(mod, grp, 'tr').slice(0, 1).forEach(a => push(a));
     if (/resumen|summary|repaso de gram/i.test(s) || (tg && /revis|repas|review/i.test(s))) actOfKind(mod, grp, 'summary').slice(0, 1).forEach(a => push(a));
     if (out.length) return out;
-    if (/listening|audio/i.test(s)) push(byType(mod, 'listening'));
+    /* RL-FIX-V1 (17-oct): el nombre “Comprensión lectora/auditiva” gana a la palabra suelta “audio” de los pasos */
+    const rk = window.JUCUM_TT && window.JUCUM_TT.rlKind ? window.JUCUM_TT.rlKind(s) : null;
+    if (rk) push(byType(mod, rk));
+    else if (/listening|audio/i.test(s)) push(byType(mod, 'listening'));
     else if (/reading|comprensi[oó]n lectora/i.test(s)) push(byType(mod, 'reading'));
     else if (/stor(y|ies)|historia|di[aá]logo|dialogue|lectura/i.test(s)) push(byType(mod, 'story'));
     return out;
@@ -726,7 +729,7 @@
   function publishSetJ(rec, mod, e, a, drop, cpId) {
     const TT = window.JUCUM_TT; const d = rec.draft;
     const qz = { traducir: a['qz-traducir'], ordenar: a['qz-ordenar'], vocabulario: a['qz-vocabulario'] };
-    const items = d.practice.filter(p => !drop.has(p.activityId));
+    const items = d.practice.filter(p => !drop.has(p.activityId)).map(p => (TT.fixRL ? TT.fixRL(p, mod) : p));
     const acts = items.filter(p => p.activityId).map(p => ({ moduleId: p.moduleId, activityId: p.activityId, label: p.label, type: p.type, note: '', quizKey: p.quizKey || null, quizUrl: (p.quizKey && qz[p.quizKey]) || null, onlyPending: !!p.onlyPending, prio: p.prio || 0, fromImport: true }));
     const oldIds = (rec.published && rec.published.practicePlanIds) || {}; const newIds = {};
     if (items.length && e.practiceDays.length) {

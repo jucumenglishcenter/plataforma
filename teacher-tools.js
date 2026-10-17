@@ -180,7 +180,29 @@
 
   /* ── Planes de práctica por FECHAS explícitas (el profe elige los días) ── */
   function rawPP() { return j(PP_KEY, []); }
-  function getPracticePlans() { return alive(rawPP()); }
+  /* RL-FIX-V1 (17-oct): “Comprensión lectora · … Historia #1” con el paso “si fallas, escucha el AUDIO”
+   * se importaba como LISTENING (enlace, selector “¿Qué audio?” y columna del 📊 Avance mal). El NOMBRE
+   * de la actividad manda: se corrige al leer (sin reescribir la nube) → arregla también los sets ya publicados. */
+  const RL_READ = /comprensi[oó]n\s+lectora|reading\s+comprehension|\breading\b/i, RL_LIST = /comprensi[oó]n\s+auditiva|audio\s+comprehension|\blistening\b/i;
+  function rlKind(t) { const s = String(t || ''); const r = RL_READ.test(s), l = RL_LIST.test(s); return r && !l ? 'reading' : (l && !r ? 'listening' : null); }
+  function rlMod(id) { const C = (window.JUCUM_DATA && window.JUCUM_DATA.MODULE_CATALOG) || {}; for (const lv of Object.keys(C)) { const m = (C[lv] || []).find(x => x.id === id); if (m) return m; } return null; }
+  function fixRL(x, mod) {
+    if (!x || (x.type !== 'listening' && x.type !== 'reading')) return x;
+    const want = rlKind(x.label || x.title); if (!want || want === x.type) return x;
+    const m = mod || (x.moduleId ? rlMod(x.moduleId) : null); const a = m ? (m.activities || []).find(z => z.type === want) : null;
+    if (x.activityId && !a) return x;
+    const y = { ...x, type: want }; if (a && x.activityId) y.activityId = a.id;
+    if (x.kind === 'listening' || x.kind === 'reading') y.kind = want;
+    if (x.emoji === '🎧' && want === 'reading') y.emoji = '📕';
+    return y;
+  }
+  function fixPlanRL(p) {
+    if (!p) return p; let ch = false; const fx = (o) => { const b = fixRL(o); if (b !== o) ch = true; return b; };
+    const acts = Array.isArray(p.activities) ? p.activities.map(fx) : p.activities;
+    const steps = p.guide && Array.isArray(p.guide.steps) ? p.guide.steps.map(fx) : null;
+    return ch ? { ...p, activities: acts, guide: steps ? { ...p.guide, steps } : p.guide } : p;
+  }
+  function getPracticePlans() { return alive(rawPP()).map(fixPlanRL); }
   function savePracticePlans(a) { w(PP_KEY, a); cloudSetting('practice_plans', a); }
   function addPracticePlan(pp) {
     const all = rawPP();
@@ -405,7 +427,7 @@
 
   window.JUCUM_TT = {
     getDailyPractice, setDailyPractice, getTodayPracticeForStudent, genericPractice,
-    getPracticePlans, addPracticePlan, updatePracticePlan, deletePracticePlan, getPracticePlansForDay, getPracticePlansForStudentOnDate,
+    getPracticePlans, addPracticePlan, updatePracticePlan, deletePracticePlan, getPracticePlansForDay, getPracticePlansForStudentOnDate, fixRL, fixPlanRL, rlKind,
     getGuideFavs, addGuideFav, deleteGuideFav,
     getClassPlans, upsertClassPlan, deleteClassPlan, getClassPlansForDay, getPlannedForDay, getClassLogForGroupRecent,
     getTemplates, addTemplate, updateTemplate, deleteTemplate,
