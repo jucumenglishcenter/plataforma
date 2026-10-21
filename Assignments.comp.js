@@ -1132,4 +1132,4 @@ function StudentTaskCard({ a, student, onChange }) {
   );
 }
 
-Object.assign(window, { TeacherAssignments, StudentAssignments, TaskAttachmentChip, TaskFilePicker, AssignmentForm, TeacherSubmissions, GradeModal, StudentTaskCard, TaskActivityPanel });
+Object.assign(window, { TeacherAssignments, StudentAssignments, TaskAttachmentChip, TaskFilePicker, AssignmentForm, DuplicateTaskModal, TeacherSubmissions, GradeModal, StudentTaskCard, TaskActivityPanel });

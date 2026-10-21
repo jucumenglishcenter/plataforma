@@ -199,6 +199,8 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
   const [dupPlan, setDupPlan] = React.useState(null);           // ⧉ duplicar plan a otro grupo
   const [trackSet, setTrackSet] = React.useState(null);         // 📊 avance de un set de práctica
   const [followPlan, setFollowPlan] = React.useState(null);     // 🔎 seguimiento de una clase dada
+  const [dupTask, setDupTask] = React.useState(null);           // ⧉ TASK-DUP-V1: duplicar tarea desde el calendario
+  const [dupTaskEdit, setDupTaskEdit] = React.useState(null);
   const cells = monthMatrix(cursor.y, cursor.m);
   const prevM = () => setCursor(c => { const d = new Date(c.y, c.m - 1, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
   const nextM = () => setCursor(c => { const d = new Date(c.y, c.m + 1, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
@@ -282,6 +284,7 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
           return (
             <DayRow key={t.id} icon="📋" tint="#FFF4E5" border="#F0C28A" title={`${t.title}${closed ? ' · cerrada' : ''}`}
               sub={`Tarea · cierra ${hh}${t.gradable ? ' · calificable' : ''}`}
+              onDup={window.DuplicateTaskModal ? () => setDupTask(t) : null}
               onOpen={() => onOpenTasks && onOpenTasks()} />
           );
         })}
@@ -323,6 +326,8 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
       </div>
       {summaryDate && <ClassSummaryModal date={summaryDate} groupId={groupId} onClose={() => setSummaryDate(null)} onDuplicate={(p) => { setSummaryDate(null); setDupPlan(p); }} />}
       {dupPlan && <DuplicateClassModal plan={dupPlan} onClose={() => setDupPlan(null)} onDone={() => { setDupPlan(null); onChange(); }} />}
+      {dupTask && window.DuplicateTaskModal && <DuplicateTaskModal task={dupTask} onClose={() => setDupTask(null)} onDone={() => { setDupTask(null); onChange(); }} onEditCopy={pf => { setDupTask(null); setDupTaskEdit(pf); }} />}
+      {dupTaskEdit && window.AssignmentForm && <AssignmentForm prefill={dupTaskEdit} onClose={() => setDupTaskEdit(null)} onSaved={() => { setDupTaskEdit(null); onChange(); }} />}
       {trackSet && <PracticeSetProgress plan={trackSet} onClose={() => setTrackSet(null)} />}
       {followPlan && window.FollowUpModal && <FollowUpModal plan={followPlan} onClose={() => setFollowPlan(null)} />}
     </>
