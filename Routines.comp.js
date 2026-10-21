@@ -127,10 +127,31 @@ function rtStudentState(student, th) {
 function rtDaysSince(s) { if (!s) return 0; return Math.max(0, Math.round((Date.parse(rtToday()) - Date.parse(s)) / 86400000)); }
 function rtReminderText(student, th, i) { const a = th.steps[i]; return { type: 'daily-reminder', title: '🧭 Tu clase ya va en ' + RT_STEP[th.cur], body: 'Te falta ' + RT_STEP[i] + ' · ' + th.group.replace(/^T\d+\s*·\s*/, '') + '. Son unos minutos y así llegas listo a la próxima clase. 💪', link: 'practice' }; }
 /* Panel del profesor (dentro del seguimiento) */
+/* ⚠ RHYTHM-ALERT-V1 (21-oct-2026): avisos 🧭 que el alumno YA recibió, leídos de la tabla notifications
+ * (sin script nuevo). Quien recibió 2+ y sigue atrasado en ese paso → alerta para el profesor. */
+const RT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function rtRemBody(th, i) { return 'Te falta ' + RT_STEP[i] + ' · ' + th.group.replace(/^T\d+\s*·\s*/, '') + '.'; }
+function useRtSentReminders(ids) {
+  const [rows, setRows] = React.useState(null); const key = ids.join(',');
+  React.useEffect(() => {
+    let off = false; const sb = window.JUCUM_SB && window.JUCUM_SB.getClient && window.JUCUM_SB.getClient();
+    const ok = ids.filter(x => RT_UUID.test(String(x))); if (!sb || !ok.length) { setRows(null); return; }
+    const since = new Date(Date.now() - 30 * 86400000).toISOString();
+    Promise.resolve(sb.from('notifications').select('user_id,body,created_at').in('user_id', ok).like('title', '🧭 Tu clase ya va en%').gte('created_at', since).limit(3000))
+      .then(r => { if (!off && r && !r.error) setRows(r.data || []); }, () => {});
+    return () => { off = true; };
+  }, [key]);
+  return rows;
+}
+function rtRemCount(rows, sid, th, i) { if (!rows) return { n: 0, last: null }; const b = rtRemBody(th, i); let n = 0, last = null; rows.forEach(r => { if (String(r.user_id) === String(sid) && String(r.body || '').startsWith(b)) { n++; if (!last || r.created_at > last) last = r.created_at; } }); return { n, last }; }
 function RhythmPanel({ groupId }) {
   const D = window.JUCUM_DATA; const [tick, setTick] = React.useState(0); const [sent, setSent] = React.useState({});
-  const ths = rtGroupRhythm(groupId); if (!ths.length) return null;
   const students = (D.STUDENTS || []).filter(s => s.group === groupId && s.active !== false && !s.closedAt);
+  const remRows = useRtSentReminders(students.map(s => s.id).sort());
+  const ths = rtGroupRhythm(groupId); if (!ths.length) return null;
+  const alerts = []; ths.forEach(th => students.forEach(s => { const st = rtStudentState(s, th); st.forEach((x, i) => { if (x !== 'behind') return; const c = rtRemCount(remRows, s.id, th, i); if (c.n >= 2) alerts.push({ s, th, i, ...c }); }); }));
+  const alertOf = (s, th) => alerts.find(a => a.s.id === s.id && a.th === th);
+  const nm = s => (s.fullName || s.username || '').split(' ').slice(0, 2).join(' ');
   const gs = D.getGroupSettings(groupId) || {}; const auto = gs.gramRemind !== false;
   const dot = st => { const z = 15; if (st === 'ok') return <span style={{display:'inline-block', width:z, height:z, borderRadius:'50%', background:'#43A047'}}></span>; if (st === 'behind') return <span style={{display:'inline-block', width:z, height:z, borderRadius:'50%', border:'2.5px solid #E53935', boxSizing:'border-box'}}></span>; if (st === 'cur') return <span style={{display:'inline-block', width:z, height:z, borderRadius:'50%', border:'2.5px solid #FB8C00', background:'#FFF4E5', boxSizing:'border-box'}}></span>; if (st === 'none') return <span style={{color:'#ccc'}}>—</span>; return <span style={{display:'inline-block', width:z, height:z, borderRadius:'50%', border:'2px dashed #C9C3B3', boxSizing:'border-box'}}></span>; };
   return (
@@ -140,13 +161,21 @@ function RhythmPanel({ groupId }) {
         <label style={{display:'flex', alignItems:'center', gap:7, fontSize:12.5, fontWeight:800, cursor:'pointer'}}><input type="checkbox" checked={auto} onChange={e => { D.setGroupSettings(groupId, { gramRemind: e.target.checked }); setTick(t => t + 1); }} /> Recordatorios automáticos {auto ? 'activados' : 'apagados'}</label>
       </div>
       <div style={{fontSize:12, color:'#7a705c', fontWeight:700}}>Fuera del ritmo = le falta aprobar un paso <b>anterior</b> al que va la clase. Avisos automáticos: máximo 1 por día y 2 por paso.</div>
+      {alerts.length > 0 && (
+        <div style={{display:'flex', gap:10, alignItems:'flex-start', border:'1.5px solid #F5B7B1', background:'#FDEDEC', borderRadius:12, padding:'10px 12px', color:'#7B241C', fontSize:12.5, lineHeight:1.5}}>
+          <span style={{fontSize:18}}>⚠️</span>
+          <div style={{flex:1}}><b>{alerts.length === 1 ? '1 alumno ya recibió' : alerts.length + ' alumnos ya recibieron'} los 2 recordatorios y {alerts.length === 1 ? 'sigue' : 'siguen'} sin ponerse al día.</b> Los avisos automáticos ya no le llegarán: conviene hablarle en clase.
+            <div style={{display:'flex', flexDirection:'column', gap:3, marginTop:6}}>{alerts.map(a => <span key={a.s.id + a.th.group + a.i}>· <b>{nm(a.s)}</b> — le falta {RT_STEP[a.i]} · {a.th.group.replace(/^T\d+\s*·\s*/, '')} ({a.n} avisos{a.last ? ', el último ' + rtDay(new Date(Date.parse(a.last) - 5 * 3600000).toISOString().slice(0, 10)) : ''})</span>)}</div>
+          </div>
+        </div>)}
       {ths.map(th => (
         <div key={th.mod.id + th.group} style={{overflowX:'auto', overflowY:'hidden'}}>
           <div style={{fontSize:12.5, fontWeight:800, color:'#1F3A8A', margin:'4px 0'}}>{th.group} · la clase va en <b>{RT_STEP[th.cur]}</b> (desde {rtDay(th.since)})</div>
           <table style={{borderCollapse:'collapse', width:'100%', minWidth:440}}>
             <thead><tr><th style={{fontSize:10.5, color:'#8a7f6a', textAlign:'left', padding:4}}>Alumno</th>{RT_STEP.map((s, i) => <th key={i} style={{fontSize:10.5, color: i === th.cur ? '#3F5BB8' : '#8a7f6a', padding:4}}>{s}{i === th.cur ? ' ▶' : ''}</th>)}<th></th></tr></thead>
             <tbody>{students.map(s => { const st = rtStudentState(s, th); const behind = st.indexOf('behind'); const key = s.id + th.group;
-              return <tr key={s.id}><td style={{fontWeight:800, fontSize:12.5, padding:'5px 4px', borderTop:'1px solid #F2ECDD', whiteSpace:'nowrap'}}>{(s.fullName || s.username || '').split(' ').slice(0, 2).join(' ')}</td>{st.map((x, i) => <td key={i} style={{textAlign:'center', borderTop:'1px solid #F2ECDD'}}>{dot(x)}</td>)}
+              const al = alertOf(s, th);
+              return <tr key={s.id}><td style={{fontWeight:800, fontSize:12.5, padding:'5px 4px', borderTop:'1px solid #F2ECDD', whiteSpace:'nowrap'}}>{nm(s)}{al && <span title={al.n + ' recordatorios recibidos sin ponerse al día'} style={{marginLeft:6, fontSize:10.5, fontWeight:900, background:'#FDEDEC', color:'#B03A2E', border:'1px solid #F5B7B1', borderRadius:6, padding:'1px 6px'}}>⚠ {al.n} avisos</span>}</td>{st.map((x, i) => <td key={i} style={{textAlign:'center', borderTop:'1px solid #F2ECDD'}}>{dot(x)}</td>)}
                 <td style={{borderTop:'1px solid #F2ECDD', textAlign:'right'}}>{behind >= 0 ? (sent[key] ? <span style={{fontSize:11.5, fontWeight:800, color:'#2E7D32'}}>✓ enviado</span> : <button onClick={() => { if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(s.id, rtReminderText(s, th, behind)); setSent(x => ({ ...x, [key]: 1 })); }} style={{border:'1.5px solid #D6DEEA', background:'#fff', borderRadius:9, padding:'3px 9px', fontSize:11.5, fontWeight:800, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap'}}>🔔 Recordar</button>) : <span style={{fontSize:11, color:'#8a7f6a', fontWeight:700}}>{st.includes('cur') ? 'en el paso actual' : 'al día'}</span>}</td></tr>; })}</tbody>
           </table>
         </div>))}
