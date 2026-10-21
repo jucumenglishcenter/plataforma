@@ -98,7 +98,9 @@ function fuReport(plan) {
   L.push('Módulo: ' + (plan.moduleName || '—') + ' · ' + (plan.sessionLabel || '') + ' (' + fuDay(F.day) + ')');
   L.push('Período: clase ' + fuDay(F.day) + ' + práctica en casa ' + fuDay(F.day) + ' → ' + fuDay(F.until) + (F.open ? ' (la práctica en casa sigue abierta)' : ''));
   L.push('Datos reales de la plataforma. Regla de refuerzo: más de 1 alumno bajo ' + FU_MIN + ' %.', '');
-  L.push('1. ASISTENCIA', F.attTaken ? '- ' + F.present.length + ' de ' + F.students.length + (F.absent.length ? '. Faltó: ' + F.absent.map(nm).join(', ') + '.' : '. Vinieron todos.') : '- No se tomó asistencia.', '');
+  L.push('1. ASISTENCIA', F.attTaken ? '- ' + F.present.length + ' de ' + F.students.length + (F.absent.length ? '. Faltó: ' + F.absent.map(nm).join(', ') + '.' : '. Vinieron todos.') : '- No se tomó asistencia.');
+  if (F.attTaken && window.JUCUM_ATT) { const ad = window.JUCUM_ATT.getDay(F.day) || {}; const pp = F.present.map(s => [s, (ad[s.id] && ad[s.id].participation) || 0]); if (pp.some(x => x[1])) L.push('- Participación: ' + pp.filter(x => x[1]).sort((a, b) => b[1] - a[1]).map(([s, n]) => nm(s) + ' ' + n).join(' · ') + (pp.some(x => !x[1]) ? ' (no participó: ' + pp.filter(x => !x[1]).map(([s]) => nm(s)).join(', ') + ')' : '')); }
+  L.push('');
   L.push('2. LO PLANEADO EN CLASE (cierre del teacher)');
   const cl = ['', 'completo', 'más corto', 'no se hizo'];
   (plan.blocks || []).forEach(b => { const v = F.closing && F.closing.blocks ? F.closing.blocks[b.id] : 0; const why = F.closing && F.closing.why ? F.closing.why[b.id] : ''; L.push('- ' + b.title + ' (' + b.mins + ' min): ' + (cl[v] || 'sin marcar') + (why && v > 1 ? ' — ' + why : '')); });
@@ -116,7 +118,9 @@ function fuReport(plan) {
   const ek = Object.keys(F.evals);
   L.push('', '6. EVALUACIÓN DEL TEACHER EN CLASE'); if (!ek.length) L.push('- (no se evaluó)');
   ek.forEach(k => L.push('- ' + (FU_CRIT[k] || k) + ': ' + F.evals[k].map(([n, v]) => (FU_LV[v] || v) + ' ' + n).join(' · ')));
-  L.push('', '7. PENDIENTES PARA LA PRÓXIMA CLASE'); if (!F.pend.length) L.push('- (ninguno)'); F.pend.forEach(p => L.push('- ' + p));
+  L.push('', '7. PENDIENTES PARA LA PRÓXIMA CLASE'); const nb = plan.nextBox || null; const carry = (plan.carry || []).filter(Boolean);
+  if (!F.pend.length && !(nb && (carry.length || (nb.notes || []).length))) L.push('- (ninguno)'); F.pend.forEach(p => L.push('- ' + p));
+  if (nb) { carry.forEach((c, i) => L.push('- [' + ((nb.done || {})[i] ? 'listo' : 'pendiente') + '] ' + ((nb.edit || {})[i] != null ? nb.edit[i] : c))); (nb.notes || []).forEach(n => L.push('- Apunte del teacher: ' + n.t)); }
   if (F.closing && F.closing.note) L.push('', '8. NOTAS DEL TEACHER', '- ' + F.closing.note);
   return L.join('\n');
 }
@@ -166,7 +170,7 @@ function FollowUpPanel({ plan, where, onAddPending, startOpen }) {
   if (!plan) return where === 'plan' ? null : <div className="scard" style={{fontSize:13, color:'#8a7f6a', fontWeight:700}}>Este grupo aún no tiene clases anteriores guardadas.</div>;
   if (!F) return null;
   const nm = s => fuFirst(s.fullName || s.username);
-  const head = where === 'plan' ? '🔎 Antes de planificar: desde la última clase' : where === 'cal' ? '🔎 Seguimiento de esta clase' : '🔎 Desde la última clase';
+  const head = where === 'plan' ? '🔎 Antes de planificar: desde la última clase' : where === 'cal' ? '🔎 Seguimiento de esta clase' : where === 'class' ? '📊 Práctica de la última clase' : '🔎 Desde la última clase';
   return (
     <div className="scard" style={{marginBottom:16, border:'2px solid #9FB0DA', display:'flex', flexDirection:'column', gap:10}}>
       <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
@@ -248,6 +252,7 @@ function ClassCloseModal({ plan, onClose, onSaved, onOpenRoster, onOpenEval }) {
           {attOk ? <span style={fuChip('#E8F5E9', '#1B5E20')}>✓ Asistencia tomada · {nPres} de {students.length}</span> : <button onClick={onOpenRoster} style={{...fuBtn, borderColor:'#F0C28A', color:'#9C5D00'}}>⚠ Falta tomar asistencia →</button>}
           {evalOk ? <span style={fuChip('#E8F5E9', '#1B5E20')}>✓ Clase evaluada</span> : <button onClick={onOpenEval} style={{...fuBtn, borderColor:'#F0C28A', color:'#9C5D00'}}>Evaluar la clase (opcional) →</button>}
         </div>
+        {window.PzCloseSummary && <PzCloseSummary students={students.filter(s => !s.closedAt)} date={plan.date} />}
         <div style={{fontSize:12.5, fontWeight:800, color:'#0D1B5A'}}>1 · ¿Qué pasó con cada bloque que planeaste?</div>
         <div style={{fontSize:12, color:'#7a705c', fontWeight:700, marginTop:-6}}>Un toque por bloque. Lo que no se hizo pasa solo a “Pendientes” del próximo plan y al reporte para tu Claude.</div>
         {(plan.blocks || []).map(b => { const v = marks[b.id] || 0; return (

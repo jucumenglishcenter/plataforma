@@ -698,6 +698,8 @@
       date: e.date, startTime: e.startTime || '09:00', sessionLabel: d.sessionLabel, emphasis: d.emphasis || (d.blocks.map(b => b.title).slice(0, 3).join(' · ')),
       blocks: d.blocks.map(b => ({ id: b.id, emoji: b.emoji, title: b.title, mins: Number(b.mins) || 0, mats: (b.mats || []).map(m => ({ moduleId: mod.id, activityId: m.activityId, quizKey: m.quizKey || null })), steps: (b.steps || []).concat(b.warn && !(b.steps || []).some(s => s.includes(b.warn)) ? ['⚠ ' + b.warn] : []) })),
       materials, source: { importId: rec.id, files: rec.files, importedAt: rec.createdAt }, carry: d.carry, nextNotes: d.myNotes || [] };
+    /* CLASSMODE-IMPORT-V1: republicar conserva lo marcado en ➡ Para la próxima clase */
+    if (planId) { const prevCP = TT.getClassPlans().find(p => p.id === planId); if (prevCP && prevCP.nextBox) classPlan.nextBox = prevCP.nextBox; }
     const cpId = TT.upsertClassPlan(classPlan);
     if (d.mode === 'jucum') return publishSetJ(rec, mod, e, a, drop, cpId);
     const qz = { traducir: a['qz-traducir'], ordenar: a['qz-ordenar'], vocabulario: a['qz-vocabulario'] };

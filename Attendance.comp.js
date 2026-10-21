@@ -200,7 +200,7 @@ function StudentAttendanceCard({ student }) {
             <div key={i} className="sm-row" style={{padding:'8px 10px'}}>
               <span style={{fontSize:16}}>{v.icon}</span>
               <div className="sm-info"><div className="sm-name" style={{fontSize:13}}>{new Date(h.date+'T12:00').toLocaleDateString('es-PE',{weekday:'long', day:'numeric', month:'long'})}</div></div>
-              <span className="mm-chip" style={{background:v.bg, color:v.color}}>{v.label}{h.status==='asistio'&&h.participation>0?` · participó ${h.participation}/3`:''}</span>
+              <span className="mm-chip" style={{background:v.bg, color:v.color}}>{v.label}{h.status==='asistio'&&h.participation>0?` · participó ${h.participation} ${h.participation===1?'vez':'veces'}`:''}</span>
             </div>
           );
         })}

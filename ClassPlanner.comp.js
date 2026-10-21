@@ -473,7 +473,7 @@ function DuplicateClassModal({ plan, onClose, onDone }) {
   const dup = () => {
     const g = (GROUPS || []).find(x => x.id === gid);
     const lvl = (g && g.level) || plan.level;
-    const copy = { ...plan, id: undefined, groupId: gid, level: lvl, date,
+    const copy = { ...plan, id: undefined, nextBox: undefined, groupId: gid, level: lvl, date,
       blocks: (plan.blocks || []).map(b => ({ ...b, id: 'b_' + Math.random().toString(36).slice(2,7) })) };
     TT.upsertClassPlan(copy);
     alert('⧉ Clase duplicada al grupo seleccionado el ' + date + '. Ábrela en su calendario para ajustar lo que quieras (no se tocó el original).');
@@ -1257,6 +1257,90 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
   );
 }
 
+/* ════════ CLASSMODE-IMPORT-V1 (21-oct-2026) · solo planes importados del documento ════════
+ * Aprobado por la usuaria en “Espejo - Modo clase con plan importado.html”: 📊 Práctica de la última clase
+ * (FollowUpPanel de la clase anterior del grupo) · 🧭 Contexto del tracker (rec.draft: ctx · open · nonneg · adapt)
+ * · ➡ Para la próxima clase (plan.carry + apuntes) guardado en el plan como `nextBox` {done, edit, notes, at}.
+ * Planes hechos a mano: idénticos. “Apuntes que te dejaste” y lo de dentro de cada bloque NO se eligieron. */
+const cmLbl = { fontSize:11, fontWeight:900, letterSpacing:'.05em', textTransform:'uppercase', color:'#8a7f6a', margin:'12px 0 4px' };
+const cmUl = { margin:0, paddingLeft:20, fontSize:12.5, lineHeight:1.5, color:'#444' };
+function CmContext({ rec }) {
+  const d = (rec && rec.draft) || {}; const [open, setOpen] = React.useState(false);
+  const ctx = (d.ctx || []).filter(x => x && x[1]); const rules = (d.nonneg || []).filter(x => x && (x[0] || x[1]));
+  const adapt = (d.adapt || []).filter(Boolean); const pend = (d.open || []).filter(Boolean);
+  if (!ctx.length && !rules.length && !adapt.length && !pend.length) return null;
+  const ritmo = ctx.find(x => x[0] === 'Ritmo');
+  return (
+    <div className="scard">
+      <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
+        <div className="sec-title" style={{flex:1, minWidth:180}}>🧭 Contexto del tracker</div>
+        <button onClick={() => setOpen(o => !o)} style={{...btnGhost, padding:'6px 12px', fontSize:12}}>{open ? '▲ Ocultar' : '▼ Ver todo'}</button>
+      </div>
+      <div style={{fontSize:12, color:'#7a705c', fontWeight:700, marginTop:2}}>Solo lo ves tú · sale del documento que subiste{ritmo ? ' · Ritmo: ' : ''}{ritmo && <b style={{color:'#1F3A8A'}}>{ritmo[1]}</b>}</div>
+      {open && <>
+        {ctx.length > 0 && <><div style={cmLbl}>Estado del grupo</div><div style={{display:'flex', flexDirection:'column', gap:4}}>{ctx.map((x, i) => <div key={i} style={{fontSize:12.5, lineHeight:1.45, color:'#333'}}><b>{x[0]}:</b> {x[1]}</div>)}</div></>}
+        {pend.length > 0 && <><div style={cmLbl}>Pendientes abiertos</div><ul style={cmUl}>{pend.map((x, i) => <li key={i}>{x}</li>)}</ul></>}
+        {rules.length > 0 && <><div style={cmLbl}>Reglas del método</div><ul style={cmUl}>{rules.map(([k, v], i) => <li key={i}><b>{k}</b>{v ? ': ' + v : ''}</li>)}</ul></>}
+        {adapt.length > 0 && <><div style={cmLbl}>Si falta tiempo · adaptaciones</div><ul style={cmUl}>{adapt.map((x, i) => <li key={i}>{x}</li>)}</ul></>}
+      </>}
+    </div>
+  );
+}
+function cmNextSeed(p) {
+  const nb = (p && p.nextBox) || {};
+  const notes = Array.isArray(nb.notes) ? nb.notes : ((p && p.nextNotes) || []).map((n, i) => ({ id: 'nn' + i, t: typeof n === 'string' ? n : ((n && n.t) || '') })).filter(n => n.t);
+  return { done: nb.done || {}, edit: nb.edit || {}, notes };
+}
+function CmNextBox({ plan }) {
+  const TT = window.JUCUM_TT;
+  const cur = () => (TT.getClassPlans().find(p => p.id === plan.id) || plan);
+  const [box, setBox] = React.useState(() => cmNextSeed(cur()));
+  const [ed, setEd] = React.useState(null); const [edT, setEdT] = React.useState('');
+  const [txt, setTxt] = React.useState(''); const [saved, setSaved] = React.useState(false);
+  const carry = (cur().carry || []).filter(Boolean);
+  const persist = nb => { setBox(nb); try { TT.upsertClassPlan({ ...cur(), nextBox: { ...nb, at: new Date().toISOString() } }); setSaved(true); setTimeout(() => setSaved(false), 1400); } catch (e) { alert('No se pudo guardar. Inténtalo de nuevo.'); } };
+  const textOf = i => (box.edit[i] != null ? box.edit[i] : carry[i]);
+  const startEd = (k, t) => { setEd(k); setEdT(t); };
+  const saveEd = () => { const t = edT.trim(); if (String(ed).startsWith('c')) { const i = ed.slice(1); persist({ ...box, edit: { ...box.edit, [i]: t || carry[i] } }); } else persist({ ...box, notes: t ? box.notes.map(n => n.id === ed ? { ...n, t } : n) : box.notes.filter(n => n.id !== ed) }); setEd(null); };
+  const addNote = () => { const t = txt.trim(); if (!t) return; persist({ ...box, notes: [...box.notes, { id: 'nn' + Date.now().toString(36), t, at: new Date().toISOString() }] }); setTxt(''); };
+  const inp = { flex:1, minWidth:0, border:'1px solid #E3DCC9', borderRadius:8, padding:'6px 9px', fontFamily:'inherit', fontSize:12.5 };
+  const mini = { border:'1px solid #E3DCC9', background:'#fff', borderRadius:8, padding:'3px 8px', cursor:'pointer', fontFamily:'inherit', fontWeight:800, fontSize:11.5, color:'#6b5a1f' };
+  const doneN = carry.filter((_, i) => box.done[i]).length;
+  return (
+    <div className="scard" style={{border:'2px solid #A5D6A7'}}>
+      <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
+        <div className="sec-title" style={{flex:1, minWidth:180}}>➡ Para la próxima clase</div>
+        {saved && <span style={{fontSize:12, fontWeight:800, color:'#2E7D32'}}>✓ Guardado</span>}
+        {carry.length > 0 && <span style={{fontSize:11.5, fontWeight:800, color:'#1B5E20', background:'#E8F5E9', borderRadius:8, padding:'2px 8px'}}>{doneN}/{carry.length} confirmados</span>}
+      </div>
+      <div style={{fontSize:12, color:'#7a705c', fontWeight:700, marginTop:2}}>Marca lo que ya quedó listo. Todo va al 📤 reporte de seguimiento.</div>
+      {carry.length > 0 && <><div style={cmLbl}>Del documento (Carry-Forward)</div>
+        <div style={{display:'flex', flexDirection:'column', gap:6}}>{carry.map((c, i) => (
+          <div key={i} style={{display:'flex', gap:8, alignItems:'flex-start'}}>
+            <input type="checkbox" checked={!!box.done[i]} onChange={e => persist({ ...box, done: { ...box.done, [i]: e.target.checked } })} style={{marginTop:3, width:16, height:16, flexShrink:0}} />
+            {ed === 'c' + i
+              ? <><input value={edT} onChange={e => setEdT(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveEd(); }} style={inp} autoFocus /><button onClick={saveEd} style={mini}>Guardar</button></>
+              : <><span style={{flex:1, fontSize:12.5, lineHeight:1.45, color: box.done[i] ? '#8a8a8a' : '#333', textDecoration: box.done[i] ? 'line-through' : 'none'}}>{textOf(i)}</span><button onClick={() => startEd('c' + i, textOf(i))} title="Editar" style={mini}>✎</button></>}
+          </div>))}</div></>}
+      <div style={cmLbl}>Mis apuntes</div>
+      <div style={{display:'flex', flexDirection:'column', gap:6}}>
+        {box.notes.length === 0 && <div style={{fontSize:12, color:'#999', fontWeight:700}}>Todavía no anotaste nada.</div>}
+        {box.notes.map(n => (
+          <div key={n.id} style={{display:'flex', gap:8, alignItems:'flex-start'}}>
+            <span style={{color:'#2E7D32', fontWeight:900}}>•</span>
+            {ed === n.id
+              ? <><input value={edT} onChange={e => setEdT(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveEd(); }} style={inp} autoFocus /><button onClick={saveEd} style={mini}>Guardar</button></>
+              : <><span style={{flex:1, fontSize:12.5, lineHeight:1.45, color:'#333'}}>{n.t}</span><button onClick={() => startEd(n.id, n.t)} title="Editar" style={mini}>✎</button><button onClick={() => { if (window.confirm('¿Borrar este apunte?')) persist({ ...box, notes: box.notes.filter(x => x.id !== n.id) }); }} title="Borrar" style={{...mini, color:'#C0392B', borderColor:'#F0C0BA'}}>✕</button></>}
+          </div>))}
+        <div style={{display:'flex', gap:6, marginTop:2}}>
+          <input value={txt} onChange={e => setTxt(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addNote(); }} placeholder="Ej.: repasar P2 con Lesli y Arturo" style={inp} />
+          <button onClick={addNote} style={{...mini, padding:'6px 12px', background:'#E8F5E9', color:'#1B5E20', borderColor:'#A5D6A7'}}>＋ Anotar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ════════ Modo clase · plan + materiales siempre a la vista ════════ */
 function ClassMode({ plan, onBack }) {
   const { MODULE_CATALOG, STUDENTS, GROUPS } = window.JUCUM_DATA;
@@ -1282,8 +1366,11 @@ function ClassMode({ plan, onBack }) {
   const [liveOn, setLiveOn] = React.useState(false);
   const [evalOn, setEvalOn] = React.useState(false);
   const [closeOn, setCloseOn] = React.useState(false);
+  const [pzOn, setPzOn] = React.useState(false);
   const [closedPlan, setClosedPlan] = React.useState(plan.closing ? plan : null);
   const focusKeys = mats.filter(m => m.moduleId && m.activityId).map(m => m.moduleId + ':' + m.activityId);
+  const cmRec = (plan.source && plan.source.importId && window.JUCUM_PLANIMPORT) ? window.JUCUM_PLANIMPORT.get(plan.source.importId) : null;
+  const cmPrev = cmRec && window.fuLastPlan ? window.fuLastPlan(plan.groupId, plan.date) : null;
   const open = (m) => {
     if (m.type === 'quizlet') { setQuizPick({ ...m, quizLinks: cpQuizLinks(m, MODULE_CATALOG) }); return; }
     askTimer();
@@ -1317,6 +1404,12 @@ function ClassMode({ plan, onBack }) {
               border:'1.5px solid ' + (evalOn ? '#fff' : 'rgba(255,255,255,0.35)'), borderRadius:22, padding:'8px 15px'}}>
             📋 {evalOn ? 'Cerrar evaluación' : 'Evaluar la clase'}
           </button>
+          {window.PzSorteo && (
+            <button onClick={() => setPzOn(true)} title="Sorteo para participar: nadie repite hasta que pasaron todos"
+              style={{marginTop:9, marginLeft:8, display:'inline-flex', alignItems:'center', gap:7, cursor:'pointer', fontFamily:'inherit', fontWeight:800, fontSize:13,
+                background:'#fff', color:'#0D1B5A', border:'1.5px solid #fff', borderRadius:22, padding:'8px 15px'}}>
+              🎲 Sortear
+            </button>)}
           {window.ClassCloseModal && plan.id && (
             <button onClick={() => setCloseOn(true)} title="Al terminar: cuenta qué pasó con cada bloque"
               style={{marginTop:9, marginLeft:8, display:'inline-flex', alignItems:'center', gap:7, cursor:'pointer', fontFamily:'inherit', fontWeight:800, fontSize:13.5,
@@ -1356,7 +1449,10 @@ function ClassMode({ plan, onBack }) {
         </div>
       )}
       <style>{`@keyframes cpPulse{0%,100%{opacity:1}50%{opacity:.25}}`}</style>
+      {cmPrev && window.FollowUpPanel && <FollowUpPanel plan={cmPrev} where="class" />}
       <div style={{display:'grid', gridTemplateColumns:'1.3fr 1fr', gap:16, alignItems:'start'}}>
+        <div style={{display:'flex', flexDirection:'column', gap:16, minWidth:0}}>
+        {cmRec && <CmContext rec={cmRec} />}
         <div className="scard">
           <div className="sec-title" style={{marginBottom:10}}>🕒 Secuencia de la sesión</div>
           <div style={{display:'flex', flexDirection:'column', gap:9}}>
@@ -1379,6 +1475,8 @@ function ClassMode({ plan, onBack }) {
               </div>
             ))}
           </div>
+        </div>
+        {cmRec && plan.id && <CmNextBox plan={plan} />}
         </div>
         <div className="scard" style={{position:'sticky', top:14}}>
           <div className="sec-title" style={{marginBottom:4}}>📎 Materiales</div>
@@ -1419,9 +1517,10 @@ function ClassMode({ plan, onBack }) {
         </div>
       )}
 
-      {/* Botón flotante · lista de alumnos del grupo */}
-      <button onClick={() => setRosterOpen(o => !o)} title="Alumnos del grupo" style={{position:'fixed', right:22, bottom:22, zIndex:60, width:60, height:60, borderRadius:'50%', border:'none', cursor:'pointer', background: rosterOpen ? '#7a5a12' : 'linear-gradient(135deg,#FFC24B,#F2820D)', color:'#fff', fontSize:25, boxShadow:'0 6px 20px rgba(214,120,13,0.45)', display:'flex', alignItems:'center', justifyContent:'center'}}><span style={{filter:'drop-shadow(0 1px 1px rgba(0,0,0,0.35))'}}>{rosterOpen ? '✕' : '👥'}</span></button>
-      {rosterOpen && <RosterPanel students={students} group={group} planDate={plan.date} onClose={() => setRosterOpen(false)} />}
+      {pzOn && window.PzSorteo && <PzSorteo students={students} group={group} date={plan.date} label={plan.moduleName} onClose={() => setPzOn(false)} />}
+      {/* Botón flotante · participación de hoy (PARTICIPATION-V1; si falta el componente, la lista de siempre) */}
+      <button onClick={() => setRosterOpen(o => !o)} title="Participación de hoy" style={{position:'fixed', right:22, bottom:22, zIndex:60, width:60, height:60, borderRadius:'50%', border:'none', cursor:'pointer', background: rosterOpen ? '#7a5a12' : 'linear-gradient(135deg,#FFC24B,#F2820D)', color:'#fff', fontSize:25, boxShadow:'0 6px 20px rgba(214,120,13,0.45)', display:'flex', alignItems:'center', justifyContent:'center'}}><span style={{filter:'drop-shadow(0 1px 1px rgba(0,0,0,0.35))'}}>{rosterOpen ? '✕' : (window.PzPanel ? '🙋' : '👥')}</span></button>
+      {rosterOpen && (window.PzPanel ? <PzPanel students={students} group={group} date={plan.date} onClose={() => setRosterOpen(false)} onSorteo={() => setPzOn(true)} /> : <RosterPanel students={students} group={group} planDate={plan.date} onClose={() => setRosterOpen(false)} />)}
     </main>
   );
 }
@@ -1535,7 +1634,7 @@ function SavedItems({ onOpenClass, onOpenPractice, onChange, refreshKey }) {
   const classTpls = templates.filter(t => t.kind === 'class');
   const pracTpls = templates.filter(t => t.kind === 'practice');
 
-  const dupClass = (p) => { const copy = { ...p, id: undefined, date: todayYMD(), sessionLabel: (p.sessionLabel || 'Sesión') + ' (copia)' }; TT.upsertClassPlan(copy); onChange(); alert('📋 Plan duplicado para hoy. Ábrelo para ajustar fecha y grupo.'); };
+  const dupClass = (p) => { const copy = { ...p, id: undefined, nextBox: undefined, date: todayYMD(), sessionLabel: (p.sessionLabel || 'Sesión') + ' (copia)' }; TT.upsertClassPlan(copy); onChange(); alert('📋 Plan duplicado para hoy. Ábrelo para ajustar fecha y grupo.'); };
   const dupPractice = (p) => { const copy = { ...p, title: (p.title || 'Práctica') + ' (copia)', dates: [] }; const id = TT.addPracticePlan(copy); onChange(); onOpenPractice({ ...TT.getPracticePlans().find(x => x.id === id) }); };
   const useTpl = (t) => { if (t.kind === 'class') onOpenClass({ ...t.payload, _tpl: true, id: undefined }); else onOpenPractice({ ...t.payload, _tpl: true, id: undefined }); };
   const dupTpl = (t) => { TT.addTemplate({ kind: t.kind, name: t.name + ' (copia)', level: t.level, payload: t.payload }); onChange(); };
