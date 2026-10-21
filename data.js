@@ -1028,25 +1028,107 @@ function weeklyReEarnXP(student) {
  * Antes vivían solo en localStorage (jucum_league_v1) y el ranking en la nube los
  * IGNORABA → los +120/+60 no movían nada (bug A1). Ahora se guardan por semana en
  * la nube (app_settings 'bonus_xp') y suman al XP total y al semanal. */
-const BONUS_KEY = 'jucum_bonus_xp_v1';
-function _getBonusState() { try { return JSON.parse(localStorage.getItem(BONUS_KEY) || '{}'); } catch { return {}; } }
+/* ── BONUS-LEDGER-V1 (21-oct-2026) · bonos SIN pisarse entre equipos ──
+ * Antes: UN solo objeto {semana:{alumno:xp}} en app_settings 'bonus_xp'; cada equipo subía SU copia
+ * entera → gana el último que guardó y se borran los bonos que solo tenía el otro (XP que “aparece y
+ * desaparece” al actualizar). Ahora cada bono es un REGISTRO con id propio ('bonus_xp_v2'):
+ * juntar copias = UNIÓN (nunca resta). Lo viejo entra como 'legacy:<sem>:<alumno>' y entre copias gana
+ * el valor MÁS ALTO (nadie pierde lo ganado). Semanas viejas se compactan en 'arch:<sem>:<alumno>'
+ * (también por máximo; con arch se ignoran los registros sueltos de esa semana). Nada se borra por
+ * antigüedad (antes, a las 8 semanas el bono desaparecía del XP total). */
+const BONUS_KEY = 'jucum_bonus_xp_v1';          // formato viejo: solo para migrar
+const BONUS2_KEY = 'jucum_bonus_xp_v2';         // {ev:{id:[alumno, semana, xp, ts]}} (HEAVY en config.js)
+const BONUS_CLOUD = 'bonus_xp_v2';
+const BONUS_RAW_WEEKS = 3;                      // semanas con registros sueltos; las anteriores se compactan
+let _bonusAgg = null;
+function _bonusIsMax(id) { return id.indexOf('legacy:') === 0 || id.indexOf('arch:') === 0; }
+function _bonusFromOld(old) { const ev = {}; try { Object.keys(old || {}).forEach(wk => { const m = old[wk] || {}; Object.keys(m).forEach(sid => { const x = Number(m[sid]) || 0; if (x) ev['legacy:' + wk + ':' + sid] = [sid, wk, x, 0]; }); }); } catch (e) {} return { ev }; }
+function _bonusLedger() {
+  try { const v = JSON.parse(localStorage.getItem(BONUS2_KEY) || 'null'); if (v && v.ev) return v; } catch (e) {}
+  let old = {}; try { old = JSON.parse(localStorage.getItem(BONUS_KEY) || '{}'); } catch (e) {}
+  const v = _bonusFromOld(old); _bonusSave(v); return v;
+}
+function _bonusSave(v) { _bonusAgg = null; try { if (window.JUCUM_STORE) window.JUCUM_STORE.setJSON(BONUS2_KEY, v); else localStorage.setItem(BONUS2_KEY, JSON.stringify(v)); } catch (e) {} }
+function _bonusMerge(a, b) {
+  const ev = { ...((a && a.ev) || {}) };
+  Object.keys((b && b.ev) || {}).forEach(id => { const e = b.ev[id]; if (!Array.isArray(e)) return; const p = ev[id]; if (!p || (_bonusIsMax(id) && (Number(e[2]) || 0) > (Number(p[2]) || 0))) ev[id] = e; });
+  return { ev };
+}
+function _bonusCompact(v) {
+  const cut = (() => { const d = new Date(weekId() + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 7 * BONUS_RAW_WEEKS); return d.toISOString().slice(0, 10); })(); /* día-ok */
+  const ev = { ...v.ev }; const sums = {};
+  Object.keys(ev).forEach(id => { if (id.indexOf('arch:') === 0) return; const e = ev[id]; if (!(e[1] < cut)) return; const k = e[1] + ':' + e[0]; sums[k] = (sums[k] || 0) + (Number(e[2]) || 0); delete ev[id]; });
+  Object.keys(sums).forEach(k => { const [wk, sid] = [k.slice(0, 10), k.slice(11)]; const id = 'arch:' + wk + ':' + sid; const p = ev[id]; if (!p || sums[k] > (Number(p[2]) || 0)) ev[id] = [sid, wk, sums[k], 0]; });
+  return { ev };
+}
+/* {semana:{alumno:xp}} a partir de los registros (con arch, se ignoran los sueltos de esa semana) */
+function _getBonusState() {
+  if (_bonusAgg) return _bonusAgg;
+  const v = _bonusLedger(); const arch = {}; const out = {};
+  Object.keys(v.ev).forEach(id => { if (id.indexOf('arch:') === 0) { const e = v.ev[id]; arch[e[1] + ':' + e[0]] = 1; } });
+  Object.keys(v.ev).forEach(id => { const e = v.ev[id]; if (!Array.isArray(e)) return; if (id.indexOf('arch:') !== 0 && arch[e[1] + ':' + e[0]]) return; out[e[1]] = out[e[1]] || {}; out[e[1]][e[0]] = (out[e[1]][e[0]] || 0) + (Number(e[2]) || 0); });
+  _bonusAgg = out; return out;
+}
+let _bonusPushT = null;
 function addBonusXP(studentId, xp) {
   if (!studentId || !xp) return;
-  const all = _getBonusState();
-  const wk = weekId();
-  all[wk] = all[wk] || {};
-  all[wk][studentId] = (all[wk][studentId] || 0) + xp;
-  const keys = Object.keys(all).sort(); while (keys.length > 8) delete all[keys.shift()];  // conserva ~8 semanas
-  localStorage.setItem(BONUS_KEY, JSON.stringify(all));
-  try { if (window.JUCUM_SB) window.JUCUM_SB.getClient().from('app_settings').upsert({ key: 'bonus_xp', value: all }, { onConflict: 'key' }).then(() => {}, () => {}); } catch {}
+  const v = _bonusLedger();
+  v.ev['b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7)] = [String(studentId), weekId(), xp, Date.now()];
+  _bonusSave(v);
+  clearTimeout(_bonusPushT); _bonusPushT = setTimeout(() => { _bonusSync(); }, 800);
 }
 function getBonusXPTotal(studentId) { const all = _getBonusState(); let x = 0; for (const wk of Object.keys(all)) x += (all[wk] && all[wk][studentId]) || 0; return x; }
 function getBonusXPWeek(studentId) { const all = _getBonusState(); return (all[weekId()] && all[weekId()][studentId]) || 0; }
-async function loadBonusXPFromCloud() {
-  if (!window.JUCUM_SB) return;
-  try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key', 'bonus_xp').maybeSingle();
-    if (data && data.value && typeof data.value === 'object') localStorage.setItem(BONUS_KEY, JSON.stringify(data.value)); } catch {}
+/* Trae la nube, JUNTA (unión) con lo local y devuelve a la nube solo si a la nube le falta algo. */
+let _bonusSyncing = null;
+function _bonusSync() {
+  if (!window.JUCUM_SB) return Promise.resolve(false);
+  if (_bonusSyncing) return _bonusSyncing;
+  _bonusSyncing = (async () => {
+    try {
+      const sb = window.JUCUM_SB.getClient();
+      const [r2, r1] = await Promise.all([
+        sb.from('app_settings').select('value').eq('key', BONUS_CLOUD).maybeSingle(),
+        sb.from('app_settings').select('value').eq('key', 'bonus_xp').maybeSingle()]);
+      if (r2.error) return false;   // sin nube: no se toca lo local
+      const cloud = (r2.data && r2.data.value && r2.data.value.ev) ? r2.data.value : { ev: {} };
+      let merged = _bonusMerge(_bonusLedger(), cloud);
+      // Equipos que aún no se actualizaron siguen escribiendo 'bonus_xp' (viejo): entra como legacy (máximo).
+      if (!r1.error && r1.data && r1.data.value && typeof r1.data.value === 'object') merged = _bonusMerge(merged, _bonusFromOld(r1.data.value));
+      merged = _bonusCompact(merged);
+      _bonusSave(merged);
+      window.__JEC_BONUS_OK = Date.now();
+      const ck = cloud.ev; const mk = merged.ev;
+      const differs = Object.keys(mk).length !== Object.keys(ck).length || Object.keys(mk).some(id => !ck[id] || Number(ck[id][2]) !== Number(mk[id][2]));
+      if (differs) { const w = await sb.from('app_settings').upsert({ key: BONUS_CLOUD, value: merged }, { onConflict: 'key' }); if (w && w.error) return false; }
+      return true;
+    } catch (e) { return false; } finally { setTimeout(() => { _bonusSyncing = null; }, 0); }
+  })();
+  return _bonusSyncing;
 }
+async function loadBonusXPFromCloud() { return _bonusSync(); }
+
+/* ── DATOS-LISTOS-V1 (21-oct-2026) · el XP y el podio no saltan al actualizar ──
+ * El XP y los rankings dependen de 4 descargas que llegan por partes (avance, días practicados,
+ * semanas, bonos). Mientras falte alguna, se muestran los ÚLTIMOS valores calculados con todo
+ * completo (snapshot chico por equipo); a los 15 s, aunque algo no llegue, se usa lo calculado. */
+const JEC_T0 = Date.now();
+const RANK_SNAP_KEY = 'jucum_rank_snap_v1';
+function jecDataReady() {
+  if (!window.JUCUM_SB) return true;
+  if (Date.now() - JEC_T0 > 15000) return true;
+  const o = window.__JEC_OK || {};
+  return !!(window.__JEC_PROG_OK && o.weeks && o.days && window.__JEC_BONUS_OK);
+}
+let _snapMem = null;
+function _snapAll() { if (_snapMem) return _snapMem; try { _snapMem = JSON.parse(localStorage.getItem(RANK_SNAP_KEY) || '{}') || {}; } catch (e) { _snapMem = {}; } return _snapMem; }
+let _snapT = null;
+function _snapPut(k, v) {
+  const a = _snapAll(); const s = JSON.stringify(v); if (a[k] && JSON.stringify(a[k].v) === s) return;
+  a[k] = { wk: weekId(), v };
+  clearTimeout(_snapT); _snapT = setTimeout(() => { try { if (window.JUCUM_STORE) window.JUCUM_STORE.setJSON(RANK_SNAP_KEY, a); else localStorage.setItem(RANK_SNAP_KEY, JSON.stringify(a)); } catch (e) {} }, 1500);
+}
+function _snapGet(k, sameWeek) { const e = _snapAll()[k]; if (!e) return null; if (sameWeek && e.wk !== weekId()) return null; return e.v; }
 
 /* ¿Semana nueva para este alumno? (aviso "vuelve a practicar y gana XP extra").
  * NO cambia el estado/bloqueo de ningún material — solo dispara el aviso. */
@@ -1063,6 +1145,13 @@ function markWeekSeen(studentId) { try { localStorage.setItem('jucum_week_seen_'
  *   − penalización suave por inactividad
  */
 function getStudentXP(student) {
+  const xp = _getStudentXPRaw(student);
+  if (!student || !student.id || !window.JUCUM_SB) return xp;
+  if (jecDataReady()) { _snapPut('xp:' + student.id, xp); return xp; }
+  const s = _snapGet('xp:' + student.id, false);
+  return typeof s === 'number' ? s : xp;
+}
+function _getStudentXPRaw(student) {
   const progress = getStudentProgress(student.id);
   let xp = 0;
   for (const key of Object.keys(progress.completed || {})) {
@@ -1232,10 +1321,16 @@ function getWeeklyXPFromProgress(student) {
   return xp;
 }
 function getWeeklyRanking(groupId) {
-  return STUDENTS
+  const live = STUDENTS
     .filter(s => s.group === groupId)
     .map(s => ({ student: s, xp: window.JUCUM_SB ? getWeeklyXPFromProgress(s) : (getWeeklyXP(s.id) || Math.floor(getStudentXP(s) * 0.12)) }))
     .sort((a, b) => b.xp - a.xp);
+  if (!window.JUCUM_SB) return live;
+  const k = 'wr:' + groupId;
+  if (jecDataReady()) { _snapPut(k, live.map(r => [r.student.id, r.xp])); return live; }
+  const snap = _snapGet(k, true); if (!snap) return live;
+  const by = {}; snap.forEach(([id, xp]) => { by[id] = xp; });
+  return live.map(r => (r.student.id in by) ? { ...r, xp: by[r.student.id] } : r).sort((a, b) => b.xp - a.xp);
 }
 function daysUntilMonday() {
   const p = peruNow();
@@ -1320,6 +1415,10 @@ function _leagueGroup(groupId, create) {
   const wk = lastWeekId(); const all = _getLeagueState();
   let g = all[groupId];
   if (_leagueIsStaff()) {
+    // DATOS-LISTOS-V1: no congelar con datos a medio cargar (quedaba un podio equivocado toda la semana).
+    if (window.JUCUM_SB && !window.__JEC_PROG_OK && (!g || g.champWeek !== wk || !g.list || !g.list.length)) {
+      return { all, g: (g && g.champWeek === wk) ? g : { champWeek: wk, scenario: (g && g.scenario) || 'theme-gold', emojis: (g && g.emojis) || {}, list: [] }, wk };
+    }
     // Personal: ÚNICA fuente que congela los campeones (tiene el progreso de todo el
     // grupo). Se congela UNA sola vez por semana: cuando ya hay Top 3 fijo para la
     // semana cerrada, NO se recalcula ni se re-publica. Antes se re-publicaba cada
@@ -1458,9 +1557,16 @@ function getStudentMastery(student) {
  * "los mejores" = los que practican y dominan. Ordena por dominio y,
  * a igualdad, por racha. Lo usa el Top del grupo (muestra los 5 primeros). */
 function getComplianceRanking(groupId) {
-  return STUDENTS
+  const live = STUDENTS
     .filter(s => s.group === groupId)
     .map(s => ({ student: s, score: getStudentMastery(s).pct, streak: s.streak || 0, xp: getStudentXP(s) }))
+    .sort((a, b) => b.score - a.score || b.streak - a.streak || b.xp - a.xp);
+  if (!window.JUCUM_SB) return live;
+  const k = 'cr:' + groupId;
+  if (jecDataReady()) { _snapPut(k, live.map(r => [r.student.id, r.score, r.streak])); return live; }
+  const snap = _snapGet(k, false); if (!snap) return live;
+  const by = {}; snap.forEach(([id, sc, stk]) => { by[id] = [sc, stk]; });
+  return live.map(r => by[r.student.id] ? { ...r, score: by[r.student.id][0], streak: by[r.student.id][1] } : r)
     .sort((a, b) => b.score - a.score || b.streak - a.streak || b.xp - a.xp);
 }
 
@@ -2471,11 +2577,12 @@ function jecPagedDaily(cols, applyFilter, done) {
       .order('user_id').order('day').order('module_id').order('activity_id');
     q = applyFilter(q).range(from, from + PAGE - 1);
     q.then(function (r) {
+      if (r && r.error) { done(all, false); return; }   // DATOS-LISTOS-V1: página fallida = descarga incompleta
       var rows = (r && r.data) || [];
       all = all.concat(rows);
-      if (rows.length < PAGE) done(all);
+      if (rows.length < PAGE) done(all, true);
       else page(from + PAGE);
-    }, function () { done(all); });
+    }, function () { done(all, false); });
   })(0);
 }
 (function jecDailyLoader() {
@@ -2483,13 +2590,15 @@ function jecPagedDaily(cols, applyFilter, done) {
     try {
       if (!window.JUCUM_SB || !window.JUCUM_SB.getClient) return;
       var day = peruDayStr();
-      jecPagedDaily('user_id,minutes', function (q) { return q.eq('day', day); }, function (rows) {
+      jecPagedDaily('user_id,minutes', function (q) { return q.eq('day', day); }, function (rows, ok) {
+        if (!ok && window.__JEC_DAILY) return;   // incompleta: se conserva lo anterior
         var map = {};
         rows.forEach(function (x) {
           map[x.user_id] = map[x.user_id] || { day: day, minutes: 0 };
           map[x.user_id].minutes += (x.minutes || 0);
         });
         window.__JEC_DAILY = map;
+        if (ok) { window.__JEC_OK = window.__JEC_OK || {}; window.__JEC_OK.daily = Date.now(); }
       });
     } catch (e) {}
   }
@@ -2513,7 +2622,8 @@ function jecPagedDaily(cols, applyFilter, done) {
     try {
       if (!window.JUCUM_SB || !window.JUCUM_SB.getClient) return;
       var since = new Date(Date.now() - 5 * 3600000 - 42 * 86400000).toISOString().slice(0, 10); // ~6 semanas (Perú)
-      jecPagedDaily('user_id,day,module_id,activity_id,minutes', function (q) { return q.gte('day', since); }, function (rows) {
+      jecPagedDaily('user_id,day,module_id,activity_id,minutes', function (q) { return q.gte('day', since); }, function (rows, ok) {
+        if (!ok && window.__JEC_WEEKS) return;   // incompleta: se conserva lo anterior
         var map = {}, dmin = {};
         rows.forEach(function (x) {
           var wk = mondayOf(x.day);
@@ -2530,12 +2640,14 @@ function jecPagedDaily(cols, applyFilter, done) {
         });
         window.__JEC_WEEKS = map;
         window.__JEC_DAYACT = dmin;
+        if (ok) { window.__JEC_OK = window.__JEC_OK || {}; window.__JEC_OK.weeks = Date.now(); }
       });
       /* 🔥 Racha multi-equipo: días REALES con práctica según daily_sessions (una fila
        * por alumno/día/material, nunca se sobreescribe — a diferencia de entry.date).
        * Ventana de 90 días para rachas largas. computeStats une estos días con lo local. */
       var sinceDays = new Date(Date.now() - 5 * 3600000 - 90 * 86400000).toISOString().slice(0, 10);
-      jecPagedDaily('user_id,day', function (q) { return q.gte('day', sinceDays); }, function (rows2) {
+      jecPagedDaily('user_id,day', function (q) { return q.gte('day', sinceDays); }, function (rows2, ok) {
+        if (!ok && window.__JEC_DAYS) return;   // incompleta: se conserva lo anterior
         var dmap = {};
         rows2.forEach(function (x) {
           if (!x.day) return;
@@ -2543,6 +2655,7 @@ function jecPagedDaily(cols, applyFilter, done) {
           dmap[x.user_id][x.day] = true;
         });
         window.__JEC_DAYS = dmap;
+        if (ok) { window.__JEC_OK = window.__JEC_OK || {}; window.__JEC_OK.days = Date.now(); }
         // Recalcula rachas ya con los días de la nube (la UI refresca sola cada 20 s).
         try { if (window.JUCUM_SYNC && window.JUCUM_SYNC.computeStats) window.JUCUM_SYNC.computeStats(); } catch (e) {}
       });

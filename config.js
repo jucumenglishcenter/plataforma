@@ -59,7 +59,7 @@ if (window.JUCUM_CONFIG.SUPABASE_ANON_KEY === 'PEGA_TU_PUBLISHABLE_KEY_AQUI') {
 (function () {
   if (window.JUCUM_BIG) return;
   var HEAVY = {
-    jucum_student_progress_v1: 1, jucum_notifs_v1: 1, jucum_submissions_v1: 1,
+    jucum_student_progress_v1: 1, jucum_notifs_v1: 1, jucum_submissions_v1: 1, jucum_bonus_xp_v2: 1, jucum_rank_snap_v1: 1,
     jucum_assignments_v1: 1, jucum_registrations_v1: 1, jucum_payments_v1: 1,
     jucum_class_log_v1: 1, jucum_teacher_notes_v1: 1, jucum_forum_v1: 1,
     jucum_evaluations_v1: 1, jucum_messages_v1: 1, jucum_forum_flags_v1: 1,

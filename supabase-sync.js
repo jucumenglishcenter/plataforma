@@ -235,6 +235,7 @@
       });
       write(KEYS.progress, progByUser);
       lastProgAt = Date.now();
+      window.__JEC_PROG_OK = Date.now();   // DATOS-LISTOS-V1 (data.js)
     }
 
     // notificaciones · SOLO las de quien entró (ver notifIdsFor). Sin sesión de alumno
@@ -617,6 +618,7 @@
         }
       } catch (e) {}
       try { computeStats(); } catch (e) {}
+      window.__JEC_PROG_OK = window.__JEC_PROG_OK || Date.now();
       return true;
     } catch (e) { console.warn('refreshProgress:', e && e.message); return false; }
   }
