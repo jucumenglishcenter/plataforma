@@ -387,6 +387,7 @@ function TeacherAssignments({ onBack, embedded }) {
   const [editing, setEditing] = tUseState(null);
   const [importing, setImporting] = tUseState(false);
   const [prefill, setPrefill] = tUseState(null);
+  const [dupping, setDupping] = tUseState(null);   // ⧉ TASK-DUP-V1: tarea a duplicar
   const [viewing, setViewing] = tUseState(null); // assignment
   const [tick, setTick] = tUseState(0);
   const [retrying, setRetrying] = tUseState(false);
@@ -464,6 +465,7 @@ function TeacherAssignments({ onBack, embedded }) {
                 </div>
                 <div className="mm-actions" onClick={e => e.stopPropagation()}>
                   <button className="att-btn" onClick={() => setEditing(a)}>✏️ Editar</button>
+                  <button className="att-btn" title="Duplicar en este u otros grupos" style={{borderColor:'#9FB0DA',color:'#3F5BB8'}} onClick={() => setDupping(a)}>⧉ Duplicar</button>
                   <button className="att-btn" onClick={() => setViewing(a)}>Ver entregas →</button>
                   <button className="att-btn" style={{borderColor:'#EF9A9A',color:'#C62828'}} onClick={() => { if (confirm('¿Eliminar esta tarea y sus entregas?')) { T.deleteAssignment(a.id); refresh(); } }}>🗑</button>
                 </div>
@@ -477,7 +479,132 @@ function TeacherAssignments({ onBack, embedded }) {
       {importing && <TaskImportModal onClose={() => setImporting(false)} onParsed={pf => { setImporting(false); setPrefill(pf); }} />}
       {prefill && <AssignmentForm prefill={prefill} onClose={() => setPrefill(null)} onSaved={() => { setPrefill(null); refresh(); }} />}
       {editing && <AssignmentForm initial={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />}
+      {dupping && <DuplicateTaskModal task={dupping} onClose={() => setDupping(null)} onDone={() => { setDupping(null); refresh(); }} onEditCopy={pf => { setDupping(null); setPrefill(pf); }} />}
     </Wrap>
+  );
+}
+
+/* ═══ ⧉ Duplicar / migrar una tarea · TASK-DUP-V1 (20-oct-2026) ═══
+ * Copia la tarea (título, instrucciones, link, material ya subido, calificable)
+ * a UNO o VARIOS grupos a la vez, incluido el mismo grupo para reprogramarla.
+ * Cada copia es una tarea NUEVA (id propio, sin entregas) y avisa a sus alumnos.
+ * Alumnos puntuales solo se conservan en el mismo grupo; en otro grupo va a todos. */
+function taskCopyData(a, groupId, dueIso) {
+  const same = groupId === a.groupId;
+  return {
+    groupId,
+    targetStudentIds: same ? [...(a.targetStudentIds || [])] : [],
+    title: a.title || '',
+    description: a.description || '',
+    dueAt: dueIso || null,
+    gradable: !!a.gradable,
+    xp: typeof a.xp === 'number' ? a.xp : 40,
+    attachments: (a.attachments || []).filter(x => x && !x.pending).map(x => ({ ...x })),
+  };
+}
+function DuplicateTaskModal({ task, onClose, onDone, onEditCopy }) {
+  const { GROUPS, LEVELS } = window.JUCUM_DATA;
+  const toLocalInput = (iso) => { if (!iso) return ''; const d = new Date(iso); const p = n => String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+  const srcGroup = GROUPS.find(g => g.id === task.groupId);
+  const list = (typeof gpSort === 'function' ? gpSort(GROUPS) : GROUPS.slice()).filter(g => !g.finishedAt || g.id === task.groupId);
+  const [picked, setPicked] = tUseState([]);
+  const [q, setQ] = tUseState('');
+  const [due, setDue] = tUseState(() => (task.dueAt && new Date(task.dueAt) > new Date()) ? toLocalInput(task.dueAt) : '');
+  const [busy, setBusy] = tUseState(false);
+  const [result, setResult] = tUseState(null);   // { ok:[nombres], fail:[nombres] }
+  const toggle = (id) => setPicked(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const shown = list.filter(g => !q || norm(g.name + ' ' + (g.schedule || '') + ' ' + (LEVELS[g.level]?.name || g.level)).includes(norm(q)));
+  const targeted = (task.targetStudentIds || []).length > 0;
+  const dueIso = due ? new Date(due).toISOString() : null;
+  const gName = id => (GROUPS.find(g => g.id === id) || {}).name || 'grupo';
+  const sameLevel = srcGroup ? list.filter(g => g.level === srcGroup.level && !g.finishedAt).map(g => g.id) : [];
+
+  const run = async () => {
+    if (!picked.length) return;
+    setBusy(true);
+    const ok = [], fail = [];
+    for (const gid of picked) {
+      try {
+        const r = await window.JUCUM_TASKS.createAssignment(taskCopyData(task, gid, dueIso));
+        (r && r.synced === false ? fail : ok).push(gName(gid));
+      } catch (e) { fail.push(gName(gid)); }
+    }
+    setBusy(false);
+    if (!fail.length) { onDone(); return; }
+    setResult({ ok, fail });
+  };
+  const editFirst = () => {
+    const gid = picked[0];
+    onEditCopy({ ...taskCopyData(task, gid, dueIso), _dup: true, _srcGroup: srcGroup ? srcGroup.name : '' });
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={busy ? undefined : onClose}>
+      <div className="modal settings-modal" style={{maxWidth:560}} onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <div className="modal-title">⧉ Duplicar tarea</div>
+          <button className="modal-close" onClick={onClose} disabled={busy}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div style={{background:'#EEF2FC', border:'1px solid #C9D4F0', borderRadius:10, padding:'10px 13px', marginBottom:14}}>
+            <div style={{fontWeight:800, fontSize:14, color:'#1F3A8A'}}>📝 {task.title}</div>
+            <div style={{fontSize:12.5, fontWeight:700, color:'#5A6A90', marginTop:3}}>Original en {srcGroup ? `${LEVELS[srcGroup.level]?.emoji || ''} ${srcGroup.name}` : 'grupo'}{targeted ? ` · ${(task.targetStudentIds || []).length} alumno(s) puntual(es)` : ''}</div>
+          </div>
+
+          {result ? (
+            <div style={{background:'#FFF8E1', border:'1.5px solid #F0C66B', borderRadius:12, padding:'12px 15px', fontSize:13, color:'#7A4E00', fontWeight:700, lineHeight:1.6}}>
+              {result.ok.length > 0 && <div>✅ Publicada en: {result.ok.join(' · ')}</div>}
+              <div>⏳ Guardada solo en este equipo (sin internet): <b>{result.fail.join(' · ')}</b>. Esos alumnos aún no la ven; se reintenta sola al abrir Tareas o con “🔄 Reintentar subida”.</div>
+            </div>
+          ) : (
+            <>
+              <div className="settings-block">
+                <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:8}}>
+                  <div className="settings-label" style={{margin:0, flex:1}}>¿En qué grupo(s)?</div>
+                  {sameLevel.length > 1 && <button type="button" className="preset" onClick={() => setPicked(sameLevel)}>Todos los de {LEVELS[srcGroup.level]?.name || 'este nivel'}</button>}
+                  {picked.length > 0 && <button type="button" className="preset" onClick={() => setPicked([])}>Quitar todos</button>}
+                </div>
+                {list.length > 6 && <input className="input-text" style={{width:'100%', marginBottom:8}} value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar grupo, día u horario…" />}
+                <div style={{display:'grid', gap:6, maxHeight:260, overflowY:'auto'}}>
+                  {shown.map(g => (
+                    <label key={g.id} className="check-row" style={picked.includes(g.id) ? {background:'#EEF2FC', borderRadius:8} : null}>
+                      <input type="checkbox" checked={picked.includes(g.id)} onChange={() => toggle(g.id)} />
+                      <span>{LEVELS[g.level]?.emoji} <b>{g.name}</b>{g.id === task.groupId && <span style={{color:'#3F5BB8', fontWeight:800}}> · este mismo grupo (reprogramar)</span>}{g.finishedAt && <span style={{color:'var(--text-soft)'}}> · finalizado</span>}</span>
+                    </label>
+                  ))}
+                  {shown.length === 0 && <div className="settings-hint">Ningún grupo coincide.</div>}
+                </div>
+                {targeted && picked.some(id => id !== task.groupId) && <div className="settings-hint" style={{marginTop:8}}>En otros grupos la copia va a <b>todo el grupo</b> (los alumnos puntuales solo existen en el original).</div>}
+              </div>
+
+              <div className="settings-block">
+                <div className="settings-label">Nueva fecha y hora de cierre (opcional)</div>
+                <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
+                  <input type="datetime-local" className="input-text" value={due} onChange={e => setDue(e.target.value)} />
+                  {due && <button type="button" className="preset" onClick={() => setDue('')}>Sin fecha</button>}
+                </div>
+                <div className="settings-hint">Se aplica a todas las copias. Si cada grupo cierra distinto, duplica en uno y usa “Revisar antes”, o edita cada copia después.</div>
+              </div>
+
+              <div className="settings-hint" style={{marginBottom:12}}>Cada copia es una tarea <b>nueva</b>: sin entregas, con el mismo título, instrucciones, link y material. Sus alumnos reciben el aviso en la campanita.</div>
+            </>
+          )}
+
+          <div className="modal-actions" style={{flexWrap:'wrap'}}>
+            {result ? (
+              <button className="btn-save" onClick={onDone}>Entendido</button>
+            ) : (
+              <>
+                <button className="btn-cancel" onClick={onClose} disabled={busy}>Cancelar</button>
+                {picked.length === 1 && <button className="btn-cancel" onClick={editFirst} disabled={busy} style={{borderColor:'#9FB0DA', color:'#3F5BB8'}}>✏️ Revisar antes de publicar</button>}
+                <button className="btn-save" disabled={busy || !picked.length} onClick={run}>{busy ? 'Duplicando…' : picked.length > 1 ? `⧉ Duplicar en ${picked.length} grupos` : '⧉ Duplicar'}</button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -544,12 +671,13 @@ function AssignmentForm({ onClose, onSaved, initial, prefill }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal settings-modal" style={{maxWidth:640}} onClick={e => e.stopPropagation()}>
         <div className="modal-head">
-          <div className="modal-title">{initial ? '✏️ Editar tarea' : prefill ? '📄 Tarea leída del documento' : '📝 Nueva tarea'}</div>
+          <div className="modal-title">{initial ? '✏️ Editar tarea' : prefill && prefill._dup ? '⧉ Copia de la tarea' : prefill ? '📄 Tarea leída del documento' : '📝 Nueva tarea'}</div>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
           {err && <div className="err" style={{marginBottom:12}}>⚠ {err}</div>}
-          {prefill && <div style={{background:'#EEF2FC', border:'1px solid #C9D4F0', borderRadius:10, padding:'9px 12px', fontSize:12.8, fontWeight:700, color:'#1F3A8A', lineHeight:1.5, marginBottom:12}}>📄 Leí <b>{prefill._file}</b>. Tu texto quedó tal cual. Revisa lo que marqué en {(prefill._notes || []).length ? <b>{prefill._notes.join(' · ')}</b> : 'los campos'} y pulsa <b>Guardar</b>: la tarea se publica en el grupo.</div>}
+          {prefill && prefill._dup && <div style={{background:'#EEF2FC', border:'1px solid #C9D4F0', borderRadius:10, padding:'9px 12px', fontSize:12.8, fontWeight:700, color:'#1F3A8A', lineHeight:1.5, marginBottom:12}}>⧉ Copia de una tarea{prefill._srcGroup ? <> de <b>{prefill._srcGroup}</b></> : ''}. Cambia lo que necesites (grupo, fecha, instrucciones) y pulsa <b>Asignar tarea</b>: se crea como tarea nueva, la original no se toca.</div>}
+          {prefill && !prefill._dup && <div style={{background:'#EEF2FC', border:'1px solid #C9D4F0', borderRadius:10, padding:'9px 12px', fontSize:12.8, fontWeight:700, color:'#1F3A8A', lineHeight:1.5, marginBottom:12}}>📄 Leí <b>{prefill._file}</b>. Tu texto quedó tal cual. Revisa lo que marqué en {(prefill._notes || []).length ? <b>{prefill._notes.join(' · ')}</b> : 'los campos'} y pulsa <b>Guardar</b>: la tarea se publica en el grupo.</div>}
 
           <div className="settings-block">
             <div className="settings-label">Título</div>
@@ -659,6 +787,8 @@ function TeacherSubmissions({ assignment, onBack }) {
   const [tick, setTick] = tUseState(0);
   const [grading, setGrading] = tUseState(null); // student
   const [editing, setEditing] = tUseState(false);
+  const [dupping, setDupping] = tUseState(false);
+  const [dupEdit, setDupEdit] = tUseState(null);
   const [preview, setPreview] = tUseState(false);
   const [lang, setLang] = tUseState('par');
   const a = T.getAssignments().find(x => x.id === assignment.id) || assignment;
@@ -676,7 +806,10 @@ function TeacherSubmissions({ assignment, onBack }) {
           <h1>{a.title}</h1>
           <p>{Object.keys(subs).length}/{recips.length} entregadas{due && ` · ⏰ ${due.txt}`}{a.gradable ? ' · calificable' : ' · sin nota'}</p>
         </div>
-        <button className="btn-settings" onClick={() => setEditing(true)}>✏️ Editar tarea</button>
+        <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+          <button className="btn-settings" onClick={() => setDupping(true)}>⧉ Duplicar</button>
+          <button className="btn-settings" onClick={() => setEditing(true)}>✏️ Editar tarea</button>
+        </div>
       </div>
 
       {(plain || hasStructured(structured)) && (
@@ -728,6 +861,8 @@ function TeacherSubmissions({ assignment, onBack }) {
       {grading && <GradeModal assignment={a} student={grading} sub={subs[grading.id]} onClose={() => { setGrading(null); setTick(t=>t+1); }} />}
       {editing && <AssignmentForm initial={a} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); setTick(t=>t+1); }} />}
       {preview && <StudentTaskPreview assignment={a} onClose={() => setPreview(false)} />}
+      {dupping && <DuplicateTaskModal task={a} onClose={() => setDupping(false)} onDone={() => setDupping(false)} onEditCopy={pf => { setDupping(false); setDupEdit(pf); }} />}
+      {dupEdit && <AssignmentForm prefill={dupEdit} onClose={() => setDupEdit(null)} onSaved={() => setDupEdit(null)} />}
     </main>
   );
 }
