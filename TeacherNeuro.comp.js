@@ -131,7 +131,7 @@ function ntStudentModel(s, cols, rows, weeks, wk, dayISO) {
   const D = window.JUCUM_DATA, prog = D.getStudentProgress(s.id) || { completed: {} };
   const mine = rows.filter(r => r.user_id === s.id), main = mine.filter(r => !/^rv:/.test(r.mat_key));
   const cells = cols.map(c => {
-    const e = prog.completed[c.key], doneDay = !!(e && e.date && ntDay(Date.parse(e.date)) === dayISO);
+    const e = prog.completed[c.key], doneDay = !!(e && e.date && (ntDay(Date.parse(e.date)) === dayISO || (window.JUCUM_DATA.practiceDays && window.JUCUM_DATA.practiceDays(s.id, c.key.slice(0, c.key.lastIndexOf(':')), c.key.slice(c.key.lastIndexOf(':') + 1)).includes(dayISO))));   // PRACTICE-DAYS-V1
     if (c.kind && c.mat && c.mat.items.length) {
       const ids = c.mat.byId, rs = main.filter(r => r.mat_key === c.key && ids[r.item_id]);
       const ok = rs.filter(r => r.status === 'ok').length, box = rs.filter(r => r.status === 'box').length, tot = c.mat.items.length;

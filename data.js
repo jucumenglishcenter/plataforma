@@ -2559,6 +2559,37 @@ window.JUCUM_DATA.getStudentModuleIds = getStudentModuleIds;
 window.JUCUM_DATA.canSeeModule = canSeeModule;
 window.JUCUM_DATA.isCyclicLevel = isCyclicLevel;
 window.JUCUM_DATA.getLevelOutline = getLevelOutline;
+/* 📅 PRACTICE-DAYS-V1 (22-oct): días (Perú) en que el alumno practicó un material.
+ * progress.completed_at se REFRESCA en cada práctica (guarda solo la ÚLTIMA): si el
+ * alumno lo hizo en la fecha del set y lo repitió después, el 📊 Avance y el
+ * 🔎 Seguimiento lo daban por "hecho otro día" o "no hecho en clase". daily_sessions
+ * (window.__JEC_DAYACT, una fila por alumno/día/material, nunca se pisa) da los días
+ * reales; la fecha de progress se suma como respaldo. */
+window.JUCUM_DATA.practiceDays = function (studentId, moduleId, activityId) {
+  const key = moduleId + ':' + activityId, out = new Set();
+  const cd = (window.__JEC_DAYACT || {})[studentId] || {};
+  Object.keys(cd).forEach(d => { if (cd[d] && Object.prototype.hasOwnProperty.call(cd[d], key)) out.add(d); });
+  try {
+    const e = ((window.JUCUM_DATA.getStudentProgress(studentId) || {}).completed || {})[key];
+    if (e && e.date && window.JUCUM_DAY) out.add(window.JUCUM_DAY.of(e.date));
+  } catch (e) {}
+  return [...out].filter(Boolean).sort();
+};
+/* El mismo material (mismo id de actividad) practicado en OTRO módulo en esos días
+ * (caso Levi 19-oct: hizo la Comprensión lectora de Daily Life, el set pedía la de
+ * Transportation). Devuelve [{ moduleId, name, day }]. */
+window.JUCUM_DATA.practicedElsewhere = function (student, moduleId, activityId, days) {
+  const cd = (window.__JEC_DAYACT || {})[student && student.id] || {};
+  const mods = (window.JUCUM_DATA.MODULE_CATALOG || {})[student && student.level] || [];
+  const out = [];
+  (days || []).forEach(d => Object.keys(cd[d] || {}).forEach(k => {
+    const i = k.lastIndexOf(':'); const mid = k.slice(0, i);
+    if (k.slice(i + 1) !== activityId || mid === moduleId || out.some(x => x.moduleId === mid)) return;
+    const m = mods.find(x => x.id === mid);
+    out.push({ moduleId: mid, name: m ? m.name : mid, day: d });
+  }));
+  return out;
+};
 window.JUCUM_DATA.nextActiveIds = nextActiveIds;
 
 

@@ -534,6 +534,7 @@ function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDu
 function PSMark({ s, size }) {
   const z = size || 16;
   if (s === 'ok') return <span style={{width:z, height:z, borderRadius:'50%', background:'#2EA84B', color:'#fff', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:z*0.62, fontWeight:900, lineHeight:1, flexShrink:0}}>✓</span>;
+  if (s === 'mod') return <span style={{width:z, height:z, borderRadius:'50%', background:'#E4EDFB', border:'2px dashed #7D97D1', color:'#1B3B6F', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:z*0.6, fontWeight:900, lineHeight:1, flexShrink:0, boxSizing:'border-box'}}>≠</span>;
   if (s === 'other') return <span style={{width:z, height:z, borderRadius:'50%', background:'#FFF3D6', border:'2px solid #E0A62E', color:'#8A6D1A', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:z*0.55, fontWeight:900, lineHeight:1, flexShrink:0, boxSizing:'border-box'}}>✓</span>;
   return <span style={{width:z, height:z, borderRadius:'50%', background:'#fff', border:'2px dashed #D8D4C8', display:'inline-block', flexShrink:0, boxSizing:'border-box'}}></span>;
 }
@@ -555,18 +556,33 @@ function PracticeSetProgress({ plan, onClose }) {
     return acts.some((b, j) => j !== i && (({ story:'Story', reading:'Reading', listening:'Listening', quizlet:'Quizlet' })[b.type] || String(b.label || b.activityId).split('·')[0].trim()) === base)
       ? `${i + 1}· ${s}` : s;
   };
+  /* PRACTICE-DAYS-V1 (22-oct): el día real sale de daily_sessions (D.practiceDays), no de
+   * la última fecha de progress — repetirlo después ya no lo pasa a "otro día". 'mod' = en la
+   * fecha hizo el MISMO material pero de OTRO módulo (no cuenta para este set, se avisa). */
   const rows = students.map(st => {
     const completed = (D.getStudentProgress(st.id) || {}).completed || {};
     const cells = acts.map(a => {
       const e = completed[a.moduleId + ':' + a.activityId];
+      const pd = e && D.practiceDays ? D.practiceDays(st.id, a.moduleId, a.activityId) : [];
+      const inWin = dates.length ? pd.filter(x => dates.includes(x)) : pd;
+      if (e && (!dates.length || inWin.length)) {
+        const sc = (typeof e.score === 'number') ? Math.max(0, Math.min(100, Math.round(e.score))) : null;
+        return { a, s:'ok', d: inWin[inWin.length - 1] || dayOf(e.date), sc };
+      }
+      const wm = (dates.length && D.practicedElsewhere) ? D.practicedElsewhere(st, a.moduleId, a.activityId, dates) : [];
+      if (wm.length) return { a, s:'mod', wm, d: wm[0].day };
       if (!e) return { a, s:'pend' };
-      const d = dayOf(e.date);
-      const sc = (typeof e.score === 'number') ? Math.max(0, Math.min(100, Math.round(e.score))) : null;
-      return { a, s: (!dates.length || dates.includes(d)) ? 'ok' : 'other', d, sc };
+      return { a, s:'other', d: pd[pd.length - 1] || dayOf(e.date) };
     });
     return { st, cells, ok: cells.filter(c => c.s === 'ok').length, other: cells.filter(c => c.s === 'other').length };
   });
   const full = rows.filter(r => r.ok === acts.length).length;
+  const modCells = rows.reduce((n, r) => n + r.cells.filter(c => c.s === 'mod').length, 0);
+  const modNames = [...new Set(rows.flatMap(r => r.cells.filter(c => c.s === 'mod').flatMap(c => c.wm.map(w => w.name))))];
+  const gsP = (D.getGroupSettings && D.getGroupSettings(plan.groupId)) || {};
+  const openIds = gsP.activeModuleIds || (gsP.activeModuleId ? [gsP.activeModuleId] : []);
+  const closedMods = [...new Set(acts.map(a => a.moduleId).filter(m => m && openIds.length && !openIds.includes(m)))]
+    .map(m => { const x = ((D.MODULE_CATALOG || {})[group && group.level] || []).find(y => y.id === m); return x ? x.name : m; });
   const fmtD = (d) => { try { return new Date(d + 'T12:00:00').toLocaleDateString('es-PE', { day:'numeric', month:'short' }); } catch (e) { return d; } };
   const cols = `minmax(150px, 220px) repeat(${Math.max(acts.length, 1)}, minmax(78px, 1fr)) 58px`;
   const colTotal = (i) => rows.filter(r => r.cells[i] && r.cells[i].s === 'ok').length;
@@ -580,6 +596,8 @@ function PracticeSetProgress({ plan, onClose }) {
             {group ? group.name : ''} · {acts.length} actividad(es) · {dates.length ? 'día(s): ' + dates.map(fmtD).join(' · ') : 'sin fecha fija'}
           </div>
           <div style={{fontSize:12.5, fontWeight:800, color: full ? '#2E7D32' : '#8a7f6a', marginTop:4}}>{full} de {students.length} completaron todo en la fecha{hiddenOut > 0 ? <span style={{color:'#a39a85', fontWeight:700}}> · {hiddenOut} retirado(s)/inactivo(s) no se cuentan</span> : null}</div>
+          {closedMods.length > 0 && <div style={{marginTop:8, fontSize:12, fontWeight:800, color:'#8A3B12', background:'#FFF1E6', border:'1px solid #F3C9A8', borderRadius:9, padding:'7px 10px'}}>⚠ Este set usa {closedMods.join(' y ')}, que hoy NO está abierto para el grupo: los alumnos no lo ven en su ruta y practican el módulo que sí tienen abierto. Ábrelo en 📦 Módulos del grupo.</div>}
+          {modCells > 0 && <div style={{marginTop:8, fontSize:12, fontWeight:800, color:'#1B3B6F', background:'#E4EDFB', border:'1px solid #C5D6F2', borderRadius:9, padding:'7px 10px'}}>≠ {modCells} tramo(s) en azul: en estas fechas el alumno hizo el MISMO material pero de otro módulo ({modNames.join(', ')}). Esa práctica sí está registrada, pero no es la de este set.</div>}
           <button onClick={onClose} style={{position:'absolute', top:14, right:14, width:32, height:32, borderRadius:'50%', border:'none', background:'#FAFAF6', color:'#8a7f6a', fontSize:14, fontWeight:800, cursor:'pointer'}}>✕</button>
         </div>
         <div style={{padding:'12px 16px 6px', overflowY:'auto', overflowX:'auto'}}>
@@ -600,14 +618,14 @@ function PracticeSetProgress({ plan, onClose }) {
                       background: all ? '#F4FAF5' : '#FCFCFA', border:'1px solid ' + (all ? '#CDEBD2' : '#EEE9DC')}}>
                       <span style={{fontWeight:800, fontSize:12.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{st.fullName}</span>
                       {cells.map((c, i) => (
-                        <span key={i} title={`${c.a.label || c.a.activityId} · ${c.s === 'ok' ? 'hecha en la fecha' + (c.sc != null ? ' · ' + c.sc + '%' : '') : c.s === 'other' ? 'la hizo otro día (' + fmtD(c.d) + ')' : 'pendiente'}`}
+                        <span key={i} title={`${c.a.label || c.a.activityId} · ${c.s === 'ok' ? 'hecha en la fecha' + (c.sc != null ? ' · ' + c.sc + '%' : '') : c.s === 'other' ? 'la hizo otro día (' + fmtD(c.d) + ')' : c.s === 'mod' ? 'el ' + fmtD(c.d) + ' hizo este material pero de OTRO módulo (' + c.wm.map(w => w.name).join(', ') + ') — no cuenta para este set' : 'pendiente'}`}
                           style={{height:24, display:'flex', alignItems:'center', justifyContent:'center', gap:4,
                             borderRadius: i === 0 ? '8px 3px 3px 8px' : i === cells.length - 1 ? '3px 8px 8px 3px' : 3,
-                            background: c.s === 'ok' ? '#2EA84B' : c.s === 'other' ? '#F2C14E' : '#EFEDE6',
-                            border: c.s === 'pend' ? '1px dashed #DAD5C6' : 'none', boxSizing:'border-box',
-                            color: c.s === 'ok' ? '#fff' : c.s === 'other' ? '#6B4E00' : '#B8B2A2',
+                            background: c.s === 'ok' ? '#2EA84B' : c.s === 'other' ? '#F2C14E' : c.s === 'mod' ? '#E4EDFB' : '#EFEDE6',
+                            border: c.s === 'pend' ? '1px dashed #DAD5C6' : c.s === 'mod' ? '1px dashed #7D97D1' : 'none', boxSizing:'border-box',
+                            color: c.s === 'ok' ? '#fff' : c.s === 'other' ? '#6B4E00' : c.s === 'mod' ? '#1B3B6F' : '#B8B2A2',
                             fontSize:10.5, fontWeight:900, whiteSpace:'nowrap', overflow:'hidden'}}>
-                          {c.s === 'ok' ? <>✓{c.sc != null ? ' ' + c.sc + '%' : ''}</> : c.s === 'other' ? <>✓ {fmtD(c.d)}</> : ''}
+                          {c.s === 'ok' ? <>✓{c.sc != null ? ' ' + c.sc + '%' : ''}</> : c.s === 'other' ? <>✓ {fmtD(c.d)}</> : c.s === 'mod' ? <>≠ otro módulo</> : ''}
                         </span>
                       ))}
                       <span style={{textAlign:'right', fontSize:12.5, fontWeight:800, whiteSpace:'nowrap', color: all ? '#2E7D32' : (ok || other) ? '#8A6D1A' : '#B5B5B5'}}>
@@ -631,7 +649,7 @@ function PracticeSetProgress({ plan, onClose }) {
           )}
         </div>
         <div style={{padding:'9px 18px 13px', borderTop:'1px dashed #E3DCC9', fontSize:11.5, fontWeight:700, color:'#8a7f6a', display:'flex', alignItems:'center', gap:7, flexWrap:'wrap'}}>
-          <PSMark s="ok" /> hecha en la fecha <span style={{opacity:.4}}>·</span> <PSMark s="other" /> la hizo otro día <span style={{opacity:.4}}>·</span> <PSMark s="pend" /> pendiente <span style={{opacity:.5}}>— pasa el cursor por un tramo para ver el detalle.</span>
+          <PSMark s="ok" /> hecha en la fecha <span style={{opacity:.4}}>·</span> <PSMark s="other" /> la hizo otro día <span style={{opacity:.4}}>·</span> <PSMark s="pend" /> pendiente <span style={{opacity:.4}}>·</span> <PSMark s="mod" /> hizo el de otro módulo <span style={{opacity:.5}}>— pasa el cursor por un tramo para ver el detalle.</span>
         </div>
       </div>
     </div>

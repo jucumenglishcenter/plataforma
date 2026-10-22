@@ -55,7 +55,9 @@ function fuData(plan) {
   const prog = {}; students.forEach(s => { prog[s.id] = D.getStudentProgress(s.id) || { completed: {} }; });
   const entry = (s, m) => (prog[s.id].completed || {})[m.moduleId + ':' + m.activityId] || null;
   const cell = (s, m, a, test) => {
-    const e = entry(s, m); if (!e || !e.date) return { st: 'no' }; const dd = fuPeru(e.date); if (!test(dd)) return { st: 'no' };
+    const e = entry(s, m); if (!e || !e.date) return { st: 'no' };
+    /* PRACTICE-DAYS-V1: día real (daily_sessions), no la última fecha de progress */
+    const pd = D.practiceDays ? D.practiceDays(s.id, m.moduleId, m.activityId) : [fuPeru(e.date)]; const hit = pd.filter(test); if (!hit.length) return { st: 'no' }; const dd = hit[0];
     const noGrade = FU_NOGRADE.includes(a ? a.type : m.type); const pct = D.scorePct ? D.scorePct(e.score) : (typeof e.score === 'number' ? Math.round(e.score) : null);
     const ok = noGrade || pct == null ? true : (D.entryPassed ? D.entryPassed(e, s.level, s.group) : pct >= FU_MIN);
     return { st: ok ? 'ok' : 'lo', pct: noGrade ? null : pct, day: dd };
