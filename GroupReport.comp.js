@@ -26,7 +26,7 @@ function GroupReport({ groupId, onBack }) {
         <img src={window.JUCUM_LOGO || 'logo-jucum.png'} alt="JUCUM EC" style={{height:64}} />
         <div>
           <div className="report-title">Reporte de grupo</div>
-          <div className="report-sub">{level.emoji} {group.name} · {group.schedule}</div>
+          <div className="report-sub">{level.emoji} {group.name}{group.schedule && !String(group.name).includes(group.schedule) ? ' · ' + group.schedule : ''}</div>
           <div className="report-date">Generado el {today} · umbral de aprobación {thr}%</div>
         </div>
       </div>

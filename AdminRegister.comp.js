@@ -103,7 +103,7 @@ function RegisterStudentForm({ onClose, onDone, prefill }) {
               <div className="settings-label">Grupo</div>
               <select className="input-text" style={{width:'100%'}} value={f.group} onChange={e=>set('group', e.target.value)}>
                 <option value="">— Elegir grupo —</option>
-                {groups.map(g => <option key={g.id} value={g.id}>{g.name} · {g.schedule}</option>)}
+                {groups.map(g => <option key={g.id} value={g.id}>{g.name}{(g.schedule && !String(g.name).includes(g.schedule) ? ' · ' + g.schedule : '')}</option>)}
               </select>
             </div>
           </div>
@@ -219,7 +219,7 @@ function ApproveModal({ reg, onClose, onDone }) {
             <div className="settings-label">Grupo</div>
             <select className="input-text" style={{width:'100%'}} value={group} onChange={e=>setGroup(e.target.value)}>
               <option value="">— Elegir grupo —</option>
-              {groups.map(g => <option key={g.id} value={g.id}>{g.name} · {g.schedule}</option>)}
+              {groups.map(g => <option key={g.id} value={g.id}>{g.name}{(g.schedule && !String(g.name).includes(g.schedule) ? ' · ' + g.schedule : '')}</option>)}
             </select>
           </div>
           <div className="modal-actions"><button className="btn-cancel" onClick={onClose}>Cancelar</button><button className="btn-save" onClick={approve} disabled={busy||!group}>{busy?'Creando…':'✓ Crear alumno'}</button></div>

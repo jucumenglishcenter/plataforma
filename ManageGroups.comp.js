@@ -109,7 +109,7 @@ function ManageGroups({ onBack }) {
 
 function GroupFormModal({ group, onClose, onSave }) {
   const isEdit = !!group;
-  const [name, setName] = mgUseState(group?.name || '');
+  const [name, setName] = mgUseState(group?.rawName || group?.name || '');
   const [level, setLevel] = mgUseState(group?.level || 'pre-a1');
   const [schedule, setSchedule] = mgUseState(group?.schedule || '');
   const [startDate, setStartDate] = mgUseState(group?.startDate || window.JUCUM_DAY.today());

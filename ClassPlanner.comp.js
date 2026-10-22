@@ -107,7 +107,7 @@ function groupsSorted() {
   return ((window.JUCUM_DATA && window.JUCUM_DATA.GROUPS) || []).slice()
     .sort((a, b) => String(a.level).localeCompare(String(b.level)) || String(a.name).localeCompare(String(b.name)));
 }
-function groupOptionLabel(g) { return (g.name || '') + (g.schedule ? ' · ' + g.schedule : ''); }
+function groupOptionLabel(g) { return (g.name || '') + (g.schedule && !String(g.name).includes(g.schedule) ? ' · ' + g.schedule : ''); }
 
 /* ════════ HUB principal (export ClassPlanner — el nombre que usa el menú) ════════ */
 function ClassPlanner({ onBack, onGoExams }) {
@@ -880,7 +880,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
    * caía en GROUPS[0] — el primer grupo que devolvía la nube, sin orden — y por
    * eso un set de la clase nueva de la tarde se mostraba/guardaba en la antigua. */
   const GSORT = GROUPS.slice().sort((a, b) => String(a.level).localeCompare(String(b.level)) || String(a.name).localeCompare(String(b.name)));
-  const gLabel = (g) => g ? (g.name + (g.schedule ? ' · ' + g.schedule : '')) : '';
+  const gLabel = (g) => g ? (g.name + (g.schedule && !String(g.name).includes(g.schedule) ? ' · ' + g.schedule : '')) : '';
   const groupReal = GROUPS.find(x => x.id === groupId) || null;
   React.useEffect(() => { if (onGroupSeen && groupReal) onGroupSeen(groupReal.id); }, [groupId]);
   const group = groupReal || {};
@@ -946,7 +946,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
     if (!dates.length) { alert('Elige al menos un día en el calendario.'); return; }
     const finalGuide = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang });
     const ds = dates.slice().sort(); const rec = { groupId, level, themeGroup, title, activities: picked, dates, assignToStudents: assign, note, guide: { ...finalGuide, from: ds[0], to: ds[ds.length - 1] } };
-    const destino = '“' + groupReal.name + '”' + (groupReal.schedule ? ' (' + groupReal.schedule + ')' : '') + ' · ' + nAlumnos + ' alumno' + (nAlumnos === 1 ? '' : 's');
+    const destino = '“' + groupReal.name + '”' + (groupReal.schedule && !String(groupReal.name).includes(groupReal.schedule) ? ' (' + groupReal.schedule + ')' : '') + ' · ' + nAlumnos + ' alumno' + (nAlumnos === 1 ? '' : 's');
     if (initial && !initial._tpl) { TT.updatePracticePlan(initial.id, rec); alert('✅ Set actualizado para ' + destino); }
     else { TT.addPracticePlan(rec); alert(assign ? '✅ Set guardado y asignado a ' + destino + ' en ' + dates.length + ' día(s)' : '✅ Set guardado (solo para ti) · ' + destino); }
     onSaved();
@@ -981,7 +981,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
         )}
         <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', background: groupReal ? '#EEF2FC' : '#FFEBEE', border:'1.5px solid ' + (groupReal ? '#B4C1E0' : '#EF9A9A'), borderRadius:11, padding:'10px 14px', margin:'4px 0 2px', fontSize:13, fontWeight:800, color: groupReal ? '#1F3A8A' : '#8E1F1F'}}>
           {groupReal
-            ? <span>👥 Este set va a: <b>{groupReal.name}</b>{groupReal.schedule ? ' · ' + groupReal.schedule : ''} · {nAlumnos} alumno{nAlumnos === 1 ? '' : 's'}{nAlumnos === 0 ? ' — ⚠ esta clase todavía no tiene alumnos asignados' : ''}</span>
+            ? <span>👥 Este set va a: <b>{groupReal.name}</b>{groupReal.schedule && !String(groupReal.name).includes(groupReal.schedule) ? ' · ' + groupReal.schedule : ''} · {nAlumnos} alumno{nAlumnos === 1 ? '' : 's'}{nAlumnos === 0 ? ' — ⚠ esta clase todavía no tiene alumnos asignados' : ''}</span>
             : <span>⚠ El grupo de este set <b>ya no existe en la nube</b>. Elige abajo la clase correcta: mientras no lo hagas, nadie recibe este set.</span>}
         </div>
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:14, marginTop:6}}>

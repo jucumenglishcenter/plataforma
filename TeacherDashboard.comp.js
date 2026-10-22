@@ -741,14 +741,14 @@ function GroupSettingsModal({ groupId, level, onClose }) {
   const modules = MODULE_CATALOG[group.level] || [];
   const [s, setS] = React.useState(() => getGroupSettings(groupId));
   const { updateGroup, passThreshold, getPassThresholds, setPassThreshold, setGroupThreshold, getGroupThreshold } = window.JUCUM_DATA;
-  const [info, setInfo] = React.useState({ name: group.name, schedule: group.schedule, startDate: group.startDate });
+  const [info, setInfo] = React.useState({ name: group.rawName || group.name, schedule: group.schedule, startDate: group.startDate });
   const levelBase = getPassThresholds()[group.level];                 // estándar del nivel
   const [ownThr, setOwnThr] = React.useState(() => getGroupThreshold(groupId) != null);  // ¿override propio?
   const [thr, setThr] = React.useState(() => { const g = getGroupThreshold(groupId); return g != null ? g : levelBase; });
   const save = () => {
     setGroupSettings(groupId, s);
     if (setGroupThreshold) setGroupThreshold(groupId, ownThr ? thr : null);  // null = vuelve a heredar
-    if (updateGroup && (info.name !== group.name || info.schedule !== group.schedule || info.startDate !== group.startDate)) {
+    if (updateGroup && (info.name !== (group.rawName || group.name) || info.schedule !== group.schedule || info.startDate !== group.startDate)) {
       updateGroup(groupId, { name: info.name, schedule: info.schedule, startDate: info.startDate });
     }
     onClose();

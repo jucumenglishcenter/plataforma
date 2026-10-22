@@ -101,7 +101,7 @@ const GROUPS = loadGroups(DEFAULT_GROUPS);
  * locales se reapuntan (remapGroupId). */
 function addGroup(g, done) {
   const id = 'g' + Date.now();
-  GROUPS.push({ ...g, id, _localOnly: true });
+  GROUPS.push({ ...g, id, rawName: g.name, name: groupDisplayName(g.name, g.schedule), _localOnly: true });
   saveGroups(GROUPS);
   const cb = (typeof done === 'function') ? done : function () {};
   if (!window.JUCUM_SB) { cb(false, 'Este equipo no está conectado a la nube: el grupo quedó guardado solo aquí y tus alumnos no lo verán.', id); return id; }
@@ -153,10 +153,21 @@ function remapGroupId(oldId, newId) {
   STUDENTS.forEach(s => { if (s.group === oldId) { s.group = newId; moved++; } });
   if (moved) { saveStudents(STUDENTS); STUDENTS.forEach(s => { if (s.group === newId && window.JUCUM_SB) window.JUCUM_SB.update('users', s.id, { group_id: newId }).catch(() => {}); }); }
 }
+/* 🕐 GROUP-HOUR-V1 (22-oct): dos grupos activos se llaman igual ("A1 - Lunes y Jueves" a las
+ * 4:30 pm y a las 8:20 pm). Para que NINGUNA pantalla los confunda, el nombre que se muestra
+ * lleva el horario si el nombre guardado no trae ya una hora (rawName = el de la nube). */
+function groupDisplayName(name, schedule) {
+  const n = String(name || ''), s = String(schedule || '').trim();
+  if (!s || !/\d{1,2}:\d{2}/.test(s) || /\d{1,2}:\d{2}/.test(n) || n.includes(s)) return n;
+  return n + ' · ' + s;
+}
+window.JUCUM_GROUP_NAME = groupDisplayName;
 function updateGroup(id, partial) {
   const idx = GROUPS.findIndex(g => g.id === id);
   if (idx >= 0) {
+    const raw0 = GROUPS[idx].rawName || GROUPS[idx].name;
     GROUPS[idx] = { ...GROUPS[idx], ...partial };
+    if ('name' in partial || 'schedule' in partial) { const raw = 'name' in partial ? partial.name : raw0; GROUPS[idx].rawName = raw; GROUPS[idx].name = groupDisplayName(raw, GROUPS[idx].schedule); }
     saveGroups(GROUPS);
     if (window.JUCUM_SB) {
       const p = {};

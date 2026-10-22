@@ -10,7 +10,7 @@
 function applyRoster(groups, users) {
   window.JUCUM_DATA.GROUPS.length = 0;
   groups.forEach(g => window.JUCUM_DATA.GROUPS.push({
-    id: g.id, level: g.level, name: g.name, schedule: g.schedule,
+    id: g.id, level: g.level, name: (window.JUCUM_GROUP_NAME ? window.JUCUM_GROUP_NAME(g.name, g.schedule) : g.name), rawName: g.name, schedule: g.schedule,   // GROUP-HOUR-V1
     startDate: g.start_date,
     // 🎓 script 28 · grupo finalizado (sin columnas → undefined → activo)
     finishedAt: g.finished_at || null, finishedLabel: g.finished_label || '', finishedMsg: g.finished_msg || '',
