@@ -663,6 +663,9 @@ function StudentDashboard({ user, onLogout }) {
           </div>
         </div>
 
+        {/* — 🏫 Actividad de clase abierta por el profe (DOCSETS-V1) — */}
+        {window.DocSetLiveBanner && <DocSetLiveBanner student={student} />}
+
         {/* — 🔇 Aviso de restricción del foro (mientras dure) — */}
         <ForumMuteBanner student={student} />
 
@@ -2103,6 +2106,7 @@ function StudentPractice({ student, settings, onBack }) {
       {/* ── 2) Tu práctica de hoy ── */}
       <PracHead emoji="🎯" title="Tu práctica de hoy" color="#1B3B6F" tint="#E4EDFB" line="#D2E0F5" />
       {window.StudentRhythmNotice && <StudentRhythmNotice student={student} />}
+      {window.DocSetLiveBanner && <div style={{marginTop:10}}><DocSetLiveBanner student={student} /></div>}
       <div style={{marginTop:10}}><TodayPracticeCard student={student} /></div>
       {extrasBlock}
 

@@ -1684,6 +1684,7 @@ function getStudentReadiness(student) {
     const assigns = JSON.parse(localStorage.getItem('jucum_assignments_v1') || '[]');
     const subs = JSON.parse(localStorage.getItem('jucum_submissions_v1') || '{}');
     const mine = assigns.filter(a => {
+      if (window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.isClass(a)) return false;   // DOCSETS-V1: actividad de clase = participación, no tarea
       const targeted = Array.isArray(a.targetStudentIds) && a.targetStudentIds.length > 0;
       return targeted ? a.targetStudentIds.includes(student.id) : a.groupId === student.group;
     });
@@ -1779,6 +1780,7 @@ function getStudentGrades(student) {
     assigns.forEach(a => {
       const s = (subs[a.id] || {})[student.id];
       if (s && s.status === 'graded' && typeof s.grade === 'number') {
+        if (window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.isClass(a)) return;
         out.push({ kind:'task', icon:'📝', title: a.title, date: s.gradedAt || s.submittedAt, grade: s.grade, feedback: s.feedback });
       }
     });

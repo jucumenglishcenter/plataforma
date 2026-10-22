@@ -122,6 +122,7 @@ async function retryPending() {
  * nube: avisar de una tarea que el alumno no puede abrir solo confunde). */
 function notifyRecipients(a, editada) {
   if (!window.JUCUM_NOTIF || !window.JUCUM_DATA) return;
+  if (window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.isClass(a)) return;   // DOCSETS-V1: la de clase avisa al ABRIRSE en Modo clase
   const dueTxt = a.dueAt ? ` · cierra ${new Date(a.dueAt).toLocaleDateString('es-PE',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}` : '';
   recipientsOf(a, window.JUCUM_DATA.STUDENTS).forEach(s => window.JUCUM_NOTIF.pushNotif(s.id, {
     type: 'assignment',
@@ -141,6 +142,7 @@ function getAssignments() {
 function assignmentsForStudent(student) {
   return getAssignments().filter(a => {
     const targeted = Array.isArray(a.targetStudentIds) && a.targetStudentIds.length > 0;
+    if (window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.isClass(a)) return false;   // DOCSETS-V1: la de clase NO es tarea (participación)
     if (targeted) return a.targetStudentIds.includes(student.id);
     return a.groupId === student.group;
   });
@@ -179,7 +181,7 @@ async function createAssignment(data) {
   return { id: a.id, synced: r.ok, error: r.msg };
 }
 
-async function updateAssignment(id, data) {
+async function updateAssignment(id, data, opts) {
   let atts = data.attachments;
   if (atts && window.JUCUM_SYNC && window.JUCUM_SYNC.uploadAttachments) {
     try { atts = await window.JUCUM_SYNC.uploadAttachments('tareas-material', atts); } catch (e) {}
@@ -191,7 +193,7 @@ async function updateAssignment(id, data) {
   arr[i] = { ...arr[i], ...data, ...(lightAtts ? { attachments: lightAtts } : {}), editedAt: new Date().toISOString(), savedAt: new Date().toISOString(), pendingSync: true };
   saveAssignments(arr);
   const r = await pushTaskSafe({ ...arr[i], ...(atts ? { attachments: atts } : {}) });
-  if (r.ok) { markSynced(id); notifyRecipients(arr[i], true); }
+  if (r.ok) { markSynced(id); if (!(opts && opts.silent)) notifyRecipients(arr[i], true); }
   return { id, synced: r.ok, error: r.msg };
 }
 

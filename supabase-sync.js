@@ -512,7 +512,7 @@
         console.warn('entregas: la nube no respondió; se conserva lo de este equipo', rs.error && rs.error.message);
       } else {
         const sMap = {};
-        rs.data.forEach(s => { if (tomb[s.assignment_id]) return; (sMap[s.assignment_id] = sMap[s.assignment_id] || {})[s.student_id] = rowToSub(s); });
+        rs.data.forEach(s => { if (tomb[s.assignment_id]) return; if (s.status === 'draft') return; /* DOCSETS-V1: avance en curso, solo nube */ (sMap[s.assignment_id] = sMap[s.assignment_id] || {})[s.student_id] = rowToSub(s); });
         const local = read('jucum_submissions_v1');
         Object.keys(local || {}).forEach(aid => {
           if (tomb[aid]) return;

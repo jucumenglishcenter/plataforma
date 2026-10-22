@@ -29,7 +29,7 @@ function parseTaskMeta(a) {
   return { structured, plain };
 }
 function hasStructured(s) {
-  return !!(s && ((s.resource && (s.resource.url || s.resource.label)) || (s.focus && s.focus.length) || (s.steps && s.steps.length) || (s.materials && s.materials.length)));
+  return !!(s && (s.docset || (s.resource && (s.resource.url || s.resource.label)) || (s.focus && s.focus.length) || (s.steps && s.steps.length) || (s.materials && s.materials.length)));
 }
 function buildTaskDescription(plain, structured) {
   let d = (plain || '').trim();
@@ -347,7 +347,7 @@ function tiParse(lines, groupId, fileName) {
   const structured = { resource: { label: found.length ? found[0].a.name : '', url: attachments[0] ? attachments[0].url : '' }, focus: [], steps, materials: found.slice(1).map(f => f.a.name) };
   return { title, description: buildTaskDescription(plain, structured), dueAt: due ? new Date(due).toISOString() : null, groupId, targetStudentIds: [], gradable, attachments, _file: fileName, _notes: notes };
 }
-function TaskImportModal({ onClose, onParsed }) {
+function TaskImportModal({ onClose, onParsed, onDocSets }) {
   const { GROUPS } = window.JUCUM_DATA;
   const [gid, setGid] = tUseState(() => { let v = ''; try { v = localStorage.getItem('jucum_planner_group_v1') || ''; } catch (e) {} return (GROUPS.find(g => g.id === v) || GROUPS[0] || {}).id || ''; });
   const [busy, setBusy] = tUseState(false); const [err, setErr] = tUseState('');
@@ -355,7 +355,11 @@ function TaskImportModal({ onClose, onParsed }) {
   const read = async (f) => {
     if (!f) return; if (!gid) { setErr('Elige primero el grupo.'); return; }
     setBusy(true); setErr('');
-    try { const PI = window.JUCUM_PLANIMPORT; const r = await PI.readFile(f); const lines = PI.jLines(r); if (!lines.length) throw new Error('El documento no trae texto.'); onParsed(tiParse(lines, gid, f.name)); }
+    try { const PI = window.JUCUM_PLANIMPORT; const r = await PI.readFile(f); const lines = PI.jLines(r); if (!lines.length) throw new Error('El documento no trae texto.');
+      /* DOCSETS-V1: si trae bloques “Step N: … • Practice X of Y”, se convierte en sets interactivos */
+      const DSd = window.JUCUM_DOCSETS && onDocSets ? window.JUCUM_DOCSETS.detect(lines) : null;
+      if (DSd && DSd.sets.length) { setBusy(false); onDocSets({ doc: DSd, groupId: gid, fileName: f.name }); return; }
+      onParsed(tiParse(lines, gid, f.name)); }
     catch (e) { setErr(e && e.message ? e.message : 'No pude leer el documento.'); }
     setBusy(false);
   };
@@ -372,7 +376,7 @@ function TaskImportModal({ onClose, onParsed }) {
             <div onClick={() => !busy && fileRef.current && fileRef.current.click()} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); read(e.dataTransfer.files[0]); }} style={{border:'2px dashed #9FB0DA', borderRadius:14, padding:'22px 14px', textAlign:'center', cursor:'pointer', background:'#F7F9FE', fontWeight:800, color:'#3F5BB8', fontSize:14}}>{busy ? 'Leyendo…' : '📎 Toca o arrastra el archivo aquí'}</div>
             <input ref={fileRef} type="file" accept=".pdf,.docx,.txt" style={{display:'none'}} onChange={e => { read(e.target.files[0]); e.target.value = ''; }} />
           </div>
-          <div className="settings-hint" style={{lineHeight:1.55}}>Leo el <b>título</b>, la <b>fecha de entrega</b> (“Entrega: viernes 10 oct, 8 pm”), los <b>pasos</b> numerados y el <b>material</b> de la plataforma que nombres (Story 2, P1, Quizlet Traducir…) o un enlace. Si no dice fecha, propongo la próxima clase del grupo. Luego revisas y pulsas Guardar.</div>
+          <div className="settings-hint" style={{lineHeight:1.55}}>Si tu hoja trae bloques <b>“Step 1: … • Practice 1 of 2”</b>, la convierto en <b>sets interactivos</b> y eliges cuál va 🏫 en clase y cuál 🏠 para casa. Si no, leo el <b>título</b>, la <b>fecha de entrega</b> (“Entrega: viernes 10 oct, 8 pm”), los <b>pasos</b> numerados y el <b>material</b> de la plataforma que nombres (Story 2, P1, Quizlet Traducir…) o un enlace. Si no dice fecha, propongo la próxima clase del grupo. Luego revisas y pulsas Guardar.</div>
         </div>
       </div>
     </div>
@@ -380,6 +384,7 @@ function TaskImportModal({ onClose, onParsed }) {
 }
 
 /* ═══════════════════════ PROFESOR ═══════════════════════ */
+function Wrap0({ embedded, children }) { return embedded ? <div>{children}</div> : <main>{children}</main>; }
 function TeacherAssignments({ onBack, embedded }) {
   const { STUDENTS, GROUPS, LEVELS } = window.JUCUM_DATA;
   const T = window.JUCUM_TASKS;
@@ -388,6 +393,7 @@ function TeacherAssignments({ onBack, embedded }) {
   const [importing, setImporting] = tUseState(false);
   const [prefill, setPrefill] = tUseState(null);
   const [dupping, setDupping] = tUseState(null);   // ⧉ TASK-DUP-V1: tarea a duplicar
+  const [docSets, setDocSets] = tUseState(null);   // ✍️ DOCSETS-V1: sets leídos del documento
   const [viewing, setViewing] = tUseState(null); // assignment
   const [tick, setTick] = tUseState(0);
   const [retrying, setRetrying] = tUseState(false);
@@ -407,6 +413,8 @@ function TeacherAssignments({ onBack, embedded }) {
     setRetrying(false); refresh();
   };
 
+  if (viewing && window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.isDocset(viewing) && window.DocSetResults) return (
+    <Wrap0 embedded={embedded}><button className="back-btn" onClick={() => { setViewing(null); refresh(); }}>← Tareas</button><DocSetResults a={viewing} /></Wrap0>);
   if (viewing) return <TeacherSubmissions assignment={viewing} onBack={() => { setViewing(null); refresh(); }} />;
 
   const Wrap = embedded ? 'div' : 'main';
@@ -454,9 +462,9 @@ function TeacherAssignments({ onBack, embedded }) {
             const targeted = (a.targetStudentIds || []).length > 0;
             return (
               <div key={a.id} className="scard mm-card" style={{cursor:'pointer'}} onClick={() => setViewing(a)}>
-                <div className="mm-emoji">📝</div>
+                <div className="mm-emoji">{window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.isDocset(a) ? (window.JUCUM_DOCSETS.isClass(a) ? '🏫' : '✍️') : '📝'}</div>
                 <div className="mm-info">
-                  <div className="mm-name">{a.title} {a.gradable && <span className="mm-chip" style={{background:'#E3E9F8',color:'#1F3A8A'}}>calificable</span>} {a.pendingSync && <span className="mm-chip" style={{background:'#FFF8E1',color:'#7A4E00'}}>⏳ sin subir</span>}</div>
+                  <div className="mm-name">{a.title} {a.gradable && <span className="mm-chip" style={{background:'#E3E9F8',color:'#1F3A8A'}}>calificable</span>} {a.pendingSync && <span className="mm-chip" style={{background:'#FFF8E1',color:'#7A4E00'}}>⏳ sin subir</span>} {window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.isClass(a) && <span className="mm-chip" style={{background:'#F3E5F5',color:'#6A1B9A'}}>🏫 en clase · {(() => { const m = window.JUCUM_DOCSETS.meta(a); return m.planDate + ' · ' + window.JUCUM_DOCSETS.liveState(m).replace('waiting','espera en Modo clase').replace('open','● en vivo').replace('closed','cerrada'); })()}</span>}</div>
                   <div className="mm-meta">
                     {targeted ? `${recips.length} alumno${recips.length===1?'':'s'} puntual${recips.length===1?'':'es'}` : (group ? `${LEVELS[group.level]?.emoji||''} ${group.name}` : 'grupo')}
                     {' · '}<b>{nSub}/{recips.length}</b> entregada{nSub===1?'':'s'}
@@ -476,7 +484,8 @@ function TeacherAssignments({ onBack, embedded }) {
       )}
 
       {creating && <AssignmentForm onClose={() => setCreating(false)} onSaved={() => { setCreating(false); refresh(); }} />}
-      {importing && <TaskImportModal onClose={() => setImporting(false)} onParsed={pf => { setImporting(false); setPrefill(pf); }} />}
+      {importing && <TaskImportModal onClose={() => setImporting(false)} onParsed={pf => { setImporting(false); setPrefill(pf); }} onDocSets={d => { setImporting(false); setDocSets(d); }} />}
+      {docSets && window.DocSetReview && <DocSetReview doc={docSets.doc} groupId={docSets.groupId} fileName={docSets.fileName} onClose={() => setDocSets(null)} onDone={() => { setDocSets(null); refresh(); }} />}
       {prefill && <AssignmentForm prefill={prefill} onClose={() => setPrefill(null)} onSaved={() => { setPrefill(null); refresh(); }} />}
       {editing && <AssignmentForm initial={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />}
       {dupping && <DuplicateTaskModal task={dupping} onClose={() => setDupping(null)} onDone={() => { setDupping(null); refresh(); }} onEditCopy={pf => { setDupping(null); setPrefill(pf); }} />}
@@ -495,7 +504,7 @@ function taskCopyData(a, groupId, dueIso) {
     groupId,
     targetStudentIds: same ? [...(a.targetStudentIds || [])] : [],
     title: a.title || '',
-    description: a.description || '',
+    description: (window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.isDocset(a)) ? window.JUCUM_DOCSETS.describe({ ...window.JUCUM_DOCSETS.meta(a), live: {}, ...(window.JUCUM_DOCSETS.meta(a).mode === 'home' ? { dueAt: dueIso || null } : {}) }) : (a.description || ''),
     dueAt: dueIso || null,
     gradable: !!a.gradable,
     xp: typeof a.xp === 'number' ? a.xp : 40,
@@ -946,7 +955,9 @@ function StudentAssignments({ user, onBack }) {
         <div className="scard" style={{marginTop:18}}><div className="empty-state"><div className="icon">🎉</div>No tienes tareas asignadas por ahora.</div></div>
       ) : (
         <div style={{marginTop:18, display:'flex', flexDirection:'column', gap:12}}>
-          {list.map(a => <StudentTaskCard key={a.id} a={a} student={student} onChange={() => setTick(t=>t+1)} />)}
+          {list.map(a => (window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.isDocset(a) && window.DocSetTaskCard)
+            ? <DocSetTaskCard key={a.id} a={a} student={student} onChange={() => setTick(t=>t+1)} />
+            : <StudentTaskCard key={a.id} a={a} student={student} onChange={() => setTick(t=>t+1)} />)}
         </div>
       )}
     </main>

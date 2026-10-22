@@ -1468,6 +1468,7 @@ function ClassMode({ plan, onBack }) {
       )}
       <style>{`@keyframes cpPulse{0%,100%{opacity:1}50%{opacity:.25}}`}</style>
       {cmPrev && window.FollowUpPanel && <FollowUpPanel plan={cmPrev} where="class" />}
+      {window.DocSetClassPanel && <DocSetClassPanel plan={plan} />}
       <div style={{display:'grid', gridTemplateColumns:'1.3fr 1fr', gap:16, alignItems:'start'}}>
         <div style={{display:'flex', flexDirection:'column', gap:16, minWidth:0}}>
         {cmRec && <CmContext rec={cmRec} />}
