@@ -70,14 +70,14 @@ function DocSetReview({ doc, groupId, fileName, onClose, onDone }) {
       <div className="modal settings-modal" style={{ maxWidth: 760 }} onClick={e => e.stopPropagation()}>
         <div className="modal-head"><div className="modal-title">✍️ Sets de práctica de tu documento</div><button className="modal-close" onClick={onClose} disabled={busy}>✕</button></div>
         <div className="modal-body">
-          <div style={{ background: '#F6F8FD', border: '1px solid #DCE4F7', borderRadius: 14, padding: '11px 13px', marginBottom: 12, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ flexShrink: 0, background: '#F6F8FD', border: '1px solid #DCE4F7', borderRadius: 14, padding: '11px 13px', marginBottom: 12, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 26 }}>📄</span>
             <div style={{ flex: 1, minWidth: 200 }}><div style={{ fontWeight: 900, fontSize: 15 }}>{doc.title || fileName}</div><div style={{ fontSize: 12, fontWeight: 700, color: '#5A6A90' }}>{sets.length} set{sets.length === 1 ? '' : 's'} · {sets.reduce((n, s) => n + s.items.length, 0)} ejercicios · {group.name || 'grupo'}</div></div>
             <button className="att-btn" disabled={tvBusy} onClick={() => fileRef.current && fileRef.current.click()}>{tvBusy ? 'Leyendo…' : '＋ Versión del teacher (Answer / Also)'}</button>
             <input ref={fileRef} type="file" accept=".pdf,.docx,.txt" style={{ display: 'none' }} onChange={e => { addTeacher(e.target.files[0]); e.target.value = ''; }} />
           </div>
           {err && <div className="err" style={{ marginBottom: 12 }}>⚠ {err}</div>}
-          <div style={{ background: '#EEF2FC', border: '1px solid #C9D4F0', borderRadius: 11, padding: '9px 12px', fontSize: 12.8, fontWeight: 700, color: '#1F3A8A', lineHeight: 1.5, marginBottom: 12 }}>
+          <div style={{ flexShrink: 0, background: '#EEF2FC', border: '1px solid #C9D4F0', borderRadius: 11, padding: '9px 12px', fontSize: 12.8, fontWeight: 700, color: '#1F3A8A', lineHeight: 1.5, marginBottom: 12 }}>
             {doc.suggest === 'split' ? <>📌 Tu documento dice <i>“{doc.intro}”</i>: te marqué la práctica 1 <b>en clase</b> y la 2 <b>para casa</b>. Cámbialo con un toque.</> : <>📌 {doc.intro ? <>Tu documento dice <i>“{doc.intro}”</i>: </> : null}<b>elige tú</b> qué hacer con cada set.</>}
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10, fontSize: 12, fontWeight: 800, color: 'var(--text-soft)' }}>Atajo:
@@ -86,7 +86,7 @@ function DocSetReview({ doc, groupId, fileName, onClose, onDone }) {
           </div>
           {sets.map((s, si) => { const c = cfg[s.id], k = DS_KIND[s.grade], op = open[s.id], am = s.grade === 'exact' && s.items.some(x => x.src !== 'teacher' && x.src !== 'ok');
             return (
-              <div key={s.id} style={{ border: '1.5px solid ' + (c.dest === 'cls' ? '#CE93D8' : c.dest === 'home' ? '#FFB74D' : 'var(--border)'), borderRadius: 16, marginBottom: 10, overflow: 'hidden', background: '#fff' }}>
+              <div key={s.id} style={{ border: '1.5px solid ' + (c.dest === 'cls' ? '#CE93D8' : c.dest === 'home' ? '#FFB74D' : 'var(--border)'), borderRadius: 16, marginBottom: 10, overflow: 'hidden', background: '#fff', flexShrink: 0 }}>
                 <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start', padding: '12px 13px' }}>
                   <span style={{ flex: 'none', width: 34, height: 34, borderRadius: 10, background: '#EEF2FC', color: '#1F3A8A', fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{s.step}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -116,7 +116,7 @@ function DocSetReview({ doc, groupId, fileName, onClose, onDone }) {
                     {s.grade === 'rule' && <div className="settings-hint" style={{ marginTop: 6 }}>Vale si conserva la oración y responde la pregunta (lugar / momento / manera). Lo dudoso te llega como “🟨 por revisar”; al alumno le decimos que <b>no es un error</b>.</div>}
                   </div>)}
                 <div style={{ padding: '10px 13px 12px', borderTop: '1px solid #F0EDE4', background: '#FCFBF8' }}>
-                  <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '.05em', textTransform: 'uppercase', color: '#555', marginBottom: 6 }}>¿Qué hago con este set?</div>
+                  <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '.05em', textTransform: 'uppercase', color: '#555', marginBottom: 6 }}>¿Dónde se hace este set? (elige uno)</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 6 }}>
                     <button style={dsBtn(c.dest === 'no', DS_NO)} onClick={() => setC(s.id, { dest: 'no' })}>🚫 No asignar</button>
                     <button style={dsBtn(c.dest === 'cls', DS_CLS)} onClick={() => setC(s.id, { dest: 'cls' })}>🏫 En clase<div style={{ fontSize: 10.5, fontWeight: 700, opacity: .8 }}>en un día de tu plan</div></button>
@@ -140,7 +140,7 @@ function DocSetReview({ doc, groupId, fileName, onClose, onDone }) {
                     <button className="preset" onClick={() => setC(s.id, { due: nextHome })}>Antes de la próxima clase</button></div>}
                 </div>
               </div>); })}
-          <div style={{ position: 'sticky', bottom: -1, background: '#fff', borderTop: '1.5px solid var(--border)', padding: '11px 0 2px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ position: 'sticky', bottom: -1, flexShrink: 0, zIndex: 2, background: '#fff', borderTop: '1.5px solid var(--border)', padding: '11px 0 2px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 220, fontSize: 12.5, fontWeight: 800, color: '#444', lineHeight: 1.55 }}>
               {chosen.length ? <>{sets.filter(s => cfg[s.id].dest === 'cls').length} 🏫 en clase · {sets.filter(s => cfg[s.id].dest === 'home').length} 🏠 para casa{amber ? <> · 🟨 al publicar se dan por buenas las respuestas propuestas</> : null}</> : 'Elige 🏫 o 🏠 en al menos un set.'}
               <div style={{ fontSize: 11.5, color: 'var(--text-soft)' }}>🏫 = participación de clase · 🏠 = cuenta como tarea cumplida.</div>
@@ -206,7 +206,7 @@ function DocSetStudentView({ a, ds, rows, who, onClose, onChanged }) {
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>{dsChip(g + '/100' + (nr ? ' provisional' : ''), '#E3F2FD', '#1565C0')}{nr > 0 && dsChip('🟨 ' + nr + ' por revisar', '#FFF8E1', '#8A5A00')}{dsChip(ds.mode === 'class' ? '🏫 En clase' : '🏠 Para casa', '#F2F0EA', '#555')}{ntr > 0 && dsChip('🌐 usó Traducir en ' + ntr, '#E3F2FD', '#0D47A1')}<span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-soft)' }}>{idx + 1} de {roster.length} · {a.title}</span></div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>{row.status === 'draft' ? dsChip(res.filter(Boolean).length + ' de ' + ds.items.length + ' respondidos', '#FFF3E0', '#E65100') : dsChip(g + '/100' + (nr ? ' provisional' : ''), '#E3F2FD', '#1565C0')}{nr > 0 && dsChip('🟨 ' + nr + ' por revisar', '#FFF8E1', '#8A5A00')}{dsChip(ds.mode === 'class' ? '🏫 En clase' : '🏠 Para casa', '#F2F0EA', '#555')}{ntr > 0 && dsChip('🌐 usó Traducir en ' + ntr, '#E3F2FD', '#0D47A1')}<span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-soft)' }}>{idx + 1} de {roster.length} · {a.title}</span></div>
           <div style={{ background: '#fff', borderRadius: 12, padding: '9px 12px', marginTop: 10, fontSize: 13.5, fontWeight: 800 }}>{ds.es || ds.en}<div style={{ fontSize: 12, fontWeight: 700, color: '#5A6A90', fontStyle: 'italic' }}>{ds.en}</div></div>
           {ds.items.map((it, i) => { const v = res[i], t = (an.ans || [])[i], f = FB(v); return (
             <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '11px 12px', marginTop: 10, border: '2px solid ' + (v === 'bad' ? '#FFB74D' : v === 'rev' ? '#90CAF9' : v ? '#A5D6A7' : '#E3E8F0') }}>
@@ -254,7 +254,7 @@ function DocSetResults({ a: a0, compact }) {
                 {!r ? dsChip(ds.mode === 'home' ? 'Aún no entrega' : 'No participó', '#FFF3E0', '#E65100') : <>
                   {k < ds.items.length && dsChip((done ? 'no terminó · ' : 'en curso · ') + k + ' de ' + ds.items.length, '#FFF3E0', '#E65100')}
                   {nr > 0 && dsChip('🟨 ' + nr + ' por revisar', '#FFF8E1', '#8A5A00')}
-                  {dsChip(X.score(ds, res) + '/100' + (nr ? ' provisional' : ''), '#E3F2FD', '#1565C0')}
+                  {done && dsChip(X.score(ds, res) + '/100' + (nr ? ' provisional' : ''), '#E3F2FD', '#1565C0')}
                   <button className="att-btn" onClick={() => setView(s.id)}>👁 Ver su actividad</button></>}
               </div>); })}
         </div>)}
@@ -270,7 +270,7 @@ function DocSetClassPanel({ plan }) {
   dsUE(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
   dsUE(() => { if (!X || !T || !plan) return; T.getAssignments().forEach(a => { if (a.groupId !== plan.groupId || !X.isClass(a)) return; const d = X.meta(a); if (d.planDate === plan.date && X.liveState(d, now) === 'closed' && d.live && !d.live.closedAt && !closing.current[a.id]) closeNow(a); }); }, [now]);
   if (!X || !T || !plan) return null;
-  const list = T.getAssignments().filter(a => a.groupId === plan.groupId && X.isClass(a) && X.meta(a).planDate === plan.date);
+  const list = T.getAssignments().filter(a => a.groupId === plan.groupId && X.isClass(a) && X.meta(a).planDate === plan.date).sort((p, q) => String(X.meta(p).step).localeCompare(String(X.meta(q).step), undefined, { numeric: true }) || String(p.title).localeCompare(String(q.title)));
   if (!list.length) return null;
   const refresh = () => setTick(t => t + 1);
   const endFor = (ds) => ds.time === 'fin' ? dsPlanEnd(plan) : ds.time === 'mas' ? new Date(ds.until || Date.now() + 86400000) : new Date(Date.now() + (+ds.time || 10) * 60000);
