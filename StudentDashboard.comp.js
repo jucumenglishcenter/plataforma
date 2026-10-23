@@ -505,6 +505,9 @@ function StudentDashboard({ user, onLogout }) {
   // 🔥 Bono de racha al cumplir la meta diaria + 📉 aviso honesto de XP por inactividad
   React.useEffect(() => {
     if (!window.JUCUM_NOTIF) return;
+    /* XP-EXPLICA-V1 (23-oct): espera los días REALES de la nube. Antes corría al montar, con la
+     * racha calculada sin __JEC_DAYS (caso Valentino: “Racha de 3 días · +90 XP” con racha real 6). */
+    if (cloudReady !== 'ready') return;
     const D = window.JUCUM_DATA;
     const today = peruDayKey();
     const tMin = progress.todayMinutes || 0;
@@ -538,7 +541,7 @@ function StudentDashboard({ user, onLogout }) {
         localStorage.setItem(k2, '1');
       }
     }
-  }, [student.id, progress.todayMinutes, settings.dailyTargetMin]);
+  }, [student.id, progress.todayMinutes, settings.dailyTargetMin, cloudReady]);
 
   // ⏳ Nota en espera: trae las anclas vivas para avisar al tocar un material
   React.useEffect(() => {
@@ -1937,20 +1940,55 @@ function PracHead({ emoji, title, color, tint, line }) {
 }
 
 /* ════════ Vista "Mi práctica" — ruta + temas + repaso + por mejorar ════════ */
-function NeuroCoach({ student, defaultOpen }) {
-  const [open, setOpen] = React.useState(!!defaultOpen);
-  const [topic, setTopic] = React.useState(null);
-  /* 🎯 El mínimo para aprobar NO es 75% en todos los niveles (Pre-A1 73 · A1 78 ·
-   * A2 85). Decirle 75% al alumno hacía que un 80% en A2 se sintiera un error de
+function NeuroCoach({ student, defaultOpen, startTopic }) {
+  const [open, setOpen] = React.useState(!!defaultOpen || startTopic != null);
+  const [topic, setTopic] = React.useState(startTopic != null ? startTopic : null);
+  /* 🎯 El mínimo para aprobar NO es 75% en todos los niveles (Pre-A1 75 · A1 78 ·
+   * A2 85; manda la nube). Decirle 75% al alumno hacía que un 80% en A2 se sintiera un error de
    * la plataforma: «la hice y no me sale terminada». (22-ago-2026) */
   const thrN = (() => { try { return window.JUCUM_DATA.passThreshold(student.level, student.group); } catch (e) { return 75; } })();
+  /* ⚡ XP-EXPLICA-V1 (23-oct-2026) · “Practico 40 min y mi XP no sube” (caso Valentino). La usuaria
+   * decidió NO cambiar el XP: solo explicarlo. Lo que el alumno YA cobró esta semana sale de las
+   * mismas reglas de data.js (activityEarnedXP = 1 vez por material · weeklyReEarnXP = 1 vez por
+   * material por SEMANA vía __JEC_WEEKS). Solo lee. El chip ⚡ de NeuroHoy abre este tema (startTopic 0). */
+  const mixOn = !!(window.JUCUM_MIX && window.JUCUM_MIX.enabledFor && window.JUCUM_MIX.enabledFor(student));
+  const xpWeek = (() => {
+    try {
+      const D = window.JUCUM_DATA, dayOf = (ms) => new Date(ms - PERU_MS).toISOString().slice(0, 10);
+      const t0 = Date.parse(peruDayKey() + 'T12:00:00Z'), wd = (new Date(t0).getUTCDay() + 6) % 7;
+      const wk = ((window.__JEC_WEEKS || {})[student.id] || {})[dayOf(t0 - wd * 864e5)] || {};
+      const done = (D.getStudentProgress(student.id) || {}).completed || {}, names = [];
+      Object.keys(wk).forEach(key => {
+        const e = done[key]; if (!e) return;
+        const [mId, aId] = key.split(':'); let a = null;
+        Object.keys(D.MODULE_CATALOG || {}).forEach(l => (D.MODULE_CATALOG[l] || []).forEach(m => { if (!a && m.id === mId) a = (m.activities || []).find(x => x.id === aId) || null; }));
+        if (!a || a.type === 'story' || a.type === 'dialog') return;
+        if (a.type !== 'summary' && a.type !== 'quizlet' && !D.entryPassed(e, student.level, student.group)) return;
+        const u = String(a.url || ''), t = String(a.name || '').match(/\bT\d+[a-z]?\b/i);
+        const k = /identify\.html/i.test(u) ? 'Identify' : /transform\.html/i.test(u) ? 'Transform' : /fill\.html/i.test(u) ? 'Fill in' : '';
+        const n = (t && k) ? t[0] + ' · ' + k : ({ reading: 'Lectura', listening: 'Listening', quizlet: 'Quizlet', summary: 'Resumen' })[a.type] || String(a.name || '').split('·')[0].trim().slice(0, 24);
+        if (n && !names.includes(n)) names.push(n);
+      });
+      if (!names.length) return null;
+      const nx = new Date(t0 + (7 - wd) * 864e5), s = names.length > 3 ? names.slice(0, 2) : names, list = [];
+      s.forEach((x, i) => { if (i) list.push(i === s.length - 1 && names.length <= 3 ? ' y ' : ', '); list.push(<b key={i}>{x}</b>); });
+      if (names.length > 3) list.push(' y ' + (names.length - 2) + ' más');
+      return { list, one: names.length === 1, next: nx.getUTCDate() + ' ' + ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'][nx.getUTCMonth()] };
+    } catch (e) { return null; }
+  })();
   const QA = [
-    { q:'⚡ ¿Cómo subo mi XP?', a:<span>Cada práctica que <b>apruebas (≥{thrN}%)</b> te da XP. Las <b>stories</b> dan XP por tiempo de lectura (10 min +5 · 20 min +10 · 30 min +15). Tu <b>racha</b> también suma: <b>+30 XP por cada día seguido</b> (hasta 14). ¡Mientras más constante, más XP! 💪</span> },
+    { q:'⚡ ¿Cómo subo mi XP?', a:<span>
+      {xpWeek && <span style={{display:'block', background:'#FFF8E1', border:'1.5px dashed #E9C45A', borderRadius:10, padding:'8px 11px', marginBottom:8, color:'#5A3E00'}}>📌 Esta semana ya ganaste el XP de {xpWeek.list}. {xpWeek.one ? 'Repetirla' : 'Repetirlas'} entrena tu memoria, y {xpWeek.one ? 'vuelve' : 'vuelven'} a darte XP desde el <b>lunes {xpWeek.next}</b>.</span>}
+      <span style={{display:'block'}}>✅ Cada práctica <b>nueva</b> te da XP <b>una vez</b>: si la apruebas (≥{thrN}%), mientras mejor tu nota, más XP (si no, +5). Las <b>stories</b> dan XP por tiempo de lectura (10 min +5 · 20 min +10 · 30 min +15).</span>
+      <span style={{display:'block', marginTop:6}}>🔁 <b>Repetir</b> una práctica te da la mitad de su XP <b>una vez por semana</b>. Si la repites otra vez esa semana, solo suma si mejoras tu nota.</span>
+      {mixOn && <span style={{display:'block', marginTop:6}}>🧠 Las <b>rondas con Neuro</b> y la <b>caja de errores</b> entrenan tu memoria: no dan XP al responder. Cuando una práctica llega al 100 %, se guarda su nota (y su XP, si es nueva). Los <b>⭐ Repasos de la semana</b> sí dan XP: <b>+2 por acierto</b> y <b>+8</b> al terminar la ronda.</span>}
+      <span style={{display:'block', marginTop:6}}>🔥 Tu <b>racha</b> suma <b>+30 XP por cada día seguido</b> (hasta 14). También suman tus medallas 🏅, tus tareas y tu participación en clase. ¡Mientras más constante, más XP! 💪</span>
+    </span> },
     { q:'📚 ¿Cómo funcionan las prácticas?', a:<span>Se abren <b>en orden</b>: completa una para desbloquear la siguiente. Lee o escucha <b>sin traducir</b>, responde, y si fallas traduce <b>solo esa parte</b>. Vuelve al día siguiente para afianzar lo aprendido ✨</span> },
-    { q:'🔁 ¿Por qué me vuelve a salir algo que ya hice?', a:<span>¡No es un error! Es el <b>repaso espaciado</b>: tu cerebro guarda mejor lo que repasa después de unos días de descanso. Cuando veas 🔁 en un módulo, esa práctica <b>toca repasarla</b> — hacerla de nuevo te da XP y fija lo aprendido para siempre 🧠</span> },
+    { q:'🔁 ¿Por qué me vuelve a salir algo que ya hice?', a:<span>¡No es un error! Es el <b>repaso espaciado</b>: tu cerebro guarda mejor lo que repasa después de unos días de descanso. Cuando veas 🔁 en un módulo, esa práctica <b>toca repasarla</b> — hacerla de nuevo te da XP (una vez por semana) y fija lo aprendido para siempre 🧠</span> },
     { q:'📊 ¿Qué significan los porcentajes?', a:<span>Cada material muestra <b>tu mejor nota</b> en él. En tu nivel necesitas <b>≥{thrN}%</b> para aprobarlo y desbloquear lo siguiente (si sacas menos queda con ↻, o sea «puedes mejorarla»). Y el % del <b>módulo</b> en tu ruta es cuánto llevas completado de él. Si repites y subes tu nota, ¡el porcentaje sube contigo!</span> },
     { q:'⏳ Repetí la práctica y mi nota no cambió', a:<span>Es a propósito: en el <b>mismo ejercicio</b> tu nota nueva se guarda <b>media hora después</b> del intento anterior, para que muestre lo que aprendiste y no lo que acabas de memorizar. ¡Tu práctica, tu tiempo, tu racha y tu XP <b>sí</b> se registran al toque! Al abrir el material te sale una <b>cuenta regresiva</b>: cuando llegue a cero, repite y tu nota sube. Mientras tanto, avanza con otra actividad 😉</span> },
-    { q:'🏁 Ya terminé todo, ¿y ahora?', a:<span>¡Bravo! Pero ojo: terminar todo en un día <b>no termina tu camino</b> 😉 Cada día tendrás tu <b>práctica diaria</b> y <b>refuerzos ✨</b> (repasar lo aprobado): dan <b>XP extra</b> y mantienen tu racha viva. El que practica a diario le gana al que hace todo de golpe 🔥</span> },
+    { q:'🏁 Ya terminé todo, ¿y ahora?', a:<span>¡Bravo! Pero ojo: terminar todo en un día <b>no termina tu camino</b> 😉 Cada día tendrás tu <b>práctica diaria</b> y <b>refuerzos ✨</b> (repasar lo aprobado): dan <b>XP extra</b> (una vez por semana cada material) y mantienen tu racha viva. El que practica a diario le gana al que hace todo de golpe 🔥</span> },
     { q:'💛 ¿Cómo hago que Neuro se sienta mejor?', a:<span>¡Fácil! Practica <b>un poquito cada día</b>. Mi energía sube con tu constancia y subo de etapa (¡hasta <b>imparable</b> 🚀!). Si dejas de practicar pierdo energía y tú pierdes XP… ¡no me dejes solito! 🧠</span> },
   ];
   return (

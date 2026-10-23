@@ -229,8 +229,10 @@
           score: p.score, minutes: p.minutes, date: p.completed_at,
         };
         const day = p.completed_at ? dayStr(Date.parse(p.completed_at)) : '';   // día en hora Perú
-        const today = dayStr(Date.now());
-        if (day === today) progByUser[p.user_id].todayMinutes += (p.minutes||0);
+        /* XP-EXPLICA-V1 (23-oct): ya NO se suman aquí los minutos de progress — p.minutes es el
+         * MÁXIMO acumulado del material (una story repetida trae 30) y marcaba “Meta cumplida”
+         * con 8 min reales. Los minutos de HOY salen de daily_sessions (__JEC_DAILY, que
+         * getStudentProgress toma como máximo) + lo medido en este equipo (ver refreshProgress). */
         if (day && (!progByUser[p.user_id].lastDay || day > progByUser[p.user_id].lastDay)) progByUser[p.user_id].lastDay = day;
       });
       write(KEYS.progress, progByUser);
@@ -564,8 +566,7 @@
         cloud[p.user_id].completed[`${p.module_id}:${p.activity_id}`] = {
           score: p.score, minutes: p.minutes, date: p.completed_at,
         };
-        const day = p.completed_at ? dayStr(Date.parse(p.completed_at)) : '';
-        if (day === today) cloud[p.user_id].todayMinutes += (p.minutes||0);
+        const day = p.completed_at ? dayStr(Date.parse(p.completed_at)) : '';   // XP-EXPLICA-V1: sin sumar p.minutes (ver hydrate)
         if (day && (!cloud[p.user_id].lastDay || day > cloud[p.user_id].lastDay)) cloud[p.user_id].lastDay = day;
       });
       // La nube manda, pero conservamos los avances locales recién hechos que
@@ -578,6 +579,8 @@
         merged[u] = merged[u] || { completed:{}, todayMinutes:(local[u] && local[u].todayMinutes) || 0, lastDay:(local[u] && local[u].lastDay) || null };
         const ld = local[u] && local[u].lastDay;
         if (ld && (!merged[u].lastDay || ld > merged[u].lastDay)) merged[u].lastDay = ld;
+        // XP-EXPLICA-V1: los minutos de HOY medidos en este equipo (rondas con Neuro) se conservan
+        if (ld === today) merged[u].todayMinutes = Math.max(merged[u].todayMinutes || 0, (local[u] && local[u].todayMinutes) || 0);
         Object.keys(lc).forEach(k => { if (!merged[u].completed[k]) merged[u].completed[k] = lc[k]; });
       });
       // ── A2 · Alimenta el motor de repaso espaciado desde la nube ──

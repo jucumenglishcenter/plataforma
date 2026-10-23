@@ -312,6 +312,8 @@ function MixedSummary({ uid, mats, sum, color, pending, onAgain, onClose }) {
         {wrong > 0 && sum.mode === 'mix' && <div className="mx-sbox">🧠 {wrong} a tu caja de errores. Se abre a las <b>{mxTime(box.next || (Date.now() + MIX.CFG.boxMs))}</b>: repasar después de un descanso ayuda a que tu cerebro lo guarde.</div>}
         {wrong > 0 && sum.mode === 'box' && <div className="mx-sbox">🌙 {wrong} vuelve{wrong > 1 ? 'n' : ''} mañana a tu caja. ¡Paso a paso!</div>}
         {wrong > 0 && sum.mode === 'bonus' && <div className="mx-sbox" style={{ background: '#FFFBEA', borderColor: '#E9C45A', color: '#5A3E00' }}>⭐ {wrong} vuelve{wrong > 1 ? 'n' : ''} en otra ronda de esta semana. No te quita puntos.</div>}
+        {/* XP-EXPLICA-V1 (23-oct-2026): honesto — las rondas mixtas y la caja no dan XP al responder */}
+        {(sum.mode === 'mix' || sum.mode === 'box') && !sum.won.length && <div style={{ fontSize: 12, fontWeight: 700, color: '#6B5A48', lineHeight: 1.45 }}>🧠 Esta ronda entrenó tu memoria: las rondas no dan XP al responder. Para ver cómo ganar XP, toca <b>⚡</b> en Mi práctica.</div>}
         <div className="mx-sbtn">
           {pending > 0 && (sum.mode === 'mix' || sum.mode === 'bonus') && <button type="button" className="mx-b1" style={sum.mode === 'bonus' ? { background: 'linear-gradient(180deg,#FFCA28,#F59E00)', color: '#3D2A00' } : null} onClick={onAgain}>{sum.mode === 'bonus' ? '⭐ Otra ronda bonus' : '▶ Otra ronda'}</button>}
           <button type="button" className="mx-b2" onClick={onClose}>Volver a Mi práctica</button>
