@@ -129,7 +129,7 @@ function ClassPlanner({ onBack, onGoExams }) {
     return s[0] ? s[0].id : (GROUPS[0] ? GROUPS[0].id : null);
   });
   const setCurGroup = (id) => { if (!id) return; setCurGroupRaw(id); try { if (window.JUCUM_STORE) window.JUCUM_STORE.set('jucum_planner_group_v1', id); else localStorage.setItem('jucum_planner_group_v1', id); } catch (e) {} };
-  const badgeGroup = (screen === 'calendar' || screen === 'class' || screen === 'practice') ? curGroup : (screen === 'classmode' && classModePlan) ? classModePlan.groupId : null;
+  const badgeGroup = (screen === 'calendar' || screen === 'class' || screen === 'practice' || screen === 'tareas') ? curGroup : (screen === 'classmode' && classModePlan) ? classModePlan.groupId : null;
   const [tick, setTick] = React.useState(0);
   const refresh = () => setTick(t => t + 1);
   /* 📄 Plan importado del teacher (PLAN-IMPORT-V1): se abre en su propio editor para que plan y práctica sigan juntos */
@@ -179,7 +179,7 @@ function ClassPlanner({ onBack, onGoExams }) {
         <PracticePlanEditor key={editPractice ? editPractice.id || 'tpl' : 'new'} date={selDate} initial={editPractice} defaultGroupId={defaultGroup || curGroup} onGroupSeen={setCurGroup} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
       )}
       {screen === 'tareas' && (
-        <TeacherAssignments embedded onBack={() => setScreen('calendar')} />
+        <TeacherAssignments embedded groupId={curGroup} onGroupChange={setCurGroup} onBack={() => setScreen('calendar')} />
       )}
       {screen === 'saved' && (
         <SavedItems onOpenClass={openClassPlan} onOpenPractice={(p) => { setEditPractice(p); setScreen('practice'); }} onChange={refresh} refreshKey={tick} />
