@@ -109,11 +109,13 @@ async function boFetchExamAtts(student) {
       const exam = X.examForModule(mod.id, student.level);
       if (!exam || /^ex-m1forms-/.test(exam.id)) return;
       const slugs = (exam.parts || []).map(p => (((p.url || '').match(/\/(m\d+)\/examen/) || [])[1])).filter(Boolean);
-      const mine = rows.filter(r => r.module_id === 'exam-' + exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl));
+      const F7 = window.JUCUM_EXAMFLOW, cut = F7 && F7.desdePara ? F7.desdePara(exam, student.group, student.id) : null;   /* NUEVA-NOTA-V1 */
+      const ok7 = d => !F7 || !F7.despuesDe || F7.despuesDe(d, cut);
+      const mine = rows.filter(r => (r.module_id === 'exam-' + exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl)) && ok7(r.created_at));
       if (mine.length) out[mod.id] = mine.reduce((a, b) => ((b.score || 0) > (a.score || 0) ? b : a), mine[0]);
       else { /* 🚑 respaldo: nota del examen desde su registro de práctica */
         const comp = (D.getStudentProgress(student.id) || {}).completed || {};
-        const ks = Object.keys(comp).filter(k => k.indexOf('exam-' + exam.id + ':') === 0);
+        const ks = Object.keys(comp).filter(k => k.indexOf('exam-' + exam.id + ':') === 0 && ok7((comp[k] || {}).date));
         if (ks.length) { let sum = 0, n = 0, last = null; ks.forEach(k => { const e = comp[k] || {}; if (typeof e.score === 'number') { sum += e.score; n++; } if (e.date && (!last || e.date > last)) last = e.date; }); if (n) out[mod.id] = { score: Math.round(sum / n), created_at: last, fromProgress: true }; }
       }
     });

@@ -29,7 +29,7 @@
     }).filter(function (r) { return typeof r.score === 'number'; });
     if (!rows.length) return { exam: exam, score: null, passed: false };
     var ret = F.getRet ? F.getRet(student.group, mod.id) : null;
-    var desde = F.examDesde ? F.examDesde(exam) : null;
+    var desde = F.desdePara ? F.desdePara(exam, student.group, student.id) : (F.examDesde ? F.examDesde(exam) : null);
     var of = F.notaOficialPartes ? F.notaOficialPartes(rows, ret, desde) : (F.notaOficial ? F.notaOficial(rows, ret, desde) : null);
     if (!of) return { exam: exam, score: null, passed: false };
     var sc = of.score;

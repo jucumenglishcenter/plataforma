@@ -329,12 +329,26 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
       /* Si en algún momento se cerró a mano, ese cierre manda sobre todo: hay que levantarlo */
       try { F.setAnn(group.id, module.id, { forceClosed: false }); } catch (e) {}
       X.setWindowOpen(w.id, true);
-      F.setAnn(group.id, module.id, { forceClosed: false });
+      F.setAnn(group.id, module.id, { forceClosed: false, openedAt: new Date().toISOString() });
     } catch (e) {}
+  };
+  /* 🔁 NUEVA-NOTA-V1: antes de programar/publicar, si alguien ya lo dio, se pregunta */
+  const preguntarRepetir = async (then) => {
+    try {
+      const ya = F.yaRindieron ? await F.yaRindieron(exam, group.id, members) : [];
+      if (ya.length) {
+        const txt = ya.map(x => '• ' + x.student.fullName + ' — ' + (x.score != null ? x.score + '/100' : 'con nota') + (x.today ? ' (hoy)' : ' (' + new Date(x.date).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' }) + ')')).join('\n');
+        if (confirm(ya.length + ' alumno(s) YA dieron este examen:\n' + txt + '\n\n¿Les dejas darlo de nuevo como NOTA NUEVA?\nAceptar = lo dan de nuevo (su nota anterior deja de contar) · Cancelar = se quedan con su nota.')) F.setFresh(group.id, exam.id, ya.map(x => x.student.id));
+      }
+    } catch (e) {}
+    then();
   };
   const doProgram = () => {
     if (!date) { alert('Elige la fecha del examen.'); return; }
     if (dateTo && dateTo < date) { alert('La fecha de cierre no puede ser anterior a la de apertura.'); return; }
+    preguntarRepetir(doProgram2);
+  };
+  const doProgram2 = () => {
     const schedNotif = aviso === 'fecha' && avisoDate && avisoDate > F.pDay();
     F.setAnn(group.id, module.id, {
       date, dateTo: dateTo || null, from: from || null, to: to || null, variant, auto: true, forceClosed: false, examId: exam.id, free: !!libre,
@@ -409,7 +423,7 @@ function ModuleFolderDetail({ group, module, exam, win, ann, members, date, setD
               <input type="checkbox" checked={auto} onChange={e => { F.setAnn(group.id, module.id, { auto: e.target.checked, forceClosed: false }); onChange(); }} disabled={!announced} />
               <span style={{fontSize:12.5}}>Apertura automática el día anunciado ({from ? F.fmtHora(from) : 'todo el día'}{to ? ' – ' + F.fmtHora(to) : ''})</span>
             </label>
-            <button className="att-btn" onClick={() => { const w = ensureWin(); X.setWindowOpen(w.id, true); F.setAnn(group.id, module.id, { forceClosed: false }); onChange(); }}>🟢 Publicar ahora</button>
+            <button className="att-btn" onClick={() => preguntarRepetir(() => { const w = ensureWin(); X.setWindowOpen(w.id, true); F.setAnn(group.id, module.id, { forceClosed: false, openedAt: new Date().toISOString() }); onChange(); })}>🟢 Publicar ahora</button>
             <button className="att-btn" onClick={() => { if (win) X.setWindowOpen(win.id, false); F.setAnn(group.id, module.id, { forceClosed: true }); onChange(); }}>⚪ Cerrar</button>
           </div>
         </div>
@@ -541,7 +555,8 @@ function ExamResultsPanel({ exam, members }) {
   const by = {}; (rows || []).forEach(r => { (by[r.user_id] = by[r.user_id] || []).push(r); });
   const failCount = {}; let did = 0;
   const list = members.map(s => {
-    const rs = by[s.id] || []; if (!rs.length) return { s };
+    const F9 = window.JUCUM_EXAMFLOW;
+    const rs = (by[s.id] || []).filter(r => !F9 || !F9.despuesDe || F9.despuesDe(r.created_at, F9.desdePara(exam, s.group, s.id))); if (!rs.length) return { s };
     did++;
     const best = rs[0];   /* vale su primer intento (23-ago-2026) */
     const weak = Object.keys(PL).filter(k => { const x = (best.sections || {})[k]; return x && x.t && (x.h / x.t) < 0.75; });
@@ -677,12 +692,13 @@ function ModuleExamBanner({ mod, studentId }) {
         ]);
         const data = res && res.data;
         if (dead) return;
-        const rows = (data || []).filter(r => (r.module_id === 'exam-' + inf.exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl)) && (!F0.examDesde || !F0.examDesde(inf.exam) || window.JUCUM_DAY.of(r.created_at) >= F0.examDesde(inf.exam)));
+        const desde0 = F0.desdePara ? F0.desdePara(inf.exam, st.group, st.id) : (F0.examDesde ? F0.examDesde(inf.exam) : null);
+        const rows = (data || []).filter(r => (r.module_id === 'exam-' + inf.exam.id || slugs.some(sl => r.activity_id === 'examen-' + sl)) && (F0.despuesDe ? F0.despuesDe(r.created_at, desde0) : (!desde0 || window.JUCUM_DAY.of(r.created_at) >= desde0)));
         if (rows.length) {
           /* Vale el PRIMER intento; solo lo reemplaza una repetición hecha DENTRO de la ventana
              de recuperación que abrió la profesora (23-ago-2026). Antes se mostraba la mejor. */
           const ret0 = F0.getRet ? F0.getRet(st.group, mod.id) : null;
-          const of0 = F0.notaOficialPartes ? F0.notaOficialPartes(rows.map(r => ({ score: r.score, date: r.created_at, part: F0.canonPart ? F0.canonPart(inf.exam, r.activity_id) : r.activity_id })), ret0, F0.examDesde ? F0.examDesde(inf.exam) : null) : null;
+          const of0 = F0.notaOficialPartes ? F0.notaOficialPartes(rows.map(r => ({ score: r.score, date: r.created_at, part: F0.canonPart ? F0.canonPart(inf.exam, r.activity_id) : r.activity_id })), ret0, desde0) : null;
           const src = (of0 && rows.find(r => r.created_at === of0.date)) || rows[0];
           const best = Object.assign({}, src, of0 ? { score: of0.score } : {});
           best._last = rows[rows.length - 1].created_at; best._n = rows.length; best._recu = !!(of0 && of0.isRecovery);
@@ -697,7 +713,7 @@ function ModuleExamBanner({ mod, studentId }) {
             /* Sin promediar (23-ago-2026): vale el PRIMER registro, o el de su recuperación autorizada */
             const rws = ks.map(k => ({ score: (comp[k] || {}).score, date: (comp[k] || {}).date, part: F0.canonPart ? F0.canonPart(inf.exam, k.split(':').slice(1).join(':')) : k.split(':').slice(1).join(':') })).filter(r => typeof r.score === 'number');
             const ret1 = F0.getRet ? F0.getRet(st.group, mod.id) : null;
-            const of1 = (rws.length && F0.notaOficialPartes) ? F0.notaOficialPartes(rws, ret1, F0.examDesde ? F0.examDesde(inf.exam) : null) : null;
+            const of1 = (rws.length && F0.notaOficialPartes) ? F0.notaOficialPartes(rws, ret1, desde0) : null;
             if (of1) { const best = { score: of1.score, created_at: of1.date, _last: of1.date, _n: of1.intentos, sections: null, fromProgress: true, _recu: of1.isRecovery, _detalle: of1.detalle, _totalPartes: of1.totalPartes }; if (F0.notaExamen) { const adj = F0.notaExamen(inf.exam, of1); if (adj && adj.parcial) { best.score = adj.score; best._parcial = true; best._falta = adj.falta; } } setAtt(prev => prev || best); }
           }
         }
@@ -775,7 +791,7 @@ function ModuleExamBanner({ mod, studentId }) {
                   const d = (att._detalle || []).find(x => x.part === p.key);
                   if (d) return <div key={p.key} style={{display:'flex', alignItems:'center', gap:9, border:'1.5px solid #A5D6A7', background:'#F4FBF4', borderRadius:11, padding:'9px 13px', fontWeight:800, color:'#1B5E20', fontSize:12.5}}>✅ {p.label} · completada<span style={{marginLeft:'auto', fontFamily:"'Fredoka',sans-serif", fontSize:16}}>{d.score}<small style={{fontSize:10, color:'#77746B'}}>/100</small></span></div>;
                   const u = urls[i];
-                  const link = u ? u.url + (u.url.includes('?') ? '&' : '?') + 'jucum_exam=1&jucum_uid=' + encodeURIComponent(studentId) + '&jucum_mod=' + encodeURIComponent('exam-' + info.exam.id) + '&jucum_act=' + encodeURIComponent(p.key) + (info.ann && /^(kids|adults)$/.test(info.ann.variant || '') ? '&jucum_variant=' + encodeURIComponent(info.ann.variant) : '') : null;
+                  const link = u ? u.url + (u.url.includes('?') ? '&' : '?') + 'jucum_exam=1&jucum_uid=' + encodeURIComponent(studentId) + '&jucum_mod=' + encodeURIComponent('exam-' + info.exam.id) + '&jucum_act=' + encodeURIComponent(p.key) + (info.ann && /^(kids|adults)$/.test(info.ann.variant || '') ? '&jucum_variant=' + encodeURIComponent(info.ann.variant) : '') + (F.retryQs ? F.retryQs(info.exam, student) : '') : null;
                   return abierto && link
                     ? <a key={p.key} href={link} target="_blank" rel="noreferrer" style={{display:'flex', alignItems:'center', justifyContent:'center', gap:8, borderRadius:24, padding:'12px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15, color:'#fff', textDecoration:'none', background:'linear-gradient(135deg,#1F3A8A,#0D1B5A)'}}>▶ Rendir la {p.label} ahora</a>
                     : <div key={p.key} style={{display:'flex', alignItems:'center', gap:9, border:'1.5px dashed #E3DDCD', background:'#FBFAF5', borderRadius:11, padding:'9px 13px', fontWeight:800, color:'#8A5100', fontSize:12.5}}>🕒 {p.label} · pendiente — se abre el {F.fmtFecha(info.ann.date)}</div>;
@@ -877,6 +893,13 @@ function ModuleExamBanner({ mod, studentId }) {
       </>
     ));
   }
+  /* ⏸ PANEL-UNICO-V1: la profesora pausó su acceso a este examen */
+  if (info.paused) return box('#D5CDBB', (
+    <>
+      {head('linear-gradient(135deg,#77746B,#4E4B44)', '⏸', 'Examen del módulo', mod.name)}
+      <div style={{padding:'12px 16px', fontSize:13, fontWeight:700, lineHeight:1.6, background:'#fff'}}>Hoy es tu examen, pero <b>tu acceso está en pausa</b>. Escríbele a tu profesora por 💬 Hablemos para que te lo habilite.</div>
+    </>
+  ));
   /* announced · apto, habilitado por la profesora, o aún no */
   const r = info.r || { overall: 0, apt: false };
   const habil = !info.canTake ? false : !r.apt;                 // tú se lo abriste a mano

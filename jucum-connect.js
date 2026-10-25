@@ -586,8 +586,30 @@
     })();
 
     // 🎓 EXAMEN: registra el PRIMER intento en la nube (module exam-…) + integridad
+    function exqRead() { try { var a = JSON.parse(localStorage.getItem('jucum_exam_prog_outbox_v1') || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+    /* 📥 PANEL-UNICO-V1 (24-oct-2026) · bandeja PREVIA del examen: la nota se anota en este
+     * equipo ANTES de enviarla y solo se borra cuando la nube la confirma. Si el envío falla (sin
+     * internet, pestaña cerrada, el alumno pasó a la Parte 2 al instante) se reenvía sola al abrir
+     * cualquier examen en este equipo — sin pisar una nota que ya esté (vale el PRIMER intento). */
+    function exqWrite(a) { try { localStorage.setItem('jucum_exam_prog_outbox_v1', JSON.stringify(a.slice(-20))); } catch (e) {} }
+    function exqSame(x, u, m, ac) { return x && x.uid === u && x.mod === m && x.act === ac; }
+    function exqAdd(pct, minutes) { if (!uid) return; var a = exqRead().filter(function (x) { return !exqSame(x, uid, modId, actId); }); a.push({ uid: uid, mod: modId, act: actId, score: pct, minutes: minutes, ts: Date.now() }); exqWrite(a); }
+    function exqDel(u, m, ac) { exqWrite(exqRead().filter(function (x) { return !exqSame(x, u, m, ac); })); }
+    function exqFlush() {
+      var s = ensureExSb(); if (!s) return;
+      exqRead().forEach(function (it) {
+        s.from('progress').select('score').eq('user_id', it.uid).eq('module_id', it.mod).eq('activity_id', it.act).maybeSingle().then(function (r) {
+          if (!r || r.error) return;
+          if (r.data && r.data.score != null) { exqDel(it.uid, it.mod, it.act); return; }
+          s.from('progress').upsert({ user_id: it.uid, module_id: it.mod, activity_id: it.act, score: it.score, minutes: it.minutes, completed_at: new Date(it.ts).toISOString() }, { onConflict: 'user_id,module_id,activity_id' })
+            .then(function (r2) { if (!(r2 && r2.error)) { exqDel(it.uid, it.mod, it.act); try { console.log('examen: nota pendiente enviada · ' + it.mod + ' · ' + it.act); } catch (e) {} } }, function () {});
+        }, function () {});
+      });
+    }
+    if (exam && uid) { setTimeout(function () { try { exqFlush(); } catch (e) {} }, 4000); window.addEventListener('online', function () { try { exqFlush(); } catch (e) {} }); }
     function finishExam(pct, minutes, hasScore) {
       try { localStorage.removeItem(EXDRAFT_KEY); } catch (e) {}
+      exqAdd(pct, minutes);
       var s = ensureExSb();
       if (!s) { showResultCard(pct, '🎓 Examen terminado · ' + minutes + ' min' + (hasScore ? ' · ' + pct + '%' : '') + ' · ⚠ sin conexión: avísale tu resultado a tu profesor', hasScore, true); return; }
       s.from('activity_parts').upsert({
@@ -596,19 +618,20 @@
       }, { onConflict: 'user_id,module_id,activity_id,part' }).then(function () {}, function () {});
       s.from('progress').select('score').eq('user_id', uid).eq('module_id', modId).eq('activity_id', actId).maybeSingle().then(function (r) {
         var prev = (r && r.data && r.data.score != null) ? r.data.score : null;
-        if (prev != null) { showResultCard(prev, '🎓 Esta parte ya estaba registrada con ' + prev + '%. En el examen vale tu PRIMER intento.', true, true); return; }
+        if (prev != null) { exqDel(uid, modId, actId); showResultCard(prev, '🎓 Esta parte ya estaba registrada con ' + prev + '%. En el examen vale tu PRIMER intento.', true, true); return; }
         s.from('progress').upsert({
           user_id: uid, module_id: modId, activity_id: actId,
           score: pct, minutes: minutes, completed_at: new Date().toISOString()
         }, { onConflict: 'user_id,module_id,activity_id' }).then(function (r2) {
-          if (r2 && r2.error) { showResultCard(pct, '🎓 Terminaste (' + (hasScore ? pct + '%' : minutes + ' min') + ') pero no se pudo registrar. Avísale a tu profesor.', hasScore, true); return; }
+          if (r2 && r2.error) { showResultCard(pct, '🎓 Terminaste (' + (hasScore ? pct + '%' : minutes + ' min') + '). Tu nota quedó guardada en este equipo y se reenviará sola; si tu profesora no la ve, vuelve a abrir el examen aquí mismo.', hasScore, true); return; }
+          exqDel(uid, modId, actId);
           showResultCard(pct, '🎓 ¡Registrado y enviado a tu profesor! · ' + minutes + ' min' + (hasScore ? ' · ' + pct + '%' : '') + (examFocusLoss > 0 ? ' · ⚠ ' + examFocusLoss + ' salida(s) registrada(s)' : ''), hasScore, true);
         }, function () { showResultCard(pct, '🎓 Terminaste pero no se pudo registrar (¿sin internet?). Avísale a tu profesor.', hasScore, true); });
       }, function () {
         s.from('progress').upsert({
           user_id: uid, module_id: modId, activity_id: actId,
           score: pct, minutes: minutes, completed_at: new Date().toISOString()
-        }, { onConflict: 'user_id,module_id,activity_id' }).then(function () {}, function () {});
+        }, { onConflict: 'user_id,module_id,activity_id' }).then(function (r3) { if (!(r3 && r3.error)) exqDel(uid, modId, actId); }, function () {});
         showResultCard(pct, '🎓 Examen terminado · ' + minutes + ' min' + (hasScore ? ' · ' + pct + '%' : ''), hasScore, true);
       });
     }

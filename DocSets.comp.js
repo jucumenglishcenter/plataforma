@@ -108,6 +108,7 @@ function DocSetReview({ doc, groupId, fileName, onClose, onDone }) {
                             <input className="input-text" style={{ flex: 1, minWidth: 180, padding: '5px 8px', fontSize: 12.5 }} value={x.tr || ''} placeholder="(opcional) cómo se dice en español" onChange={e => setItem(si, ii, { tr: e.target.value })} /></label>
                           {s.grade !== 'manual' && <label style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', fontSize: 11, fontWeight: 800, color: 'var(--text-soft)' }}>{s.grade === 'exact' ? 'Answer' : 'Ejemplo (opcional)'}
                             <input className="input-text" style={{ flex: 1, minWidth: 180, padding: '5px 8px', fontSize: 12.5, background: s.grade === 'exact' && x.src !== 'teacher' && x.src !== 'ok' ? '#FFF8E1' : '#F7FBF7', borderColor: s.grade === 'exact' && !String(x.key || '').trim() ? '#E57373' : undefined }} value={x.key || ''} onChange={e => setItem(si, ii, { key: e.target.value, src: 'ok' })} /></label>}
+                          {s.kind === 'combine' && (() => { const alts = X.combineAlts(x.q, x.cue).filter(t => X.norm(t) !== X.norm(x.key || '')); return alts.length ? <div style={{ fontSize: 11, fontWeight: 700, color: '#2E7D32', lineHeight: 1.45 }}>✓ También acepto solo: {alts.map(t => '«' + t + '»').join(' · ')}</div> : null; })()}
                           {s.grade === 'exact' && <label style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', fontSize: 11, fontWeight: 800, color: 'var(--text-soft)' }}>También vale
                             <input className="input-text" style={{ flex: 1, minWidth: 180, padding: '5px 8px', fontSize: 12.5 }} value={(x.also || []).join(' | ')} placeholder="otras formas correctas, separadas con |" onChange={e => setItem(si, ii, { also: e.target.value.split('|').map(t => t.trim()).filter(Boolean) })} /></label>}
                         </div>
@@ -164,7 +165,7 @@ function dsUseSubs(aid, ms) {
 function dsRowsBy(rows) { const o = {}; (rows || []).forEach(r => { o[r.student_id] = r; }); return o; }
 function DocSetBoard({ a, ds, onView }) {
   const X = DSX(); const [rows] = dsUseSubs(a.id, 8000); const by = dsRowsBy(rows); const roster = dsRoster(a.groupId); const n = ds.items.length;
-  const info = roster.map(s => { const r = by[s.id], an = r ? X.unpack(r.text) : null, res = (an && an.res) || [], k = res.filter(Boolean).length, done = !!(r && r.status !== 'draft');
+  const info = roster.map(s => { const r = by[s.id], z0 = r ? X.unpack(r.text) : null, an = z0 ? X.upgrade(ds, z0).ans : null, res = (an && an.res) || [], k = res.filter(Boolean).length, done = !!(r && r.status !== 'draft');
     const stuck = r && !done && k < n && (Date.now() - new Date(r.submitted_at).getTime()) > 3 * 60000; return { s, r, an, res, k, done, stuck, g: done ? r.grade : null, at: r ? new Date(r.submitted_at).getTime() : 0 }; });
   const sent = info.filter(x => x.done).sort((p, q) => p.at - q.at);
   const fails = ds.items.map((it, i) => info.filter(x => x.res[i] === 'bad').length); const mx = Math.max(0, ...fails), hard = fails.indexOf(mx);
@@ -186,7 +187,7 @@ function DocSetStudentView({ a, ds, rows, who, onClose, onChanged }) {
   const X = DSX(), N = window.JUCUM_NOTIF; const by = dsRowsBy(rows); const roster = dsRoster(a.groupId).filter(s => by[s.id]);
   const [sid, setSid] = dsUS(who); const [cmt, setCmt] = dsUS(''); const [busy, setBusy] = dsUS(false);
   const idx = roster.findIndex(s => s.id === sid), s = roster[idx]; if (!s) return null;
-  const row = by[s.id], an = X.unpack(row.text) || { ans: [], res: [], tr: [] }, res = an.res || [], live = ds.mode === 'class' && X.liveState(ds) === 'open';
+  const row = by[s.id], an = X.upgrade(ds, X.unpack(row.text) || { ans: [], res: [], tr: [] }).ans, res = an.res || [], live = ds.mode === 'class' && X.liveState(ds) === 'open';
   const g = X.score(ds, res), nr = X.nRev(res), ntr = (an.tr || []).filter(Boolean).length;
   const decide = async (i, ok) => { setBusy(true); await X.setItemResult(a, ds, s.id, row, i, ok ? 'ok' : 'bad'); if (N) N.pushNotif(s.id, { type: 'assignment', title: '✅ Tu profe revisó tu respuesta', body: `“${a.title}”, ejercicio ${i + 1}: ${ok ? 'está bien' : 'mira la respuesta correcta'}.`, link: 'tasks' }); setBusy(false); onChanged(); };
   const darBuena = async (i) => {
@@ -232,6 +233,10 @@ function DocSetStudentView({ a, ds, rows, who, onClose, onChanged }) {
 function DocSetResults({ a: a0, compact }) {
   const X = DSX(); const [a, setA] = dsUS(a0); const ds = X.meta(a) || { items: [] };
   const [rows, refresh] = dsUseSubs(a.id, 0); const by = dsRowsBy(rows); const roster = dsRoster(a.groupId);
+  /* DOCSETS-FIX-V2: al abrir Resultados se guardan las correcciones que SUBEN la nota (respuestas que estaban bien y salieron ✘) */
+  const [fixed, setFixed] = dsUS(0); const fixRef = dsUR({});
+  dsUE(() => { if (!rows) return; let stop = false; (async () => { let c = 0; for (const r of rows) { const k = r.id + ':' + String(r.text || '').length + ':' + (r.status || ''); if (fixRef.current[k]) continue; fixRef.current[k] = 1; try { if (await X.persistUpgrade(a, ds, r, true)) c++; } catch (e) {} } if (!stop && c) { setFixed(f => f + c); refresh(); } })(); return () => { stop = true; }; }, [rows]);
+  const closedHome = ds.mode === 'home' && a.dueAt && new Date(a.dueAt).getTime() < Date.now();
   const [view, setView] = dsUS(null); const [editDue, setEditDue] = dsUS(false); const [due, setDue] = dsUS(dsLocalInput(a.dueAt));
   const pend = roster.reduce((n, s) => { const z = by[s.id] && X.unpack(by[s.id].text); return n + X.nRev(z && z.res); }, 0);
   const saveDue = async () => { const iso = new Date(due).toISOString(); const u = await X.patch(a, d => { d.dueAt = iso; }); if (u) { setA(u); X.notifyGroup(a, '⏰ Tu profe cambió el plazo', `“${a.title}” · ahora hasta ${dsFmt(iso)}.`, 'tasks'); } setEditDue(false); };
@@ -247,12 +252,13 @@ function DocSetResults({ a: a0, compact }) {
         {editDue ? <><input type="datetime-local" className="input-text" style={{ width: 'auto', padding: '5px 8px' }} value={due} onChange={e => setDue(e.target.value)} /><button className="btn-save" onClick={saveDue}>Guardar</button><button className="btn-cancel" onClick={() => setEditDue(false)}>Cancelar</button></> : <button className="att-btn" onClick={() => setEditDue(true)}>✏️ Cambiar entrega</button>}</div>}
       {rows === null ? <div className="settings-hint">Cargando entregas…</div> : (
         <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
-          {roster.map(s => { const r = by[s.id], z = r && X.unpack(r.text), res = (z && z.res) || [], k = res.filter(Boolean).length, nr = X.nRev(res), done = r && r.status !== 'draft';
+          {fixed > 0 && <div style={{ background: '#E8F5E9', color: '#1B5E20', fontSize: 12.5, fontWeight: 800, padding: '8px 12px', borderBottom: '1px solid #C8E6C9', lineHeight: 1.45 }}>✨ Corregí {fixed} entrega{fixed > 1 ? 's' : ''}: había respuestas bien escritas que salieron ✘ (por ejemplo, unir sin repetir el sujeto: “Tomás sees a ship and a bridge.”). Su nota subió y les avisé por la campanita.</div>}
+          {roster.map(s => { const r = by[s.id], z = r && X.unpack(r.text) ? X.upgrade(ds, X.unpack(r.text)).ans : null, res = (z && z.res) || [], k = res.filter(Boolean).length, nr = X.nRev(res), done = r && r.status !== 'draft';
             return (
               <div key={s.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '9px 12px', borderBottom: '1px solid #F0EDE4', flexWrap: 'wrap', background: '#fff' }}>
                 <b style={{ flex: 1, minWidth: 120, fontSize: 13.5 }}>{s.name}</b>
                 {!r ? dsChip(ds.mode === 'home' ? 'Aún no entrega' : 'No participó', '#FFF3E0', '#E65100') : <>
-                  {k < ds.items.length && dsChip((done ? 'no terminó · ' : 'en curso · ') + k + ' de ' + ds.items.length, '#FFF3E0', '#E65100')}
+                  {k < ds.items.length && dsChip((done || closedHome ? 'no terminó · ' : 'en curso · ') + k + ' de ' + ds.items.length, '#FFF3E0', '#E65100')}
                   {nr > 0 && dsChip('🟨 ' + nr + ' por revisar', '#FFF8E1', '#8A5A00')}
                   {done && dsChip(X.score(ds, res) + '/100' + (nr ? ' provisional' : ''), '#E3F2FD', '#1565C0')}
                   <button className="att-btn" onClick={() => setView(s.id)}>👁 Ver su actividad</button></>}
@@ -270,12 +276,10 @@ function DocSetClassPanel({ plan }) {
   dsUE(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
   dsUE(() => { if (!X || !T || !plan) return; T.getAssignments().forEach(a => { if (a.groupId !== plan.groupId || !X.isClass(a)) return; const d = X.meta(a); if (d.planDate === plan.date && X.liveState(d, now) === 'closed' && d.live && !d.live.closedAt && !closing.current[a.id]) closeNow(a); }); }, [now]);
   if (!X || !T || !plan) return null;
-  const list = T.getAssignments().filter(a => a.groupId === plan.groupId && X.isClass(a) && X.meta(a).planDate === plan.date).sort((p, q) => String(X.meta(p).step).localeCompare(String(X.meta(q).step), undefined, { numeric: true }) || String(p.title).localeCompare(String(q.title)));
+  const list = X.seq(plan.blocks || [], T.getAssignments().filter(a => a.groupId === plan.groupId && X.isClass(a) && X.meta(a).planDate === plan.date)).filter(o => o.t === 's').map(o => o.a);
   if (!list.length) return null;
   const refresh = () => setTick(t => t + 1);
-  const endFor = (ds) => ds.time === 'fin' ? dsPlanEnd(plan) : ds.time === 'mas' ? new Date(ds.until || Date.now() + 86400000) : new Date(Date.now() + (+ds.time || 10) * 60000);
-  const openNow = async (a) => { setBusy(a.id); const ds0 = X.meta(a); const end = endFor(ds0).toISOString(); await X.patch(a, d => { d.live = { openedAt: new Date().toISOString(), endAt: end }; });
-    X.notifyGroup(a, '🏫 Tu profe abrió una actividad en clase', `“${a.title}” · se cierra a las ${dsHM(end)}. Ábrela en tu Inicio.`, 'dashboard'); setBusy(''); refresh(); };
+  const openNow = async (a) => { setBusy(a.id); await dsOpenNow(a, plan); setBusy(''); refresh(); };
   const setEnd = async (a, end) => { await X.patch(a, d => { d.live = { ...(d.live || {}), endAt: end.toISOString(), closedAt: null }; }); refresh(); };
   const closeNow = async (a) => { if (closing.current[a.id]) return; closing.current[a.id] = 1; setBusy(a.id); const ds0 = X.meta(a);
     await X.patch(a, d => { d.live = { ...(d.live || {}), closedAt: new Date().toISOString() }; }); await X.closeDrafts(a, ds0); setBusy(''); setShow(s => ({ ...s, [a.id]: 'res' })); refresh(); };
@@ -285,7 +289,7 @@ function DocSetClassPanel({ plan }) {
       <div className="sec-head"><div className="sec-title">✍️ Actividades de tu documento para esta clase</div><span className="sec-meta">los alumnos solo las ven cuando tocas ▶ Abrir ahora</span></div>
       {list.map(a0 => { const a = T.getAssignments().find(x => x.id === a0.id) || a0; const ds = X.meta(a); const st = X.liveState(ds, now); const left = ds.live && ds.live.endAt ? new Date(ds.live.endAt).getTime() - now : 0;
         return (
-          <div key={a.id} style={{ border: '1.5px solid ' + (st === 'open' ? '#BA68C8' : 'var(--border)'), borderRadius: 14, padding: '11px 13px', marginTop: 10, background: st === 'open' ? '#FCF7FD' : st === 'closed' ? '#F7FBF7' : '#fff' }}>
+          <div key={a.id} id={'ds-' + a.id} style={{ border: '1.5px solid ' + (st === 'open' ? '#BA68C8' : 'var(--border)'), borderRadius: 14, padding: '11px 13px', marginTop: 10, background: st === 'open' ? '#FCF7FD' : st === 'closed' ? '#F7FBF7' : '#fff' }}>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ fontSize: 20 }}>✍️</span>
               <div style={{ flex: 1, minWidth: 180 }}><b style={{ fontSize: 14 }}>{a.title}</b><div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-soft)' }}>{ds.items.length} ejercicios · ⏱ {dsTimeLabel(ds)} · {DS_KIND[ds.grade].t}</div></div>
@@ -317,24 +321,36 @@ function DocSetClassPanel({ plan }) {
 function DocSetViewLoader({ a, sid, onClose }) { const [rows, refresh] = dsUseSubs(a.id, 8000); if (!rows) return null; return <DocSetStudentView a={a} ds={DSX().meta(a)} rows={rows} who={sid} onClose={onClose} onChanged={refresh} />; }
 
 /* ═══════════ 4 · ALUMNO ═══════════ */
+/* DOCSETS-FIX-V2 (23-oct): el borrador local va POR ALUMNO (antes era solo por tarea: en un equipo compartido el
+ * segundo alumno veía y entregaba las respuestas del primero). Las claves viejas (sin alumno) se descartan. */
 const DS_DRAFT_KEY = 'jucum_docset_draft_v1';
-function dsDraftGet(aid) { try { const o = JSON.parse(localStorage.getItem(DS_DRAFT_KEY) || '{}'); return o[aid] || null; } catch (e) { return null; } }
-function dsDraftSet(aid, v) { try { const o = JSON.parse(localStorage.getItem(DS_DRAFT_KEY) || '{}'); const lim = Date.now() - 14 * 86400000; Object.keys(o).forEach(k => { if (!o[k] || (o[k]._t || 0) < lim) delete o[k]; }); if (v) o[aid] = { ...v, _t: Date.now() }; else delete o[aid]; if (window.JUCUM_STORE) window.JUCUM_STORE.setJSON(DS_DRAFT_KEY, o); else localStorage.setItem(DS_DRAFT_KEY, JSON.stringify(o)); } catch (e) {} }
+function dsDraftGet(aid, sid) { try { const o = JSON.parse(localStorage.getItem(DS_DRAFT_KEY) || '{}'); const v = o[aid + '|' + sid]; return v && v.sid === sid ? v : null; } catch (e) { return null; } }
+function dsDraftSet(aid, sid, v) { try { const o = JSON.parse(localStorage.getItem(DS_DRAFT_KEY) || '{}'); const lim = Date.now() - 14 * 86400000; Object.keys(o).forEach(k => { if (!o[k] || (o[k]._t || 0) < lim || k.indexOf('|') < 0) delete o[k]; }); const key = aid + '|' + sid; if (v) o[key] = { ...v, sid, _t: Date.now() }; else delete o[key]; if (window.JUCUM_STORE) window.JUCUM_STORE.setJSON(DS_DRAFT_KEY, o); else localStorage.setItem(DS_DRAFT_KEY, JSON.stringify(o)); } catch (e) {} }
 function DocSetPlayer({ a: a0, student, onClose }) {
   const X = DSX(), T = window.JUCUM_TASKS; const [a, setA] = dsUS(a0); const ds = X.meta(a); const n = ds.items.length;
   const sub = T.getSubmission(a.id, student.id); const final0 = sub && X.unpack(sub.text);
-  const [st, setSt] = dsUS(() => final0 || dsDraftGet(a.id) || { ans: [], res: [], tr: [], fb: [], startedAt: new Date().toISOString() });
+  const [st, setSt] = dsUS(() => X.upgrade(ds, final0 ? { ...final0, done: true } : (dsDraftGet(a.id, student.id) || { ans: [], res: [], tr: [], fb: [], startedAt: new Date().toISOString() })).ans);
   const [i, setI] = dsUS(() => Math.min((st.res || []).filter(Boolean).length, n - 1)); const [txt, setTxt] = dsUS(''); const [showTr, setShowTr] = dsUS(false);
   const [now, setNow] = dsUS(Date.now()); const [saving, setSaving] = dsUS(false); const [closedMsg, setClosedMsg] = dsUS(false);
+  /* ☁️ DOCSETS-FIX-V2: antes de dejar responder se mira la nube. Si empezó en otro equipo, sigue donde iba (sin repetir
+   * ejercicios = 1 intento de verdad); si ya la entregó, ve sus respuestas. Sin red (5 s) sigue con lo de este equipo. */
+  const [sync, setSync] = dsUS(!final0);
+  dsUE(() => { if (final0) return; let stop = false, tarde = false; const tmo = setTimeout(() => { tarde = true; setSync(false); }, 5000);
+    X.fetchMine(a.id, student.id).then(row => { if (stop || tarde) return; clearTimeout(tmo); const z = row && X.unpack(row.text);
+      const nL = (st.res || []).filter(Boolean).length, nC = z ? (z.res || []).filter(Boolean).length : 0;
+      if (z && (row.status !== 'draft' || nC > nL)) { const u = X.upgrade(ds, row.status !== 'draft' ? { ...z, done: true } : z).ans; setSt(u); setI(Math.min((u.res || []).filter(Boolean).length, n - 1)); if (!u.done) dsDraftSet(a.id, student.id, u); }
+      else if (row !== undefined && nL > nC) X.saveDraft(a.id, student.id, st);
+      setSync(false); });
+    return () => { stop = true; clearTimeout(tmo); }; }, []);
   const done = !!st.done; const cls = ds.mode === 'class'; const left = cls && ds.live && ds.live.endAt ? new Date(ds.live.endAt).getTime() - now : 0;
   dsUE(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
   dsUE(() => { if (!cls || done) return; let stop = false; const poll = async () => { const L = await X.fetchGroupTasks(a.groupId); const r = L && L.find(x => x.id === a.id); if (!stop && r) setA(p => ({ ...p, description: r.description })); };
     const id = setInterval(poll, 10000); return () => { stop = true; clearInterval(id); }; }, [cls, done]);
-  const finish = async (s2) => { setSaving(true); const z = { ...s2 }; try { await X.finalize(a, ds, student.id, z); } catch (e) {} dsDraftSet(a.id, null); setSt({ ...z, done: true }); setSaving(false); };
-  dsUE(() => { if (cls && !done && X.liveState(ds, now) === 'closed' && !closedMsg) { setClosedMsg(true); finish(st); } }, [now, a]);
+  const finish = async (s2) => { setSaving(true); const z = X.upgrade(ds, { ...s2 }).ans; try { await X.finalize(a, ds, student.id, z); } catch (e) {} dsDraftSet(a.id, student.id, null); setSt({ ...z, done: true }); setSaving(false); };
+  dsUE(() => { if (cls && !done && !sync && X.liveState(ds, now) === 'closed' && !closedMsg) { setClosedMsg(true); finish(st); } }, [now, a, sync]);
   const it = ds.items[i], r = (st.res || [])[i];
-  const check = () => { const g = X.grade(ds, i, txt); if (g.r === 'blank') return; const s2 = { ...st, ans: [...(st.ans || [])], res: [...(st.res || [])], tr: [...(st.tr || [])], fb: [...(st.fb || [])] };
-    s2.ans[i] = txt; s2.res[i] = g.r; s2.tr[i] = !!showTr; s2.fb[i] = g.d || g.h || ''; setSt(s2); dsDraftSet(a.id, s2); X.saveDraft(a.id, student.id, s2); };
+  const check = () => { if (sync) return; const g = X.grade(ds, i, txt); if (g.r === 'blank') return; const s2 = { ...st, ans: [...(st.ans || [])], res: [...(st.res || [])], tr: [...(st.tr || [])], fb: [...(st.fb || [])] };
+    s2.ans[i] = txt; s2.res[i] = g.r; s2.tr[i] = !!showTr; s2.fb[i] = g.d || g.h || ''; setSt(s2); dsDraftSet(a.id, student.id, s2); X.saveDraft(a.id, student.id, s2); };
   const next = () => { setTxt(''); if (i < n - 1) setI(i + 1); else finish(st); };
   const g = X.score(ds, st.res || []), nr = X.nRev(st.res);
   const head = (
@@ -349,7 +365,7 @@ function DocSetPlayer({ a: a0, student, onClose }) {
       <div style={{ background: '#fff', borderRadius: 18, padding: '18px 14px', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
         <div style={{ fontSize: 40 }}>{g >= 80 ? '🎉' : '💪'}</div>
         <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 22, color: '#2E7D32' }}>{closedMsg ? '🔒 Tu profe cerró la actividad' : '¡Entregada!'}</div>
-        <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 30, color: '#1B5E20' }}>{(sub && typeof sub.grade === 'number' ? sub.grade : g)}/100</div>
+        <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 30, color: '#1B5E20' }}>{(sub && typeof sub.grade === 'number' && sub.grade >= g ? sub.grade : g)}/100</div>
         <div style={{ fontSize: 13, fontWeight: 700, color: '#555', lineHeight: 1.5 }}>{nr ? <span style={{ display: 'inline-block', background: '#E3F2FD', color: '#0D47A1', borderRadius: 9, padding: '4px 9px' }}>📝 Nota provisional · {nr} respuesta{nr > 1 ? 's' : ''} la revisa tu profe a mano (no es un error)</span> : '✔ Nota registrada al instante'}<br />{cls ? 'Cuenta como participación de clase.' : 'Cuenta como tarea cumplida.'}</div>
         <div style={{ textAlign: 'left', margin: '12px 0', display: 'flex', flexDirection: 'column', gap: 6 }}>{ds.items.map((x, k) => { const v = (st.res || [])[k]; return (
           <div key={k} style={{ fontSize: 13, fontWeight: 700, background: '#F6F8FC', borderRadius: 9, padding: '7px 9px', lineHeight: 1.45 }}>{v === 'bad' ? '❌' : !v ? '⬜' : v === 'rev' ? '📝' : '✅'} {(st.ans || [])[k] || <i style={{ color: '#9A9484' }}>en blanco</i>}
@@ -374,7 +390,7 @@ function DocSetPlayer({ a: a0, student, onClose }) {
           {r === 'ok' ? '✔ ¡Correcto!' : r === 'okd' ? <>✔ Correcto · vale completo. Ojo: {(st.fb || [])[i] || 'mayúscula, tilde o signo final'}.</> : r === 'rev' ? <>📝 ¡Buena idea! Esta respuesta <b>la revisa tu profe a mano</b>. <b>No es un error.</b></> : <>✘ Todavía no.{(st.fb || [])[i] ? ' 💡 ' + st.fb[i] : ''}{it.key ? <><br />Respuesta: <u style={{ textDecoration: 'none', background: 'rgba(255,255,255,.7)', borderRadius: 6, padding: '1px 5px' }}>{it.key}</u></> : null}</>}</div>}
         <div style={{ marginTop: 10 }}>{r
           ? <button className="btn-save" style={{ width: '100%', minHeight: 48 }} disabled={saving} onClick={next}>{i === n - 1 ? (saving ? 'Entregando…' : '📨 Entregar') : 'Siguiente ▶'}</button>
-          : <button className="btn-save" style={{ width: '100%', minHeight: 48 }} disabled={!txt.trim()} onClick={check}>✓ Comprobar</button>}</div>
+          : <button className="btn-save" style={{ width: '100%', minHeight: 48 }} disabled={!txt.trim() || sync} onClick={check}>{sync ? '⏳ Revisando tu avance…' : '✓ Comprobar'}</button>}</div>
       </div>
       <div style={{ marginTop: 12, fontSize: 12, fontWeight: 700, color: 'var(--text-soft)', textAlign: 'center', lineHeight: 1.5 }}>1 intento por ejercicio. Olvidar una tilde, el punto o la mayúscula <b>no te baja la nota</b>: solo te avisamos.</div>
     </div></div>);
@@ -386,7 +402,7 @@ function DocSetLiveBanner({ student }) {
     go(); const id = setInterval(go, 12000); const t = setInterval(() => setNow(Date.now()), 1000); return () => { stop = true; clearInterval(id); clearInterval(t); }; }, [student && student.id]);
   if (!list.length && !open) return null;
   return (<>
-    {list.map(a => { const ds = X.meta(a); const sub = window.JUCUM_TASKS.getSubmission(a.id, student.id); const dr = dsDraftGet(a.id); const done = !!(sub || (dr && dr.done)); const left = new Date(ds.live.endAt).getTime() - now;
+    {list.map(a => { const ds = X.meta(a); const sub = window.JUCUM_TASKS.getSubmission(a.id, student.id); const dr = dsDraftGet(a.id, student.id); const done = !!(sub || (dr && dr.done)); const left = new Date(ds.live.endAt).getTime() - now;
       return (
         <div key={a.id} style={{ background: 'linear-gradient(135deg,#6A1B9A,#9C4DCC)', color: '#fff', borderRadius: 18, padding: '14px 16px', margin: '0 0 12px', boxShadow: 'var(--shadow-md,0 6px 18px rgba(0,0,0,.15))' }}>
           <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', display: 'flex', gap: 6, alignItems: 'center' }}><span style={{ width: 9, height: 9, borderRadius: '50%', background: '#FF5252', animation: 'cpPulse 1.3s infinite' }}></span>🏫 En clase ahora · en vivo</div>
@@ -400,20 +416,69 @@ function DocSetLiveBanner({ student }) {
 }
 function DocSetTaskCard({ a, student, onChange }) {
   const X = DSX(), T = window.JUCUM_TASKS; const ds = X.meta(a); const [open, setOpen] = dsUS(false);
-  const sub = T.getSubmission(a.id, student.id); const z = sub && X.unpack(sub.text); const dr = !sub && dsDraftGet(a.id); const k = ((dr && dr.res) || []).filter(Boolean).length;
+  const sub = T.getSubmission(a.id, student.id); const z0 = sub && X.unpack(sub.text), up = z0 ? X.upgrade(ds, z0) : null, z = up ? up.ans : null; const dr = !sub && dsDraftGet(a.id, student.id); const k = ((dr && dr.res) || []).filter(Boolean).length;
+  const shown = sub ? ((up && up.changed) || typeof sub.grade !== 'number' ? X.score(ds, (z && z.res) || []) : sub.grade) : null;
   const late = a.dueAt && new Date(a.dueAt).getTime() < Date.now() && !sub; const nr = z ? X.nRev(z.res) : 0;
   return (
     <div className="scard" style={{ borderColor: sub ? '#C8E6C9' : late ? '#E6E2D8' : '#FFB74D', borderWidth: 2 }}>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
-        {sub ? dsChip('✓ Entregada · ' + (typeof sub.grade === 'number' ? sub.grade : X.score(ds, (z && z.res) || [])) + '/100' + (nr ? ' provisional' : ''), '#E8F5E9', '#2E7D32') : late ? dsChip('⏰ Cerró · ' + dsFmt(a.dueAt), '#FFEBEE', '#C62828') : dsChip('⏰ Entrega hasta ' + dsFmt(a.dueAt), '#FFF3E0', '#E65100')}
+        {sub ? dsChip('✓ Entregada · ' + shown + '/100' + (nr ? ' provisional' : ''), '#E8F5E9', '#2E7D32') : late ? dsChip('⏰ Cerró · ' + dsFmt(a.dueAt), '#FFEBEE', '#C62828') : dsChip('⏰ Entrega hasta ' + dsFmt(a.dueAt), '#FFF3E0', '#E65100')}
         {dsChip('✍️ ' + ds.items.length + ' ejercicios · +' + (a.xp || 40) + ' XP', '#F2F0EA', '#555')}
       </div>
       <div style={{ fontWeight: 900, fontSize: 15.5 }}>{a.title}</div>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-soft)', margin: '3px 0 10px' }}>{ds.es || ds.en}{k ? ` · vas ${k}/${ds.items.length}` : ''}{nr ? ' · 📝 tu profe revisa ' + nr + ' respuesta' + (nr > 1 ? 's' : '') : ''}</div>
-      {late ? <div className="settings-hint">Esta tarea ya cerró y no la entregaste. Si necesitas otra oportunidad, escríbele a tu profe.</div>
+      {late ? <div className="settings-hint">{k ? `Esta tarea cerró antes de que la entregaras (respondiste ${k} de ${ds.items.length}); tu profe ve tus respuestas.` : 'Esta tarea ya cerró y no la entregaste.'} Si necesitas otra oportunidad, escríbele a tu profe.</div>
         : <button className="btn-save" style={{ width: '100%', minHeight: 46 }} onClick={() => setOpen(true)}>{sub ? 'Ver mis respuestas' : k ? '✍️ Seguir' : '▶ Empezar'}</button>}
       {open && <DocSetPlayer a={a} student={student} onClose={() => { setOpen(false); onChange && onChange(); }} />}
     </div>);
 }
 
-Object.assign(window, { DocSetReview, DocSetBoard, DocSetStudentView, DocSetResults, DocSetClassPanel, DocSetPlayer, DocSetLiveBanner, DocSetTaskCard });
+/* ═══════════ 5 · DENTRO DEL PLAN DEL DÍA (DOCSETS-FIX-V2 · pedido 22-oct) ═══════════
+ * El set 🏫 entra a la lista de actividades de ese día: en el calendario se ubica con ▲▼ entre los bloques del plan
+ * y en ▶ Modo clase aparece en ese lugar de la secuencia con “▶ Abrir ahora” (el tablero en vivo sigue arriba). */
+const dsEndFor = (ds, plan) => ds.time === 'fin' ? dsPlanEnd(plan) : ds.time === 'mas' ? new Date(ds.until || Date.now() + 86400000) : new Date(Date.now() + (+ds.time || 10) * 60000);
+async function dsOpenNow(a, plan) {
+  const X = DSX(); const end = dsEndFor(X.meta(a), plan).toISOString();
+  await X.patch(a, d => { d.live = { openedAt: new Date().toISOString(), endAt: end }; });
+  X.notifyGroup(a, '🏫 Tu profe abrió una actividad en clase', `“${a.title}” · se cierra a las ${dsHM(end)}. Ábrela en tu Inicio.`, 'dashboard');
+}
+function DocSetDayCard({ groupId, date, plan, onChange }) {
+  const X = DSX(); const [busy, setBusy] = dsUS(false); const [, setTick] = dsUS(0);
+  if (!X || !X.classForDay) return null; const list = X.classForDay(groupId, date); if (!list.length) return null;
+  const blocks = (plan && plan.blocks) || []; const s = X.seq(blocks, list);
+  const mv = async (a, dir) => { setBusy(true); try { for (const c of X.reorder(blocks, list, a.id, dir)) await X.patch(c.a, d => { d.after = c.after; d.ord = c.ord; }); } catch (e) {} setBusy(false); setTick(t => t + 1); if (onChange) onChange(); };
+  return (
+    <div style={{ border: '1.5px solid #CE93D8', background: '#FCF7FD', borderRadius: 12, padding: '10px 12px', marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+        <b style={{ fontSize: 13.5, color: DS_PUR, flex: 1, minWidth: 180 }}>✍️ {list.length === 1 ? '1 set' : list.length + ' sets'} de tu documento en esta clase</b>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: '#7B5A8C' }}>{blocks.length ? 'Ubícalos con ▲▼ dentro de tu plan · se abren en ▶ Modo clase' : 'Este día aún no tiene plan de clase · se abren en ▶ Modo clase'}</span>
+      </div>
+      {s.map((o, k) => o.t === 'b'
+        ? <div key={'b' + o.b.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '3px 6px', fontSize: 12, fontWeight: 700, color: '#8a7f6a' }}><span style={{ width: 66, flex: 'none' }}></span><span>{o.b.emoji || '•'}</span><span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.b.title}</span><span>{o.b.mins ? o.b.mins + '′' : ''}</span></div>
+        : (() => { const ds = X.meta(o.a) || { items: [] }; const st = X.liveState(ds); return (
+          <div key={o.a.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px', margin: '3px 0', background: '#fff', border: '1px solid #E1BEE7', borderRadius: 9 }}>
+            <span style={{ display: 'flex', gap: 3, flex: 'none' }}><button className="att-btn" style={{ padding: '3px 9px' }} disabled={busy || k === 0} onClick={() => mv(o.a, -1)} title="Subir">▲</button><button className="att-btn" style={{ padding: '3px 9px' }} disabled={busy || k === s.length - 1} onClick={() => mv(o.a, 1)} title="Bajar">▼</button></span>
+            <span>✍️</span>
+            <span style={{ flex: 1, minWidth: 0, fontWeight: 800, fontSize: 12.8 }}>{o.a.title}<span style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#7B5A8C' }}>{ds.items.length} ejercicios · ⏱ {dsTimeLabel(ds)}{st === 'open' ? ' · ● en vivo' : st === 'closed' ? ' · ✓ cerrada' : ''}</span></span>
+          </div>); })())}
+    </div>);
+}
+function DocSetSeqRow({ a: a0, plan }) {
+  const X = DSX(), T = window.JUCUM_TASKS; const [now, setNow] = dsUS(Date.now()); const [busy, setBusy] = dsUS(false);
+  dsUE(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
+  const a = (T && T.getAssignments().find(x => x.id === a0.id)) || a0; const ds = X && X.meta(a); if (!ds) return null;
+  const st = X.liveState(ds, now), left = ds.live && ds.live.endAt ? new Date(ds.live.endAt).getTime() - now : 0;
+  const go = () => { const el = document.getElementById('ds-' + a.id); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.pageYOffset - 80, behavior: 'smooth' }); };
+  return (
+    <div style={{ border: '1.5px solid ' + (st === 'open' ? '#BA68C8' : '#E1BEE7'), borderRadius: 11, padding: '10px 12px', background: st === 'open' ? '#FCF7FD' : '#FDFBFE' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 15 }}>✍️</span>
+        <span style={{ fontWeight: 800, fontSize: 14, flex: 1, minWidth: 160 }}>{a.title}<span style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: '#7B5A8C' }}>De tu documento · {ds.items.length} ejercicios · ⏱ {dsTimeLabel(ds)}</span></span>
+        {st === 'waiting' && <button className="btn-save" disabled={busy} onClick={async () => { setBusy(true); try { await dsOpenNow(a, plan); } catch (e) {} setBusy(false); }}>{busy ? 'Abriendo…' : '▶ Abrir ahora'}</button>}
+        {st === 'open' && <button className="att-btn" onClick={go} style={{ borderColor: '#BA68C8', color: DS_PUR }}>● En vivo · {dsMMSS(left)} · ver tablero ↑</button>}
+        {st === 'closed' && <button className="att-btn" onClick={go}>✓ Cerrada · 📊 resultados ↑</button>}
+      </div>
+    </div>);
+}
+
+Object.assign(window, { DocSetReview, DocSetBoard, DocSetStudentView, DocSetResults, DocSetClassPanel, DocSetPlayer, DocSetLiveBanner, DocSetTaskCard, DocSetDayCard, DocSetSeqRow });

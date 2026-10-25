@@ -106,6 +106,8 @@ function openWindowsForStudent(student) {
  * 🧩 28-ago-2026: quien YA rindió una parte de un examen de varias partes puede entrar a las
  * que le faltan sin volver a pasar el filtro de apto — un examen empezado se termina. */
 function canTakeWindow(student, w) {
+  /* ⏸ PANEL-UNICO-V1: acceso pausado por la profesora para este examen */
+  try { const F = window.JUCUM_EXAMFLOW; const a = F && F.annForWindow ? F.annForWindow(w) : null; if (a && (a.paused || []).includes(student.id)) return false; } catch (e) {}
   if ((w.allowOverrides || []).includes(student.id)) return true;
   try {
     const ex = getExam(w.examId);
@@ -218,7 +220,10 @@ function examPartLink(part, examId, studentId, partIdx) {
   if (!part.url) return null;
   const sep = part.url.includes('?') ? '&' : '?';
   const act = (part.competency || 'p') + (partIdx > 0 ? '-p' + (partIdx + 1) : '');
-  return `${part.url}${sep}jucum_exam=1&jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent('exam-' + examId)}&jucum_act=${encodeURIComponent(act)}`;
+  /* 🔁 NUEVA-NOTA-V1: si la profesora aceptó que lo dé de nuevo, el examen no debe decirle “Ya rendiste” */
+  let extra = '';
+  try { const F = window.JUCUM_EXAMFLOW, D = window.JUCUM_DATA; const st = ((D && D.STUDENTS) || []).find(s => s.id === studentId); const ex = getExam(examId); if (F && F.retryQs && st && ex) extra = F.retryQs(ex, st); } catch (e) {}
+  return `${part.url}${sep}jucum_exam=1&jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent('exam-' + examId)}&jucum_act=${encodeURIComponent(act)}${extra}`;
 }
 
 /* Grupos cuyo promedio de cumplimiento cruzó el 75% → listos para examen.
@@ -349,7 +354,7 @@ function announceExam(groupId, moduleId, examId, dateStr, dateToStr) {
   saveAnn(ann);
   const group = D.GROUPS.find(g => g.id === groupId);
   const mod = (D.MODULE_CATALOG[group?.level] || []).find(m => m.id === moduleId);
-  const modName = mod?.name || 'tu módulo';
+  const modName = mod?.name || (String(moduleId).indexOf('exam:') === 0 ? ((getExam(String(moduleId).slice(5)) || {}).title || 'tu examen') : 'tu módulo');
   const fecha = dateStr ? new Date(dateStr + 'T00:00:00').toLocaleDateString('es-PE', { weekday:'long', day:'numeric', month:'long' }) : null;
   const fechaFin = (dateToStr && dateToStr !== dateStr) ? new Date(dateToStr + 'T00:00:00').toLocaleDateString('es-PE', { weekday:'long', day:'numeric', month:'long' }) : null;
   const members = D.STUDENTS.filter(s => s.group === groupId);

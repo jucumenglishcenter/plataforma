@@ -209,6 +209,7 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
   /* DUE-DAY-V1 (17-oct): día LOCAL (Perú) de la fecha límite — ymd() usa UTC y una tarea del 20 a las 23:59 caía en el 21 */
   const localDay = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
   const tasksFor = (dstr) => (window.JUCUM_TASKS ? window.JUCUM_TASKS.getAssignments() : []).filter(a => a.dueAt && localDay(a.dueAt) === dstr && (!groupId || a.groupId === groupId));
+  const dsDays = (window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.classDays && groupId) ? window.JUCUM_DOCSETS.classDays(groupId) : {};   /* DOCSETS-FIX-V2: sets 🏫 de clase por día */
 
   const sel = day(selDate); const selLog = logFor(selDate); const selTasks = tasksFor(selDate);
 
@@ -245,6 +246,7 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
                   {nClass > 0 && <span title="Plan de clase" style={dot('#3F5BB8')}>📘</span>}
                   {nPrac > 0 && <span title="Set de práctica" style={dot('#6C4FB0')}>📝</span>}
                   {tasksFor(dstr).length > 0 && <span title="Tarea (cierre)" style={dot('#E65100')}>📋</span>}
+                  {dsDays[dstr] && <span title="Set de clase (de tu documento)" style={dot('#6A1B9A')}>✍️</span>}
                   {(window.JUCUM_EXAMFLOW ? window.JUCUM_EXAMFLOW.eventsForDay(groupId, dstr) : []).map((ev, k) => <span key={'x' + k} title={ev.title} style={dot(ev.kind === 'exam' ? '#1F3A8A' : '#7B1FA2')}>{ev.icon}</span>)}
                   {nLog > 0 && <span title="Realizado en clase" style={dot('#2E7D32')}>✅</span>}
                 </span>
@@ -253,7 +255,7 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
           })}
         </div>
         <div style={{display:'flex', gap:14, flexWrap:'wrap', marginTop:11, fontSize:11.5, fontWeight:700, color:'#8a7f6a'}}>
-          <span>📘 Plan de clase</span><span>📝 Set de práctica</span><span>📋 Tarea (cierre)</span><span>🎓 Examen</span><span>🧭 Pre-examen</span><span>✅ Realizado (bitácora)</span>
+          <span>📘 Plan de clase</span><span>📝 Set de práctica</span><span>📋 Tarea (cierre)</span><span>✍️ Set de clase</span><span>🎓 Examen</span><span>🧭 Pre-examen</span><span>✅ Realizado (bitácora)</span>
         </div>
       </div>
 
@@ -266,7 +268,7 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
           {onOpenTasks && <button onClick={() => onOpenTasks()} style={{...btnGhost, padding:'7px 12px', borderColor:'#F0C28A', color:'#E65100'}}>＋ Tarea</button>}
         </div>
 
-        {sel.classPlans.length === 0 && sel.practicePlans.length === 0 && selLog.length === 0 && selTasks.length === 0 && (window.JUCUM_EXAMFLOW ? window.JUCUM_EXAMFLOW.eventsForDay(groupId, selDate) : []).length === 0 && (
+        {sel.classPlans.length === 0 && sel.practicePlans.length === 0 && selLog.length === 0 && selTasks.length === 0 && !dsDays[selDate] && (window.JUCUM_EXAMFLOW ? window.JUCUM_EXAMFLOW.eventsForDay(groupId, selDate) : []).length === 0 && (
           <div className="empty-state" style={{padding:'22px 0'}}><div className="icon">🗓️</div>Nada planeado para este día. Agrega un plan de clase, un set de práctica o una tarea.</div>
         )}
 
@@ -300,6 +302,7 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
             sub={`${(p.activities || []).length} actividad(es) · ${p.assignToStudents !== false ? '👥 asignado a alumnos' : '🙋 solo para mí'} · ${(p.dates || []).length} día(s)`}
             onTrack={() => setTrackSet(p)} onOpen={() => onEditPractice(p)} onDelete={() => { TT.deletePracticePlan(p.id); onChange(); }} />
         ))}
+        {window.DocSetDayCard && dsDays[selDate] && <DocSetDayCard groupId={groupId} date={selDate} plan={sel.classPlans[0] || null} onChange={onChange} />}
         {selLog.length > 0 ? (
           <div style={{marginTop:10, borderTop:'1px dashed #E3DCC9', paddingTop:10}}>
             <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:7, flexWrap:'wrap'}}>
@@ -1375,6 +1378,7 @@ function ClassMode({ plan, onBack }) {
   const blocks = withClock(plan.blocks || [], plan.startTime).map(b => { const raw = Array.isArray(b.mats) && b.mats.length ? b.mats.map(m => ({ ...m, moduleId: m.moduleId || plan.moduleId })) : cpDetectMats(cmMod, b, plan.themeGroup); return { ...b, _mats: cpMatsToMaterials([{ mats: raw }], [], MODULE_CATALOG).map((m, k) => ({ ...m, quizKey: (raw[k] && raw[k].quizKey) || null })) }; });
   const mats = ((plan.materials || []).length ? plan.materials : cpMatsToMaterials(blocks.map(b => ({ mats: b._mats })), [], MODULE_CATALOG)).slice().sort((a, b) => matRank(a.type) - matRank(b.type));
   const group = (GROUPS || []).find(g => g.id === plan.groupId);
+  const cmSeq = (window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.seq) ? window.JUCUM_DOCSETS.seq(blocks, window.JUCUM_DOCSETS.classForDay(plan.groupId, plan.date)) : blocks.map(b => ({ t: 'b', b }));   /* DOCSETS-FIX-V2: los sets 🏫 en su lugar de la secuencia */
   /* AVANCE-ACTIVOS-V1: modo clase solo con activos */ const cmOut = (s) => { const st = String(s.status || '').toLowerCase(); if (['retirado','retirada','retired','inactivo','inactiva','inactive','baja','withdrawn'].includes(st)) return true; if (s.closedAt) return true; try { const G = window.JUCUM_GRAD; if (G && G.isGraduated && G.isGraduated(s.id)) return true; } catch (e) {} return false; };
   const students = (STUDENTS || []).filter(s => s.group === plan.groupId && !cmOut(s));
   const startTimer = () => { const lengthMin = plan.lengthMin || 60; const t = { endMs: Date.now() + lengthMin * 60000, lengthMin }; try { localStorage.setItem(timerKey, JSON.stringify(t)); } catch {} setTimer(t); };
@@ -1475,7 +1479,7 @@ function ClassMode({ plan, onBack }) {
         <div className="scard">
           <div className="sec-title" style={{marginBottom:10}}>🕒 Secuencia de la sesión</div>
           <div style={{display:'flex', flexDirection:'column', gap:9}}>
-            {blocks.map(b => (
+            {cmSeq.map(o => o.t === 's' ? (window.DocSetSeqRow ? <DocSetSeqRow key={'ds' + o.a.id} a={o.a} plan={plan} /> : null) : (b => (
               <div key={b.id} style={{border:'1px solid #E3DCC9', borderRadius:11, padding:'10px 12px', background:'#FCFAF4'}}>
                 <div style={{display:'flex', alignItems:'center', gap:9}}>
                   <span style={{fontSize:12, fontWeight:800, color:'#1F3A8A', whiteSpace:'nowrap'}}>{b.from}–{b.to}</span>
@@ -1492,7 +1496,7 @@ function ClassMode({ plan, onBack }) {
                   </div>
                 )}
               </div>
-            ))}
+            ))(o.b))}
           </div>
         </div>
         {cmRec && plan.id && <CmNextBox plan={plan} />}

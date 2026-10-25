@@ -1,10 +1,10 @@
-/* Bloque J3 · Centro de exámenes (ETAPA 1 del nuevo orden) — 2 pestañas por grupo:
- *   ⚙️ Configurar: reglas del grupo + RUTA de módulos (aviso · fecha/hora · calificadores · pre-examen)
- *   📊 Resultados: nota automática desde la nube, en fichas (✅ aprobados / 🔁 recuperación y por rendir)
+/* Bloque J3 · Centro de exámenes · PANEL-UNICO-V1 (24-oct-2026): UN panel por grupo —
+ *   lista de sus exámenes (módulos + final) + ficha en 3 pasos: ① Programar y avisar · ② Día del
+ *   examen en vivo · ③ Notas y recuperación (fichas ✅ aprobados / 🔁 recuperación y por rendir)
  * La recuperación es UNA ventana de días (desaprobados Y quienes no rindieron): dentro de ella cada
  * alumno rinde apenas cumple sus requisitos (apto ≥75% + práctica 10/14 días); la profesora puede
  * abrirle (force) o pausarle (block) el examen a cualquiera — última palabra.
- * Motores: exams.js + exam-flow.js (cfg/ret). Aperturas avanzadas y Definir siguen en TeacherExams. */
+ * Motores: exams.js + exam-flow.js (cfg/ret). Ventanas por alumno y Definir siguen en TeacherExams (solo desarrollo). */
 
 const ecUS = React.useState, ecUE = React.useEffect;
 
@@ -19,14 +19,56 @@ function ecDraftFB(nombre, nota, weak, min) {
   return `${nombre}, obtuviste ${nota} — aún no apruebas, pero con constancia lo logras: refuerza ${w.length ? w.join(' · ') : 'las prácticas del módulo'} un poco cada día. 💪`;
 }
 
-/* ═══ Marco ═══ */
+/* ═══ Marco · PANEL-UNICO-V1 (24-oct-2026) ═══
+ * UN solo panel por grupo (aprobado en `Espejo - Panel unico de examenes.html`): a la izquierda
+ * TODOS sus exámenes (módulos + final) con su estado; a la derecha la ficha del elegido en
+ * 3 pasos — ① Programar y avisar · ② Día del examen (en vivo) · ③ Notas y recuperación
+ * (EcModResults, sin cambios). Reemplaza las pestañas Configurar / Resultados. */
+const ecMES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'], ecDIA = ['dom','lun','mar','mié','jue','vie','sáb'];
+function ecCorta(d) { if (!d) return ''; const x = new Date(d + 'T12:00:00Z'); return ecDIA[x.getUTCDay()] + ' ' + x.getUTCDate() + ' ' + ecMES[x.getUTCMonth()]; }
+function ecAddDays(d, n) { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }
+function ecHM(min) { const t = Math.max(0, Math.min(23 * 60 + 59, min)); return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); }
+function ecMinOf(hhmm) { if (!hhmm || !/^\d{1,2}:\d{2}$/.test(hhmm)) return null; const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; }
+function ecPeruHM(iso) { return new Date(Date.parse(iso) - 5 * 3600000).toISOString().slice(11, 16); }
+function ecHoyIso(hhmm) { const F = window.JUCUM_EXAMFLOW; return new Date(Date.parse(F.pDay() + 'T' + hhmm + ':00Z') + 5 * 3600000).toISOString(); }
+function ecNParts(exam) { return ((exam && exam.parts) || []).filter(p => p && p.url).length; }
+
+function ecItems(group) {
+  const D = window.JUCUM_DATA, X = window.JUCUM_EXAMS, F = window.JUCUM_EXAMFLOW;
+  const num = group.level === 'pre-a1';   /* A1/A2: sin números de módulo (RUEDA) */
+  const mods = (D.MODULE_CATALOG[group.level] || []).map((m, i) => ({ mod: m, label: (num ? 'M' + (i + 1) + ' · ' : '') + m.name, exam: X.examForModule(m.id, group.level), first: i === 0 }));
+  const solos = (F.standaloneExams ? F.standaloneExams(group.level) : []).map(e => ({ mod: { id: 'exam:' + e.id, name: e.title, emoji: '🏁', activities: [] }, label: e.title, exam: e, solo: true }));
+  return mods.concat(solos);
+}
+/* Estado de un examen del grupo → paso al que abre la ficha (1·2·3) y texto de la lista */
+function ecEstado(group, it) {
+  const X = window.JUCUM_EXAMS, F = window.JUCUM_EXAMFLOW;
+  const exam = it.exam, mid = it.mod.id, hoy = F.pDay();
+  const formsWin = F.formsWindowFor(group);
+  const formsExam = formsWin ? X.getExam(formsWin.examId) : null;
+  if (!exam || /^ex-m1forms-/.test(exam.id)) {
+    if (it.first && formsExam && (formsExam.moduleIds || []).includes(mid)) return { step: 3, c: '#5B3FA0', bg: '#EDE7F6', t: 'Notas de Google Forms', forms: true };
+    return { step: 0, c: '#9A9384', bg: '#F0F0EA', t: 'Sin examen aún' };
+  }
+  const win = X.windowForExamGroup(exam.id, group.id), ann = F.getAnn(group.id, mid), ret = F.getRet(group.id, mid);
+  if (ret && F.retActive(ret)) return { step: 3, c: '#C62828', bg: '#FFEBEE', t: 'Recuperación hasta ' + ecCorta(ret.to) };
+  if (F.winEffectiveOpen(win)) return { step: 2, c: '#2E7D32', bg: '#E8F5E9', t: 'Abierto ahora', open: true };
+  if (ann && ann.date && F.enFechaAnn(ann, hoy)) return { step: 2, c: '#2E7D32', bg: '#E8F5E9', t: 'Hoy es el examen' };
+  if (ann && ann.p2mode === 'otro' && ann.p2date && hoy > ann.date && hoy < ann.p2date) return { step: 2, c: '#1F3A8A', bg: '#E3E9F8', t: 'Parte 2 · ' + ecCorta(ann.p2date) };
+  if (ann && ann.date && ann.date > hoy) { const d = F.daysTo(ann.date); return { step: 1, c: '#1F3A8A', bg: '#E3E9F8', t: 'Programado · ' + ecCorta(ann.date) + (d === 1 ? ' · mañana' : ' · en ' + d + ' días') }; }
+  const pasado = (ann && ann.date && (F.annFin(ann) || ann.date) < hoy) || (ann && ann.openedAt && F.pDay() > new Date(Date.parse(ann.openedAt) - 5 * 3600000).toISOString().slice(0, 10));
+  if ((win && Object.keys(win.results || {}).length) || pasado || (win && win.isOpen && !ann)) return { step: 3, c: '#5B3FA0', bg: '#EDE7F6', t: 'Rendido' + (ann && ann.date ? ' · ' + ecCorta(ann.date) : '') };
+  if (ann && ann.notified && !ann.date) return { step: 1, c: '#1F3A8A', bg: '#E3E9F8', t: 'Avisado · sin fecha' };
+  return { step: 1, c: '#9A9384', bg: '#F0F0EA', t: 'Por programar' };
+}
+
 function ExamsCenter({ onBack, hideBack, initialGroup, canDefine }) {
   const { GROUPS, LEVELS } = window.JUCUM_DATA;
   const [groupId, setGroupId] = ecUS(initialGroup || (GROUPS[0] ? GROUPS[0].id : null));
-  const [tab, setTab] = ecUS('cfg');
+  const [selId, setSelId] = ecUS(null);
   const [classic, setClassic] = ecUS(false);
   const [demoOpen, setDemoOpen] = ecUS(false);
-  const [tick, setTick] = ecUS(0);
+  const [, setTick] = ecUS(0);
   const refresh = () => setTick(t => t + 1);
   ecUE(() => { const f = () => refresh(); window.addEventListener('jucum:examflow', f); return () => window.removeEventListener('jucum:examflow', f); }, []);
   const group = GROUPS.find(g => g.id === groupId) || GROUPS[0];
@@ -39,20 +81,27 @@ function ExamsCenter({ onBack, hideBack, initialGroup, canDefine }) {
   );
   if (!group) return <main>{!hideBack && <button className="back-btn" onClick={onBack}>← Volver al panel</button>}<div className="scard"><div className="empty-state"><div className="icon">👥</div>No hay grupos todavía.</div></div></main>;
 
+  const items = ecItems(group);
+  const est = items.map(it => ecEstado(group, it));
+  const pref = [i => est[i].step === 2, i => est[i].step === 1 && est[i].c === '#1F3A8A', i => est[i].step === 1, i => est[i].step === 3];
+  let defIdx = -1; for (const p of pref) { defIdx = items.findIndex((_, i) => p(i)); if (defIdx >= 0) break; }
+  const cur = items.find(it => it.mod.id === selId) || items[defIdx >= 0 ? defIdx : 0];
+  const curIdx = cur ? items.indexOf(cur) : -1;
+
   return (
     <main>
       {!hideBack && <button className="back-btn" onClick={onBack}>← Volver al panel</button>}
       <div className="welcome teacher">
         <div className="welcome-text">
           <div className="eyebrow">🎓 Exámenes</div>
-          <h1>Exámenes de avance</h1>
-          <p>Dos lugares, dos momentos: en <b>Configurar</b> programas la ruta (aviso, fecha, calificadores) · en <b>Resultados</b> acompañas lo rendido — la nota se publica <b>sola</b> al terminar.</p>
+          <h1>Exámenes del grupo</h1>
+          <p>Todo lo de cada examen en un solo lugar: lo eliges a la izquierda y lo manejas en 3 pasos — <b>programar y avisar</b> · <b>día del examen</b> · <b>notas y recuperación</b>. Nada se queda abierto: todo se cierra solo.</p>
         </div>
         <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
           {canDefine && <button className="btn-settings" onClick={() => setClassic('define')}>📑 Definir exámenes</button>}
           {canDefine && <button className="btn-settings" onClick={() => setClassic('weights')}>⚖️ Peso examen</button>}
           <button className="btn-settings" onClick={() => setDemoOpen(true)}>🧪 Examen de prueba</button>
-          <button className="btn-settings" onClick={() => setClassic(true)} title="Ventanas puntuales por alumno y aperturas manuales">⚙ Aperturas avanzadas</button>
+          {canDefine && <button className="btn-settings" onClick={() => setClassic(true)} title="Ventanas puntuales por alumno">⚙ Ventanas por alumno</button>}
         </div>
       </div>
 
@@ -62,7 +111,7 @@ function ExamsCenter({ onBack, hideBack, initialGroup, canDefine }) {
         {GROUPS.map(g => {
           const lv = LEVELS[g.level] || {}; const on = g.id === group.id;
           return (
-            <button key={g.id} onClick={() => setGroupId(g.id)} style={{
+            <button key={g.id} onClick={() => { setGroupId(g.id); setSelId(null); }} style={{
               border:'1.5px solid ' + (on ? '#D5CDBB' : '#DDD5C4'), borderBottom:'none', background: on ? '#fff' : '#EFEAE0',
               color: on ? 'var(--text)' : '#6B6455', borderRadius:'11px 11px 0 0', padding: on ? '11px 15px 12px' : '8px 15px 10px',
               fontFamily:"'Nunito',sans-serif", fontWeight:800, fontSize:12.5, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:7,
@@ -74,315 +123,453 @@ function ExamsCenter({ onBack, hideBack, initialGroup, canDefine }) {
         })}
       </div>
       <div style={{background:'#fff', border:'1.5px solid #D5CDBB', borderRadius:14, padding:18, position:'relative', zIndex:1, boxShadow:'0 2px 4px rgba(0,0,0,.06),0 8px 20px rgba(0,0,0,.08)'}}>
-        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:16}}>
-          {[['cfg','⚙️ Configurar examen','ruta · aviso · fechas · calificadores'],['res','📊 Resultados','aprobados · recuperación · por rendir']].map(([k, t, s]) => (
-            <button key={k} onClick={() => setTab(k)} style={{
-              border:'1.5px solid ' + (tab === k ? 'var(--lp, #F9A825)' : 'var(--border)'), background: tab === k ? '#FFF9E2' : '#FAFAF6',
-              borderRadius:12, padding:'11px 14px', cursor:'pointer', textAlign:'left',
-              fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15, color: tab === k ? '#8A5100' : '#777'}}>
-              {t}<span style={{display:'block', fontFamily:"'Nunito',sans-serif", fontWeight:700, fontSize:11, color:'#999'}}>{s}</span>
-            </button>
-          ))}
+        <EcReglasStrip group={group} onChange={refresh} />
+        <div style={{display:'flex', flexWrap:'wrap', gap:16, alignItems:'flex-start'}}>
+          <div style={{flex:'1 1 220px', maxWidth:300, minWidth:0, display:'flex', flexDirection:'column', gap:4}}>
+            <div style={{fontSize:10.5, fontWeight:900, letterSpacing:'.06em', textTransform:'uppercase', color:'#A08F63', padding:'0 4px 4px'}}>Exámenes del grupo</div>
+            {items.map((it, i) => { const e = est[i], on = cur && it.mod.id === cur.mod.id; return (
+              <button key={it.mod.id} onClick={() => setSelId(it.mod.id)} style={{display:'grid', gridTemplateColumns:'30px minmax(0,1fr)', gap:8, alignItems:'center', textAlign:'left', padding:'8px 9px', borderRadius:11, cursor:'pointer',
+                background: on ? '#FFF9E2' : '#fff', border:'1.5px ' + (it.solo && !on ? 'dashed ' : 'solid ') + (on ? '#F9A825' : (it.solo ? '#C9B8EC' : '#EFE7D2')),
+                marginTop: it.solo ? 6 : 0, boxShadow: on ? '0 0 0 3px rgba(249,168,37,.15)' : 'none', fontFamily:"'Nunito',sans-serif"}}>
+                <span style={{fontSize:19, textAlign:'center'}}>{it.mod.emoji || '📘'}</span>
+                <span style={{minWidth:0}}>
+                  <span style={{display:'block', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13.5, lineHeight:1.2, color:'var(--text)'}}>{it.label}{it.solo && ecNParts(it.exam) > 1 ? ' · ' + ecNParts(it.exam) + ' partes' : ''}</span>
+                  <span style={{display:'flex', alignItems:'center', gap:6, fontSize:11.5, fontWeight:800, color: e.c, marginTop:2}}><span style={{width:8, height:8, borderRadius:'50%', background: e.c, flexShrink:0}}></span>{e.t}</span>
+                </span>
+              </button>); })}
+          </div>
+          <div style={{flex:'999 1 480px', minWidth:0}}>
+            {cur ? <EcFicha key={group.id + ':' + cur.mod.id} group={group} it={cur} est={est[curIdx]} onChange={refresh} /> : <div className="empty-state"><div className="icon">📚</div>Este nivel no tiene módulos.</div>}
+          </div>
         </div>
-        {tab === 'cfg'
-          ? <EcConfigTab key={group.id + ':' + tick} group={group} goRes={() => setTab('res')} onChange={refresh} />
-          : <EcResTab key={group.id + ':' + tick} group={group} onChange={refresh} />}
       </div>
       {demoOpen && <DemoExamModal onClose={() => setDemoOpen(false)} onDone={() => { setDemoOpen(false); refresh(); }} />}
     </main>
   );
 }
 
-/* ═══ ⚙️ CONFIGURAR ═══ */
-function EcReglas({ group, onChange }) {
+function EcReglasStrip({ group, onChange }) {
   const F = window.JUCUM_EXAMFLOW;
-  const cfg = F.getCfg(group.id);
   const [min, setMin] = ecUS(F.minGradeFor(group.id));
+  ecUE(() => { setMin(F.minGradeFor(group.id)); }, [group.id]);
+  const save = () => { const n = Math.max(1, Math.min(100, parseInt(min, 10) || 75)); if (n === F.minGradeFor(group.id)) { setMin(n); return; } F.setCfg(group.id, { minGrade: n }); setMin(n); onChange(); };
+  const chip = { display:'inline-flex', alignItems:'center', gap:6, fontSize:11.5, fontWeight:800, color:'#6B665C', background:'#FBFAF5', border:'1px solid #EFE7D2', borderRadius:10, padding:'4px 10px' };
   return (
-    <div className="scard" style={{marginBottom:14}}>
-      <div className="sec-head"><div className="sec-title">⚖️ Reglas del grupo</div><span className="sec-meta">se aplican a todos sus exámenes</span></div>
-      <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))', gap:10}}>
-        <div style={{border:'1px solid var(--border)', borderRadius:11, padding:'10px 13px'}}>
-          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:12.5, color:'#1F3A8A', marginBottom:6}}>🎯 Quién aparece como apto</div>
-          <div style={{fontSize:12, lineHeight:1.6}}>Preparación ≥ <b>75%</b> <b>y</b> practicar <b>al menos {F.retMin} de los últimos {F.retDe} días</b> (📘 resúmenes · ✏️ gramática · 📗 stories). Quien no repasa así, no sale apto. <b>Tú tienes la última palabra</b>: habilitas o pausas por alumno.</div>
-        </div>
-        <div style={{border:'1px solid var(--border)', borderRadius:11, padding:'10px 13px'}}>
-          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:12.5, color:'#1F3A8A', marginBottom:6}}>✅ Nota mínima para aprobar</div>
-          <div className="row-flex" style={{gap:8}}>
-            <input type="number" min="1" max="100" className="input-text" style={{width:70}} value={min} onChange={e => setMin(e.target.value)} />
-            <button className="att-btn" onClick={() => { const n = Math.max(1, Math.min(100, parseInt(min, 10) || 75)); F.setCfg(group.id, { minGrade: n }); setMin(n); onChange(); }}>💾 Guardar</button>
-          </div>
-          <div className="settings-hint" style={{margin:'6px 0 0'}}>Con menos de <b>{F.minGradeFor(group.id)}</b> pasa a recuperación.{cfg.minGrade ? '' : ' (usando el estándar: 75)'}</div>
-        </div>
-        <div style={{border:'1px solid var(--border)', borderRadius:11, padding:'10px 13px'}}>
-          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:12.5, color:'#1F3A8A', marginBottom:6}}>📤 Publicación automática</div>
-          <div style={{fontSize:12, lineHeight:1.6}}>Cada alumno ve su nota, sus partes flojas y su recomendación <b>apenas termina</b> el examen — tú supervisas y afinas desde <b>Resultados</b>.</div>
-        </div>
-      </div>
+    <div style={{display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', marginBottom:16}}>
+      <span style={chip}>✅ Aprueba con <input type="number" min="1" max="100" className="input-text" style={{width:58, padding:'3px 6px', textAlign:'center'}} value={min} onChange={e => setMin(e.target.value)} onBlur={save} onKeyDown={e => { if (e.key === 'Enter') save(); }} /></span>
+      <span style={chip}>🎯 Apto = preparación ≥ 75% y práctica {F.retMin} de los últimos {F.retDe} días · tú decides en la fila de cada alumno</span>
+      <span style={chip}>📤 La nota se publica sola al entregar</span>
     </div>
   );
 }
 
-function EcModRow({ group, module, onChange, goRes }) {
+function EcSteps({ step, auto, onStep }) {
+  const L = ['Programar y avisar', 'Día del examen', 'Notas y recuperación'];
+  return (
+    <div style={{display:'grid', gridTemplateColumns:'repeat(3,minmax(0,1fr))', margin:'16px 0 18px'}}>
+      {L.map((t, i) => { const n = i + 1, done = n < auto, on = n === step; return (
+        <button key={t} onClick={() => onStep(n)} style={{background:'none', border:0, cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', gap:5, position:'relative', fontFamily:"'Nunito',sans-serif", fontWeight:800, fontSize:12, color: on ? 'var(--text)' : '#A39C8C', padding:'0 4px', textAlign:'center'}}>
+          {i > 0 && <span style={{position:'absolute', top:13, left:'-50%', right:'50%', height:3, background: n <= auto ? '#2E7D32' : '#E6DFCC'}}></span>}
+          <span style={{position:'relative', zIndex:1, width:28, height:28, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, border:'2.5px solid ' + (on ? '#1F3A8A' : done ? '#2E7D32' : '#D5CDBB'), background: on ? '#1F3A8A' : done ? '#2E7D32' : '#fff', color: (on || done) ? '#fff' : '#A39C8C', boxShadow: on ? '0 0 0 4px #E3E9F8' : 'none'}}>{done && !on ? '✓' : n}</span>
+          {t}
+        </button>); })}
+    </div>
+  );
+}
+
+function EcFicha({ group, it, est, onChange }) {
+  const D = window.JUCUM_DATA;
+  const [step, setStep] = ecUS(est.step || 1);
+  const members = D.STUDENTS.filter(s => s.group === group.id);
+  const n = ecNParts(it.exam);
+  const head = (
+    <div style={{display:'flex', alignItems:'center', gap:11, flexWrap:'wrap'}}>
+      <span style={{fontSize:28}}>{it.mod.emoji || '📘'}</span>
+      <div style={{flex:1, minWidth:200}}>
+        <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, lineHeight:1.2}}>{it.label}</div>
+        <div className="settings-hint" style={{margin:0}}>{it.exam && !est.forms ? it.exam.title + (n > 1 ? ' · ' + n + ' partes · la nota es el promedio' : '') : est.forms ? 'Rendido por Google Forms · las notas se conservan tal cual' : 'Desarrollo aún no sube el examen de este módulo'}</div>
+      </div>
+      {ecPill(est.bg, est.c, est.t, 'st')}
+    </div>
+  );
+  if (!est.step) return <div>{head}{it.first && window.M1FormsButton && <div style={{marginTop:12}}><M1FormsButton group={group} onChange={onChange} /></div>}</div>;
+  if (est.forms) return <div>{head}<div style={{marginTop:14}}><EcModResults group={group} module={it.mod} members={members} onChange={onChange} /></div></div>;
+  return (
+    <div>
+      {head}
+      <EcSteps step={step} auto={est.step} onStep={setStep} />
+      {step === 1 && <EcProgramar group={group} it={it} est={est} members={members} onChange={onChange} goStep={setStep} />}
+      {step === 2 && <EcEnVivo group={group} it={it} members={members} onChange={onChange} goStep={setStep} />}
+      {step === 3 && <EcModResults group={group} module={it.mod} members={members} onChange={onChange} />}
+    </div>
+  );
+}
+
+/* Acceso por alumno a ESTE examen: Auto (según apto) · Habilitar (allowOverrides) · Pausar (ann.paused) */
+function ecAcceso(group, exam, mid, onChange) {
   const D = window.JUCUM_DATA, X = window.JUCUM_EXAMS, F = window.JUCUM_EXAMFLOW;
-  const soloRow = String(module.id).indexOf('exam:') === 0;   /* examen final u otro sin módulo */
-  const exam = soloRow ? X.getExam(String(module.id).slice(5)) : X.examForModule(module.id, group.level);
-  const isForms = exam && /^ex-m1forms-/.test(exam.id);
-  const formsWin = F.formsWindowFor(group);
-  const isM1 = (D.MODULE_CATALOG[group.level] || [])[0]?.id === module.id;
-  const formsForThis = isM1 && formsWin && (X.getExam(formsWin.examId)?.moduleIds || []).includes(module.id);
-  const win = exam && !isForms ? X.windowForExamGroup(exam.id, group.id) : null;
-  const ann = F.getAnn(group.id, module.id);
-  const open = F.winEffectiveOpen(win);
-  const today = F.pDay();
-  const past = ann && ann.date && ann.date < today;
-  const ret = F.getRet(group.id, module.id);
-  const [expand, setExpand] = ecUS(!!ann && !past && !(win && Object.keys(win.results || {}).length));
-  const [showNotes, setShowNotes] = ecUS(false);
-  const [date, setDate] = ecUS(ann?.date || '');
-  const [from, setFrom] = ecUS(ann?.from || '');
-  const [to, setTo] = ecUS(ann?.to || '');
-  const [variant, setVariant] = ecUS(ann?.variant || 'mixed');
-  const [aviso, setAviso] = ecUS(ann && ann.notifyDate && !ann.notified ? 'fecha' : 'ahora');
-  const [avisoDate, setAvisoDate] = ecUS((ann && ann.notifyDate && !ann.notified ? ann.notifyDate : '') || '');
+  const win = X.windowForExamGroup(exam.id, group.id), ann = F.getAnn(group.id, mid);
+  const accOf = s => (ann && (ann.paused || []).includes(s.id)) ? 'pausa' : (win && (win.allowOverrides || []).includes(s.id)) ? 'hab' : 'auto';
+  const readyOf = s => { try { return D.getStudentReadiness(s) || { apt: false, overall: 0 }; } catch (e) { return { apt: false, overall: 0 }; } };
+  const canEnter = s => { const a = accOf(s); return a === 'hab' || (a === 'auto' && !!readyOf(s).apt); };
+  const setAcc = (s, v) => {
+    const now = accOf(s); if (now === v) return;
+    if (now === 'hab' || v === 'hab') {
+      let w = win;
+      if (!w) { X.createWindow({ examId: exam.id, groupId: group.id, isOpen: false }); w = X.windowForExamGroup(exam.id, group.id); }
+      if (w) X.toggleOverride(w.id, s.id);
+    }
+    const p = new Set((ann && ann.paused) || []); if (v === 'pausa') p.add(s.id); else p.delete(s.id);
+    if (now === 'pausa' || v === 'pausa') F.setAnn(group.id, mid, { paused: Array.from(p), examId: exam.id });
+    onChange();
+  };
+  return { accOf, canEnter, setAcc, readyOf, win, ann };
+}
+function EcAccSeg({ v, onSet }) {
+  return (
+    <span style={{display:'inline-flex', border:'1.5px solid #D5CDBB', borderRadius:16, padding:2, gap:2, background:'#F6F3EA', whiteSpace:'nowrap'}}>
+      {[['auto','Auto'],['hab','Habilitar'],['pausa','Pausar']].map(([k, l]) => (
+        <button key={k} onClick={() => onSet(k)} style={{border:0, borderRadius:13, padding:'3px 9px', fontFamily:"'Nunito',sans-serif", fontWeight:800, fontSize:11, cursor:'pointer', background: v === k ? '#fff' : 'transparent', color: v === k ? 'var(--text)' : '#6B665C', boxShadow: v === k ? '0 1px 3px rgba(0,0,0,.14)' : 'none'}}>{l}</button>
+      ))}
+    </span>
+  );
+}
+function EcAccSub({ acc, r }) {
+  const falta = window.exfFalta ? window.exfFalta(r) : '';
+  if (acc === 'hab') return <div style={{fontSize:11, fontWeight:800, color:'#2E7D32', marginTop:2}}>habilitado por ti</div>;
+  if (acc === 'pausa') return <div style={{fontSize:11, fontWeight:800, color:'#E65100', marginTop:2}}>en pausa · no entra</div>;
+  return r.apt ? <div style={{fontSize:11, fontWeight:800, color:'#2E7D32', marginTop:2}}>apto</div> : <div style={{fontSize:11, fontWeight:800, color:'#E65100', marginTop:2}}>no apto{falta ? ' · ' + falta : ''}</div>;
+}
+function ecSegBtns(val, set, opts, dis) {
+  return (
+    <span style={{display:'inline-flex', flexWrap:'wrap', border:'1.5px solid #D5CDBB', borderRadius:20, padding:2, gap:2, background:'#F6F3EA', opacity: dis ? .45 : 1}}>
+      {opts.map(([k, l]) => <button key={k} disabled={dis} onClick={() => set(k)} style={{border:0, borderRadius:16, padding:'5px 11px', fontFamily:"'Nunito',sans-serif", fontWeight:800, fontSize:12, cursor: dis ? 'default' : 'pointer', background: val === k ? '#fff' : 'transparent', color: val === k ? 'var(--text)' : '#6B665C', boxShadow: val === k ? '0 1px 3px rgba(0,0,0,.14)' : 'none'}}>{l}</button>)}
+    </span>
+  );
+}
+const ecCard = { border:'1.5px solid #EFE7D2', borderRadius:12, padding:'12px 14px', background:'#fff' };
+const ecCardT = { fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14, color:'#1F3A8A', marginBottom:8 };
+const ecTh = { fontSize:10.5, fontWeight:900, letterSpacing:'.05em', textTransform:'uppercase', color:'#A08F63', textAlign:'left', padding:'8px 10px', background:'#FFFCF2', borderBottom:'1px solid #EFE7D2' };
+const ecTd = { padding:'8px 10px', borderBottom:'1px solid #F3EEE0', fontSize:12.5, verticalAlign:'middle' };
+
+/* ═══ ① PROGRAMAR Y AVISAR ═══ */
+function EcProgramar({ group, it, est, members, onChange, goStep }) {
+  const X = window.JUCUM_EXAMS, F = window.JUCUM_EXAMFLOW;
+  const exam = it.exam, mid = it.mod.id, multi = ecNParts(exam) > 1;
+  const A = ecAcceso(group, exam, mid, onChange);
+  const ann = A.ann, win = A.win;
+  const [date, setDate] = ecUS((ann && ann.date) || '');
+  const [from, setFrom] = ecUS((ann && ann.from) || '');
+  const [to, setTo] = ecUS((ann && ann.to) || '');
+  const [p2mode, setP2mode] = ecUS((ann && ann.p2mode) || 'seguida');
+  const [p2date, setP2date] = ecUS((ann && ann.p2date) || '');
+  const [p2from, setP2from] = ecUS((ann && (ann.p2from || ann.from)) || '');
+  const [p2to, setP2to] = ecUS((ann && (ann.p2to || ann.to)) || '');
+  const [aviso, setAviso] = ecUS(ann && ann.notifyDate && !ann.notified ? 'antes' : 'ahora');
+  const [noDate, setNoDate] = ecUS(!!(ann && ann.notified && !ann.date));
+  const [variant, setVariant] = ecUS((ann && ann.variant) || 'mixed');
+  const [more, setMore] = ecUS(false);
+  const [ya, setYa] = ecUS(null);
+  const [sel, setSel] = ecUS([]);
+  const [abrir, setAbrir] = ecUS(false);
+  const [filtro, setFiltro] = ecUS('all');
+  ecUE(() => {
+    let vivo = true;
+    (F.yaRindieron ? F.yaRindieron(exam, group.id, members) : Promise.resolve([])).then(l => { if (vivo) setYa(l || []); }).catch(() => { if (vivo) setYa([]); });
+    return () => { vivo = false; };
+  }, [exam.id, group.id]);
+  const yaMap = {}; (ya || []).forEach(x => { yaMap[x.student.id] = x; });
+  const lo = s => A.canEnter(s) && (!yaMap[s.id] || sel.includes(s.id));
+  const nLo = members.filter(lo).length, nSin = members.filter(s => !A.canEnter(s)).length;
+  const nNueva = members.filter(s => yaMap[s.id] && sel.includes(s.id) && A.canEnter(s)).length;
+  const nConserva = members.filter(s => yaMap[s.id] && !sel.includes(s.id) && A.canEnter(s)).length;
   const graders = (ann && ann.graders) || [];
-  const toggleGrader = (name) => { const set = new Set(graders); if (set.has(name)) set.delete(name); else set.add(name); F.setAnn(group.id, module.id, { graders: Array.from(set) }); onChange(); };
+  const toggleGrader = (name) => { const set = new Set(graders); if (set.has(name)) set.delete(name); else set.add(name); F.setAnn(group.id, mid, { graders: Array.from(set), examId: exam.id }); onChange(); };
+  const pre = (it.mod.activities || []).find(a => F.isPreexamActivity && F.isPreexamActivity(a));
+  const hoy = F.pDay();
+  const diaAviso = date ? ecAddDays(date, -2) : hoy;
 
-  if (!exam && !formsForThis) {
-    return (
-      <div style={{border:'1px solid var(--border)', borderRadius:13, background:'#fff'}}>
-        <div style={{display:'flex', alignItems:'center', gap:11, padding:'12px 15px', flexWrap:'wrap'}}>
-          <span style={{fontSize:22}}>{module.emoji}</span>
-          <div style={{flex:1, minWidth:0}}>
-            <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14.5}}>{module.name}</div>
-            <div className="settings-hint" style={{margin:0}}>⏳ Desarrollo aún no sube el examen de este módulo</div>
-          </div>
-          {isM1 && window.M1FormsButton && <M1FormsButton group={group} onChange={onChange} />}
-          {ecPill('#F0F0EA', '#888', '⏳ Sin examen', 'st')}
-        </div>
-      </div>
-    );
+  const lineas = [];
+  if (noDate) lineas.push('📣 Aviso sin fecha: “Estás pronto a dar tu examen, practica…”. Cuando pongas la fecha, verán la cuenta regresiva.');
+  else {
+    lineas.push(aviso === 'ahora' ? '📣 La campanita sale apenas guardes.' : aviso === 'antes' ? (diaAviso > hoy ? '📣 La campanita sale sola el ' + ecCorta(diaAviso) + '.' : '📣 Faltan menos de 2 días: la campanita sale apenas guardes.') : '🔕 Sin campanita: lo verán en su módulo.');
+    if (date) lineas.push('🟢 ' + (multi ? 'La Parte 1' : 'El examen') + ' se abre el ' + ecCorta(date) + (from ? ' a las ' + F.fmtHora(from) : ' (todo el día)') + ' y se cierra solo' + (to ? ' a las ' + F.fmtHora(to) : ' al terminar el día') + '.');
+    if (multi) lineas.push(p2mode === 'otro' ? '🟢 La Parte 2 se abre el ' + (p2date ? ecCorta(p2date) : '(elige la fecha)') + (p2from ? ' a las ' + F.fmtHora(p2from) : '') + (p2to ? ' y se cierra sola a las ' + F.fmtHora(p2to) : '') + '.' : '➡️ Parte 2 seguida: al entregar la Parte 1, la Parte 2 aparece ahí mismo, en la página del examen.');
   }
-  if (formsForThis && (!exam || isForms)) {
-    const res = formsWin.results || {};
-    const members = D.STUDENTS.filter(s => s.group === group.id);
-    const graded = members.filter(s => res[s.id]);
-    return (
-      <div style={{border:'1px solid var(--border)', borderRadius:13, background:'#fff', overflow:'hidden'}}>
-        <div style={{display:'flex', alignItems:'center', gap:11, padding:'12px 15px', flexWrap:'wrap'}}>
-          <span style={{fontSize:22}}>{module.emoji}</span>
-          <div style={{flex:1, minWidth:0}}>
-            <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14.5}}>{module.name}</div>
-            <div className="settings-hint" style={{margin:0}}>Rendido por <b>Google Forms</b> · {graded.length}/{members.length} con nota — se conserva tal cual</div>
-          </div>
-          {ecPill('#EDE7F6', '#5B3FA0', '✅ Notas registradas', 'st')}
-          <button className="att-btn" onClick={() => setShowNotes(v => !v)}>📊 {showNotes ? 'Ocultar' : 'Ver notas'}</button>
-        </div>
-        {showNotes && <NotesList members={members} results={res} />}
-      </div>
-    );
-  }
+  lineas.push(ya === null ? '⏳ Revisando quién ya dio este examen…' : '👥 Lo dan ' + nLo + ' de ' + members.length + (nSin ? ' · ' + nSin + ' sin acceso' : '') + (nNueva ? ' · ' + nNueva + ' de nuevo como nota nueva' : '') + (nConserva ? ' · ' + nConserva + ' ya lo dieron y conservan su nota' : '') + '.');
 
-  const rendido = win && (Object.keys(win.results || {}).length > 0);
-  const chip = ret && F.retActive(ret) ? ['#FFEBEE', '#C62828', '🔁 Recuperación abierta']
-    : past ? ['#EDE7F6', '#5B3FA0', '📤 Rendido · resultados automáticos']
-    : open ? ['#E8F5E9', '#2E7D32', '🟢 Abierto ahora']
-    : ann && ann.date ? ['#E3E9F8', '#1F3A8A', '📣 Programado']
-    : ['#F0F0EA', '#777', '⚪ Listo para programar'];
-  const days = ann && ann.date ? F.daysTo(ann.date) : null;
-  const doProgram = () => {
-    if (!date) { alert('Elige la fecha del examen.'); return; }
-    const schedNotif = aviso === 'fecha' && avisoDate && avisoDate > F.pDay();
-    F.setAnn(group.id, module.id, {
-      date, from: from || null, to: to || null, variant, auto: true, forceClosed: false, examId: exam.id,
-      programmedAt: new Date().toISOString(),
-      notifyDate: schedNotif ? avisoDate : F.pDay(), notified: !schedNotif,
+  const guardar = () => {
+    if (!noDate && !date) { alert('Elige la fecha del examen (o marca “Todavía no tengo la fecha”).'); return; }
+    if (!noDate && multi && p2mode === 'otro' && !p2date) { alert('Elige la fecha de la Parte 2.'); return; }
+    if (!noDate && multi && p2mode === 'otro' && p2date <= date) { alert('La Parte 2 debe ser un día DESPUÉS de la Parte 1.'); return; }
+    if (sel.length) F.setFresh(group.id, exam.id, sel);
+    if (noDate) {
+      const n = X.announceExam(group.id, mid, exam.id, null);
+      F.setAnn(group.id, mid, { examId: exam.id, notified: true, notifyDate: hoy, variant });
+      alert('📣 Aviso SIN fecha enviado a ' + n + ' alumno(s): “Estás pronto a dar tu examen, practica…”.');
+      onChange(); return;
+    }
+    const programar = aviso === 'antes' && diaAviso > hoy;
+    F.setAnn(group.id, mid, {
+      date, dateTo: null, from: from || null, to: to || null, variant, auto: true, forceClosed: false, closedOn: null, examId: exam.id,
+      programmedAt: new Date().toISOString(), openedAt: null, openUntil: null,
+      p2mode: multi ? p2mode : null, p2date: multi && p2mode === 'otro' ? p2date : null,
+      p2from: multi && p2mode === 'otro' ? (p2from || null) : null, p2to: multi && p2mode === 'otro' ? (p2to || null) : null,
+      notifyDate: aviso === 'no' ? null : (programar ? diaAviso : hoy), notified: aviso === 'no' ? true : !programar,
     });
     if (!win) X.createWindow({ examId: exam.id, groupId: group.id, isOpen: false });
-    const horarioTxt = (from ? ', ' + F.fmtHora(from) : '') + (to ? ' – ' + F.fmtHora(to) : '');
-    if (schedNotif) alert('🗓️ Programado para ' + group.name + ':\n📣 El aviso se enviará SOLO el ' + F.fmtFecha(avisoDate) + '.\n🎓 Examen: ' + F.fmtFecha(date) + horarioTxt + ' — se abre y se cierra solo (hora de Perú).');
-    else { const n = X.announceExam(group.id, module.id, exam.id, date); alert('📣 Aviso enviado AHORA a ' + n + ' alumno(s).\n🎓 Examen: ' + F.fmtFecha(date) + horarioTxt + ' — se abre y se cierra solo (hora de Perú).'); }
+    else if (win.isOpen) X.setWindowOpen(win.id, false);   /* manda el horario: nada abierto a mano */
+    if (aviso !== 'no' && !programar) X.announceExam(group.id, mid, exam.id, date);
+    alert('💾 Guardado para ' + group.name + ':\n' + lineas.join('\n'));
     onChange();
   };
-  const doAvisoSinFecha = () => {
-    const n = X.announceExam(group.id, module.id, exam.id, null);
-    F.setAnn(group.id, module.id, { examId: exam.id, notified: true, notifyDate: F.pDay() });
-    alert('📣 Aviso SIN fecha enviado a ' + n + ' alumno(s): "Estás pronto a dar tu examen, practica…" — cuando pongas la fecha, verán la cuenta regresiva.');
-    onChange();
+  const abrirAhora = (untilIso) => {
+    if (sel.length) F.setFresh(group.id, exam.id, sel);
+    let w = win;
+    if (!w) { X.createWindow({ examId: exam.id, groupId: group.id, isOpen: false }); w = X.windowForExamGroup(exam.id, group.id); }
+    if (w) X.setWindowOpen(w.id, true);
+    F.setAnn(group.id, mid, { examId: exam.id, forceClosed: false, closedOn: null, openedAt: new Date().toISOString(), openUntil: untilIso, variant, p2mode: multi ? 'seguida' : null });
+    setAbrir(false); onChange(); goStep(2);
   };
 
-  return (
-    <div style={{border:'1.5px solid ' + (expand ? ((D.LEVELS[group.level] || {}).color || 'var(--border)') : 'var(--border)'), borderRadius:13, background:'#fff', overflow:'hidden'}}>
-      <div style={{display:'flex', alignItems:'center', gap:11, padding:'12px 15px', flexWrap:'wrap', cursor:'pointer'}} onClick={() => setExpand(v => !v)}>
-        <span style={{fontSize:22}}>{module.emoji}</span>
-        <div style={{flex:1, minWidth:0}}>
-          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14.5}}>{module.name}</div>
-          <div className="settings-hint" style={{margin:0}}>
-            Examen: <b>{exam.title}</b>{ann && ann.date ? <> · 📅 <b>{F.fmtFecha(ann.date)}</b>{ann.from ? ', ' + F.fmtHora(ann.from) + (ann.to ? ' – ' + F.fmtHora(ann.to) : '') : ''}</> : ann && ann.notified ? ' · 📣 aviso sin fecha enviado' : null}
-            {ret && ret.from ? <> · 🔁 recuperación <b>{F.fmtFecha(ret.from)} – {F.fmtFecha(ret.to)}</b></> : null}
-          </div>
-        </div>
-        {ecPill(chip[0], chip[1], chip[2], 'st')}
-        {days != null && days >= 0 && !rendido && (
-          <span style={{textAlign:'center', background:'#1F3A8A', color:'#fff', borderRadius:11, padding:'4px 13px', lineHeight:1.1}}>
-            <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, display:'block'}}>{days === 0 ? 'HOY' : days}</b>
-            <span style={{fontSize:9, fontWeight:800, letterSpacing:'.06em', textTransform:'uppercase', opacity:.85}}>{days === 0 ? 'examen' : days === 1 ? 'día' : 'días'}</span>
-          </span>
-        )}
-        <span style={{color:'#B0A99A', fontSize:17, transform: expand ? 'rotate(90deg)' : 'none', transition:'.2s'}}>›</span>
-      </div>
-      {expand && (
-        <div style={{borderTop:'1px dashed var(--border)', background:'#FBFAF5', padding:'14px 16px', display:'grid', gap:12}}>
-          {(past || rendido) && (
-            <div className="row-flex" style={{gap:8, flexWrap:'wrap'}}>
-              <span style={{fontSize:12.5}}>Este examen ya se rindió; sus notas se publican solas. La recuperación se maneja en <b>Resultados</b>.</span>
-              <button className="btn-save" onClick={goRes}>📊 Ver en Resultados</button>
-            </div>
-          )}
-          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))', gap:10}}>
-            <div style={{border:'1px solid var(--border)', borderRadius:11, padding:'10px 13px', background:'#fff'}}>
-              <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:12.5, color:'#1F3A8A', marginBottom:7}}>1 · 📣 Aviso a los alumnos</div>
-              <div style={{display:'grid', gap:6}}>
-                <label className="check-row" style={{margin:0}}><input type="radio" name={'av-' + group.id + module.id} checked={aviso === 'ahora'} onChange={() => setAviso('ahora')} /><span style={{fontSize:12}}>enviarlo al programar</span></label>
-                <label className="check-row" style={{margin:0}}><input type="radio" name={'av-' + group.id + module.id} checked={aviso === 'fecha'} onChange={() => setAviso('fecha')} /><span style={{fontSize:12}}>se envía solo el</span><input type="date" className="input-text" style={{width:145}} value={avisoDate} onChange={e => { setAvisoDate(e.target.value); setAviso('fecha'); }} /></label>
-              </div>
-              <div className="settings-hint" style={{margin:'6px 0 0'}}>Sin fecha aún: <button className="att-btn" onClick={doAvisoSinFecha} style={{marginRight:4}}>📣 Avisar sin fecha</button> dice “Estás pronto a dar tu examen, practica…”. Si no anuncias nada, el alumno <b>no ve ningún aviso</b>.</div>
-            </div>
-            <div style={{border:'1px solid var(--border)', borderRadius:11, padding:'10px 13px', background:'#fff'}}>
-              <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:12.5, color:'#1F3A8A', marginBottom:7}}>2 · 🗓️ Examen (hora de Perú)</div>
-              <div className="row-flex" style={{gap:7, flexWrap:'wrap'}}>
-                <input type="date" className="input-text" style={{width:145}} value={date} onChange={e => setDate(e.target.value)} />
-                <span style={{fontSize:11.5, fontWeight:800, color:'#777'}}>abre</span>
-                <input type="time" className="input-text" style={{width:100}} value={from} onChange={e => setFrom(e.target.value)} />
-                <span style={{fontSize:11.5, fontWeight:800, color:'#777'}}>cierra</span>
-                <input type="time" className="input-text" style={{width:100}} value={to} onChange={e => setTo(e.target.value)} />
-              </div>
-              <div className="row-flex" style={{gap:7, marginTop:6, flexWrap:'wrap'}}>
-                <select className="input-text" value={variant} onChange={e => { const v = e.target.value; setVariant(v); if (ann) { F.setAnn(group.id, module.id, { variant: v }); onChange(); } }} title="Versión del examen para este grupo">
-                  <option value="mixed">👥 Que el alumno elija (grupo mixto)</option>
-                  <option value="kids">🧒 Versión niños</option>
-                  <option value="adults">🧑 Versión adultos</option>
-                </select>
-                <span className="settings-hint" style={{margin:0}}>se abre y se cierra solo · solo aptos o habilitados</span>
-              </div>
-            </div>
-            <div style={{border:'1px solid var(--border)', borderRadius:11, padding:'10px 13px', background:'#fff'}}>
-              <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:12.5, color:'#1F3A8A', marginBottom:7}}>3 · 🧑‍🏫 Quiénes califican</div>
-              <div className="row-flex" style={{gap:6, flexWrap:'wrap'}}>
-                {ecPill('#E3E9F8', '#1F3A8A', '👩‍🏫 Tú (siempre)', 'yo')}
-                {['Teacher', 'Asistente'].map(n => (
-                  <button key={n} className={`preset ${graders.includes(n) ? 'on' : ''}`} onClick={() => toggleGrader(n)}>{n === 'Teacher' ? '🧑‍🏫' : '🙋'} {n}</button>
-                ))}
-              </div>
-              <div className="settings-hint" style={{margin:'6px 0 0'}}>Lo objetivo se corrige <b>solo, al instante</b>. 🗣️ Speaking / ✍️ Writing los revisa un calificador; mientras tanto el alumno ve su <b>nota parcial</b>.</div>
-            </div>
-          </div>
-          <div className="row-flex" style={{gap:8, flexWrap:'wrap'}}>
-            <button className="btn-save" onClick={doProgram}>💾 {ann && ann.date ? 'Re-programar' : 'Programar todo'}</button>
-            {ann && <button className="att-btn" onClick={() => { if (confirm('¿Quitar la programación? El aviso y la cuenta regresiva desaparecen para los alumnos.')) { F.setAnn(group.id, module.id, null); X.cancelAnnouncement(group.id, module.id); onChange(); } }}>✕ Quitar</button>}
-            <span style={{flex:1}}></span>
-            <button className="att-btn" onClick={() => { const w = win || (X.createWindow({ examId: exam.id, groupId: group.id, isOpen: false }), X.windowForExamGroup(exam.id, group.id)); X.setWindowOpen(w.id, true); F.setAnn(group.id, module.id, { forceClosed: false }); onChange(); }}>🟢 Publicar ahora</button>
-            <button className="att-btn" onClick={() => { if (win) X.setWindowOpen(win.id, false); F.setAnn(group.id, module.id, { forceClosed: true }); onChange(); }}>⚪ Cerrar</button>
-          </div>
-          {ann && ann.date && <div className="settings-hint" style={{margin:0}}>✓ Programado: 📣 aviso {ann.notified ? 'ya enviado' : 'se enviará el ' + F.fmtFecha(ann.notifyDate)} · 🎓 examen {F.fmtFecha(ann.date)}{ann.from ? ', ' + F.fmtHora(ann.from) : ''}{ann.to ? ' – ' + F.fmtHora(ann.to) : ''} · sale en tu calendario de Planificar.</div>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function EcRutaItem({ emoji, color, bg, last, children }) {
-  return (
-    <div style={{display:'grid', gridTemplateColumns:'44px 1fr', columnGap:10}}>
-      <div style={{display:'flex', flexDirection:'column', alignItems:'center'}}>
-        <span style={{width:38, height:38, borderRadius:'50%', border:'2.5px solid ' + color, background: bg || '#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:17, flexShrink:0, zIndex:1}}>{emoji}</span>
-        {!last && <span style={{width:3, flex:1, background:'#E0DACB', minHeight:14, borderRadius:2, margin:'3px 0'}}></span>}
-      </div>
-      <div style={{paddingBottom: last ? 0 : 10, minWidth:0}}>{children}</div>
-    </div>
-  );
-}
-
-function EcConfigTab({ group, goRes, onChange }) {
-  const D = window.JUCUM_DATA, X = window.JUCUM_EXAMS, F = window.JUCUM_EXAMFLOW;
-  const mods = D.MODULE_CATALOG[group.level] || [];
-  const members = D.STUDENTS.filter(s => s.group === group.id);
-  const estadoDe = (m) => {
-    const exam = X.examForModule(m.id, group.level);
-    if (!exam) return ['#C9C2B2', '#fff'];
-    const win = X.windowForExamGroup(exam.id, group.id);
-    const ann = F.getAnn(group.id, m.id);
-    if (win && Object.keys(win.results || {}).length) return ['#5B3FA0', '#EDE7F6'];
-    if (ann && ann.date && ann.date < F.pDay()) return ['#5B3FA0', '#EDE7F6'];
-    if (F.winEffectiveOpen(win)) return ['#2E7D32', '#E8F5E9'];
-    if (ann && ann.date) return ['#1F3A8A', '#E3E9F8'];
-    return ['#C9C2B2', '#fff'];
-  };
+  const filas = members.filter(s => filtro === 'all' ? true : filtro === 'in' ? A.canEnter(s) : !A.canEnter(s));
   return (
     <div>
-      <EcReglas group={group} onChange={onChange} />
-      <div className="sec-head" style={{marginBottom:10}}><div className="sec-title">🛤️ La ruta de exámenes de {group.name}</div><span className="sec-meta">como la ruta de práctica: un paso lleva al siguiente</span></div>
-      <div>
-        {mods.map(m => { const [c, b] = estadoDe(m); return (
-          <EcRutaItem key={m.id} emoji={m.emoji} color={c} bg={b}>
-            <EcModRow group={group} module={m} onChange={onChange} goRes={goRes} />
-          </EcRutaItem>
-        ); })}
-        <EcRutaItem emoji="🏁" color="#B9A8E3" bg="#FDFCFF">
-        {(() => {
-          /* 🏁 Con examen final ya creado, esta fila es REAL: se programa y se ven sus notas aquí */
-          const fin = (F.standaloneExams ? F.standaloneExams(group.level) : [])[0];
-          if (!fin) return (
-          <div style={{border:'1.5px dashed #B9A8E3', borderRadius:13, background:'#FDFCFF', padding:'12px 15px', display:'flex', alignItems:'center', gap:11, flexWrap:'wrap'}}>
-            <div style={{flex:1, minWidth:200}}>
-              <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14.5}}>Examen final · Nivel {(D.LEVELS[group.level] || {}).code || group.level}</div>
-              <div className="settings-hint" style={{margin:0}}>El ensayo general del nivel: se arma con los {mods.length} módulos cuando el grupo los cierre — aquí mismo lo programarás como cualquier módulo.</div>
+      {est.step === 3 && <div style={{background:'#FFF3E0', borderRadius:11, padding:'9px 13px', fontSize:12.5, fontWeight:700, color:'#6B4300', marginBottom:12}}>Este examen ya se rindió. Si lo programas otra vez, en la tabla marcas quién lo da de nuevo como <b>nota nueva</b>; los demás conservan su nota.</div>}
+      <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:12}}>
+        <div style={ecCard}>
+          <div style={ecCardT}>🗓️ Cuándo <span style={{fontFamily:"'Nunito',sans-serif", fontSize:11.5, fontWeight:800, color:'#8A8578'}}>· hora de Perú</span></div>
+          <div className="row-flex" style={{gap:7, flexWrap:'wrap', opacity: noDate ? .45 : 1}}>
+            <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13, minWidth:58}}>{multi ? 'Parte 1' : 'Examen'}</b>
+            <input type="date" className="input-text" style={{width:150}} value={date} disabled={noDate} onChange={e => setDate(e.target.value)} />
+            <span style={{fontSize:11.5, fontWeight:800, color:'#8A8578'}}>de</span>
+            <input type="time" className="input-text" style={{width:108}} value={from} disabled={noDate} onChange={e => setFrom(e.target.value)} />
+            <span style={{fontSize:11.5, fontWeight:800, color:'#8A8578'}}>a</span>
+            <input type="time" className="input-text" style={{width:108}} value={to} disabled={noDate} onChange={e => setTo(e.target.value)} />
+          </div>
+          {multi && <>
+            <div className="row-flex" style={{gap:7, flexWrap:'wrap', marginTop:8, opacity: noDate ? .45 : 1}}>
+              <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13, minWidth:58}}>Parte 2</b>
+              {ecSegBtns(p2mode, setP2mode, [['seguida', 'Seguida, al terminar la Parte 1'], ['otro', 'Otro día']], noDate)}
             </div>
-            {ecPill('#EDE7F6', '#5B3FA0', '🔒 Se desbloquea al cerrar los módulos', 'f')}
-          </div>);
-          return <EcModRow group={group} module={{ id: 'exam:' + fin.id, name: fin.title, emoji: '🎓', activities: [] }} onChange={onChange} goRes={goRes} />;
-        })()}
-        </EcRutaItem>
-        <EcRutaItem emoji="🌐" color="#C9C2B2" last>
-          <div className="settings-hint" style={{margin:'9px 0 0', lineHeight:1.6}}><b>Examen internacional</b> — cada alumno lo rinde en su plataforma externa; el examen final del nivel es su preparación.</div>
-        </EcRutaItem>
+            {p2mode === 'otro' && <div className="row-flex" style={{gap:7, flexWrap:'wrap', marginTop:7, paddingLeft:65, opacity: noDate ? .45 : 1}}>
+              <input type="date" className="input-text" style={{width:150}} value={p2date} disabled={noDate} onChange={e => setP2date(e.target.value)} />
+              <span style={{fontSize:11.5, fontWeight:800, color:'#8A8578'}}>de</span>
+              <input type="time" className="input-text" style={{width:108}} value={p2from} disabled={noDate} onChange={e => setP2from(e.target.value)} />
+              <span style={{fontSize:11.5, fontWeight:800, color:'#8A8578'}}>a</span>
+              <input type="time" className="input-text" style={{width:108}} value={p2to} disabled={noDate} onChange={e => setP2to(e.target.value)} />
+            </div>}
+            <div className="settings-hint" style={{margin:'8px 0 0'}}>{p2mode === 'seguida' ? <>Al entregar la Parte 1, <b>en la misma página del examen</b> le aparece «Sigue la Parte 2». No vuelve a la plataforma a buscarla.</> : <>Al entregar la Parte 1 verá «Tu Parte 2 es el {p2date ? ecCorta(p2date) : '…'}». Cada parte se abre y se cierra sola.</>}</div>
+          </>}
+          {!multi && <div className="settings-hint" style={{margin:'8px 0 0'}}>Se abre y se cierra solo. Después de la hora de cierre no queda nada abierto.</div>}
+          <label className="check-row" style={{margin:'10px 0 0'}}><input type="checkbox" checked={noDate} onChange={e => setNoDate(e.target.checked)} /><span style={{fontSize:12}}>Todavía no tengo la fecha (solo avisar que se acerca)</span></label>
+        </div>
+        <div style={ecCard}>
+          <div style={ecCardT}>📣 Aviso a los alumnos</div>
+          {ecSegBtns(noDate ? 'ahora' : aviso, setAviso, [['ahora', 'Al guardar'], ['antes', '2 días antes'], ['no', 'Sin campanita']], noDate)}
+          <div style={{display:'flex', gap:9, alignItems:'flex-start', background:'#F6F3EA', borderRadius:11, padding:'9px 11px', marginTop:10, fontSize:12.5, fontWeight:700}}>
+            <span style={{fontSize:16}}>🔔</span>
+            <div><div style={{fontSize:10, fontWeight:900, letterSpacing:'.05em', textTransform:'uppercase', color:'#A08F63'}}>Lo que verán</div>
+              {noDate ? 'Estás pronto a dar tu examen. ¡Practica un poquito cada día!' : aviso === 'no' ? <span style={{color:'#8A8578'}}>No se envía campanita: el examen igual aparece en su módulo con la cuenta regresiva.</span> : <>🎓 Tu examen es el {date ? F.fmtFecha(date) : '…'}{from ? ', ' + F.fmtHora(from) : ''}.{multi ? (p2mode === 'seguida' ? ' Las 2 partes van seguidas.' : ' La Parte 2 es el ' + (p2date ? F.fmtFecha(p2date) : '…') + '.') : ''} ¡Practica!</>}
+            </div>
+          </div>
+        </div>
       </div>
-      {window.PreexamFolderRow && mods.map(m => {
-        const act = (m.activities || []).find(a => F.isPreexamActivity(a));
-        return act ? <PreexamFolderRow key={'pre-' + m.id} group={group} module={m} act={act} onChange={onChange} /> : null;
-      })}
+
+      <div style={{...ecCard, marginTop:12, padding:0}}>
+        <button onClick={() => setMore(v => !v)} style={{width:'100%', background:'none', border:0, padding:'11px 14px', display:'flex', gap:8, alignItems:'center', cursor:'pointer', fontFamily:"'Nunito',sans-serif", fontWeight:800, fontSize:12.5, color:'var(--text)', textAlign:'left'}}>
+          ⚙️ Más opciones <span style={{color:'#A39C8C', fontWeight:700}}>versión · quiénes califican{pre ? ' · pre-examen' : ''}</span>
+          <span style={{marginLeft:'auto', color:'#B0A99A', fontSize:17, transform: more ? 'rotate(90deg)' : 'none', transition:'.2s'}}>›</span>
+        </button>
+        {more && <div style={{borderTop:'1px dashed #EFE7D2', padding:'10px 14px 14px', display:'grid', gap:12}}>
+          <div><div style={{fontSize:11, fontWeight:900, color:'#8A8578', marginBottom:5}}>Versión del examen</div>
+            {ecSegBtns(variant, v => { setVariant(v); if (ann) { F.setAnn(group.id, mid, { variant: v }); onChange(); } }, [['mixed', '👥 Que elija el alumno'], ['kids', '🧒 Niños'], ['adults', '🧑 Adultos']])}</div>
+          <div><div style={{fontSize:11, fontWeight:900, color:'#8A8578', marginBottom:5}}>Quiénes califican speaking / writing</div>
+            <div className="row-flex" style={{gap:6, flexWrap:'wrap'}}>{ecPill('#E3E9F8', '#1F3A8A', '👩‍🏫 Tú (siempre)', 'yo')}{['Teacher', 'Asistente'].map(g => <button key={g} className={`preset ${graders.includes(g) ? 'on' : ''}`} onClick={() => toggleGrader(g)}>{g === 'Teacher' ? '🧑‍🏫' : '🙋'} {g}</button>)}</div>
+            <div className="settings-hint" style={{margin:'6px 0 0'}}>Lo objetivo se corrige solo, al instante. Mientras tanto el alumno ve su nota parcial.</div></div>
+          {pre && window.PreexamFolderRow && <div><div style={{fontSize:11, fontWeight:900, color:'#8A8578', marginBottom:5}}>Pre-examen del módulo</div><PreexamFolderRow group={group} module={it.mod} act={pre} onChange={onChange} /></div>}
+        </div>}
+      </div>
+
+      <div style={{marginTop:12, border:'1.5px solid #1F3A8A', borderRadius:12, background:'#F7F9FE', padding:'12px 14px'}}>
+        <div style={{fontSize:10.5, fontWeight:900, letterSpacing:'.06em', textTransform:'uppercase', color:'#1F3A8A', marginBottom:5}}>Así queda</div>
+        <div style={{display:'grid', gap:3, fontSize:12.5, fontWeight:700, marginBottom:11}}>{lineas.map((l, i) => <div key={i}>{l}</div>)}</div>
+        <div className="row-flex" style={{gap:8, flexWrap:'wrap'}}>
+          <button className="btn-save" onClick={guardar}>💾 Guardar</button>
+          <span style={{fontSize:11.5, fontWeight:800, color:'#A8A08E'}}>o</span>
+          <button className="att-btn" style={{background:'#2E7D32', borderColor:'#2E7D32', color:'#fff'}} onClick={() => setAbrir(true)}>▶ Abrir ahora</button>
+          <span style={{flex:1}}></span>
+          {ann && (ann.date || ann.notified) && <button className="att-btn" onClick={() => { if (confirm('¿Quitar la programación? El aviso y la cuenta regresiva desaparecen para los alumnos.')) { const keep = (ann && ann.paused) || []; F.setAnn(group.id, mid, null); if (keep.length) F.setAnn(group.id, mid, { paused: keep, examId: exam.id }); X.cancelAnnouncement(group.id, mid); onChange(); } }}>✕ Quitar programación</button>}
+        </div>
+        {ann && ann.date && <div className="settings-hint" style={{margin:'8px 0 0'}}>✓ Programado: aviso {ann.notified ? 'ya enviado' : 'se enviará el ' + ecCorta(ann.notifyDate)} · examen {ecCorta(ann.date)}{ann.from ? ', ' + F.fmtHora(ann.from) : ''}{ann.to ? ' – ' + F.fmtHora(ann.to) : ''}{ann.p2mode === 'otro' && ann.p2date ? ' · Parte 2 ' + ecCorta(ann.p2date) : ''} · sale en tu calendario de Planificar.</div>}
+      </div>
+
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap', margin:'20px 0 8px'}}>
+        <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14.5}}>👥 Quién lo dará</div>
+        {ecSegBtns(filtro, setFiltro, [['all', 'Todos ' + members.length], ['in', 'Pueden entrar ' + (members.length - nSin)], ['out', 'Sin acceso ' + nSin]])}
+      </div>
+      <div style={{overflowX:'auto', border:'1.5px solid #EFE7D2', borderRadius:12}}>
+        <table style={{width:'100%', borderCollapse:'collapse', minWidth:640}}>
+          <thead><tr><th style={ecTh}>Alumno</th><th style={ecTh}>Preparación</th><th style={ecTh}>Acceso</th><th style={ecTh}>Este examen</th></tr></thead>
+          <tbody>{filas.map(s => { const r = A.readyOf(s), acc = A.accOf(s), ok = A.canEnter(s), y = yaMap[s.id]; return (
+            <tr key={s.id}>
+              <td style={ecTd}><div style={{display:'flex', gap:8, alignItems:'center', fontWeight:800, whiteSpace:'nowrap'}}><span style={{width:9, height:9, borderRadius:'50%', background: ok ? '#2E7D32' : '#C9C2B2', flexShrink:0}}></span>{s.fullName}</div></td>
+              <td style={ecTd}><span style={{display:'inline-block', width:60, height:6, borderRadius:4, background:'#EEE9DC', overflow:'hidden', verticalAlign:'middle', marginRight:6}}><span style={{display:'block', height:'100%', width: Math.min(100, r.overall || 0) + '%', background: (r.overall || 0) >= 75 ? '#2E7D32' : '#F9A825'}}></span></span><b>{r.overall || 0}%</b></td>
+              <td style={ecTd}><EcAccSeg v={acc} onSet={v => A.setAcc(s, v)} /><EcAccSub acc={acc} r={r} /></td>
+              <td style={ecTd}>{y ? <>
+                  <div style={{fontSize:11, fontWeight:700, color:'#8A8578'}}>Ya lo dio{y.today ? ' HOY' : ' el ' + ecCorta(window.JUCUM_DAY.of(y.date))}{typeof y.score === 'number' ? ' · ' + y.score : ''}</div>
+                  <label className="check-row" style={{margin:'3px 0 0'}}><input type="checkbox" checked={sel.includes(s.id)} onChange={e => setSel(e.target.checked ? sel.concat([s.id]) : sel.filter(x => x !== s.id))} /><span style={{fontSize:11.5, fontWeight:800}}>Lo da de nuevo (nota nueva)</span></label>
+                </> : ok ? ecPill('#E8F5E9', '#2E7D32', 'lo dará', 'l') : ecPill('#F0F0EA', '#888', 'no entra', 'n')}</td>
+            </tr>); })}</tbody>
+        </table>
+      </div>
+      {abrir && <EcAbrirModal exam={exam} group={group} defTo={to || (ann && ann.to) || ''} entran={nLo} total={members.length} onClose={() => setAbrir(false)} onOpen={abrirAhora} />}
     </div>
   );
 }
 
-/* ═══ 📊 RESULTADOS ═══ */
-function EcResTab({ group, onChange }) {
-  const D = window.JUCUM_DATA, X = window.JUCUM_EXAMS, F = window.JUCUM_EXAMFLOW;
-  const mods = D.MODULE_CATALOG[group.level] || [];
-  const members = D.STUDENTS.filter(s => s.group === group.id);
-  /* 🎓 23-ago-2026: el examen FINAL (sin módulo propio) también tiene su botón en Resultados —
-     antes solo se listaban los módulos y no había dónde ver sus notas. */
-  const solos = (F.standaloneExams ? F.standaloneExams(group.level) : []).map(e => ({ id: 'exam:' + e.id, name: e.title, emoji: '🎓' }));
-  const todos = mods.concat(solos);
-  const conAlgo = todos.filter(m => {
-    const solo = String(m.id).indexOf('exam:') === 0;
-    const exam = solo ? X.getExam(String(m.id).slice(5)) : X.examForModule(m.id, group.level);
-    if (!exam) return false;
-    const ann = F.getAnn(group.id, m.id);
-    const win = X.windowForExamGroup(exam.id, group.id);
-    /* 🎯 14-sep-2026 (caso real Turno Noche): el examen rendido anoche se abrió A MANO (ventana sin
-     * aviso) y Resultados caía en el último módulo AVISADO (el M3 de agosto) — la profesora veía
-     * notas viejas y "por rendir" falsos. Cualquier ventana creada ya cuenta como examen con historia. */
-    return !!win || (ann && ann.date && ann.date <= F.pDay()) || !!F.formsWindowFor(group);
+/* ▶ “Abrir ahora” SIEMPRE pregunta hasta qué hora (pedido de la usuaria, 24-oct) */
+function EcAbrirModal({ exam, group, defTo, entran, total, onClose, onOpen }) {
+  const F = window.JUCUM_EXAMFLOW;
+  const now = F.pMin();
+  const opts = [];
+  const tMin = ecMinOf(defTo);
+  if (tMin != null && tMin > now + 5) opts.push(['to', 'Hasta la hora de cierre', defTo]);
+  opts.push(['60', 'Por 1 hora', ecHM(now + 60)], ['120', 'Por 2 horas', ecHM(now + 120)]);
+  const [k, setK] = ecUS(opts[0][0]);
+  const [otra, setOtra] = ecUS('');
+  const hasta = k === 'otra' ? otra : (opts.find(o => o[0] === k) || [])[2];
+  const valido = !!hasta && ecMinOf(hasta) != null && ecMinOf(hasta) > now;
+  const opt = (key, label, right) => (
+    <label key={key} style={{display:'flex', gap:10, alignItems:'center', border:'1.5px solid ' + (k === key ? '#1F3A8A' : '#D5CDBB'), background: k === key ? '#F7F9FE' : '#fff', borderRadius:12, padding:'9px 12px', marginTop:8, fontSize:13, fontWeight:800, cursor:'pointer'}}>
+      <input type="radio" checked={k === key} onChange={() => setK(key)} />{label}<span style={{marginLeft:'auto', fontSize:12, color:'#8A8578'}}>{right}</span>
+    </label>
+  );
+  return (
+    <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(62,58,51,.38)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
+      <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:16, maxWidth:430, width:'100%', padding:'18px 20px', boxShadow:'0 18px 40px rgba(0,0,0,.2)'}}>
+        <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:17}}>▶ Abrir ahora · {exam.title}</div>
+        <div className="settings-hint" style={{margin:'2px 0 0'}}>{group.name} · lo dan {entran} de {total} alumnos</div>
+        <div style={{fontSize:13, fontWeight:800, marginTop:12}}>¿Hasta qué hora queda abierto?</div>
+        {opts.map(o => opt(o[0], o[1], F.fmtHora(o[2])))}
+        {opt('otra', 'Otra hora', <input type="time" className="input-text" style={{width:110}} value={otra} onClick={() => setK('otra')} onChange={e => { setOtra(e.target.value); setK('otra'); }} />)}
+        <div className="settings-hint" style={{margin:'10px 0 0'}}>A esa hora se cierra solo (hora de Perú). Quien esté dentro alcanza a enviar lo que lleva.</div>
+        <div className="row-flex" style={{gap:8, justifyContent:'flex-end', marginTop:14}}>
+          <button className="att-btn" onClick={onClose}>Cancelar</button>
+          <button className="btn-save" disabled={!valido} style={{opacity: valido ? 1 : .5}} onClick={() => valido && onOpen(ecHoyIso(hasta))}>🟢 Abrir{valido ? ' hasta las ' + F.fmtHora(hasta) : ''}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══ ② DÍA DEL EXAMEN · en vivo ═══
+ * Fuentes: nota registrada (progress exam-<id>:<parte>, con el corte de “nota nueva”) +
+ * presencia en vivo (live_presence, la escribe jucum-connect desde la página del examen).
+ * 🛟 Red de seguridad: quien entregó (se ve en vivo) pero su nota aún no llega, sale marcado. */
+function EcEnVivo({ group, it, members, onChange, goStep }) {
+  const D = window.JUCUM_DATA, X = window.JUCUM_EXAMS, F = window.JUCUM_EXAMFLOW, L = window.JUCUM_LIVE;
+  const exam = it.exam, mid = it.mod.id;
+  const A = ecAcceso(group, exam, mid, onChange);
+  const ann = A.ann, win = A.win;
+  const parts = F.partesDeExamen ? F.partesDeExamen(exam) : [{ key: 'p', label: 'Examen' }];
+  const multi = parts.length > 1, otro = multi && ann && ann.p2mode === 'otro' && ann.p2date;
+  const [rows, setRows] = ecUS([]);
+  const [abrir, setAbrir] = ecUS(false);
+  const [, setT] = ecUS(0);
+  ecUE(() => { if (!L || !L.subscribe) return; return L.subscribe(r => setRows(r || []), 12000); }, []);
+  ecUE(() => {
+    const S = window.JUCUM_SYNC;
+    const t = setInterval(() => { try { if (S && S.refreshProgress) S.refreshProgress().then(() => setT(x => x + 1)).catch(() => {}); else setT(x => x + 1); } catch (e) {} }, 30000);
+    return () => clearInterval(t);
+  }, []);
+  const open = F.winEffectiveOpen(win);
+  const hoy = F.pDay();
+  const esDia2 = otro && hoy === ann.p2date;
+  const cierre = F.abiertoAhoraHasta && F.abiertoAhoraHasta(ann) ? ecPeruHM(ann.openUntil) : ann ? (esDia2 ? (ann.p2to || ann.to) : ann.to) : null;
+  const falta = cierre && open ? Math.max(0, ecMinOf(cierre) - F.pMin()) : null;
+  const celda = (s, k) => {
+    const comp = ((D.getStudentProgress && D.getStudentProgress(s.id)) || {}).completed || {};
+    const e = comp['exam-' + exam.id + ':' + k];
+    const desde = F.desdePara ? F.desdePara(exam, group.id, s.id) : null;
+    if (e && typeof e.score === 'number' && (!desde || F.despuesDe(e.date, desde))) return { k: 'ok', score: e.score };
+    const lr = rows.find(r => r.user_id === s.id && r.module_id === 'exam-' + exam.id && r.activity_id === k);
+    if (lr && L) { const c = L.classify(lr); if (c.completed) return { k: 'llega', score: lr.score }; if (c.phase === 'gone') return { k: 'salio', min: c.elapsedMin }; return { k: 'in', min: c.elapsedMin }; }
+    return { k: 'no' };
+  };
+  const data = members.map(s => {
+    if (!A.canEnter(s)) return { s, c: [{ k: 'blk' }, { k: 'blk' }] };
+    const c = parts.map(p => celda(s, p.key));
+    if (multi && c[1].k === 'no' && (c[0].k === 'ok' || c[0].k === 'llega')) c[1] = otro && hoy < ann.p2date ? { k: 'dia' } : { k: 'puede' };
+    return { s, c };
   });
-  const [modId, setModId] = ecUS((conAlgo[conAlgo.length - 1] || todos[0] || {}).id || null);
-  const mod = todos.find(m => m.id === modId);
+  const cnt = { no: 0, p1: 0, p2: 0, todo: 0, blk: 0, llega: [], salio: [] };
+  data.forEach(({ s, c }) => {
+    if (c[0].k === 'blk') { cnt.blk++; return; }
+    c.forEach(x => { if (x.k === 'llega') cnt.llega.push(s); if (x.k === 'salio') cnt.salio.push(s); });
+    if (c[0].k === 'no') cnt.no++;
+    else if (c[0].k === 'in' || c[0].k === 'salio') cnt.p1++;
+    else if (!multi || c[1].k === 'ok' || c[1].k === 'llega') cnt.todo++;
+    else if (c[1].k === 'in' || c[1].k === 'puede' || c[1].k === 'salio') cnt.p2++;
+    else cnt.todo++;
+  });
+  const K = multi ? [['No han entrado', cnt.no], ['En la Parte 1', cnt.p1], [otro ? 'Parte 1 entregada' : 'En la Parte 2', cnt.p2 + (otro ? cnt.todo : 0)], ...(otro ? [] : [['Entregaron todo', cnt.todo]]), ['Sin acceso', cnt.blk]]
+    : [['No han entrado', cnt.no], ['Dentro', cnt.p1], ['Entregaron', cnt.todo], ['Sin acceso', cnt.blk]];
+  const mas15 = () => {
+    if (F.abiertoAhoraHasta(ann)) F.setAnn(group.id, mid, { openUntil: new Date(Date.parse(ann.openUntil) + 15 * 60000).toISOString() });
+    else if (ann && esDia2 && (ann.p2to || ann.to)) F.setAnn(group.id, mid, { p2to: ecHM(ecMinOf(ann.p2to || ann.to) + 15) });
+    else if (ann && ann.to) F.setAnn(group.id, mid, { to: ecHM(ecMinOf(ann.to) + 15) });
+    onChange();
+  };
+  const cerrar = () => {
+    if (!confirm('¿Cerrar el examen ahora? Quien esté dentro alcanza a enviar lo que lleva. ' + (otro && !esDia2 ? 'La Parte 2 del ' + ecCorta(ann.p2date) + ' sigue programada.' : ''))) return;
+    if (F.abiertoAhoraHasta(ann)) F.setAnn(group.id, mid, { openUntil: new Date().toISOString(), closedOn: hoy });
+    else F.setAnn(group.id, mid, { closedOn: hoy, examId: exam.id });
+    if (win && win.isOpen) X.setWindowOpen(win.id, false);
+    onChange();
+  };
+  const chip = (x) => {
+    if (x.k === 'ok') return ecPill('#E8F5E9', '#2E7D32', '✓ ' + x.score, 'c');
+    if (x.k === 'llega') return ecPill('#FFF3E0', '#8A5100', '⏳ entregó' + (x.score != null ? ' · ' + x.score : '') + ' · nota en camino', 'c');
+    if (x.k === 'in') return ecPill('#E3E9F8', '#1F3A8A', '● dentro · ' + (x.min || 0) + ' min', 'c');
+    if (x.k === 'salio') return ecPill('#F0F0EA', '#8A5100', 'salió sin entregar', 'c');
+    if (x.k === 'puede') return ecPill('#FFF8E1', '#E65100', 'puede empezar', 'c');
+    if (x.k === 'dia') return ecPill('#F0F0EA', '#77746B', 'el ' + ecCorta(ann.p2date), 'c');
+    if (x.k === 'blk') return <span style={{fontSize:11.5, fontWeight:700, color:'#9A9384'}}>sin acceso</span>;
+    return ecPill('#F0F0EA', '#888', 'no ha entrado', 'c');
+  };
   return (
     <div>
-      <div className="preset-row" style={{flexWrap:'wrap', marginBottom:14}}>
-        {todos.map(m => <button key={m.id} className={`preset ${modId === m.id ? 'on' : ''}`} onClick={() => setModId(m.id)}>{m.emoji} {m.name}</button>)}
+      <div style={{border:'1.5px solid ' + (open ? '#A5D6A7' : '#D5CDBB'), borderRadius:12, background: open ? '#F6FBF6' : '#FBFAF5', padding:'12px 14px'}}>
+        <div className="row-flex" style={{gap:8, flexWrap:'wrap', fontSize:13, fontWeight:800}}>
+          {open ? <><span style={{width:10, height:10, borderRadius:'50%', background:'#2E7D32', boxShadow:'0 0 0 4px rgba(46,125,50,.18)'}}></span>En curso{esDia2 ? ' · Parte 2' : multi && otro ? ' · Parte 1' : ''}{cierre ? ' · se cierra solo a las ' + F.fmtHora(cierre) : ''}{falta != null ? ' · faltan ' + falta + ' min' : ''}</>
+            : <>⚪ Cerrado ahora{ann && ann.date && F.enFechaAnn(ann, hoy) && ann.from && ecMinOf(ann.from) > F.pMin() ? ' · se abre solo a las ' + F.fmtHora(esDia2 ? (ann.p2from || ann.from) : ann.from) : ''}</>}
+        </div>
+        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:8, margin:'11px 0'}}>
+          {K.map(([l, n]) => <div key={l} style={{background:'#fff', border:'1px solid #EFE7D2', borderRadius:11, padding:'8px 10px'}}><b style={{display:'block', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:22, lineHeight:1.1}}>{n}</b><span style={{fontSize:11, fontWeight:800, color:'#8A8578'}}>{l}</span></div>)}
+        </div>
+        <div className="row-flex" style={{gap:8, flexWrap:'wrap'}}>
+          {open ? <><button className="att-btn" onClick={mas15}>+15 min a todos</button><button className="att-btn" onClick={cerrar}>⚪ Cerrar ahora</button></>
+            : <button className="att-btn" style={{background:'#2E7D32', borderColor:'#2E7D32', color:'#fff'}} onClick={() => setAbrir(true)}>▶ Abrir ahora</button>}
+          <button className="att-btn" onClick={() => goStep(3)}>📊 Ver notas</button>
+          <span className="settings-hint" style={{margin:0}}>Se actualiza solo. ¿Alguien no puede entrar? Su motivo está en su fila.</span>
+        </div>
       </div>
-      {mod ? <EcModResults key={mod.id} group={group} module={mod} members={members} onChange={onChange} /> : <div className="scard"><div className="empty-state"><div className="icon">📚</div>Este nivel no tiene módulos.</div></div>}
+      {cnt.llega.length > 0 && <div style={{marginTop:10, background:'#FFF3E0', border:'1.5px solid #FFB74D', borderRadius:12, padding:'10px 13px', fontSize:12.5, fontWeight:700, color:'#6B4300', lineHeight:1.55}}>⏳ <b>{cnt.llega.map(s => s.fullName.split(' ')[0]).join(', ')}</b>: {cnt.llega.length > 1 ? 'entregaron' : 'entregó'}, pero la nota aún no llega a la nube. Normalmente llega sola en segundos. Si en 2 minutos sigue así, que {cnt.llega.length > 1 ? 'abran' : 'abra'} el examen otra vez <b>en el mismo equipo</b>: la nota guardada ahí se reenvía sola.</div>}
+      {cnt.salio.length > 0 && <div style={{marginTop:10, background:'#F6F3EA', borderRadius:12, padding:'10px 13px', fontSize:12.5, fontWeight:700, color:'#55524A'}}>⚠ Salieron sin entregar: <b>{cnt.salio.map(s => s.fullName.split(' ')[0]).join(', ')}</b>. Pueden volver a entrar mientras esté abierto: siguen donde se quedaron.</div>}
+      <div style={{overflowX:'auto', border:'1.5px solid #EFE7D2', borderRadius:12, marginTop:14}}>
+        <table style={{width:'100%', borderCollapse:'collapse', minWidth:620}}>
+          <thead><tr><th style={ecTh}>Alumno</th><th style={ecTh}>Acceso</th>{parts.map(p => <th key={p.key} style={ecTh}>{multi ? p.label : 'Examen'}</th>)}<th style={ecTh}></th></tr></thead>
+          <tbody>{data.map(({ s, c }) => { const acc = A.accOf(s); return (
+            <tr key={s.id}>
+              <td style={ecTd}><div style={{display:'flex', gap:8, alignItems:'center', fontWeight:800, whiteSpace:'nowrap'}}><span style={{width:9, height:9, borderRadius:'50%', background: A.canEnter(s) ? '#2E7D32' : '#C9C2B2', flexShrink:0}}></span>{s.fullName}</div></td>
+              <td style={ecTd}><EcAccSeg v={acc} onSet={v => A.setAcc(s, v)} />{!A.canEnter(s) && <EcAccSub acc={acc} r={A.readyOf(s)} />}</td>
+              {parts.map((p, i) => <td key={p.key} style={ecTd}>{chip(c[i] || { k: 'no' })}</td>)}
+              <td style={{...ecTd, textAlign:'right'}}>{window.EcVerExamen && <EcVerExamen exam={exam} student={s} group={group} rindio={c.some(x => x.k === 'ok' || x.k === 'llega')} />}</td>
+            </tr>); })}</tbody>
+        </table>
+      </div>
+      {abrir && <EcAbrirModal exam={exam} group={group} defTo={(ann && (esDia2 ? (ann.p2to || ann.to) : ann.to)) || ''} entran={members.filter(A.canEnter).length} total={members.length} onClose={() => setAbrir(false)} onOpen={(iso) => { let w = win; if (!w) { X.createWindow({ examId: exam.id, groupId: group.id, isOpen: false }); w = X.windowForExamGroup(exam.id, group.id); } if (w) X.setWindowOpen(w.id, true); F.setAnn(group.id, mid, { examId: exam.id, forceClosed: false, closedOn: null, openedAt: new Date().toISOString(), openUntil: iso }); setAbrir(false); onChange(); }} />}
     </div>
   );
 }
@@ -457,19 +644,20 @@ function EcModResults({ group, module, members, onChange }) {
    * intentos no responde (RLS/anon), el panel igual muestra las notas — nunca un falso 0. */
   const retW = F.getRet ? F.getRet(group.id, module.id) : null;
   const desdeW = F.examDesde ? F.examDesde(exam) : null;
+  const desdeOf = s => (F.desdePara ? F.desdePara(exam, group.id, s.id) : desdeW);   /* NUEVA-NOTA-V1 */
   const progOf = s => { try {
     const comp = (D.getStudentProgress(s.id) || {}).completed || {};
     const ks = Object.keys(comp).filter(k => k.indexOf('exam-' + exam.id + ':') === 0);
     const rws = ks.map(k => ({ score: (comp[k] || {}).score, date: (comp[k] || {}).date, part: F.canonPart ? F.canonPart(exam, k.split(':').slice(1).join(':')) : k.split(':').slice(1).join(':') })).filter(r => typeof r.score === 'number');
     if (!rws.length) return null;
-    const of = F.notaOficialPartes ? F.notaOficialPartes(rws, retW, desdeW) : F.notaOficial(rws, retW, desdeW);
+    const of = F.notaOficialPartes ? F.notaOficialPartes(rws, retW, desdeOf(s)) : F.notaOficial(rws, retW, desdeOf(s));
     return of ? { score: of.score, created_at: of.date, fromProgress: true, _n: of.intentos, _recu: of.isRecovery, _partes: of.partes, _totalPartes: of.totalPartes, _detalle: of.detalle } : null;
   } catch (e) { return null; } };
   const list = members.map(s => {
     const rs = by[s.id] || [];
     /* Nota oficial: su PRIMER intento (o el de su recuperación autorizada). Nunca la mejor
      * ni el promedio de dos intentos — 23-ago-2026. */
-    const of = (rs.length && F.notaOficialPartes) ? F.notaOficialPartes(rs.map(r => ({ score: r.score, date: r.created_at, part: F.canonPart ? F.canonPart(exam, r.activity_id) : r.activity_id })), retW, desdeW) : null;
+    const of = (rs.length && F.notaOficialPartes) ? F.notaOficialPartes(rs.map(r => ({ score: r.score, date: r.created_at, part: F.canonPart ? F.canonPart(exam, r.activity_id) : r.activity_id })), retW, desdeOf(s)) : null;
     let best = of ? Object.assign({}, rs.find(r => r.created_at === of.date) || rs[0], { score: of.score, _n: of.intentos, _recu: of.isRecovery, _sinPermiso: of.sinPermiso, _detalle: of.detalle, _totalPartes: of.totalPartes }) : null;
     const pr = progOf(s);
     if (!best && pr) best = pr;
@@ -756,4 +944,36 @@ function EcRetRow({ x, group, module, exam, win, min, pendiente, onChange }) {
   );
 }
 
-Object.assign(window, { ExamsCenter, EcModResults });
+/* 🔁 NUEVA-NOTA-V1 · “Estos alumnos ya dieron este examen — ¿lo dan de nuevo?” */
+function EcRetakeAsk({ exam, askR, setAskR, onYes, onNo }) {
+  const sel = askR.sel || [];
+  const toggle = id => setAskR(Object.assign({}, askR, { sel: sel.includes(id) ? sel.filter(x => x !== id) : sel.concat([id]) }));
+  const fecha = x => x.today ? 'hoy' : new Date(x.date).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' });
+  return (
+    <div onClick={() => setAskR(null)} style={{position:'fixed', inset:0, background:'rgba(20,16,8,.5)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
+      <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:16, maxWidth:460, width:'100%', maxHeight:'88vh', overflow:'auto', boxShadow:'0 12px 40px rgba(0,0,0,.25)'}}>
+        <div style={{padding:'16px 18px 10px'}}>
+          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:17}}>🔁 {askR.ya.length === 1 ? '1 alumno ya dio' : askR.ya.length + ' alumnos ya dieron'} este examen</div>
+          <div style={{fontSize:12.5, color:'#555', fontWeight:600, lineHeight:1.55, marginTop:4}}>Al abrir <b>{exam.title}</b>, todo el grupo lo da. Marca a quienes dejas darlo <b>de nuevo</b>: su nota anterior deja de contar y lo que saquen ahora será su <b>nota nueva</b>. A los que no marques se les queda su nota.</div>
+        </div>
+        <div style={{padding:'0 18px', display:'grid', gap:6}}>
+          {askR.ya.map(x => (
+            <label key={x.student.id} className="check-row" style={{margin:0, display:'flex', alignItems:'center', gap:9, border:'1.5px solid ' + (sel.includes(x.student.id) ? '#F0C46C' : 'var(--border)'), background: sel.includes(x.student.id) ? '#FFF8E8' : '#fff', borderRadius:10, padding:'8px 11px', cursor:'pointer'}}>
+              <input type="checkbox" checked={sel.includes(x.student.id)} onChange={() => toggle(x.student.id)} />
+              <span style={{flex:1, fontWeight:800, fontSize:13}}>{x.student.fullName}</span>
+              <span style={{fontSize:11.5, fontWeight:800, color:'#77746B'}}>{x.score != null ? x.score + '/100 · ' : ''}{fecha(x)}</span>
+            </label>
+          ))}
+          {askR.ya.some(x => x.today) && <div className="settings-hint" style={{margin:'2px 0 0'}}>Los que lo dieron <b>hoy</b> salen sin marcar: seguramente es este mismo examen.</div>}
+        </div>
+        <div style={{display:'flex', gap:8, flexWrap:'wrap', padding:'14px 18px 16px'}}>
+          <button className="btn-save" onClick={() => onYes(sel)} disabled={!sel.length}>✅ Sí, que lo den de nuevo ({sel.length})</button>
+          <button className="att-btn" onClick={onNo}>No, se quedan con su nota</button>
+          <button className="att-btn" onClick={() => setAskR(null)} style={{marginLeft:'auto'}}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { ExamsCenter, EcModResults, EcRetakeAsk });

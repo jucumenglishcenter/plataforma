@@ -100,10 +100,48 @@
   function base(v) { const l = v.toLowerCase(); if (/ies$/.test(l)) return l.slice(0, -3) + 'y'; if (/(ss|sh|ch|x|o)es$/.test(l)) return l.slice(0, -2); if (/s$/.test(l) && !/ss$/.test(l)) return l.slice(0, -1); return l; }
   function past(v) { const l = v.toLowerCase(); if (IRR[l]) return IRR[l]; const b = base(l); if (/e$/.test(b)) return b + 'd'; if (/[^aeiou]y$/.test(b)) return b.slice(0, -1) + 'ied'; if (/^[^aeiou]*[aeiou][^aeiouwxy]$/.test(b)) return b + b.slice(-1) + 'ed'; return b + 'ed'; }
   function subjLen(t) { return DET.test(t[0]) ? 2 : 1; }
+  /* DOCSETS-FIX-V2 (23-oct) · Formas que TAMBIÉN valen al unir con and/but/or, sin repetir el sujeto (ni el verbo).
+   * Caso real 22-oct: “Tomás sees a ship. He sees a bridge. (and)” → “Tomás sees a ship and a bridge.” salía ✘. */
+  const PRON = /^(he|she|it|they|we|you|i)$/i;
+  const ABBR = /\b(Mr|Mrs|Ms|Dr|St|Sr|Sra|Srta)\.(?=\s)/g;
+  function sentSplit(q) { return String(q || '').trim().replace(ABBR, '$1\u00a7').split(/(?<=[.!?])\s+/).map(s => s.replace(/\u00a7/g, '.')); }
+  function subjOf(t) { if (!t.length) return 0; if (PRON.test(t[0])) return 1; if (DET.test(t[0])) return Math.min(2, t.length); let k = 0; while (k < t.length && /^[A-ZÁÉÍÓÚÑ]/.test(t[k])) k++; return Math.max(1, k); }
+  function combineAlts(q, cue) {
+    const w = String(cue || '').toLowerCase().split(/[\s(]/)[0]; if (!w) return [];
+    const parts = sentSplit(q); if (parts.length !== 2) return [];
+    const A = parts[0].replace(/[.!?]+$/, '').trim(), B = parts[1].replace(/[.!?]+$/, '').trim();
+    const a = A.split(/\s+/), b = B.split(/\s+/), la = a.map(x => x.toLowerCase()), lb = b.map(x => x.toLowerCase());
+    const out = []; const add = rest => { if (rest.length) out.push(A + (w === 'but' || w === 'so' ? ', ' : ' ') + w + ' ' + rest.join(' ') + '.'); };
+    add(lc1(B).split(/\s+/));
+    if (!/^(and|but|or)$/.test(w)) return out;
+    const sa = subjOf(a), sb = subjOf(b);
+    let co = sa === sb && la.slice(0, sa).join(' ') === lb.slice(0, sb).join(' ');
+    if (!co && sb === 1 && PRON.test(b[0])) { const p = lb[0], head = la[sa - 1] || '';
+      co = /^(he|she|it)$/.test(p) ? !/^(i|we|you|they)$/.test(la[0]) : p === 'they' ? (la[0] === 'they' || (/s$/.test(head) && !/(ss|us|is|ás|és)$/.test(head))) : p === la[0]; }
+    if (!co) return out;
+    add(b.slice(sb));                                          // “… and sees a bridge.”
+    if (lb[sb] && lb[sb] === la[sa]) add(b.slice(sb + 1));     // “… and a bridge.” · “wide and noisy.”
+    return out;
+  }
+  /* Dos oraciones donde se pedía UNA (caso real: “The bus is full.  So they stand…” salía ✔). */
+  function multiSentence(t) { const core = String(t || '').trim().replace(/[.!?…]+["'”’)\]]*\s*$/, '').replace(/\b(Mr|Mrs|Ms|Dr|St|Sr|Sra|Srta)\./gi, '$1'); return /[.!?]\s+\S/.test(core); }
+  function hintFor(set, it) {
+    const c = String(it.cue || '').toLowerCase();
+    if (set.kind === 'combine') return 'Copia las dos oraciones tal cual (revisa cada palabra) y únelas con «' + c.split(/[\s(]/)[0] + '».';
+    if (set.kind === 'change') {
+      if (/^past/.test(c)) return 'Pasa el verbo a pasado (walk → walked · stop → stopped · see → saw) y copia lo demás igual.';
+      if (/^question/.test(c)) return 'Para preguntar: Is/Are + el resto + ? · o Do/Does + verbo sin -s + ?';
+      if (/^negative/.test(c)) return 'Negativo: is not / are not · does not / do not + verbo sin -s.';
+      if (/^singular/.test(c)) return 'En singular el verbo lleva -s (A ticket costs…).';
+      if (/^plural/.test(c)) return 'En plural el verbo va sin -s (The houses are…).';
+      return 'Cambia solo lo que pide la palabra y copia lo demás igual.';
+    }
+    return '';
+  }
   function propose(kind, q, cue) {
     const c = String(cue || '').toLowerCase();
     if (kind === 'combine') {
-      const parts = q.split(/(?<=[.!?])\s+/); if (parts.length !== 2) return '';
+      const parts = sentSplit(q); if (parts.length !== 2) return '';
       const a = parts[0].replace(/[.!?]$/, ''), b = lc1(parts[1].replace(/[.!?]$/, ''));
       const w = c.split(/\s/)[0]; if (!w) return '';
       return (w === 'so' || w === 'but' ? a + ', ' + w + ' ' + b : a + ' ' + w + ' ' + b) + '.';
@@ -128,7 +166,7 @@
   /* ── corrección ── */
   const PLACE = /\b(in|at|on|near|next|under|behind|to|from|inside|outside|by|between|home|there|here|around|into|across|in front of)\b/;
   const TIME = /\b(morning|afternoon|evening|night|today|yesterday|tomorrow|at|in|on|every|after|before|o'clock|oclock|am|pm|monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|day|month|year|now|later|soon|early|late|always|usually|sometimes)\b/;
-  const HOW = /(\w{3,}ly\b|\b(a lot|with|fast|well|hard|loud|quiet|happy|together|alone)\b)/;
+  const HOW = /(\w{3,}ly\b|\b(a lot|with|like|fast|well|hard|loud|quiet|happy|together|alone)\b)/;
   function warnings(txt, key) {
     const t = String(txt).trim(), d = []; if (!t) return d;
     if (t[0] !== t[0].toUpperCase()) d.push('empieza con mayúscula');
@@ -140,6 +178,8 @@
   }
   function grade(set, i, txt) {
     const it = set.items[i]; if (!String(txt || '').trim()) return { r: 'blank' };
+    if (set.grade !== 'manual' && multiSentence(txt) && !multiSentence(set.grade === 'rule' ? it.q : it.key))
+      return { r: 'bad', h: set.kind === 'combine' ? 'Une las dos en UNA sola oración: sin punto en el medio.' : set.grade === 'rule' ? 'Agrega la información a la MISMA oración (sin punto en el medio).' : 'Escribe UNA sola oración (sin punto en el medio).' };
     if (set.grade === 'rule') {
       const b = words(it.q), a = words(txt), keep = b.every((w, k) => a[k] === w), add = a.length - b.length, extra = a.slice(b.length).join(' ');
       const cue = String(it.cue || '').toLowerCase(); const re = /where/.test(cue) ? PLACE : /when/.test(cue) ? TIME : /how/.test(cue) ? HOW : null;
@@ -148,11 +188,20 @@
       return { r: 'bad', h: !keep ? 'Conserva la oración «' + it.q.replace(/[.!?]$/, '') + '» y agrégale información al final.' : 'Agrega información que responda ' + (it.ces || it.cue) + '.' };
     }
     if (set.grade === 'manual') return { r: 'rev' };
-    const keys = [it.key].concat(it.also || []).filter(Boolean).map(norm);
+    const keys = [it.key].concat(it.also || [], set.kind === 'combine' ? combineAlts(it.q, it.cue) : []).filter(Boolean).map(norm);
     if (keys.includes(norm(txt))) { const w = warnings(txt, it.key); return w.length ? { r: 'okd', d: w.join(' y ') } : { r: 'ok' }; }
     const cw = String(it.cue || '').toLowerCase().split(/\s/)[0];
     if (set.kind === 'combine' && cw && !words(txt).includes(cw)) return { r: 'bad', h: 'Usa la palabra «' + cw + '».' };
-    return { r: 'bad', h: '' };
+    return { r: 'bad', h: hintFor(set, it) };
+  }
+  /* Corrección que solo SUBE (DOCSETS-FIX-V2): si el corrector mejoró, lo que salió ✘ y ahora vale se corrige.
+   * Nunca baja una nota ni toca lo que el teacher decidió a mano (ans.tch). Solo nota exacta (Combine/Change). */
+  function upgrade(set, ans) {
+    if (!set || set.grade !== 'exact' || !ans || !Array.isArray(ans.res)) return { ans, changed: 0 };
+    const res = ans.res.slice(), fb = (ans.fb || []).slice(), tch = ans.tch || {}; let changed = 0;
+    (ans.ans || []).forEach((t, i) => { if (res[i] !== 'bad' || tch[i] || !set.items[i] || !String(t || '').trim()) return;
+      const g = grade(set, i, t); if (g.r === 'ok' || g.r === 'okd') { res[i] = g.r; fb[i] = g.d || ''; changed++; } });
+    return changed ? { ans: Object.assign({}, ans, { res, fb }), changed } : { ans, changed: 0 };
   }
   const pts = r => (r === 'ok' || r === 'okd' || r === 'rev') ? 1 : 0;
   function score(set, res) { const n = set.items.length || 1; let s = 0; for (let i = 0; i < n; i++) s += pts(res[i]); return Math.round(s / n * 100); }
@@ -173,6 +222,25 @@
     try { const r = await c.from('assignments').select('id,group_id,target_student_ids,title,description,due_at,xp,created_at').eq('group_id', gid); if (r.error) return null;
       return (r.data || []).map(x => ({ id: x.id, groupId: x.group_id, targetStudentIds: x.target_student_ids || [], title: x.title, description: x.description, dueAt: x.due_at, xp: x.xp, date: x.created_at })); } catch (e) { return null; }
   }
+  /* La fila del alumno en la nube (para retomar en otro equipo). undefined = no se pudo consultar · null = no hay. */
+  async function fetchMine(aid, sid) {
+    const c = SB(); if (!c) return undefined;
+    try { const r = await c.from('submissions').select('*').eq('assignment_id', aid).eq('student_id', sid).limit(1); if (r.error) return undefined; return (r.data && r.data[0]) || null; } catch (e) { return undefined; }
+  }
+  /* Guarda en la nube la corrección que sube (la llama el panel del teacher al abrir Resultados). */
+  async function persistUpgrade(a, set, row, notify) {
+    const z = unpack(row && row.text); if (!z) return null; const u = upgrade(set, z); if (!u.changed) return null;
+    const c = SB(); if (!c) return null; const draft = row.status === 'draft', ans = u.ans;
+    let patchRow;
+    if (draft) patchRow = { text: packAns(ans) };
+    else { ans.grade = score(set, ans.res); patchRow = { text: packAns(ans), grade: ans.grade, feedback: 'Revisamos tus respuestas: ' + u.changed + ' estaba' + (u.changed > 1 ? 'n' : '') + ' bien. Tu nota es ' + ans.grade + '/100.', graded_at: new Date().toISOString() }; }
+    try { const r = await c.from('submissions').update(patchRow).eq('id', row.id); if (r.error) return null; } catch (e) { return null; }
+    if (!draft) {
+      try { const k = 'jucum_submissions_v1'; const subs = JSON.parse(localStorage.getItem(k) || '{}'); const cur = (subs[a.id] || {})[row.student_id]; if (cur) { subs[a.id][row.student_id] = Object.assign({}, cur, { text: patchRow.text, grade: patchRow.grade, feedback: patchRow.feedback, gradedAt: patchRow.graded_at }); localStorage.setItem(k, JSON.stringify(subs)); } } catch (e) {}
+      if (notify && window.JUCUM_NOTIF) { try { window.JUCUM_NOTIF.pushNotif(row.student_id, { type: 'assignment', title: '✅ Revisamos tus respuestas', body: '“' + a.title + '”: ' + u.changed + ' respuesta' + (u.changed > 1 ? 's estaban' : ' estaba') + ' bien. Tu nota ahora es ' + ans.grade + '/100.', link: 'tasks' }); } catch (e) {} }
+    }
+    return Object.assign({}, row, patchRow);
+  }
   async function saveDraft(aid, sid, ans) {
     const S = window.JUCUM_SYNC; if (!S || !S.pushSubmission) return false;
     try { const r = await S.pushSubmission(aid, sid, { id: 'sub-ds-' + aid.slice(-8) + '-' + String(sid).slice(0, 8), submittedAt: new Date().toISOString(), text: packAns(ans), attachments: [], status: 'draft' }); return !r || r.ok !== false; } catch (e) { return false; }
@@ -187,7 +255,7 @@
   }
   /* El teacher cambia la nota de un ejercicio (✔ Está bien / ✘ Corregir / Dar por buena) */
   async function setItemResult(a, set, sid, row, i, r) {
-    const ans = unpack(row && row.text) || { ans: [], res: [] }; ans.res = ans.res || []; ans.res[i] = r; ans.grade = score(set, ans.res);
+    const ans = unpack(row && row.text) || { ans: [], res: [] }; ans.res = ans.res || []; ans.res[i] = r; ans.tch = Object.assign({}, ans.tch || {}, { [i]: r }); ans.grade = score(set, ans.res);
     const text = packAns(ans), g = ans.grade, fb = nRev(ans.res) ? 'Nota provisional: aún hay respuestas por revisar.' : 'Tu profe revisó tus respuestas.';
     const c = SB(); if (c) { try { await c.from('submissions').upsert({ id: (row && row.id) || ('sub-ds-' + Date.now()), assignment_id: a.id, student_id: sid, submitted_at: (row && row.submitted_at) || new Date().toISOString(), text, attachments: [], status: 'graded', grade: g, feedback: fb, graded_at: new Date().toISOString() }, { onConflict: 'assignment_id,student_id' }); } catch (e) {} }
     try { const k = 'jucum_submissions_v1'; const subs = JSON.parse(localStorage.getItem(k) || '{}'); subs[a.id] = subs[a.id] || {}; subs[a.id][sid] = Object.assign({}, subs[a.id][sid] || { id: row && row.id, submittedAt: row && row.submitted_at, attachments: [] }, { text, status: 'graded', grade: g, feedback: fb, gradedAt: new Date().toISOString() }); localStorage.setItem(k, JSON.stringify(subs)); } catch (e) {}
@@ -213,5 +281,27 @@
   }
   const trUrl = q => 'https://translate.google.com/?sl=en&tl=es&op=translate&text=' + encodeURIComponent(q);
 
-  window.JUCUM_DOCSETS = { detect, merge, propose, meta, isDocset, isClass, describe, liveState, grade, score, nRev, warnings, norm, packAns, unpack, fetchSubs, fetchGroupTasks, saveDraft, finalize, setItemResult, closeDrafts, patch, notifyGroup, trUrl, cueEs };
+  /* ── Dentro del plan del día (pedido 22-oct, DOCSETS-FIX-V2): el set 🏫 entra a la lista de actividades de ese día
+   * y se reordena con ▲▼. ds.after = id del bloque del plan tras el que va ('__start' = antes del primero; sin valor
+   * = al final) · ds.ord = orden entre sets del mismo hueco. ── */
+  function classDays(gid) { const T = window.JUCUM_TASKS, o = {}; if (!T) return o; T.getAssignments().forEach(a => { if (a.groupId !== gid) return; const m = meta(a); if (m && m.mode === 'class' && m.planDate) (o[m.planDate] = o[m.planDate] || []).push(a); }); return o; }
+  function classForDay(gid, date) { return classDays(gid)[date] || []; }
+  function seq(blocks, list) {
+    const B = blocks || [], ids = B.map(b => b.id);
+    const slot = a => { const af = (meta(a) || {}).after; return af === '__start' ? -1 : (ids.indexOf(af) >= 0 ? ids.indexOf(af) : ids.length - 1); };
+    const sets = (list || []).slice().sort((p, q) => slot(p) - slot(q) || (+(meta(p) || {}).ord || 0) - (+(meta(q) || {}).ord || 0) || String((meta(p) || {}).step).localeCompare(String((meta(q) || {}).step), undefined, { numeric: true }) || String(p.title).localeCompare(String(q.title)));
+    const out = [], put = k => sets.forEach(a => { if (slot(a) === k) out.push({ t: 's', a }); });
+    put(-1); B.forEach((b, k) => { out.push({ t: 'b', b }); put(k); });
+    return out;
+  }
+  /* ▲▼: mueve un set un lugar (salta bloques u otros sets) y devuelve [{a, after, ord}] de los que cambian. */
+  function reorder(blocks, list, aid, dir) {
+    const s = seq(blocks, list), k = s.findIndex(o => o.t === 's' && o.a.id === aid), j = k + dir; if (k < 0 || j < 0 || j >= s.length) return [];
+    const t = s[k]; s[k] = s[j]; s[j] = t;
+    let last = '__start', n = 0; const out = [];
+    s.forEach(o => { if (o.t === 'b') { last = o.b.id; return; } const m = meta(o.a) || {}; n++; if (m.after !== last || +m.ord !== n) out.push({ a: o.a, after: last, ord: n }); });
+    return out;
+  }
+
+  window.JUCUM_DOCSETS = { detect, merge, propose, meta, isDocset, isClass, describe, liveState, grade, score, nRev, warnings, norm, packAns, unpack, fetchSubs, fetchMine, fetchGroupTasks, saveDraft, finalize, setItemResult, closeDrafts, patch, notifyGroup, trUrl, cueEs, combineAlts, multiSentence, upgrade, persistUpgrade, classDays, classForDay, seq, reorder };
 })();

@@ -165,8 +165,16 @@
   }
   /* DIA-PERU-V1: día Perú de una nota (un examen rendido a las 8 PM del último día de la recuperación contaba como del día siguiente) */
 function rDay(x) { if (!x) return ''; if (/^\d{4}-\d{2}-\d{2}$/.test(String(x))) return String(x); var t = Date.parse(x); return isFinite(t) ? pDayOf(t) : ''; }
+/* 🔁 NUEVA-NOTA-V1 (23-oct-2026): `desde` puede ser un DÍA ('aaaa-mm-dd', fecha de creación del
+ * examen) o un INSTANTE ISO (la profesora aceptó que el alumno vuelva a dar el examen: todo lo
+ * anterior a ese momento ya no cuenta y su próximo intento es la nota nueva). */
+function despuesDe(x, desde) {
+    if (!desde) return true;
+    if (String(desde).indexOf('T') > 0) { const c = Date.parse(desde), t = Date.parse(x); return !isFinite(c) || (isFinite(t) && t >= c); }
+    return rDay(x) >= desde;
+  }
 function notaOficial(list, ret, desde) {
-    const rows = (list || []).filter(r => r && typeof r.score === 'number' && (!desde || rDay(r.date) >= desde))
+    const rows = (list || []).filter(r => r && typeof r.score === 'number' && despuesDe(r.date, desde))
       .slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
     if (!rows.length) return null;
     const first = rows[0];
@@ -175,6 +183,55 @@ function notaOficial(list, ret, desde) {
     const use = rec || first;
     return { score: use.score, date: use.date, isRecovery: !!rec, intentos: rows.length, primera: first.score, sinPermiso: rows.length - 1 - (rec ? 1 : 0) };
   }
+  /* ── 🔁 NUEVA-NOTA-V1 · “que lo den de nuevo” ──
+   * Al programar / publicar un examen, si alguien del grupo YA lo dio, la profesora decide si
+   * lo vuelve a dar como NOTA NUEVA. Se guarda en ann['<grupo>:fresh:<examId>'].fresh =
+   * {alumno: instante ISO}: lo rendido antes de ese instante deja de contar (no se borra nada)
+   * y su enlace lleva jucum_retry=1 para que el examen no le diga “Ya rendiste”. Vive dentro de
+   * `ann` a propósito: los equipos con código viejo conservan las claves de ann al guardar. */
+  function freshKey(examId) { return 'fresh:' + examId; }
+  function freshFor(exam, groupId, sid) { if (!exam || !groupId || !sid) return null; const a = getAnn(groupId, freshKey(exam.id)); return (a && a.fresh && a.fresh[sid]) || null; }
+  function desdePara(exam, groupId, sid) { return freshFor(exam, groupId, sid) || examDesde(exam); }
+  function setFresh(groupId, examId, sids) {
+    if (!groupId || !examId || !(sids || []).length) return;
+    const now = new Date().toISOString();
+    const a = getAnn(groupId, freshKey(examId)) || {};
+    const f = Object.assign({}, a.fresh || {});
+    sids.forEach(function (s) { f[s] = now; });
+    setAnn(groupId, freshKey(examId), { fresh: f, examId: examId });
+  }
+  function retryQs(exam, student) { return (student && freshFor(exam, student.group, student.id)) ? '&jucum_retry=1' : ''; }
+  /* ¿Quiénes del grupo YA dieron este examen (después de su último “de nuevo”)?
+   * Nube (diagnostic_attempts) + registro de práctica de este equipo + notas a mano. */
+  async function yaRindieron(exam, groupId, members) {
+    const X = window.JUCUM_EXAMS, D = window.JUCUM_DATA, out = {};
+    if (!exam || /^ex-m1forms-/.test(exam.id) || !(members || []).length) return [];
+    const slugs = (exam.parts || []).map(function (p) { return ((String(p.url || '').match(/\/(m\d+)\/examen/) || [])[1]); }).filter(Boolean);
+    const add = function (sid, date, score) {
+      if (!sid || !date || !despuesDe(date, desdePara(exam, groupId, sid))) return;
+      const o = out[sid]; if (!o || String(date) < String(o.date)) out[sid] = { date: date, score: score };
+    };
+    try {
+      const sb = window.JUCUM_SB && window.JUCUM_SB.getClient();
+      if (sb) {
+        const res = await Promise.race([
+          sb.from('diagnostic_attempts').select('user_id,score,created_at,module_id,activity_id').in('user_id', members.map(function (s) { return s.id; })).order('created_at', { ascending: true }).limit(1000),
+          new Promise(function (r) { setTimeout(function () { r({ data: [] }); }, 10000); }),
+        ]);
+        ((res && res.data) || []).forEach(function (r) { if (r.module_id === 'exam-' + exam.id || slugs.some(function (sl) { return r.activity_id === 'examen-' + sl; })) add(r.user_id, r.created_at, r.score); });
+      }
+    } catch (e) {}
+    try {
+      members.forEach(function (s) {
+        const comp = ((D && D.getStudentProgress && D.getStudentProgress(s.id)) || {}).completed || {};
+        Object.keys(comp).forEach(function (k) { if (k.indexOf('exam-' + exam.id + ':') === 0 && typeof (comp[k] || {}).score === 'number') add(s.id, comp[k].date, comp[k].score); });
+      });
+      const w = X && X.windowForExamGroup ? X.windowForExamGroup(exam.id, groupId) : null;
+      Object.keys((w && w.results) || {}).forEach(function (sid) { const r = w.results[sid]; if (r && typeof r.grade === 'number') add(sid, r.gradedAt, r.grade); });
+    } catch (e) {}
+    return members.filter(function (s) { return out[s.id]; }).map(function (s) { return { student: s, date: out[s.id].date, score: out[s.id].score, today: pDayOf(out[s.id].date) === pDay() }; });
+  }
+
   function getRet(groupId, moduleId) { return load().ret[groupId + ':' + moduleId] || null; }
   function setRet(groupId, moduleId, patch) {
     const flow = load(); const k = groupId + ':' + moduleId;
@@ -281,20 +338,50 @@ function notaOficial(list, ret, desde) {
     const X = window.JUCUM_EXAMS; if (!X || !w) return null;
     const exam = X.getExam(w.examId); if (!exam) return null;
     for (const mid of (exam.moduleIds || [])) { const a = getAnn(w.groupId, mid); if (a) return Object.assign({ moduleId: mid }, a); }
+    /* examen suelto (el final): su anuncio vive en 'exam:<id>' — antes no se encontraba */
+    const s = getAnn(w.groupId, 'exam:' + exam.id); if (s) return Object.assign({ moduleId: 'exam:' + exam.id }, s);
     return null;
   }
+  /* 🧩 PANEL-UNICO-V1 (24-oct-2026): la Parte 2 del final va SEGUIDA (mismo horario, el examen
+   * pasa solo de la Parte 1 a la 2) u OTRO DÍA (ann.p2mode='otro' + p2date/p2from/p2to).
+   * “▶ Abrir ahora” guarda ann.openUntil: se cierra solo a esa hora — nada queda abierto. */
+  function annFin(ann) { if (!ann || !ann.date) return null; if (ann.p2mode === 'otro' && ann.p2date) return ann.p2date > ann.date ? ann.p2date : ann.date; return ann.dateTo || ann.date; }
+  function enFechaAnn(ann, hoy) {
+    if (!ann || !ann.date) return false;
+    if (ann.p2mode === 'otro' && ann.p2date) return hoy === ann.date || hoy === ann.p2date;
+    return hoy >= ann.date && hoy <= (ann.dateTo || ann.date);
+  }
+  function enHorario(ann, hoy) {
+    const min = pMin();
+    if (ann.p2mode === 'otro' && ann.p2date && hoy === ann.p2date && hoy !== ann.date) return min >= hm(ann.p2from || ann.from, 0) && min <= hm(ann.p2to || ann.to, 1439);
+    return min >= hm(ann.from, 0) && min <= hm(ann.to, 1439);
+  }
+  function abiertoAhoraHasta(ann) { return !!(ann && ann.openedAt && ann.openUntil && pDayOf(ann.openedAt) === pDay()); }
   function winEffectiveOpen(w) {
     if (!w) return false;
     const ann = annForWindow(w);
     if (ann && ann.forceClosed) return false;
-    if (w.isOpen) { if (w.closesAt && new Date(w.closesAt) < new Date()) return false; return true; }
+    if (ann && ann.closedOn && ann.closedOn === pDay()) return false;   /* PANEL-UNICO-V1: “Cerrar ahora” vale solo HOY */
+    if (abiertoAhoraHasta(ann)) return Date.now() < Date.parse(ann.openUntil);
+    if (w.isOpen) {
+      if (w.closesAt && new Date(w.closesAt) < new Date()) return false;
+      /* 🔒 NUEVA-NOTA-V1 (23-oct, caso Camila): “Abrir / Publicar ahora” vale SOLO para el día
+       * programado (o el día en que se abrió a mano). Antes quedaba abierto para siempre: el
+       * examen del M3 abierto el 21-ago seguía apareciéndole al grupo el día del examen final. */
+      if (ann && (ann.date || ann.openedAt)) {
+        const hoy = pDay();
+        const enFecha = enFechaAnn(ann, hoy);
+        const abiertoHoy = !!ann.openedAt && pDayOf(ann.openedAt) === hoy;
+        if (!enFecha && !abiertoHoy) return false;
+      }
+      return true;
+    }
     if (ann && ann.auto !== false && ann.date) {
       /* 📅 23-ago-2026: el examen puede durar VARIOS días (ann.dateTo). Cada día del rango se
        * abre en el mismo horario; sin dateTo se comporta igual que antes (un solo día). */
-      const hoy = pDay(), fin = ann.dateTo || ann.date;
-      if (hoy < ann.date || hoy > fin) return false;
-      const min = pMin();
-      return min >= hm(ann.from, 0) && min <= hm(ann.to, 1439);
+      const hoy = pDay();
+      if (!enFechaAnn(ann, hoy)) return false;
+      return enHorario(ann, hoy);
     }
     return false;
   }
@@ -325,13 +412,18 @@ function notaOficial(list, ret, desde) {
     const isForms = /^ex-m1forms-/.test(exam.id);
     const win = X.windowForExamGroup(exam.id, student.group);
     const ann = getAnn(student.group, mod.id);
-    const res = (win && win.published) ? (win.results || {})[student.id] : null;
+    const fr = freshFor(exam, student.group, student.id);
+    let res = (win && win.published) ? (win.results || {})[student.id] : null;
+    if (res && fr && !despuesDe(res.gradedAt, fr)) res = null;   /* la profesora aceptó que lo dé de nuevo */
     if (res) return { phase: 'done', exam: exam, win: win, ann: ann, result: res, isForms: isForms };
     if (isForms) return { phase: 'none' };                       // Forms sin nota propia: nada que mostrar
     const r = D.getStudentReadiness(student);
     const overridden = !!(win && (win.allowOverrides || []).includes(student.id));
-    const canTake = r.apt || overridden || !!(ann && ann.free);
+    /* ⏸ PANEL-UNICO-V1: la profesora puede PAUSAR el acceso de un alumno a este examen */
+    const paused = !!(ann && (ann.paused || []).includes(student.id));
+    const canTake = !paused && (r.apt || overridden || !!(ann && ann.free));
     const open = winEffectiveOpen(win);
+    let linkPi = 0;
     const link = (function () {
       /* 🧩 23-ago-2026: con examen de varias partes (final día 1/día 2), el botón lleva a la
        * PRIMERA parte que el alumno aún no rindió — antes siempre abría el día 1. */
@@ -341,17 +433,35 @@ function notaOficial(list, ret, desde) {
       let p = null, pi = 0;
       for (let i = 0; i < ps.length; i++) {
         const act = (ps[i].competency || 'p') + (i > 0 ? '-p' + (i + 1) : '');
-        if (!comp['exam-' + exam.id + ':' + act]) { p = ps[i]; pi = i; break; }
+        const e0 = comp['exam-' + exam.id + ':' + act];
+        if (!e0 || (fr && !despuesDe(e0.date, fr))) { p = ps[i]; pi = i; break; }
       }
       if (!p) { p = ps[ps.length - 1]; pi = ps.length - 1; }
-      let href = X.examPartLink(p, exam.id, student.id, pi);
-      if (ann && /^(kids|adults)$/.test(ann.variant || '')) href += '&jucum_variant=' + encodeURIComponent(ann.variant);
+      linkPi = pi;
+      const vq = (ann && /^(kids|adults)$/.test(ann.variant || '')) ? '&jucum_variant=' + encodeURIComponent(ann.variant) : '';
+      let href = X.examPartLink(p, exam.id, student.id, pi) + vq;
+      /* ➡️ PANEL-UNICO-V1: la página de la Parte 1 ofrece la Parte 2 al entregar (seguida) o
+       * dice cuándo es (otro día) — el alumno ya no vuelve a la plataforma a buscarla. */
+      if (ps.length > 1 && pi === 0) {
+        if (ann && ann.p2mode === 'otro' && ann.p2date) href += '&jucum_p2when=' + encodeURIComponent(fmtFecha(ann.p2date) + (ann.p2from ? ', ' + fmtHora(ann.p2from) : ''));
+        else {
+          href += '&jucum_next=' + encodeURIComponent(X.examPartLink(ps[1], exam.id, student.id, 1) + vq);
+          const cierre = abiertoAhoraHasta(ann) ? new Date(Date.parse(ann.openUntil) - 5 * 3600000).toISOString().slice(11, 16) : (ann && ann.to) || '';
+          if (cierre) href += '&jucum_close=' + encodeURIComponent(cierre);
+        }
+      }
       return href;
     })();
+    /* 📅 Parte 2 “otro día”: quien ya entregó la Parte 1 ve la cuenta regresiva a la Parte 2 */
+    if (linkPi >= 1 && ann && ann.p2mode === 'otro' && ann.p2date && pDay() < ann.p2date) {
+      const a2 = Object.assign({}, ann, { date: ann.p2date, dateTo: null, from: ann.p2from || ann.from, to: ann.p2to || ann.to });
+      return { phase: 'announced', exam: exam, win: win, ann: a2, r: r, canTake: canTake, days: daysTo(ann.p2date), isToday: false, parte2: true };
+    }
+    if (open && paused) return { phase: 'announced', exam: exam, win: win, ann: ann, r: r, canTake: false, paused: true, days: 0, isToday: true };
     if (open && canTake) return { phase: 'today', exam: exam, win: win, ann: ann, r: r, canTake: true, link: link, days: 0 };
     if (ann && ann.date) {
       const d = daysTo(ann.date);
-      const dFin = daysTo(ann.dateTo || ann.date);
+      const dFin = daysTo(annFin(ann) || ann.date);
       if (d >= 0 && !open) return { phase: 'announced', exam: exam, win: win, ann: ann, r: r, canTake: canTake, days: d, isToday: d === 0 };
       if (open && !canTake) return { phase: 'announced', exam: exam, win: win, ann: ann, r: r, canTake: false, days: 0, isToday: true };
       if (dFin >= 0 && !open) return { phase: 'announced', exam: exam, win: win, ann: ann, r: r, canTake: canTake, days: 0, isToday: true };   // dentro del rango, fuera del horario de hoy
@@ -466,7 +576,9 @@ function notaOficial(list, ret, desde) {
     getAnn: getAnn, setAnn: setAnn, getPre: getPre, setPre: setPre,
     isPreexamActivity: isPreexamActivity, preOpenNow: preOpenNow, preexamVisibleFor: preexamVisibleFor,
     annForWindow: annForWindow, winEffectiveOpen: winEffectiveOpen, infoForModule: infoForModule,
+    annFin: annFin, enFechaAnn: enFechaAnn, abiertoAhoraHasta: abiertoAhoraHasta,
     registerM1Forms: registerM1Forms, formsWindowFor: formsWindowFor, eventsForDay: eventsForDay, hydrate: hydrate,
+    despuesDe: despuesDe, freshFor: freshFor, desdePara: desdePara, setFresh: setFresh, retryQs: retryQs, yaRindieron: yaRindieron,
     getCfg: getCfg, setCfg: setCfg, minGradeFor: minGradeFor, notaOficial: notaOficial, notaOficialPartes: notaOficialPartes, examDesde: examDesde, partesDeExamen: partesDeExamen, lblParte: lblParte, faltanPartes: faltanPartes, notaExamen: notaExamen, canonPart: canonPart,
     getRet: getRet, setRet: setRet, retActive: retActive, retReqsFor: retReqsFor, retOpenFor: retOpenFor,
     retDias: retDias, retPlan: retPlan, retPlanDone: retPlanDone, retAvanceMin: RET_AVANCE_MIN,
