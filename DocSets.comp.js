@@ -22,6 +22,20 @@ const dsBtn = (on, col) => ({ border: '1.5px solid ' + (on ? col.b : 'var(--bord
 const DS_CLS = { b: '#BA68C8', bg: DS_PURL, c: DS_PUR }, DS_HOME = { b: '#FFB74D', bg: '#FFF3E0', c: '#BF360C' }, DS_NO = { b: '#CFC9B8', bg: '#F2F0EA', c: '#555' };
 function dsActive(s) { const st = String(s.status || '').toLowerCase(); if (['retirado', 'retirada', 'retired', 'inactivo', 'inactiva', 'inactive', 'baja', 'withdrawn'].includes(st)) return false; if (s.closedAt) return false; try { const G = window.JUCUM_GRAD; if (G && G.isGraduated && G.isGraduated(s.id)) return false; } catch (e) {} return true; }
 const dsRoster = (gid) => (window.JUCUM_DATA.STUDENTS || []).filter(s => s.group === gid && dsActive(s));
+/* 👥 TAREAS-ENTREGAS-V1 (26-oct): los alumnos reales traen fullName (no name) → en Resultados salían SIN NOMBRE y
+ * “👁 Ver su actividad” se caía (s.name.split) → la app entera se recargaba en el 📅 Calendario. Nombre SIEMPRE con dsName. */
+const dsName = (s) => String((s && (s.fullName || s.name || s.username)) || '').trim() || 'Alumno sin nombre';
+const dsFirst = (s) => dsName(s).split(/\s+/)[0];
+const dsIni = (s) => dsName(s).split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+/* El grupo de hoy + quien entregó aunque ya no esté en él (cambió de grupo, pausa, egresó) o ya no tenga cuenta: nadie desaparece */
+function dsRosterFor(a, rows) {
+  const all = window.JUCUM_DATA.STUDENTS || [], base = dsRoster(a.groupId), seen = {}; base.forEach(s => { seen[s.id] = 1; });
+  const extra = []; (rows || []).forEach(r => { const id = r && r.student_id; if (!id || seen[id]) return; seen[id] = 1; const s = all.find(x => x.id === id); extra.push(s ? Object.assign({}, s, { _away: true }) : { id, fullName: 'Alumno sin cuenta activa', _away: true, _gone: true }); });
+  return base.concat(extra);
+}
+/* Si la nube no responde: lo guardado en este equipo (antes se quedaba en “Cargando entregas…” para siempre) */
+function dsLocalRows(aid) { try { const subs = (window.JUCUM_TASKS && window.JUCUM_TASKS.submissionsFor(aid)) || {}; const l = Object.keys(subs).map(sid => { const x = subs[sid] || {}; return { id: x.id || null, assignment_id: aid, student_id: sid, status: x.status || 'submitted', text: x.text || '', grade: x.grade != null ? x.grade : null, feedback: x.feedback || null, submitted_at: x.submittedAt || null, _local: true }; }); l._loc = 1; return l; } catch (e) { const l = []; l._loc = 1; return l; } }
+function dsSafe(el, onClose, modal) { const S = window.TaskSafe; return S ? <S onClose={onClose} modal={modal}>{el}</S> : el; }
 function dsPlanEnd(plan) { try { const d = window.JUCUM_DAY.parse(plan.date); const [h, m] = String(plan.startTime || '18:00').split(':').map(Number); d.setHours(h, m || 0, 0, 0); return new Date(d.getTime() + (plan.lengthMin || 60) * 60000); } catch (e) { return new Date(Date.now() + 3600000); } }
 
 /* ═══════════ 1 · REVISIÓN DE LOS SETS (teacher) ═══════════ */
@@ -158,13 +172,13 @@ function DocSetReview({ doc, groupId, fileName, onClose, onDone }) {
 /* ═══════════ 2 · TABLERO / RESULTADOS (teacher) ═══════════ */
 function dsUseSubs(aid, ms) {
   const [rows, setRows] = dsUS(null); const [tick, setTick] = dsUS(0);
-  dsUE(() => { let stop = false; const go = async () => { const r = await DSX().fetchSubs(aid); if (!stop && r) setRows(r); };
+  dsUE(() => { let stop = false; const go = async () => { const r = await DSX().fetchSubs(aid); if (stop) return; if (r) setRows(r); else setRows(p => (p && !p._loc) ? p : dsLocalRows(aid)); };
     go(); const id = ms ? setInterval(() => { if (document.visibilityState !== 'hidden') go(); }, ms) : null; return () => { stop = true; if (id) clearInterval(id); }; }, [aid, ms, tick]);
   return [rows, () => setTick(t => t + 1), setRows];
 }
 function dsRowsBy(rows) { const o = {}; (rows || []).forEach(r => { o[r.student_id] = r; }); return o; }
 function DocSetBoard({ a, ds, onView }) {
-  const X = DSX(); const [rows] = dsUseSubs(a.id, 8000); const by = dsRowsBy(rows); const roster = dsRoster(a.groupId); const n = ds.items.length;
+  const X = DSX(); const [rows] = dsUseSubs(a.id, 8000); const by = dsRowsBy(rows); const roster = dsRosterFor(a, rows); const n = ds.items.length;
   const info = roster.map(s => { const r = by[s.id], z0 = r ? X.unpack(r.text) : null, an = z0 ? X.upgrade(ds, z0).ans : null, res = (an && an.res) || [], k = res.filter(Boolean).length, done = !!(r && r.status !== 'draft');
     const stuck = r && !done && k < n && (Date.now() - new Date(r.submitted_at).getTime()) > 3 * 60000; return { s, r, an, res, k, done, stuck, g: done ? r.grade : null, at: r ? new Date(r.submitted_at).getTime() : 0 }; });
   const sent = info.filter(x => x.done).sort((p, q) => p.at - q.at);
@@ -175,7 +189,7 @@ function DocSetBoard({ a, ds, onView }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: 7 }}>
         {info.map(x => (
           <button key={x.s.id} onClick={() => x.k ? onView(x.s.id) : null} title={x.k ? 'Ver su actividad' : 'Aún no responde'} style={{ textAlign: 'left', border: '1px solid ' + (x.stuck ? '#FFB74D' : 'var(--border)'), background: x.stuck ? '#FFF8E1' : x.done ? '#F5FBF5' : '#FAFAF6', borderRadius: 11, padding: '8px 10px', cursor: x.k ? 'pointer' : 'default', fontFamily: 'inherit', opacity: x.k || x.done ? 1 : .6 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontWeight: 800, fontSize: 13 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.s.name}</span><span style={{ fontSize: 11, color: '#2E7D32' }}>{x.done ? (x.g != null ? x.g + '%' : '✓') : x.k ? x.k + '/' + n : ''}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontWeight: 800, fontSize: 13 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dsName(x.s)}</span><span style={{ fontSize: 11, color: '#2E7D32' }}>{x.done ? (x.g != null ? x.g + '%' : '✓') : x.k ? x.k + '/' + n : ''}</span></div>
             <div style={{ display: 'flex', gap: 3, marginTop: 6 }}>{ds.items.map((it, i) => { const v = x.res[i]; return <i key={i} style={{ flex: 1, height: 7, borderRadius: 4, background: v === 'ok' || v === 'okd' ? '#66BB6A' : v === 'rev' ? '#90CAF9' : v === 'bad' ? '#FFB74D' : '#E3E8F0' }}></i>; })}</div>
             <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--text-soft)', marginTop: 4 }}>{x.k ? '👁 ' : ''}{x.done ? 'Entregó · ' + (sent.indexOf(x) + 1) + '.º' : x.stuck ? '⚠ Trabado en el ' + (x.k + 1) + ' hace +3 min' : x.k ? 'Va en el ' + (x.k + 1) : 'No ha entrado'}</div>
           </button>))}
@@ -183,10 +197,11 @@ function DocSetBoard({ a, ds, onView }) {
       {mx > 0 && <div style={{ marginTop: 10, fontSize: 12.5, fontWeight: 700, color: '#555', background: '#F6F8FC', borderRadius: 10, padding: '8px 10px', lineHeight: 1.5 }}>📍 <b>Dónde se traban:</b> {hard + 1}. {ds.items[hard].q} ({ds.items[hard].cue}) · {mx} alumno{mx > 1 ? 's' : ''}.{ds.items[hard].key ? <> Respuesta: <i>{ds.items[hard].key}</i>.</> : null} Buen momento para explicarlo en la pizarra.</div>}
     </div>);
 }
-function DocSetStudentView({ a, ds, rows, who, onClose, onChanged }) {
-  const X = DSX(), N = window.JUCUM_NOTIF; const by = dsRowsBy(rows); const roster = dsRoster(a.groupId).filter(s => by[s.id]);
+function DocSetStudentView({ a, ds, rows, who, order, onClose, onChanged }) {
+  const X = DSX(), N = window.JUCUM_NOTIF; const by = dsRowsBy(rows); let roster = dsRosterFor(a, rows).filter(s => by[s.id]);
+  if (order && order.length) roster = roster.slice().sort((p, q) => { const i = order.indexOf(p.id), j = order.indexOf(q.id); return (i < 0 ? 1e9 : i) - (j < 0 ? 1e9 : j); });
   const [sid, setSid] = dsUS(who); const [cmt, setCmt] = dsUS(''); const [busy, setBusy] = dsUS(false);
-  const idx = roster.findIndex(s => s.id === sid), s = roster[idx]; if (!s) return null;
+  const idx = roster.findIndex(s => s.id === sid), s = roster[idx]; if (!s || !ds || !ds.items) return null;
   const row = by[s.id], an = X.upgrade(ds, X.unpack(row.text) || { ans: [], res: [], tr: [] }).ans, res = an.res || [], live = ds.mode === 'class' && X.liveState(ds) === 'open';
   const g = X.score(ds, res), nr = X.nRev(res), ntr = (an.tr || []).filter(Boolean).length;
   const decide = async (i, ok) => { setBusy(true); await X.setItemResult(a, ds, s.id, row, i, ok ? 'ok' : 'bad'); if (N) N.pushNotif(s.id, { type: 'assignment', title: '✅ Tu profe revisó tu respuesta', body: `“${a.title}”, ejercicio ${i + 1}: ${ok ? 'está bien' : 'mira la respuesta correcta'}.`, link: 'tasks' }); setBusy(false); onChanged(); };
@@ -202,7 +217,7 @@ function DocSetStudentView({ a, ds, rows, who, onClose, onChanged }) {
       <div className="modal settings-modal" style={{ maxWidth: 640, background: '#F0F7FF' }} onClick={e => e.stopPropagation()}>
         <div className="modal-head" style={{ background: '#fff', gap: 8 }}>
           <button className="att-btn" disabled={idx <= 0} onClick={() => setSid(roster[idx - 1].id)}>◀</button>
-          <div className="modal-title" style={{ flex: 1, textAlign: 'center' }}>👁 {s.name}{live && <span style={{ marginLeft: 6 }}>{dsChip('● en vivo', DS_PURL, DS_PUR)}</span>}</div>
+          <div className="modal-title" style={{ flex: 1, textAlign: 'center' }}>👁 {dsName(s)}{live && <span style={{ marginLeft: 6 }}>{dsChip('● en vivo', DS_PURL, DS_PUR)}</span>}{s._away && <span style={{ marginLeft: 6 }}>{dsChip('ya no está en este grupo', '#ECEAE3', '#6f6a5c')}</span>}</div>
           <button className="att-btn" disabled={idx >= roster.length - 1} onClick={() => setSid(roster[idx + 1].id)}>▶</button>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
@@ -223,7 +238,7 @@ function DocSetStudentView({ a, ds, rows, who, onClose, onChanged }) {
               </div>}
             </div>); })}
           <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
-            <input className="input-text" style={{ flex: 1, minWidth: 200 }} value={cmt} onChange={e => setCmt(e.target.value)} placeholder={`Comentario para ${s.name.split(' ')[0]} (le llega a la campanita)…`} />
+            <input className="input-text" style={{ flex: 1, minWidth: 200 }} value={cmt} onChange={e => setCmt(e.target.value)} placeholder={`Comentario para ${dsFirst(s)} (le llega a la campanita)…`} />
             <button className="btn-save" disabled={!cmt.trim()} onClick={() => { if (N) N.pushNotif(s.id, { type: 'assignment', title: '💬 Comentario de tu profe', body: `“${a.title}”: ${cmt.trim()}`, link: 'tasks' }); setCmt(''); alert('💬 Comentario enviado.'); }}>Enviar</button>
           </div>
         </div>
@@ -232,39 +247,64 @@ function DocSetStudentView({ a, ds, rows, who, onClose, onChanged }) {
 }
 function DocSetResults({ a: a0, compact }) {
   const X = DSX(); const [a, setA] = dsUS(a0); const ds = X.meta(a) || { items: [] };
-  const [rows, refresh] = dsUseSubs(a.id, 0); const by = dsRowsBy(rows); const roster = dsRoster(a.groupId);
+  const [rows, refresh] = dsUseSubs(a.id, 0); const by = dsRowsBy(rows); const roster = dsRosterFor(a, rows);
   /* DOCSETS-FIX-V2: al abrir Resultados se guardan las correcciones que SUBEN la nota (respuestas que estaban bien y salieron ✘) */
   const [fixed, setFixed] = dsUS(0); const fixRef = dsUR({});
-  dsUE(() => { if (!rows) return; let stop = false; (async () => { let c = 0; for (const r of rows) { const k = r.id + ':' + String(r.text || '').length + ':' + (r.status || ''); if (fixRef.current[k]) continue; fixRef.current[k] = 1; try { if (await X.persistUpgrade(a, ds, r, true)) c++; } catch (e) {} } if (!stop && c) { setFixed(f => f + c); refresh(); } })(); return () => { stop = true; }; }, [rows]);
+  dsUE(() => { if (!rows || rows._loc) return; let stop = false; (async () => { let c = 0; for (const r of rows) { const k = r.id + ':' + String(r.text || '').length + ':' + (r.status || ''); if (fixRef.current[k]) continue; fixRef.current[k] = 1; try { if (await X.persistUpgrade(a, ds, r, true)) c++; } catch (e) {} } if (!stop && c) { setFixed(f => f + c); refresh(); } })(); return () => { stop = true; }; }, [rows]);
   const closedHome = ds.mode === 'home' && a.dueAt && new Date(a.dueAt).getTime() < Date.now();
   const [view, setView] = dsUS(null); const [editDue, setEditDue] = dsUS(false); const [due, setDue] = dsUS(dsLocalInput(a.dueAt));
-  const pend = roster.reduce((n, s) => { const z = by[s.id] && X.unpack(by[s.id].text); return n + X.nRev(z && z.res); }, 0);
+  const [flt, setFlt] = dsUS('all');
+  /* TAREAS-ENTREGAS-V1: arriba el resumen (cada recuadro filtra), abajo una línea tocable por alumno: por revisar → entregaron → en curso → faltan */
+  const nIt = (ds.items || []).length, cls = ds.mode === 'class';
+  const info = roster.map(s => { const r = by[s.id], z0 = r ? X.unpack(r.text) : null, z = z0 ? X.upgrade(ds, z0).ans : null, res = (z && z.res) || [], k = res.filter(Boolean).length, nr = X.nRev(res), done = !!(r && r.status !== 'draft');
+    return { s, r, k, nr, done, g: done ? X.score(ds, res) : null, st: !r ? 'miss' : nr ? 'rev' : done ? 'done' : 'draft', at: r && r.submitted_at ? new Date(r.submitted_at).getTime() : 0 }; });
+  const RANK = { rev: 0, done: 1, draft: 2, miss: 3 };
+  const sorted = info.slice().sort((p, q) => RANK[p.st] - RANK[q.st] || (!!p.s._away - !!q.s._away) || (p.st === 'miss' ? dsName(p.s).localeCompare(dsName(q.s)) : p.at - q.at));
+  const pend = info.reduce((n, x) => n + x.nr, 0), nDone = info.filter(x => x.done).length, nRevS = info.filter(x => x.nr).length, nMiss = info.length - nDone;
+  const gs = info.filter(x => x.done && x.g != null).map(x => x.g), avg = gs.length ? Math.round(gs.reduce((p, q) => p + q, 0) / gs.length) : null;
+  const shown = sorted.filter(x => flt === 'all' || (flt === 'done' && x.done) || (flt === 'rev' && x.nr) || (flt === 'miss' && !x.done));
+  const order = sorted.filter(x => x.r).map(x => x.s.id);
   const saveDue = async () => { const iso = new Date(due).toISOString(); const u = await X.patch(a, d => { d.dueAt = iso; }); if (u) { setA(u); X.notifyGroup(a, '⏰ Tu profe cambió el plazo', `“${a.title}” · ahora hasta ${dsFmt(iso)}.`, 'tasks'); } setEditDue(false); };
+  const tile = (k, big, label, col) => { const on = flt === k; return (
+    <button key={k} onClick={() => setFlt(on ? 'all' : k)} title={on ? 'Ver a todos' : 'Ver solo estos'} style={{ border: '1.5px solid ' + (on ? '#1F3A8A' : 'var(--border)'), background: on ? '#EEF2FC' : '#fff', borderRadius: 13, padding: '8px 11px', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', boxShadow: on ? '0 2px 8px rgba(31,58,138,.15)' : 'none' }}>
+      <b style={{ display: 'block', fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 20, lineHeight: 1.15, color: col || 'inherit' }}>{big}</b>
+      <span style={{ fontSize: 11.5, fontWeight: 800, color: on ? '#1F3A8A' : '#6f6f6f' }}>{label}</span></button>); };
   return (
     <div className={compact ? '' : 'scard'} style={compact ? { marginTop: 10 } : { marginTop: 14 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
         <div className="sec-title" style={{ flex: 1 }}>📊 Resultados · {a.title}</div>
-        {ds.mode === 'class' ? dsChip('🏫 participación de clase', DS_PURL, DS_PUR) : dsChip('🏠 cuenta como tarea', '#FFF3E0', '#BF360C')}
-        {pend > 0 && dsChip('🟨 ' + pend + ' por revisar', '#FFF8E1', '#8A5A00')}
-        <button className="att-btn" onClick={refresh}>🔄</button>
+        {cls ? dsChip('🏫 participación de clase', DS_PURL, DS_PUR) : dsChip('🏠 cuenta como tarea', '#FFF3E0', '#BF360C')}
+        <button className="att-btn" onClick={refresh} title="Volver a leer las entregas">🔄</button>
       </div>
       {ds.mode === 'home' && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10, fontSize: 12.5, fontWeight: 800, color: '#555' }}>⏰ Entrega hasta {dsFmt(a.dueAt) || 'sin fecha'}
         {editDue ? <><input type="datetime-local" className="input-text" style={{ width: 'auto', padding: '5px 8px' }} value={due} onChange={e => setDue(e.target.value)} /><button className="btn-save" onClick={saveDue}>Guardar</button><button className="btn-cancel" onClick={() => setEditDue(false)}>Cancelar</button></> : <button className="att-btn" onClick={() => setEditDue(true)}>✏️ Cambiar entrega</button>}</div>}
-      {rows === null ? <div className="settings-hint">Cargando entregas…</div> : (
+      {rows === null ? <div className="settings-hint">Cargando entregas…</div> : <>
+        {rows._loc && <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', background: '#FFF8E1', border: '1px solid #F0C66B', color: '#7A4E00', borderRadius: 12, padding: '8px 12px', marginBottom: 10, fontSize: 12.5, fontWeight: 800, lineHeight: 1.45 }}><span style={{ flex: 1, minWidth: 200 }}>⚠️ No pude leer las entregas de la nube. Te muestro lo guardado en este equipo (puede faltar alguna).</span><button className="att-btn" onClick={refresh}>🔄 Reintentar</button></div>}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(118px,1fr))', gap: 7, marginBottom: 10 }}>
+          {tile('done', '✅ ' + nDone + '/' + info.length, cls ? 'Respondieron' : 'Entregaron')}
+          {tile('rev', '🟨 ' + nRevS, 'Por revisar' + (pend ? ' · ' + pend + ' resp.' : ''), nRevS ? '#B26A00' : null)}
+          {tile('miss', '⏳ ' + nMiss, cls ? 'No terminaron' : 'Faltan')}
+          <div style={{ border: '1.5px solid var(--border)', borderRadius: 13, padding: '8px 11px', background: '#FAFAF6' }}><b style={{ display: 'block', fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 20, lineHeight: 1.15 }}>📈 {avg != null ? avg : '—'}</b><span style={{ fontSize: 11.5, fontWeight: 800, color: '#6f6f6f' }}>Promedio{gs.length ? ' de ' + gs.length : ''}</span></div>
+        </div>
         <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
           {fixed > 0 && <div style={{ background: '#E8F5E9', color: '#1B5E20', fontSize: 12.5, fontWeight: 800, padding: '8px 12px', borderBottom: '1px solid #C8E6C9', lineHeight: 1.45 }}>✨ Corregí {fixed} entrega{fixed > 1 ? 's' : ''}: había respuestas bien escritas que salieron ✘ (por ejemplo, unir sin repetir el sujeto: “Tomás sees a ship and a bridge.”). Su nota subió y les avisé por la campanita.</div>}
-          {roster.map(s => { const r = by[s.id], z = r && X.unpack(r.text) ? X.upgrade(ds, X.unpack(r.text)).ans : null, res = (z && z.res) || [], k = res.filter(Boolean).length, nr = X.nRev(res), done = r && r.status !== 'draft';
+          {shown.length === 0 && <div className="settings-hint" style={{ padding: '14px 12px', margin: 0, background: '#fff' }}>{flt === 'rev' ? '🎉 Nada por revisar.' : flt === 'miss' ? '🎉 Todos entregaron.' : flt === 'done' ? 'Todavía nadie entrega.' : 'No hay alumnos en este grupo.'}</div>}
+          {shown.map(x => { const { s, r, k, nr, done } = x;
             return (
-              <div key={s.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '9px 12px', borderBottom: '1px solid #F0EDE4', flexWrap: 'wrap', background: '#fff' }}>
-                <b style={{ flex: 1, minWidth: 120, fontSize: 13.5 }}>{s.name}</b>
-                {!r ? dsChip(ds.mode === 'home' ? 'Aún no entrega' : 'No participó', '#FFF3E0', '#E65100') : <>
-                  {k < ds.items.length && dsChip((done || closedHome ? 'no terminó · ' : 'en curso · ') + k + ' de ' + ds.items.length, '#FFF3E0', '#E65100')}
+              <div key={s.id} onClick={r ? () => setView(s.id) : undefined} title={r ? 'Ver su actividad' : ''} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '9px 12px', borderBottom: '1px solid #F0EDE4', flexWrap: 'wrap', background: x.st === 'rev' ? '#FFFCF2' : '#fff', cursor: r ? 'pointer' : 'default' }}>
+                <span style={{ width: 34, height: 34, borderRadius: '50%', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 12.5, background: s._away ? '#ECEAE3' : '#E3E9F8', color: s._away ? '#6f6a5c' : '#1F3A8A' }}>{dsIni(s)}</span>
+                <div style={{ flex: 1, minWidth: 150 }}>
+                  <b style={{ display: 'block', fontSize: 13.8 }}>{dsName(s)}</b>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: '#8a7f6a' }}>{!r ? (s.username ? '@' + s.username : '') : done ? (cls ? 'Respondió' : 'Entregó') + (r.submitted_at ? ' · ' + dsFmt(r.submitted_at) : '') : 'Empezó · va en ' + k + ' de ' + nIt}{s._away ? ' · ya no está en este grupo' : ''}</span>
+                </div>
+                {!r ? dsChip(cls ? 'No participó' : 'Aún no entrega', '#FFF3E0', '#E65100') : <>
+                  {k < nIt && (done || closedHome) && dsChip('no terminó · ' + k + ' de ' + nIt, '#FFF3E0', '#E65100')}
                   {nr > 0 && dsChip('🟨 ' + nr + ' por revisar', '#FFF8E1', '#8A5A00')}
-                  {done && dsChip(X.score(ds, res) + '/100' + (nr ? ' provisional' : ''), '#E3F2FD', '#1565C0')}
-                  <button className="att-btn" onClick={() => setView(s.id)}>👁 Ver su actividad</button></>}
+                  {done && dsChip(x.g + '/100' + (nr ? ' provisional' : ''), '#E3F2FD', '#1565C0')}
+                  <button className="att-btn" onClick={e => { e.stopPropagation(); setView(s.id); }}>👁 Ver su actividad</button></>}
               </div>); })}
-        </div>)}
-      {view && <DocSetStudentView a={a} ds={ds} rows={rows} who={view} onClose={() => setView(null)} onChanged={(u) => { if (u) setA(u); refresh(); }} />}
+        </div></>}
+      {view && dsSafe(<DocSetStudentView a={a} ds={ds} rows={rows} who={view} order={order} onClose={() => setView(null)} onChanged={(u) => { if (u) setA(u); refresh(); }} />, () => setView(null), true)}
     </div>);
 }
 
@@ -313,12 +353,12 @@ function DocSetClassPanel({ plan }) {
               </div>
               <DocSetBoard a={a} ds={ds} onView={sid => setView({ a, sid })} />
             </>}
-            {st === 'closed' && show[a.id] === 'res' && <DocSetResults a={a} compact />}
+            {st === 'closed' && show[a.id] === 'res' && dsSafe(<DocSetResults a={a} compact />)}
           </div>); })}
       {view && <DocSetViewLoader a={view.a} sid={view.sid} onClose={() => setView(null)} />}
     </div>);
 }
-function DocSetViewLoader({ a, sid, onClose }) { const [rows, refresh] = dsUseSubs(a.id, 8000); if (!rows) return null; return <DocSetStudentView a={a} ds={DSX().meta(a)} rows={rows} who={sid} onClose={onClose} onChanged={refresh} />; }
+function DocSetViewLoader({ a, sid, onClose }) { const [rows, refresh] = dsUseSubs(a.id, 8000); if (!rows) return null; return dsSafe(<DocSetStudentView a={a} ds={DSX().meta(a)} rows={rows} who={sid} onClose={onClose} onChanged={refresh} />, onClose, true); }
 
 /* ═══════════ 4 · ALUMNO ═══════════ */
 /* DOCSETS-FIX-V2 (23-oct): el borrador local va POR ALUMNO (antes era solo por tarea: en un equipo compartido el

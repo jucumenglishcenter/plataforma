@@ -6,6 +6,33 @@
 
 const { useState: tUseState, useRef: tUseRef } = React;
 
+/* 🛡 TAREAS-ENTREGAS-V1 (26-oct-2026): si una vista de entregas falla, el aviso sale AQUÍ — antes se caía la app entera y
+ * se recargaba en el 📅 Calendario (o quedaba en blanco). Nombre del alumno SIEMPRE con tName (los reales traen fullName). */
+class TaskSafe extends React.Component {
+  constructor(p) { super(p); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err) { try { console.error('Tareas · vista protegida:', err); } catch (e) {} }
+  render() {
+    if (!this.state.err) return this.props.children;
+    const close = this.props.onClose;
+    const box = (
+      <div className="scard" style={{marginTop:14, background:'#FFF8E1', borderColor:'#F0C66B', maxWidth:560}} onClick={e => e.stopPropagation()}>
+        <div style={{fontWeight:900, fontSize:15, color:'#7A4E00'}}>⚠️ No pude mostrar esta parte</div>
+        <div style={{fontSize:13, color:'#5d4a1a', margin:'6px 0 12px', lineHeight:1.5}}>Las entregas de tus alumnos están a salvo. Vuelve a intentarlo; si se repite, avísale a soporte con el nombre de la tarea.</div>
+        <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+          <button className="btn-save" onClick={() => this.setState({ err: null })}>🔄 Volver a intentar</button>
+          {close && <button className="att-btn" onClick={() => { this.setState({ err: null }); close(); }}>← Volver</button>}
+        </div>
+      </div>);
+    return this.props.modal ? <div className="modal-backdrop" onClick={close} style={{alignItems:'center', justifyContent:'center'}}>{box}</div> : box;
+  }
+}
+const tName = (s) => String((s && (s.fullName || s.name || s.username)) || '').trim() || 'Alumno sin nombre';
+const tIni = (s) => tName(s).split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+const T_NAV = 'tasks_view';   // tarea abierta en “Ver entregas”: sobrevive a una recarga (sessionStorage vía JUCUM_NAV)
+const tNavGet = () => { try { return window.JUCUM_NAV ? window.JUCUM_NAV.load(T_NAV, null) : null; } catch (e) { return null; } };
+const tNavSet = (id) => { try { if (window.JUCUM_NAV) window.JUCUM_NAV.save(T_NAV, id || null); } catch (e) {} };
+
 /* ── helpers de fecha ── */
 function taskDueLabel(dueAt) {
   if (!dueAt) return null;
@@ -446,7 +473,7 @@ function TaskDateModal({ tasks, onClose, onDone }) {
       </div>
     </div>);
 }
-function TeacherAssignments({ onBack, embedded, groupId: gidProp, onGroupChange }) {
+function TeacherAssignments({ onBack, embedded, groupId: gidProp, onGroupChange, openId }) {
   const { STUDENTS, GROUPS, LEVELS } = window.JUCUM_DATA;
   const T = window.JUCUM_TASKS;
   const [creating, setCreating] = tUseState(false);
@@ -455,7 +482,11 @@ function TeacherAssignments({ onBack, embedded, groupId: gidProp, onGroupChange 
   const [prefill, setPrefill] = tUseState(null);
   const [dupping, setDupping] = tUseState(null);   // ⧉ TASK-DUP-V1: tarea a duplicar
   const [docSets, setDocSets] = tUseState(null);   // ✍️ DOCSETS-V1: sets leídos del documento
-  const [viewing, setViewing] = tUseState(null); // assignment
+  /* TAREAS-ENTREGAS-V1: se abre directo la tarea pedida (desde el calendario) o la que estaba abierta antes de recargar */
+  const wantRef = tUseRef(openId || tNavGet());
+  const [viewing, setViewingRaw] = tUseState(() => { const w = wantRef.current; return w ? (T.getAssignments().find(x => x.id === w) || null) : null; }); // assignment
+  const setViewing = (a) => { wantRef.current = a ? a.id : null; tNavSet(wantRef.current); setViewingRaw(a); };
+  React.useEffect(() => { if (wantRef.current) tNavSet(wantRef.current); return () => tNavSet(null); }, []);
   const [tick, setTick] = tUseState(0);
   const [retrying, setRetrying] = tUseState(false);
   const refresh = () => setTick(t => t + 1);
@@ -470,7 +501,10 @@ function TeacherAssignments({ onBack, embedded, groupId: gidProp, onGroupChange 
   const [dating, setDating] = tUseState(null);
   React.useEffect(() => {
     if (window.JUCUM_SYNC && window.JUCUM_SYNC.refreshTasks) {
-      window.JUCUM_SYNC.refreshTasks().then(refresh).catch(() => {});
+      window.JUCUM_SYNC.refreshTasks().then(() => {
+        refresh();
+        const w = wantRef.current; if (w) { const f = T.getAssignments().find(x => x.id === w); if (f) setViewingRaw(v => v || f); }
+      }).catch(() => {});
     }
   }, []);
 
@@ -483,9 +517,10 @@ function TeacherAssignments({ onBack, embedded, groupId: gidProp, onGroupChange 
     setRetrying(false); refresh();
   };
 
+  const closeView = () => { setViewing(null); refresh(); };
   if (viewing && window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.isDocset(viewing) && window.DocSetResults) return (
-    <Wrap0 embedded={embedded}><button className="back-btn" onClick={() => { setViewing(null); refresh(); }}>← Tareas</button><DocSetResults a={viewing} /></Wrap0>);
-  if (viewing) return <TeacherSubmissions assignment={viewing} onBack={() => { setViewing(null); refresh(); }} />;
+    <Wrap0 embedded={embedded}><button className="back-btn" onClick={closeView}>← Tareas</button><TaskSafe key={viewing.id} onClose={closeView}><DocSetResults a={viewing} /></TaskSafe></Wrap0>);
+  if (viewing) return <TaskSafe key={viewing.id} onClose={closeView}><TeacherSubmissions assignment={viewing} embedded={embedded} onBack={closeView} /></TaskSafe>;
 
   const Wrap = embedded ? 'div' : 'main';
   return (
@@ -966,7 +1001,7 @@ function AssignmentForm({ onClose, onSaved, initial, prefill }) {
 }
 
 /* ── entregas de una tarea (profesor) ── */
-function TeacherSubmissions({ assignment, onBack }) {
+function TeacherSubmissions({ assignment, onBack, embedded }) {
   const { STUDENTS, LEVELS } = window.JUCUM_DATA;
   const T = window.JUCUM_TASKS;
   const [tick, setTick] = tUseState(0);
@@ -976,20 +1011,37 @@ function TeacherSubmissions({ assignment, onBack }) {
   const [dupEdit, setDupEdit] = tUseState(null);
   const [preview, setPreview] = tUseState(false);
   const [lang, setLang] = tUseState('par');
+  const [flt, setFlt] = tUseState('all');
   const a = T.getAssignments().find(x => x.id === assignment.id) || assignment;
   const recips = T.recipientsOf(a, STUDENTS);
   const subs = T.submissionsFor(a.id);
   const due = taskDueLabel(a.dueAt);
   const { structured, plain } = parseTaskMeta(a);
+  /* TAREAS-ENTREGAS-V1: quien entregó y ya no está entre los destinatarios (cambió de grupo, pausa) también se ve */
+  const extra = Object.keys(subs).filter(id => subs[id] && !recips.some(s => s.id === id)).map(id => { const s = STUDENTS.find(x => x.id === id); return s ? { ...s, _away: true } : { id, fullName: 'Alumno sin cuenta activa', _away: true }; });
+  const stOf = (sub) => !sub ? 'miss' : sub.status === 'graded' ? 'graded' : 'sent';
+  const RANK = a.gradable ? { sent: 0, graded: 1, miss: 2 } : { sent: 0, graded: 0, miss: 2 };
+  const people = recips.concat(extra).map(s => ({ s, sub: subs[s.id], st: stOf(subs[s.id]) }))
+    .sort((p, q) => RANK[p.st] - RANK[q.st] || (!!p.s._away - !!q.s._away) || tName(p.s).localeCompare(tName(q.s)));
+  const nDone = people.filter(x => x.sub).length, nToGrade = a.gradable ? people.filter(x => x.st === 'sent').length : 0, nMiss = people.length - nDone;
+  const gs = people.filter(x => x.sub && typeof x.sub.grade === 'number').map(x => x.sub.grade), avg = gs.length ? Math.round(gs.reduce((p, q) => p + q, 0) / gs.length) : null;
+  const shown = people.filter(x => flt === 'all' || (flt === 'done' && x.sub) || (flt === 'grade' && x.st === 'sent') || (flt === 'miss' && !x.sub));
+  const fmt = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('es-PE', { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }); };
+  const late = (sub) => !!(a.dueAt && sub && sub.submittedAt && new Date(sub.submittedAt).getTime() > new Date(a.dueAt).getTime());
+  const tile = (k, big, label, col) => { const on = flt === k; return (
+    <button key={k} onClick={() => setFlt(on ? 'all' : k)} title={on ? 'Ver a todos' : 'Ver solo estos'} style={{border:'1.5px solid ' + (on ? '#1F3A8A' : 'var(--border)'), background: on ? '#EEF2FC' : '#fff', borderRadius:13, padding:'9px 12px', cursor:'pointer', textAlign:'left', fontFamily:'inherit', boxShadow: on ? '0 2px 8px rgba(31,58,138,.15)' : 'none'}}>
+      <b style={{display:'block', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:21, lineHeight:1.15, color: col || 'inherit'}}>{big}</b>
+      <span style={{fontSize:12, fontWeight:800, color: on ? '#1F3A8A' : '#6f6f6f'}}>{label}</span></button>); };
+  const W = embedded ? 'div' : 'main';
 
   return (
-    <main>
+    <W>
       <button className="back-btn" onClick={onBack}>← Volver a tareas</button>
       <div className="welcome teacher">
         <div className="welcome-text">
           <div className="eyebrow">📝 Entregas</div>
           <h1>{a.title}</h1>
-          <p>{Object.keys(subs).length}/{recips.length} entregadas{due && ` · ⏰ ${due.txt}`}{a.gradable ? ' · calificable' : ' · sin nota'}</p>
+          <p>{nDone}/{people.length} entregadas{due && ` · ⏰ ${due.txt}`}{a.gradable ? ' · calificable' : ' · sin nota'}</p>
         </div>
         <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
           <button className="btn-settings" onClick={() => setDupping(true)}>⧉ Duplicar</button>
@@ -1012,28 +1064,32 @@ function TeacherSubmissions({ assignment, onBack }) {
       )}
 
       <div className="scard" style={{marginTop:14}}>
-        <div className="sec-head"><div className="sec-title">Alumnos</div></div>
+        <div className="sec-head"><div className="sec-title">Alumnos</div><span className="sec-meta">toca a un alumno para ver su entrega</span></div>
+        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:8, margin:'4px 0 12px'}}>
+          {tile('done', '✅ ' + nDone + '/' + people.length, 'Entregaron')}
+          {a.gradable && tile('grade', '🟨 ' + nToGrade, 'Por calificar', nToGrade ? '#B26A00' : null)}
+          {tile('miss', '⏳ ' + nMiss, 'Faltan')}
+          {a.gradable && <div style={{border:'1.5px solid var(--border)', borderRadius:13, padding:'9px 12px', background:'#FAFAF6'}}><b style={{display:'block', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:21, lineHeight:1.15}}>📈 {avg != null ? avg : '—'}</b><span style={{fontSize:12, fontWeight:800, color:'#6f6f6f'}}>Promedio{gs.length ? ` de ${gs.length}` : ''}</span></div>}
+        </div>
+        {shown.length === 0 && <div className="empty-state" style={{padding:'16px 0'}}>{flt === 'grade' ? '🎉 Nada por calificar.' : flt === 'miss' ? '🎉 Todos entregaron.' : flt === 'done' ? 'Todavía nadie entrega.' : 'Esta tarea no tiene alumnos asignados.'}</div>}
         <div className="sm-list">
-          {recips.map(s => {
-            const sub = subs[s.id];
-            const level = LEVELS[s.level];
-            const status = !sub ? {t:'Pendiente', c:'#C62828', bg:'#FFEBEE'}
-              : sub.status === 'graded' ? {t:`Calificado${typeof sub.grade==='number'?` · ${sub.grade}/100`:''}`, c:'#1565C0', bg:'#E3F2FD'}
-              : {t:'Entregado', c:'#2E7D32', bg:'#E8F5E9'};
+          {shown.map(({ s, sub, st }) => {
+            const level = LEVELS[s.level] || { color:'#B0AC9E', dark:'#5b5648' };
+            const status = st === 'miss' ? {t:'Pendiente', c:'#C62828', bg:'#FFEBEE'}
+              : st === 'graded' ? {t:`Calificado${typeof sub.grade==='number'?` · ${sub.grade}/100`:''}`, c:'#1565C0', bg:'#E3F2FD'}
+              : a.gradable ? {t:'Por calificar', c:'#8A5A00', bg:'#FFF8E1'} : {t:'Entregado', c:'#2E7D32', bg:'#E8F5E9'};
             return (
-              <div key={s.id} className="sm-row" style={{flexWrap:'wrap'}}>
-                <div className="st-ava" style={{background:`linear-gradient(135deg,${level.color}80,${level.dark})`}}>
-                  {s.fullName.split(' ').map(n=>n[0]).slice(0,2).join('')}
-                </div>
+              <div key={s.id} className="sm-row" onClick={sub ? () => setGrading(s) : undefined} style={{flexWrap:'wrap', cursor: sub ? 'pointer' : 'default', background: st === 'sent' && a.gradable ? '#FFFCF2' : undefined}}>
+                <div className="st-ava" style={{background: s._away ? '#CFC9B8' : `linear-gradient(135deg,${level.color}80,${level.dark})`}}>{tIni(s)}</div>
                 <div className="sm-info">
-                  <div className="sm-name">{s.fullName}</div>
-                  <div className="sm-meta">@{s.username}{sub ? ` · entregó ${new Date(sub.submittedAt).toLocaleDateString('es-PE',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}` : ''}</div>
+                  <div className="sm-name">{tName(s)}</div>
+                  <div className="sm-meta">{s.username ? '@' + s.username : ''}{sub && sub.submittedAt ? `${s.username ? ' · ' : ''}entregó ${fmt(sub.submittedAt)}` : ''}{late(sub) ? ' · después del plazo' : ''}{s._away ? ' · ya no está en este grupo' : ''}</div>
                 </div>
                 <span className="mm-chip" style={{background:status.bg, color:status.c}}>{status.t}</span>
-                {sub && <button className="att-btn" onClick={() => setGrading(s)}>{a.gradable ? '📊 Calificar' : '👁 Ver'}</button>}
-                {sub && sub.attachments?.length > 0 && (
-                  <div className="att-list" style={{flexBasis:'100%', marginTop:8}}>
-                    {sub.attachments.map((a, i) => <TaskAttachmentChip key={i} att={a} />)}
+                {sub && <button className="att-btn" onClick={e => { e.stopPropagation(); setGrading(s); }}>{a.gradable ? (st === 'graded' ? '✏️ Cambiar nota' : '📊 Calificar') : '👁 Ver entrega'}</button>}
+                {sub && (sub.attachments?.length > 0 || sub.text) && (
+                  <div className="att-list" style={{flexBasis:'100%', marginTop:8}} onClick={e => e.stopPropagation()}>
+                    {(sub.attachments || []).map((x, i) => <TaskAttachmentChip key={i} att={x} />)}
                     {sub.text && <div className="fpost-body sm" style={{marginTop:4}}>“{sub.text}”</div>}
                   </div>
                 )}
@@ -1048,7 +1104,7 @@ function TeacherSubmissions({ assignment, onBack }) {
       {preview && <StudentTaskPreview assignment={a} onClose={() => setPreview(false)} />}
       {dupping && <DuplicateTaskModal task={a} onClose={() => setDupping(false)} onDone={() => setDupping(false)} onEditCopy={pf => { setDupping(false); setDupEdit(pf); }} />}
       {dupEdit && <AssignmentForm prefill={dupEdit} onClose={() => setDupEdit(null)} onSaved={() => setDupEdit(null)} />}
-    </main>
+    </W>
   );
 }
 
@@ -1064,7 +1120,7 @@ function GradeModal({ assignment, student, sub, onClose }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal settings-modal" style={{maxWidth:520}} onClick={e => e.stopPropagation()}>
         <div className="modal-head">
-          <div className="modal-title">📊 {assignment.gradable ? 'Calificar' : 'Retroalimentar'} · {student.fullName}</div>
+          <div className="modal-title">📊 {assignment.gradable ? 'Calificar' : 'Retroalimentar'} · {tName(student)}</div>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
@@ -1319,4 +1375,4 @@ function StudentTaskCard({ a, student, onChange }) {
   );
 }
 
-Object.assign(window, { TeacherAssignments, StudentAssignments, TaskAttachmentChip, TaskFilePicker, AssignmentForm, DuplicateTaskModal, TeacherSubmissions, GradeModal, StudentTaskCard, TaskActivityPanel });
+Object.assign(window, { TaskSafe, TeacherAssignments, StudentAssignments, TaskAttachmentChip, TaskFilePicker, AssignmentForm, DuplicateTaskModal, TeacherSubmissions, GradeModal, StudentTaskCard, TaskActivityPanel });

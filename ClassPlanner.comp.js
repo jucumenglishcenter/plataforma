@@ -113,7 +113,11 @@ function groupOptionLabel(g) { return (g.name || '') + (g.schedule && !String(g.
 function ClassPlanner({ onBack, onGoExams }) {
   const { MODULE_CATALOG, GROUPS } = window.JUCUM_DATA;
   const TT = window.JUCUM_TT;
-  const [screen, setScreen] = React.useState('calendar');   // calendar | class | practice | saved
+  /* TAREAS-ENTREGAS-V1 (26-oct): la pestaña (📅 Calendario / 📋 Tareas) sobrevive a una recarga, y desde el día del calendario se abre
+   * DIRECTO la tarea tocada (antes caía en la lista general de Tareas). */
+  const [screen, setScreenRaw] = React.useState(() => { let s = null; try { s = window.JUCUM_NAV ? window.JUCUM_NAV.load('planner_screen', null) : null; } catch (e) {} return s === 'tareas' ? 'tareas' : 'calendar'; });   // calendar | class | practice | saved
+  const setScreen = (s) => { setScreenRaw(s); try { if (window.JUCUM_NAV) window.JUCUM_NAV.save('planner_screen', s); } catch (e) {} };
+  const [openTask, setOpenTask] = React.useState(null);   // { id, k } tarea a abrir al entrar a 📋 Tareas
   const now = new Date();
   const [cursor, setCursor] = React.useState({ y: now.getFullYear(), m: now.getMonth() });
   const [selDate, setSelDate] = React.useState(todayYMD());
@@ -158,13 +162,13 @@ function ClassPlanner({ onBack, onGoExams }) {
       <div className="mm-tabs" style={{flexWrap:'wrap'}}>
         <button className={`mm-tab ${screen === 'calendar' ? 'on' : ''}`} onClick={() => setScreen('calendar')}>📅 Calendario</button>
         {window.PlanImport && <button className={`mm-tab ${screen === 'import' ? 'on' : ''}`} onClick={() => goImport()}>📄 Subir plan del teacher</button>}
-        <button className={`mm-tab ${screen === 'tareas' ? 'on' : ''}`} onClick={() => setScreen('tareas')}>📋 Tareas</button>
+        <button className={`mm-tab ${screen === 'tareas' ? 'on' : ''}`} onClick={() => { setOpenTask(null); setScreen('tareas'); }}>📋 Tareas</button>
       </div>
 
       {screen === 'calendar' && (
         <CalendarHub groupId={curGroup} setGroupId={setCurGroup} cursor={cursor} setCursor={setCursor} selDate={selDate} setSelDate={setSelDate} onGoExams={onGoExams}
           onNewClass={goNewClass} onNewPractice={goNewPractice} onEditClass={openClassPlan} onReport={(p) => goImport(p.source.importId, 'report')} isImported={isImported}
-          onEditPractice={(p) => { setEditPractice(p); setScreen('practice'); }} onClassMode={goClassMode} onOpenTasks={() => setScreen('tareas')} refreshKey={tick} onChange={refresh} />
+          onEditPractice={(p) => { setEditPractice(p); setScreen('practice'); }} onClassMode={goClassMode} onOpenTasks={(id) => { setOpenTask(id ? { id, k: Date.now() } : null); setScreen('tareas'); }} refreshKey={tick} onChange={refresh} />
       )}
       {screen === 'class' && (
         <ClassPlanEditor key={editPlan ? editPlan.id || 'tpl' : 'new'} onImport={window.PlanImport ? () => goImport() : null} date={selDate} initial={editPlan} defaultGroupId={defaultGroup || curGroup} onGroupSeen={setCurGroup} onClassMode={goClassMode} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
@@ -179,7 +183,7 @@ function ClassPlanner({ onBack, onGoExams }) {
         <PracticePlanEditor key={editPractice ? editPractice.id || 'tpl' : 'new'} date={selDate} initial={editPractice} defaultGroupId={defaultGroup || curGroup} onGroupSeen={setCurGroup} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
       )}
       {screen === 'tareas' && (
-        <TeacherAssignments embedded groupId={curGroup} onGroupChange={setCurGroup} onBack={() => setScreen('calendar')} />
+        <TeacherAssignments key={openTask ? openTask.k : 'list'} openId={openTask ? openTask.id : null} embedded groupId={curGroup} onGroupChange={setCurGroup} onBack={() => setScreen('calendar')} />
       )}
       {screen === 'saved' && (
         <SavedItems onOpenClass={openClassPlan} onOpenPractice={(p) => { setEditPractice(p); setScreen('practice'); }} onChange={refresh} refreshKey={tick} />
@@ -286,8 +290,9 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
           return (
             <DayRow key={t.id} icon="📋" tint="#FFF4E5" border="#F0C28A" title={`${t.title}${closed ? ' · cerrada' : ''}`}
               sub={`Tarea · cierra ${hh}${t.gradable ? ' · calificable' : ''}`}
+              openLabel="📥 Ver entregas"
               onDup={window.DuplicateTaskModal ? () => setDupTask(t) : null}
-              onOpen={() => onOpenTasks && onOpenTasks()} />
+              onOpen={() => onOpenTasks && onOpenTasks(t.id)} />
           );
         })}
 
@@ -509,7 +514,7 @@ function DuplicateClassModal({ plan, onClose, onDone }) {
   );
 }
 
-function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDup, onTrack, onReport, onFollow, onPrint }) {
+function DayRow({ icon, tint, border, title, sub, onOpen, openLabel, onDelete, onPlay, onDup, onTrack, onReport, onFollow, onPrint }) {
   return (
     <div style={{display:'flex', alignItems:'center', gap:11, border:'1px solid ' + border, background: tint, borderRadius:11, padding:'10px 12px', marginBottom:8, flexWrap:'wrap'}}>
       <span style={{fontSize:19}}>{icon}</span>
@@ -521,10 +526,10 @@ function DayRow({ icon, tint, border, title, sub, onOpen, onDelete, onPlay, onDu
       {onTrack && <button onClick={onTrack} title="Quiénes ya hicieron estas prácticas" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#B7A8E0', color:'#5B3FA0'}}>📊 Avance</button>}
       {onFollow && <button onClick={onFollow} title="Cómo va: en clase y en casa" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>🔎 Seguimiento</button>}
       {onReport && <button onClick={onReport} title="Reporte de cumplimiento para devolver a Claude" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>📤 Reporte</button>}
-      <button onClick={onOpen} style={{...btnGhost, padding:'6px 12px', fontSize:12.5}}>Abrir</button>
+      <button onClick={onOpen} style={{...btnGhost, padding:'6px 12px', fontSize:12.5}}>{openLabel || 'Abrir'}</button>
       {onPrint && <button onClick={onPrint} title="Imprimir / guardar en PDF" style={{...btnGhost, padding:'6px 12px', fontSize:12.5}}>🖨️ Imprimir</button>}
       {onDup && <button onClick={onDup} title="Duplicar a otro grupo" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>⧉ Duplicar</button>}
-      <button onClick={onDelete} title="Eliminar" style={{...iconBtn, color:'#C0392B'}}>×</button>
+      {onDelete && <button onClick={onDelete} title="Eliminar" style={{...iconBtn, color:'#C0392B'}}>×</button>}
     </div>
   );
 }
