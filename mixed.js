@@ -11,8 +11,11 @@
  *    materiales), azar criptográfico, opciones reordenadas en cada aparición, la
  *    correcta repartida por igual entre A/B/C y NUNCA 3 seguidas iguales (posición,
  *    respuesta, material ni respuesta dentro de un material).
- *  · CAJA DE ERRORES: lo fallado se guarda y vuelve 2 h después (24 h si vuelve a
- *    fallar). La hora la pone el SERVIDOR (script 35 · trigger + mix_box_ready).
+ *  · CAJA DE ERRORES: lo fallado se guarda y vuelve 2 h después (NEURO-FIX-V1 · script 38:
+ *    también 2 h si vuelve a fallar). La hora la pone el SERVIDOR (trigger + mix_box_ready).
+ *  · NEURO-FIX-V1 (26-oct-2026, caso Rafaela): la caja junta errores de CUALQUIER día
+ *    (`pullBox` + `boxMaterials`), ▶ Empezar mete hasta 3 errores listos por ronda, la
+ *    lectura/listening usa solo la historia del set (`storyNo`) y la vista previa LEE la nube.
  *  · GUARDADO: local al instante (clave HEAVY → IndexedDB vía JUCUM_BIG) + bandeja
  *    de salida con versión por pregunta → upsert idempotente a `practice_items`.
  *    Un acierto nunca vuelve atrás (lo garantiza también la base de datos).
@@ -24,7 +27,7 @@
   if (window.JUCUM_MIX) return;
 
   var CFG = { levels: { 'pre-a1': 1 }, size: 12, minPer: 2, maxPer: 4, maxMats: 6,
-    boxMs: 2 * 3600e3, retryMs: 24 * 3600e3, cacheMs: 6 * 3600e3, secPerQ: 35, maxSecQ: 90 };
+    boxMs: 2 * 3600e3, retryMs: 2 * 3600e3, cacheMs: 6 * 3600e3, secPerQ: 35, maxSecQ: 90, boxInMix: 3, boxMax: 10 };
   var STATE_KEY = 'jucum_mix_v1';        // HEAVY (config.js)
   var CACHE_KEY = 'jucum_mix_cache_v1';  // HEAVY (config.js)
   var HOST = /^https:\/\/jucumenglishcenter\.github\.io\//i;
@@ -232,11 +235,14 @@
     return { s: ok ? 'ok' : (a.s || b.s), f: a.f != null ? a.f : b.f, a: Math.max(a.a || 0, b.a || 0), r: Math.max(a.r || 0, b.r || 0), due: ok ? 0 : (b.due || a.due || 0), at: Math.max(a.at || 0, b.at || 0), fa: a.fa != null ? a.fa : b.fa, la: a.la != null ? a.la : b.la };
   }
   function matProgress(uid, mat) {
-    var u = getU(uid), ok = 0, box = 0, first = 0, ans = 0;
+    var u = getU(uid), ok = 0, box = 0, first = 0, ans = 0, boxAll = 0, t = AD.now(), ready = 0, next = 0;
     (mat.items || []).forEach(function (it) { var r = rec(u, mat.key, it.id); if (!r) return; ans++; if (r.s === 'ok') ok++; else if (r.s === 'box') box++; if (r.f === true) first++; });
+    (mat.all || mat.items || []).forEach(function (it) { var r = rec(u, mat.key, it.id); if (!r || r.s !== 'box') return; boxAll++; if ((r.due || 0) <= t) ready++; else next = next ? Math.min(next, r.due) : r.due; });
     var total = (mat.items || []).length;
-    return { total: total, ok: ok, box: box, answered: ans, pending: total - ans, pct: total ? Math.round(ok / total * 100) : 0, firstPct: total ? Math.round(first / total * 100) : 0, graded: u.g[mat.key] != null ? u.g[mat.key] : null };
+    return { total: total, ok: ok, box: box, answered: ans, pending: total - ans, pct: total ? Math.round(ok / total * 100) : 0, firstPct: total ? Math.round(first / total * 100) : 0, graded: u.g[mat.key] != null ? u.g[mat.key] : null,
+      boxAll: boxAll, boxReady: ready, boxNext: next };
   }
+  function poolOf(m) { return m.all || m.items || []; } // todas las preguntas cargadas (la caja puede traer de otra historia)
 
   /* ── SESIÓN: armado + aleatorización ────────────────────────────────────── */
   function ansKey(x) { return x.mat + '#' + String(x.q.correct).toLowerCase(); }
@@ -273,10 +279,10 @@
       pos.push(p);
     });
     return best.map(function (it, k) {
-      if (it.q.kind === 'transform') return { mat: it.mat, id: it.q.id, q: it.q, opts: null, ans: null, bank: bankOrder(it.q) };
+      if (it.q.kind === 'transform') return { mat: it.mat, id: it.q.id, q: it.q, opts: null, ans: null, bank: bankOrder(it.q), fromBox: !!it.fromBox };
       var cor = it.q.correct, dis = shuffle(it.q.opts.filter(function (o) { return o !== cor; })), opts = [], di = 0;
       for (var p = 0; p < it.q.opts.length; p++) opts.push(p === pos[k] ? cor : dis[di++]);
-      return { mat: it.mat, id: it.q.id, q: it.q, opts: opts, ans: pos[k] };
+      return { mat: it.mat, id: it.q.id, q: it.q, opts: opts, ans: pos[k], fromBox: !!it.fromBox };
     });
   }
   function arrange(items) { var r = null; for (var t = 0; t < 80; t++) { r = arrangeOnce(items); if (runs(r.filter(function (x) { return x.ans != null; }).map(function (x) { return x.ans; })) <= 2) return r; } return r; }
@@ -286,16 +292,23 @@
     while (any) { any = false; keys.forEach(function (k) { if (g[k].length) { out.push(g[k].shift()); any = true; } }); }
     return out;
   }
-  function buildSession(uid, mats, mode, size) {
-    var u = getU(uid), t = AD.now();
+  /* opts (NEURO-FIX-V1): only = solo ese material · skip = claves que ya se conectaron en el
+   * material (no se piden preguntas NUEVAS) · noBox = sin errores dentro de la ronda (bonus). */
+  function readyBox(u, mats, t, only) {
+    var ready = [];
+    mats.forEach(function (m) { if (only && m.key !== only) return; poolOf(m).forEach(function (q) { var r = rec(u, m.key, q.id); if (r && r.s === 'box' && (r.due || 0) <= t) ready.push({ mat: m.key, q: q, due: r.due || 0, fromBox: true }); }); });
+    return ready.sort(function (a, b) { return a.due - b.due; });
+  }
+  function buildSession(uid, mats, mode, size, opts) {
+    var u = getU(uid), t = AD.now(); opts = opts || {};
     size = size || CFG.size;
-    if (mode === 'box') {
-      var ready = [];
-      mats.forEach(function (m) { (m.items || []).forEach(function (q) { var r = rec(u, m.key, q.id); if (r && r.s === 'box' && (r.due || 0) <= t) ready.push({ mat: m.key, q: q }); }); });
-      return arrange(shuffle(ready).slice(0, 10));
-    }
-    var pend = {};
-    mats.forEach(function (m) { pend[m.key] = interleaveByKey(shuffle((m.items || []).filter(function (q) { return !rec(u, m.key, q.id); }))); });
+    if (mode === 'box') return arrange(shuffle(readyBox(u, mats, t, opts.only).slice(0, CFG.boxMax)));
+    var pend = {}, skip = opts.skip || [];
+    mats.forEach(function (m) { pend[m.key] = m.extra || (opts.only && m.key !== opts.only) || (!opts.only && skip.indexOf(m.key) >= 0) ? [] : interleaveByKey(shuffle((m.items || []).filter(function (q) { return !rec(u, m.key, q.id); }))); });
+    var pendTot = mats.reduce(function (a, m) { return a + pend[m.key].length; }, 0);
+    var errs = opts.noBox ? [] : readyBox(u, mats, t, opts.only).slice(0, pendTot ? CFG.boxInMix : CFG.boxMax);
+    if (!pendTot) return opts.countOnly ? { n: errs.length, errs: errs.length } : (errs.length ? arrange(shuffle(errs)) : []);
+    size = Math.max(1, size - errs.length);
     var use = mats.filter(function (m) { return pend[m.key].length; })
       .sort(function (a, b) { return (matProgress(uid, a).pct - matProgress(uid, b).pct) + (rnd() - .5) * 8; })
       .slice(0, CFG.maxMats).map(function (m) { return m.key; });
@@ -310,8 +323,9 @@
       if (!best) break; q[best]++; tot++;
     }
     var items = [];
+    if (opts.countOnly) return { n: tot + errs.length, errs: errs.length };
     use.forEach(function (k) { pend[k].slice(0, q[k]).forEach(function (qq) { items.push({ mat: k, q: qq }); }); });
-    return arrange(items);
+    return arrange(items.concat(errs));
   }
   function metrics(seq) {
     var by = {}; seq.forEach(function (x) { (by[x.mat] = by[x.mat] || []).push(ansKeyText(x)); });
@@ -338,7 +352,7 @@
     var nr = { s: r.s, f: r.f, a: (r.a || 0) + 1, r: r.r || 0, due: r.due || 0, at: AD.now(), fa: r.fa != null ? r.fa : atext, la: atext }; // NT-V1: qué respondió (1.ª vez y última)
     if (nr.f == null) nr.f = ok;
     if (ok) { nr.s = 'ok'; nr.due = 0; }
-    else if (r.s !== 'ok') { if (mode === 'box') nr.r = (r.r || 0) + 1; nr.s = 'box'; nr.due = AD.now() + (nr.r > 0 ? CFG.retryMs : CFG.boxMs); }
+    else if (r.s !== 'ok') { if (mode === 'box' || step.fromBox) nr.r = (r.r || 0) + 1; nr.s = 'box'; nr.due = AD.now() + (nr.r > 0 ? CFG.retryMs : CFG.boxMs); }
     setRec(u, mk, id, nr); putU(uid, u);
     var res = { ok: ok, matDone: false, score: null, due: nr.due };
     if (mat) { var p = matProgress(uid, mat); if (before < 100 && p.pct >= 100 && p.graded == null) { res.matDone = true; res.score = p.firstPct; var u2 = getU(uid); u2.g[mk] = p.firstPct; putU(uid, u2); try { hooks.onMaterialDone && hooks.onMaterialDone(uid, mat, p.firstPct); } catch (e) {} } }
@@ -370,8 +384,8 @@
     }).catch(function () { return false; }).then(function (x) { flushing[uid] = null; return x; });
     return flushing[uid];
   }
-  function pull(uid, mats) {
-    var c = AD.client(); if (!c || isPreview(uid)) return Promise.resolve(false);
+  function pull(uid, mats) { // solo LEE: también en vista previa (la profesora ve lo mismo que el alumno)
+    var c = AD.client(); if (!c) return Promise.resolve(false);
     var keys = mats.map(function (m) { return m.key; }); if (!keys.length) return Promise.resolve(true);
     return Promise.resolve(c.from('practice_items').select('mat_key,item_id,status,first_ok,attempts,box_round,due_at').eq('user_id', uid).in('mat_key', keys)).then(function (res) {
       if (res && res.error) throw res.error;
@@ -385,8 +399,55 @@
       putU(uid, u); return true;
     }).catch(function () { return false; });
   }
-  function refreshReady(uid) { // confirma con la hora del SERVIDOR qué errores ya se pueden repasar
-    var c = AD.client(); if (!c || isPreview(uid)) return Promise.resolve(null);
+  /* NEURO-FIX-V1: trae de la nube TODOS los errores en caja del alumno (de cualquier día y material).
+   * Antes solo se veían los de los materiales del set de hoy. Solo lee. */
+  function pullBox(uid) {
+    var c = AD.client(); if (!c) return Promise.resolve(false);
+    return Promise.resolve(c.from('practice_items').select('mat_key,item_id,status,first_ok,attempts,box_round,due_at').eq('user_id', uid).eq('status', 'box').limit(1000)).then(function (res) {
+      if (res && res.error) throw res.error;
+      var u = getU(uid);
+      ((res && res.data) || []).forEach(function (row) {
+        if (/^rv:/.test(row.mat_key)) return;
+        var cloud = { s: row.status, f: row.first_ok, a: row.attempts || 0, r: row.box_round || 0, due: row.due_at ? Date.parse(row.due_at) : 0, at: 0 };
+        var loc = rec(u, row.mat_key, row.item_id), m = merge(loc, cloud);
+        if (loc && loc.s !== 'ok' && cloud.due) m.due = cloud.due;
+        (u.m[row.mat_key] = u.m[row.mat_key] || {})[row.item_id] = m;
+      });
+      putU(uid, u); return true;
+    }).catch(function () { return false; });
+  }
+  /* Materiales con errores en caja que NO están en el set de hoy → se cargan para poder repasarlos.
+   * Un error cuya pregunta ya no existe en el material (lo editaron) se marca 'gone' en este equipo
+   * para que nunca quede un “6 errores” imposible de resolver. */
+  function boxMaterials(student, haveKeys) {
+    var D = window.JUCUM_DATA, uid = student && student.id; if (!D || !uid) return Promise.resolve([]);
+    var u = getU(uid), mods = D.MODULE_CATALOG[student.level] || [], list = [];
+    Object.keys(u.m).forEach(function (k) {
+      if (/^rv:/.test(k) || (haveKeys || []).indexOf(k) >= 0) return;
+      var recs = u.m[k] || {}; if (!Object.keys(recs).some(function (id) { return recs[id] && recs[id].s === 'box'; })) return;
+      var p = k.split(':'), mod = mods.filter(function (m) { return m.id === p[0]; })[0]; if (!mod) return;
+      var a = (mod.activities || []).filter(function (x) { return x.id === p[1]; })[0]; if (!a || !kindOf(a.url)) return;
+      var num = D.getModuleNumber ? D.getModuleNumber(student.level, mod.id) : null;
+      list.push({ key: k, moduleId: mod.id, activityId: a.id, name: (num ? 'M' + num + ' · ' : '') + (a.group ? a.group.split('·')[0].trim() + ' · ' : '') + a.name, short: (a.group ? a.group.split('·')[0].trim() + ' · ' : '') + a.name, group: a.group || '', url: a.url, kind: kindOf(a.url), extra: true });
+    });
+    return Promise.all(list.map(function (m) { return loadMaterial(m.url).then(function (r) { m.ok = r.ok; m.all = r.ok ? r.items : []; m.items = m.all; return m; }); })).then(function (ms) {
+      ms = ms.filter(function (m) { return m.ok; });
+      var u2 = getU(uid), ch = false;
+      ms.forEach(function (m) { var ids = {}; m.all.forEach(function (q) { ids[q.id] = 1; }); var recs = u2.m[m.key] || {};
+        Object.keys(recs).forEach(function (id) { if (recs[id].s === 'box' && !ids[id]) { recs[id].s = 'gone'; ch = true; } }); });
+      if (ch) putU(uid, u2);
+      return ms;
+    });
+  }
+  /* Resumen de la caja SIN cargar materiales (Inicio y campanita): cuántos esperan, cuántos listos y cuándo vuelve el próximo. */
+  function boxSummary(uid) {
+    var u = getU(uid), t = AD.now(), total = 0, ready = 0, next = 0, lastReady = 0;
+    Object.keys(u.m).forEach(function (k) { if (/^rv:/.test(k)) return; var recs = u.m[k] || {};
+      Object.keys(recs).forEach(function (id) { var r = recs[id]; if (!r || r.s !== 'box') return; total++; if ((r.due || 0) <= t) { ready++; lastReady = Math.max(lastReady, r.due || 0); } else next = next ? Math.min(next, r.due) : r.due; }); });
+    return { total: total, ready: ready, next: next, lastReady: lastReady };
+  }
+  function refreshReady(uid) { // confirma con la hora del SERVIDOR qué errores ya se pueden repasar (solo lee)
+    var c = AD.client(); if (!c) return Promise.resolve(null);
     return Promise.resolve(c.rpc('mix_box_ready', { p_user: uid })).then(function (res) {
       if (res && res.error) throw res.error;
       var ready = {}; ((res && res.data) || []).forEach(function (r) { ready[r.mat_key + '|' + r.item_id] = 1; });
@@ -399,7 +460,7 @@
   }
   function boxStatus(uid, mats) {
     var u = getU(uid), t = AD.now(), total = 0, ready = 0, next = 0, tomorrow = 0;
-    mats.forEach(function (m) { (m.items || []).forEach(function (q) { var r = rec(u, m.key, q.id); if (!r || r.s !== 'box') return; total++; if ((r.due || 0) <= t) ready++; else { next = next ? Math.min(next, r.due) : r.due; if (r.r > 0) tomorrow++; } }); });
+    mats.forEach(function (m) { poolOf(m).forEach(function (q) { var r = rec(u, m.key, q.id); if (!r || r.s !== 'box') return; total++; if ((r.due || 0) <= t) ready++; else { next = next ? Math.min(next, r.due) : r.due; if (r.r > 0) tomorrow++; } }); });
     return { total: total, ready: ready, next: next, tomorrow: tomorrow };
   }
 
@@ -424,11 +485,24 @@
     items.forEach(function (it) {
       var mod = mods.filter(function (m) { return m.id === it.moduleId; })[0]; if (!mod) return;
       var a = (mod.activities || []).filter(function (x) { return x.id === it.activityId; })[0]; if (!a) return;
-      var k = mod.id + ':' + a.id; if (seen[k] || !kindOf(a.url)) return; seen[k] = 1;
-      list.push({ key: k, moduleId: mod.id, activityId: a.id, name: (a.group ? a.group.split('·')[0].trim() + ' · ' : '') + a.name, group: a.group || '', url: a.url, kind: kindOf(a.url) });
+      var k = mod.id + ':' + a.id; if (!kindOf(a.url)) return;
+      if (seen[k]) { if (it.storyNo) seen[k].stories.push(String(it.storyNo)); return; }
+      var m = { key: k, moduleId: mod.id, activityId: a.id, name: (a.group ? a.group.split('·')[0].trim() + ' · ' : '') + a.name, group: a.group || '', url: a.url, kind: kindOf(a.url), stories: it.storyNo ? [String(it.storyNo)] : [] };
+      seen[k] = m; list.push(m);
     });
-    return Promise.all(list.map(function (m) { return loadMaterial(m.url).then(function (r) { m.ok = r.ok; m.items = r.items || []; m.warn = r.warn || []; m.err = r.err || null; return m; }); }))
-      .then(function (ms) { return ms.filter(function (m) { return m.ok; }); });
+    return Promise.all(list.map(function (m) { return loadMaterial(m.url).then(function (r) { m.ok = r.ok; m.all = r.items || []; m.items = m.all; m.warn = r.warn || []; m.err = r.err || null; return m; }); }))
+      .then(function (ms) {
+        var u = getU(student.id);
+        ms.forEach(function (m) { // 📖🎧 solo la historia que dejó la profe (o la primera que aún no tiene completa)
+          if (!m.ok || (m.kind !== 'read' && m.kind !== 'listen')) return;
+          var sts = []; m.all.forEach(function (q) { if (sts.indexOf(String(q.storyN)) < 0) sts.push(String(q.storyN)); });
+          var want = m.stories.filter(function (s) { return sts.indexOf(s) >= 0; });
+          if (!want.length) { var f = sts.filter(function (s) { return m.all.some(function (q) { if (String(q.storyN) !== s) return false; var r = rec(u, m.key, q.id); return !r || r.s !== 'ok'; }); })[0] || sts[0]; if (f) want = [f]; }
+          m.stories = want; m.items = m.all.filter(function (q) { return want.indexOf(String(q.storyN)) >= 0; });
+          m.name = m.name + ' · Historia ' + want.join(' y ');
+        });
+        return ms.filter(function (m) { return m.ok && m.items.length; });
+      });
   }
 
   /* ── ⭐ REPASOS DE LA SEMANA (NEURO-HOY-V1) ──────────────────────────────
@@ -582,7 +656,8 @@
   try { document.addEventListener('visibilitychange', function () { if (document.hidden) { var s = window.JUCUM_MIX && window.JUCUM_MIX._lastUid; if (s) flush(s); } }); } catch (e) {}
 
   window.JUCUM_MIX = {
-    VERSION: 'SESION-MIXTA-V1', CFG: CFG, enabledFor: enabledFor, kindOf: kindOf, parseHtml: parseHtml, loadMaterial: loadMaterial,
+    VERSION: 'NEURO-FIX-V1', CFG: CFG, enabledFor: enabledFor, kindOf: kindOf, parseHtml: parseHtml, loadMaterial: loadMaterial,
+    pullBox: pullBox, boxMaterials: boxMaterials, boxSummary: boxSummary, isPreview: isPreview, now: function () { return AD.now(); },
     todayMaterials: todayMaterials, matProgress: matProgress, buildSession: buildSession, arrange: arrange, metrics: metrics, runs: runs,
     answer: answer, flush: flush, pull: pull, refreshReady: refreshReady, boxStatus: boxStatus, addSeconds: addSeconds, merge: merge,
     hooks: hooks, plain: plain, _lastUid: null, transOk: transOk, bankOrder: bankOrder, teacherFetch: teacherFetch,

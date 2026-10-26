@@ -677,6 +677,8 @@ function StudentDashboard({ user, onLogout }) {
 
         {/* — 🎓 Cuenta regresiva del examen anunciado — */}
         <ExamCountdownCard student={student} onGo={() => setView('practica')} />
+        {/* 🧠 NEURO-FIX-V1: errores de Neuro que esperan o ya volvieron (solo Pre-A1 con Neuro) */}
+        {window.NeuroBoxHomeCard && <NeuroBoxHomeCard student={student} onGo={() => setView('practica')} />}
 
         {/* — Neuro + (Racha fusionada con Meta de hoy) — */}
         <div className="two-col" style={{gridTemplateColumns:'1.4fr 1fr', marginTop:18}}>

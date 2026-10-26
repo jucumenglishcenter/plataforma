@@ -18,6 +18,9 @@ function exfFalta(r, largo) {
   if (!r || r.apt) return '';
   const cov = r.needCoverage || 60, thr = r.threshold || 75;
   const covBloq = r.blocker ? r.blocker === 'coverage' : (r.overall >= thr && (r.coverage || 0) < cov);
+  if (covBloq && r.scopeLabel === 'nivel') return largo   /* examen final: TODO el nivel */
+    ? `para el examen final debe terminar TODO el nivel: lleva ${r.done || 0} de ${r.total || 0} prácticas aprobadas`
+    : `falta nivel ${r.done || 0}/${r.total || 0}`;
   if (covBloq) return largo
     ? `le falta terminar el módulo: lleva ${r.coverage || 0}% de prácticas aprobadas y necesita ${cov}%`
     : `falta módulo ${r.coverage || 0}/${cov}%`;

@@ -23,6 +23,112 @@ const NH_CSS = `.nh .nz{width:calc(100px*var(--z));height:calc(112px*var(--z));p
 @keyframes nhSpin{to{transform:rotate(360deg)}}
 `;
 (function injectNhCSS() { if (typeof document === 'undefined' || document.getElementById('nh-css')) return; const st = document.createElement('style'); st.id = 'nh-css'; st.textContent = NH_CSS; document.head.appendChild(st); })();
+/* NEURO-FIX-V1 (26-oct-2026 · caso Rafaela): ficha al tocar la neurona, 🧠N en la neurona, Neuro
+ * dice cuánto falta (globo + anillo con reloj en vivo, opción 1C elegida), caja con errores de
+ * CUALQUIER día, tarjeta en Inicio y campanita cuando vuelven. */
+const NH_CSS2 = `.nh .nb-bub{position:relative;flex-shrink:0;align-self:center;max-width:260px;background:#fff;color:#1E2433;border-radius:14px;padding:7px 12px;font-size:12.5px;font-weight:800;line-height:1.3;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,.25);margin:2px auto -12px;z-index:4}
+.nh .nb-bub::after{content:'';position:absolute;left:50%;bottom:-7px;margin-left:-7px;border:7px solid transparent;border-bottom:0;border-top-color:#fff}
+.nh .nb-bub b{display:block;font-family:'Fredoka',sans-serif;font-weight:600;font-size:17px;color:#5B3FA0;font-variant-numeric:tabular-nums}.nh .nb-bub.rdy b{color:#C25400}
+.nh .nb-ring{position:absolute;left:150px;top:166px;width:100px;height:100px;margin:-50px 0 0 -50px;border-radius:50%;z-index:2;-webkit-mask:radial-gradient(circle,transparent 45px,#000 46px);mask:radial-gradient(circle,transparent 45px,#000 46px);pointer-events:none}
+.nh .fn .bxn{position:absolute;right:-9px;top:-7px;min-width:25px;height:21px;border-radius:11px;background:#9C7BE0;color:#fff;font-size:10.5px;font-weight:900;display:flex;align-items:center;justify-content:center;padding:0 5px;box-shadow:0 0 0 2px #131D47;z-index:3}
+.nh .fn .bxn.rdy{background:#FFB300;color:#3D2A00}
+.nh .hl .sub{font-size:10.5px;font-weight:900;color:#C9B6F5}
+.nsh-sd{position:fixed;inset:0;z-index:8990;background:rgba(10,16,40,.5)}
+.nsh{position:fixed;left:0;right:0;bottom:0;z-index:8991;max-width:560px;margin:0 auto;background:#FFFDF7;border-radius:22px 22px 0 0;padding:10px 16px 20px;display:flex;flex-direction:column;gap:11px;color:#1E2433;font-family:'Nunito',sans-serif;box-shadow:0 -6px 24px rgba(0,0,0,.25);max-height:88vh;overflow:auto}
+.nsh .gr{width:42px;height:5px;border-radius:3px;background:#D8D2C2;align-self:center;flex-shrink:0}
+.nsh .hd{display:flex;gap:10px;align-items:center}.nsh .hd .ic{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:21px;flex-shrink:0}
+.nsh .hd b{font-family:'Fredoka',sans-serif;font-weight:600;font-size:17px;line-height:1.2;display:block}.nsh .hd small{font-size:12px;font-weight:800;color:#7A6A55}
+.nsh .x{margin-left:auto;width:40px;height:40px;border-radius:50%;border:0;background:#EEE9DD;font-size:15px;cursor:pointer;flex-shrink:0;color:#5B4A3A}
+.nsh .bar{height:12px;border-radius:7px;background:#EDE6D6;overflow:hidden;display:flex;flex-shrink:0}.nsh .bar i{display:block;height:100%}
+.nsh .lg{display:flex;gap:12px;flex-wrap:wrap;font-size:12.5px;font-weight:800;color:#4A4A4A}.nsh .lg span{display:flex;align-items:center;gap:5px}.nsh .lg i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.nsh .wt{border-radius:14px;padding:11px 12px;font-size:13.5px;font-weight:700;line-height:1.45;background:#F3EEFC;color:#3F2A78}
+.nsh .wt .big{font-family:'Fredoka',sans-serif;font-weight:600;font-size:26px;color:#5B3FA0;display:block;line-height:1.15;font-variant-numeric:tabular-nums}
+.nsh .wt.ok{background:#E9F7EC;color:#1D4D25}.nsh .wt.ok .big{color:#2E7D32}
+.nsh .pb{border:0;border-radius:13px;background:linear-gradient(180deg,#FFB13B,#FF8F00);color:#fff;font-family:'Fredoka',sans-serif;font-weight:600;font-size:16px;padding:12px;min-height:50px;cursor:pointer;box-shadow:0 3px 0 #B85F00}
+.nsh .pb.pu{background:linear-gradient(180deg,#9C7BE0,#5B3FA0);box-shadow:0 3px 0 #3F2A78}.nsh .pb:disabled{background:#ECE8F3;color:#7E73A0;box-shadow:none;cursor:default}
+.nsh .sb{border:1.5px solid #E3DCCB;background:#fff;border-radius:13px;padding:11px;font-weight:800;font-size:14px;cursor:pointer;color:#1E2433;min-height:46px;font-family:inherit}
+.nsh .nt{font-size:12px;font-weight:700;color:#7A7468;text-align:center}
+.nbh{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#fff;border:2px solid #E3DCCB;border-radius:18px;padding:12px 14px;cursor:pointer;font-family:inherit;color:#1E2433;margin-top:14px;box-shadow:0 3px 0 #E3DCCB}
+.nbh.rdy{border-color:#F0C46C;background:#FFF9E8;box-shadow:0 3px 0 #F0C46C}
+.nbh .bi{width:46px;height:46px;border-radius:14px;background:#EEE7F9;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;position:relative}
+.nbh .bi b{position:absolute;right:-6px;top:-6px;min-width:21px;height:21px;border-radius:11px;background:#8A6CD0;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;padding:0 5px}
+.nbh .tx{flex:1;min-width:0;font-weight:900;font-size:14.5px;line-height:1.3}.nbh .tx small{display:block;font-weight:700;font-size:12.5px;color:#6F6A7E}
+.nbh .ar{font-size:22px;color:#8A6CD0;font-weight:900}`;
+(function injectNhCSS2() { if (typeof document === 'undefined' || document.getElementById('nh-css2')) return; const st = document.createElement('style'); st.id = 'nh-css2'; st.textContent = NH_CSS2; document.head.appendChild(st); })();
+const NH_BOXMS = 2 * 3600e3;
+function nhClock(ms) { const s = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); }
+function NhClock({ to, onDone }) { // reloj en vivo (se actualiza solo, sin redibujar toda la pantalla)
+  const [, setT] = React.useState(0); const done = React.useRef(false);
+  React.useEffect(() => { done.current = false; const iv = setInterval(() => { setT(t => t + 1); if (!done.current && to && to - Date.now() <= 0) { done.current = true; try { onDone && onDone(); } catch (e) {} } }, 1000); return () => clearInterval(iv); }, [to]);
+  return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{nhClock((to || 0) - Date.now())}</span>;
+}
+function NhRing({ to, ready }) { // anillo alrededor de Neuro: se llena mientras los errores descansan
+  const [, setT] = React.useState(0);
+  React.useEffect(() => { if (ready) return; const iv = setInterval(() => setT(t => t + 1), 1000); return () => clearInterval(iv); }, [to, ready]);
+  const f = ready ? 100 : Math.max(0, Math.min(100, (1 - ((to || 0) - Date.now()) / NH_BOXMS) * 100));
+  return <span className="nb-ring" style={{ background: `conic-gradient(${ready ? '#FFCA28' : '#9C7BE0'} 0 ${f}%,rgba(160,180,240,.18) ${f}% 100%)` }}></span>;
+}
+/* 🔔 Campanita cuando los errores vuelven: una vez por tanda, nunca de 9 pm a 7 am (hora Perú), nunca en vista previa. */
+const NH_NTF_KEY = 'jucum_mix_ntf_v1';
+function nhNotifyBox(student) {
+  try {
+    const MIX = window.JUCUM_MIX, N = window.JUCUM_NOTIF; if (!MIX || !N || !student || !MIX.enabledFor(student) || MIX.isPreview(student.id)) return;
+    const s = MIX.boxSummary(student.id); if (!s.ready) return;
+    const h = new Date(Date.now() - 5 * 3600e3).getUTCHours(); if (h < 7 || h >= 21) return;
+    let all = {}; try { all = JSON.parse(localStorage.getItem(NH_NTF_KEY) || '{}') || {}; } catch (e) {}
+    if ((all[student.id] || 0) >= s.lastReady) return;
+    const title = '🧠 ¡Tus errores ya volvieron!';
+    const dup = (N.getNotifs(student.id) || []).some(n => n.title === title && Date.now() - Date.parse(n.date) < 3 * 3600e3);
+    all[student.id] = s.lastReady; const ks = Object.keys(all); if (ks.length > 12) ks.slice(0, ks.length - 12).forEach(k => delete all[k]);
+    if (window.JUCUM_STORE) window.JUCUM_STORE.setJSON(NH_NTF_KEY, all); else localStorage.setItem(NH_NTF_KEY, JSON.stringify(all));
+    if (!dup) N.pushNotif(student.id, { type: 'daily-reminder', title, body: `${s.ready === 1 ? '1 error está listo' : s.ready + ' errores están listos'} para repasar. Entran solos en ▶ Empezar de Mi práctica y completan tus neuronas.`, link: 'practica' });
+  } catch (e) {}
+}
+/* 🏠 Tarjeta en Inicio: solo si tiene errores esperando o listos. Lee la nube (solo lectura) y avisa por la campanita. */
+function NeuroBoxHomeCard({ student, onGo }) {
+  const MIX = window.JUCUM_MIX, on = !!(MIX && student && MIX.enabledFor(student));
+  const [, setT] = React.useState(0);
+  React.useEffect(() => {
+    if (!on) return; let alive = true;
+    MIX.pullBox(student.id).then(() => MIX.refreshReady(student.id)).then(() => { if (alive) { setT(t => t + 1); nhNotifyBox(student); } });
+    const iv = setInterval(() => { if (alive) { setT(t => t + 1); nhNotifyBox(student); } }, 60000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [student && student.id, on]);
+  if (!on) return null;
+  const s = MIX.boxSummary(student.id); if (!s.total) return null;
+  const go = () => { try { sessionStorage.setItem('jucum_nh_tab_v1', 'hoy'); } catch (e) {} onGo && onGo(); };
+  return (
+    <button type="button" className={'nbh' + (s.ready ? ' rdy' : '')} onClick={go}>
+      <span className="bi">{s.ready ? '🔔' : '🧠'}<b>{s.total}</b></span>
+      <span className="tx">{s.ready ? (s.ready === s.total ? (s.total === 1 ? '¡Tu error ya volvió!' : `¡Tus ${s.total} errores ya volvieron!`) : `${s.ready} de tus errores ya volvieron`) : (s.total === 1 ? '1 error descansando' : `${s.total} errores descansando`)}
+        <small>{s.ready ? 'Repásalos en Mi práctica · entran solos en ▶ Empezar' : <>Vuelven en <NhClock to={s.next} onDone={() => setT(t => t + 1)} /> · a las {nhTime(s.next)}</>}</small></span>
+      <span className="ar">›</span>
+    </button>
+  );
+}
+/* Ficha de la neurona (se abre al tocarla): qué le falta, cuándo vuelven sus errores y qué tocar. */
+function NhSheet({ n, onClose, onMix, onBox, onOpen, onReady }) {
+  const p = n.prog, okW = p.total ? p.ok / p.total * 100 : 0, bxW = p.total ? p.box / p.total * 100 : 0;
+  const when = n.viaMatDate ? new Date(Date.parse(n.viaMatDate)).toLocaleString('es-PE', { weekday: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+  return (
+    <>
+      <div className="nsh-sd" onClick={onClose}></div>
+      <div className="nsh" role="dialog" aria-label={n.full || n.short}>
+        <span className="gr"></span>
+        <div className="hd"><span className="ic" style={{ background: n.color + '33' }}>{n.ico}</span><span><b>{n.full || n.short}</b><small>{p.total} preguntas{n.mm && n.mm.stories && n.mm.stories.length ? ' · la historia que dejó tu profe' : ''}</small></span><button type="button" className="x" onClick={onClose} aria-label="Cerrar">✕</button></div>
+        <div className="bar"><i style={{ width: okW + '%', background: n.color }}></i><i style={{ width: bxW + '%', background: '#9C7BE0' }}></i></div>
+        <div className="lg"><span><i style={{ background: n.color }}></i>{p.ok} conectadas</span>{p.boxAll > 0 && <span><i style={{ background: '#9C7BE0' }}></i>{p.boxAll} en tu caja</span>}{p.pending > 0 && <span><i style={{ background: '#EDE6D6' }}></i>{p.pending} sin responder</span>}</div>
+        {n.viaMat && p.pct < 100 && <div className="wt ok"><span className="big">✓ Conectada</span>La hiciste en el material: <b>{n.viaMatScore}%</b>{when ? ' (' + when + ')' : ''}. No te falta nada aquí.</div>}
+        {p.pct >= 100 && <div className="wt ok"><span className="big">✓ ¡Neurona completa!</span>{p.graded != null ? 'Tu nota: ' + p.graded + '%' : 'Respondiste todo bien.'}</div>}
+        {p.boxReady > 0 && <><div className="wt ok"><span className="big">¡{p.boxReady === 1 ? 'Tu error ya volvió' : `Tus ${p.boxReady} errores ya volvieron`}!</span>Repásalos{n.viaMat ? ' (opcional)' : ' y tu neurona sube'}.</div><button type="button" className="pb pu" onClick={onBox}>🧠 Repasar {p.boxReady === 1 ? 'mi error' : `mis ${p.boxReady} errores`}</button></>}
+        {p.boxAll > 0 && !p.boxReady && <div className="wt"><span className="big"><NhClock to={p.boxNext} onDone={onReady} /></span>{p.boxAll === 1 ? 'Tu error vuelve' : `Tus ${p.boxAll} errores vuelven`} a las <b>{nhTime(p.boxNext)}</b>. Neuro los guarda 2 horas porque, después de un descanso, tu cerebro los recuerda mejor.</div>}
+        {p.pending > 0 && <button type="button" className="pb" onClick={onMix}>{n.viaMat ? 'Practicar igual (opcional)' : `▶ Seguir · ${p.pending === 1 ? 'falta 1 pregunta' : `faltan ${p.pending} preguntas`}`}</button>}
+        {n.href && <button type="button" className="sb" onClick={onOpen}>{n.locked ? '🔒 ' : ''}Abrir el material completo ›</button>}
+        {!n.viaMat && p.pct < 100 && <div className="nt">Si haces el material completo y apruebas, la neurona también se conecta ✓</div>}
+      </div>
+    </>
+  );
+}
 
 const NH_COLORS = ['#FFB300', '#4FC3F7', '#F06292', '#81C784', '#BA68C8', '#FF8A65', '#4DB6AC', '#9575CD', '#AED581', '#7986CB'];
 const NH_TYPE_ICO = { story: '📗', dialog: '📗', reading: '📖', listening: '🎧', grammar: '📝', summary: '📚', quizlet: '🃏' };
@@ -94,6 +200,7 @@ function NhNode({ n, x, y, sz, num, onClick }) {
         <span className="e" style={{ fontSize: Math.round(sz * .36) }}>{n.locked ? '🔒' : n.ico}</span>
       </span>
       {p >= 100 && <span className="ck" style={{ color: n.color, borderColor: n.color }}>✓</span>}
+      {n.boxN > 0 && <span className={'bxn' + (n.boxRdy ? ' rdy' : '')}>🧠{n.boxN}</span>}
       {num ? <span className="num">{num}</span> : null}
     </button>
   );
@@ -107,6 +214,8 @@ function NeuroPractice({ student, settings, onBack, helpers, extras, explore, co
   const [showCoach, setShowCoach] = React.useState(false);
   const [coachTopic, setCoachTopic] = React.useState(null);   // XP-EXPLICA-V1: 0 = Neuro abre “⚡ ¿Cómo subo mi XP?”
   const [mats, setMats] = React.useState(null);
+  const [boxMats, setBoxMats] = React.useState([]);   // NEURO-FIX-V1: materiales con errores de otros días
+  const [sheet, setSheet] = React.useState(null);
   const [rev, setRev] = React.useState(null);
   const [run, setRun] = React.useState(null);
   const [sum, setSum] = React.useState(null);
@@ -120,10 +229,11 @@ function NeuroPractice({ student, settings, onBack, helpers, extras, explore, co
     Promise.all([MIX.todayMaterials(student).catch(() => []), MIX.weekReviews(student).catch(() => null)]).then(([ms, r]) => {
       if (!alive) return;
       setMats(ms || []); setRev(r);
-      MIX.pull(uid, (ms || []).concat(r ? r.mats : [])).then(() => MIX.refreshReady(uid)).then(() => alive && refresh());
+      MIX.pull(uid, (ms || []).concat(r ? r.mats : [])).then(() => MIX.pullBox(uid)).then(() => MIX.boxMaterials(student, (ms || []).map(m => m.key)))
+        .then((bx) => { if (alive) setBoxMats(bx || []); return MIX.refreshReady(uid); }).then(() => { if (alive) { refresh(); nhNotifyBox(student); } });
       MIX.flush(uid);
     });
-    const iv = setInterval(() => alive && refresh(), 60000);
+    const iv = setInterval(() => { if (alive) { refresh(); nhNotifyBox(student); } }, 60000);
     return () => { alive = false; clearInterval(iv); };
   }, [uid]);
   React.useEffect(() => { if (run || sum) { const o = document.body.style.overflow; document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = o; }; } }, [!!(run || sum)]);
@@ -140,16 +250,27 @@ function NeuroPractice({ student, settings, onBack, helpers, extras, explore, co
   const items = (tp && tp.items) || [];
   const mods = D.MODULE_CATALOG[student.level] || [];
   const prog = D.getStudentProgress(uid);
+  /* NEURO-FIX-V1: la neurona también se conecta si el alumno APROBÓ el material desde que la profe lo dejó (primer día del set; set automático = hoy) */
+  const plansToday = (TT && TT.getPracticePlansForStudentOnDate ? TT.getPracticePlansForStudentOnDate(student, todayISO) : []).filter(p => p.assignToStudents !== false);
+  const fromOf = (it) => { let f = null; plansToday.forEach(p => { if ((p.activities || []).some(a => a.moduleId === it.moduleId && a.activityId === it.activityId)) { const d = (p.dates || []).slice().sort()[0]; if (d && (!f || d < f)) f = d; } }); return f || todayISO; };
   const nodes = items.map((it, i) => {
     const mod = mods.find(m => m.id === it.moduleId); const a = mod && (mod.activities || []).find(x => x.id === it.activityId);
     if (!mod || !a) return null;
     const key = mod.id + ':' + a.id, mm = mats ? mats.find(m => m.key === key) : null, type = a.type || it.type;
     const story = type === 'story' || type === 'dialog', noGrade = story || type === 'summary' || type === 'quizlet';
     const e = prog.completed[key], doneToday = !!(e && e.date && nhPeruDay(Date.parse(e.date)) === todayISO);
-    let pct, label, conn;
-    if (mm) { const p = MIX.matProgress(uid, mm); pct = p.pct; conn = pct >= 100; label = conn ? (p.graded != null ? '✓ Nota ' + p.graded + '%' : '✓') : pct + '%'; }
+    let pct, label, conn, sub = null, viaMat = false, viaMatScore = null, mp = null;
+    if (mm) {
+      mp = MIX.matProgress(uid, mm); const from = fromOf(it);
+      viaMat = !!(e && e.date && nhPeruDay(Date.parse(e.date)) >= from && D.entryPassed(e, student.level, student.group));
+      viaMatScore = viaMat ? (D.scorePct ? D.scorePct(e.score) : e.score) : null;
+      conn = mp.pct >= 100 || viaMat; pct = conn ? 100 : mp.pct;
+      label = mp.pct >= 100 ? (mp.graded != null ? '✓ Nota ' + mp.graded + '%' : '✓') : viaMat ? '✓ ' + viaMatScore + '%' : mp.pct + '%';
+      sub = viaMat && mp.pct < 100 ? 'en el material' : (mp.boxReady ? '🔔 ' + mp.boxReady + (mp.boxReady === 1 ? ' listo' : ' listos') : null);
+    }
     else if (story) { pct = doneToday ? 100 : 0; conn = doneToday; label = doneToday ? 'Leída ✓' : 'Leer 4 min'; }
     else {
+      /* SUM-CORE (26-oct, decisión de la usuaria): el Resumen cuenta como hecho al terminar los pasos 1-3, como siempre (sin nota mínima) */
       const sc = doneToday && !noGrade ? (D.scorePct ? D.scorePct(e.score) : e.score) : null;
       const passed = doneToday && (noGrade || D.entryPassed(e, student.level, student.group));
       pct = doneToday ? (passed ? 100 : Math.max(10, sc || 0)) : 0; conn = doneToday;
@@ -159,12 +280,15 @@ function NeuroPractice({ student, settings, onBack, helpers, extras, explore, co
     let qGame = null;
     if (type === 'quizlet' && H.quizletGames) { const gs = H.quizletGames(a); const g = gs.find(x => x.key === it.quizKey) || gs[0]; qGame = g ? { ...g, url: it.quizUrl || g.url } : (it.quizUrl ? { key: it.quizKey, url: it.quizUrl } : null); }
     const locked = !!(H.isLockHref && H.isLockHref(href)) && !conn;
-    return { i, key, it, mod, a, type, mm, pct, label, conn, href, qGame, locked, short: nhShort(type, it.label || a.name, a.url), full: it.label || a.name, color: NH_COLORS[i % NH_COLORS.length], ico: nhIco(type, a.url) };
+    return { i, key, it, mod, a, type, mm, pct, label, conn, href, qGame, locked, sub, viaMat, viaMatScore, viaMatDate: viaMat ? e.date : null, prog: mp, boxN: mp ? mp.boxAll : 0, boxRdy: mp ? mp.boxReady : 0,
+      short: nhShort(type, it.label || a.name, a.url) + (mm && mm.stories && mm.stories.length ? ' H' + mm.stories.join('/') : ''), full: (a.group && type === 'grammar' ? a.group.split('·')[0].trim() + ' · ' : '') + (it.label || a.name) + (mm && mm.stories && mm.stories.length ? ' · Historia ' + mm.stories.join(' y ') : ''), color: NH_COLORS[i % NH_COLORS.length], ico: nhIco(type, a.url) };
   }).filter(Boolean);
   const N = nodes.length, connN = nodes.filter(n => n.conn).length, allConn = N > 0 && connN === N;
+  const skipKeys = nodes.filter(n => n.mm && n.viaMat && n.prog && n.prog.pct < 100).map(n => n.key);
+  const allMats = (mats || []).concat(boxMats || []);
 
   const openNode = (n) => {
-    if (n.mm) { if (n.pct < 100) start('mix'); return; }
+    if (n.mm) { setSheet(n.key); return; }
     if (n.locked) { H.showLockToast && H.showLockToast(H.lockMsgOf(n.href)); return; }
     if (n.qGame) { try { D.markActivityComplete(uid, n.mod.id, n.a.id, null, 0, { quizlet: n.qGame.key }); } catch (e) {} window.open(n.qGame.url, '_blank', 'noopener'); setTimeout(refresh, 600); return; }
     if (n.href && H.openMat) H.openMat(n.href);
@@ -172,16 +296,18 @@ function NeuroPractice({ student, settings, onBack, helpers, extras, explore, co
 
   /* ── sesión mixta / caja / bonus ── */
   const colorOf = (pool) => (k) => { const i = pool.findIndex(m => m.key === k); const nd = nodes.find(x => x.key === k); return nd ? nd.color : NH_COLORS[(i + 3) % NH_COLORS.length]; };
-  const start = (mode) => {
-    const pool = mode === 'bonus' ? (rev ? rev.mats : []) : (mats || []);
+  const start = (mode, only, force) => {
+    const pool = mode === 'bonus' ? (rev ? rev.mats : []) : allMats;
     if (!pool.length) return;
-    const seq = MIX.buildSession(uid, pool, mode === 'box' ? 'box' : 'mix', mode === 'bonus' ? 6 : undefined);
+    const seq = MIX.buildSession(uid, pool, mode === 'box' ? 'box' : 'mix', mode === 'bonus' ? 6 : undefined, { only: only || null, skip: force ? [] : skipKeys, noBox: mode === 'bonus' });
     if (!seq.length) { refresh(); return; }
+    setSheet(null);
     const before = {}; pool.forEach(m => { before[m.key] = MIX.matProgress(uid, m).pct; });
     setSum(null); setRun({ mode, pool, seq, k: 0, chosen: null, res: [], before, shownAt: Date.now(), secs: 0, won: [], lastWon: null });
     MIX.live(student, 'start', pool.find(m => m.key === seq[0].mat), 0);
   };
-  const startBox = () => { MIX.refreshReady(uid).then(() => { refresh(); start('box'); }); };
+  const startBox = (only) => { MIX.refreshReady(uid).then(() => { refresh(); start('box', only); }); };
+  const onBoxReady = () => { MIX.refreshReady(uid).then(() => { refresh(); nhNotifyBox(student); }); };
   const onAnswered = (r, res, secs) => {
     const st = r.seq[r.k], m = r.pool.find(x => x.key === st.mat);
     MIX.live(student, res.matDone ? 'done' : 'active', m, secs / 60, res.matDone ? res.score : null);
@@ -216,7 +342,6 @@ function NeuroPractice({ student, settings, onBack, helpers, extras, explore, co
   const openXP = () => { if (showCoach && coachTopic === 0) { setShowCoach(false); return; } setCoachTopic(0); setShowCoach(true); };
 
   /* ── Cómo practicar hoy (instructivo del set del profe) ── */
-  const plansToday = (TT && TT.getPracticePlansForStudentOnDate ? TT.getPracticePlansForStudentOnDate(student, todayISO) : []).filter(p => p.assignToStudents !== false);
   const planWithGuide = plansToday.find(p => p.guide && p.guide.steps && p.guide.steps.length);
   const openGuide = () => {
     if (!window.JUCUM_GUIDE) return;
@@ -230,9 +355,10 @@ function NeuroPractice({ student, settings, onBack, helpers, extras, explore, co
   };
 
   /* ── botón principal ── */
-  const pool = mats ? mats.reduce((a, m) => a + MIX.matProgress(uid, m).pending, 0) : 0;
-  const nOpen = Math.min(MIX.CFG.size, pool);
-  const box = MIX.boxStatus(uid, mats || []);
+  const plan0 = mats ? MIX.buildSession(uid, allMats, 'mix', undefined, { skip: skipKeys, countOnly: true }) : { n: 0, errs: 0 };
+  const pool = plan0.n || 0;
+  const nOpen = pool;
+  const box = MIX.boxStatus(uid, allMats);
   const nextOther = nodes.find(n => !n.conn && !n.mm && !n.locked);
   const L = nhLayout(Math.max(1, N));
   const avg = N ? nodes.reduce((a, n) => a + n.pct, 0) / N / 100 : 0;
@@ -246,24 +372,30 @@ function NeuroPractice({ student, settings, onBack, helpers, extras, explore, co
       {N > 0 && (
         <div className="startb">
           {!mats ? <button type="button" className="zbtn" disabled>Preparando tus ejercicios…</button>
-            : pool > 0 ? <><button type="button" className="zbtn" onClick={() => start('mix')}>▶ Empezar{mats.some(m => MIX.matProgress(uid, m).answered > 0) ? ' otra ronda' : ''}</button><small>{nOpen} ejercicios mezclados de tus prácticas · ≈ {Math.max(1, Math.round(nOpen * MIX.CFG.secPerQ / 60))} min</small></>
+            : pool > 0 ? <><button type="button" className="zbtn" onClick={() => start('mix')}>{plan0.errs === pool ? '🧠 Repasar mis errores' : '▶ Empezar' + (mats.some(m => MIX.matProgress(uid, m).answered > 0) ? ' otra ronda' : '')}</button><small>{plan0.errs === pool ? `${pool} ${pool === 1 ? 'error listo' : 'errores listos'} · ≈ ${Math.max(1, Math.round(pool * MIX.CFG.secPerQ / 60))} min` : `${nOpen} ejercicios mezclados de tus prácticas${plan0.errs ? ' · incluye ' + plan0.errs + (plan0.errs === 1 ? ' de tus errores 🧠' : ' de tus errores 🧠') : ''} · ≈ ${Math.max(1, Math.round(nOpen * MIX.CFG.secPerQ / 60))} min`}</small></>
             : nextOther ? <><button type="button" className="zbtn" onClick={() => openNode(nextOther)}>▶ Sigue: {nextOther.full || nextOther.short}</button><small>{nextOther.type === 'story' ? 'Se marca al leer 4 minutos' : 'Se abre el material como siempre'}</small></>
-            : <div className="bfoot" style={{ color: '#9FF0FF', fontSize: 13 }}>{allConn ? '🎉 ¡Respondiste todo lo del profe!' : '¡Respondiste todos los ejercicios!'}{box.total ? ' Solo falta tu caja de errores.' : ''}</div>}
+            : <div className="bfoot" style={{ color: '#9FF0FF', fontSize: 13 }}>{allConn ? '🎉 ¡Respondiste todo lo del profe!' : '¡Respondiste todos los ejercicios!'}{box.total ? ' Tus errores vuelven pronto: Neuro te avisa.' : ''}</div>}
         </div>
+      )}
+      {N > 0 && box.total > 0 && (
+        <div className={'nb-bub' + (box.ready ? ' rdy' : '')}>{box.ready
+          ? <>{box.ready === 1 ? '¡Ya volvió tu error!' : `¡Ya volvieron tus ${box.ready} errores!`}<b>Toca ▶ Empezar</b></>
+          : <>{box.total === 1 ? 'Tu error está descansando 💤' : `Tus ${box.total} errores están descansando 💤`}<b><NhClock to={box.next} onDone={onBoxReady} /></b></>}</div>
       )}
       {N > 0 ? (
         <div className="hub">
           {nodes.map((n, i) => { const [px, py] = L.pos[i], dx = 150 - px, dy = L.cy - py, len = Math.sqrt(dx * dx + dy * dy), ang = Math.atan2(dy, dx) * 180 / Math.PI;
             return <span key={'a' + i} className="axm" style={{ left: px, top: py - 1.5, width: len, transform: `rotate(${ang}deg)`, background: `linear-gradient(90deg,${n.color} 0,${n.color} ${n.pct}%,rgba(160,180,240,.22) ${n.pct}%)`, ...(n.pct >= 100 ? { boxShadow: '0 0 10px ' + n.color, height: 4 } : {}) }}></span>; })}
           <span className={'halo' + (allConn ? ' gold' : bonusToday ? ' bon' : '')} style={{ top: L.cy, opacity: .25 + .75 * Math.max(avg, bonusToday ? .6 : 0) }}></span>
-          <div className="hcen" style={{ top: L.cy }}><NeuroFace z={N <= 6 ? .74 : .66} anim={allConn ? 'cheer' : 'idle'} mood={lit ? 'grin' : 'smile'} wave={!lit} sparks={allConn || bonusToday} /></div>
+          {box.total > 0 && <NhRing to={box.next} ready={box.ready > 0} />}
+          <div className="hcen" style={{ top: L.cy }}><NeuroFace z={N <= 6 ? .74 : .66} anim={allConn || box.ready ? 'cheer' : 'idle'} mood={lit ? 'grin' : 'smile'} wave={!lit || box.ready > 0} sparks={allConn || bonusToday} /></div>
           {nodes.map((n, i) => { const [px, py] = L.pos[i];
-            const click = (n.mm && n.pct < 100 && pool > 0) || (!n.mm && !(n.conn && n.type === 'story')) ? () => openNode(n) : null;
+            const click = n.mm || !(n.conn && n.type === 'story') ? () => openNode(n) : null;
             return (
               <React.Fragment key={'n' + i}>
                 <NhNode n={n} x={px} y={py} sz={L.sz} num={N > 6 ? i + 1 : 0} onClick={click} />
                 {N <= 6
-                  ? <div className="hl" style={{ left: px - 52, top: py + L.sz / 2 + 3 }}><span className="nm">{n.short}</span><span className="hlp" style={{ color: n.color }}>{n.locked ? '🔒' : n.label}</span></div>
+                  ? <div className="hl" style={{ left: px - 52, top: py + L.sz / 2 + 3 }}><span className="nm">{n.short}</span><span className="hlp" style={{ color: n.color }}>{n.locked ? '🔒' : n.label}</span>{n.sub && N <= 4 && <span className="sub">{n.sub}</span>}</div>
                   : <div className="hl sm" style={{ left: px - 30, top: py + L.sz / 2 + 2 }}><span className="hlp" style={{ color: n.color, fontSize: 12 }}>{n.pct >= 100 ? '✓' : n.locked ? '🔒' : n.pct + '%'}</span></div>}
               </React.Fragment>
             ); })}
@@ -273,8 +405,8 @@ function NeuroPractice({ student, settings, onBack, helpers, extras, explore, co
       )}
       {N > 6 && <div className="lgd">{nodes.map((n, i) => <div key={i}><i style={{ background: n.color }}>{i + 1}</i><span>{n.full || n.short}</span><b>{n.mm ? n.pct + '%' : n.label}</b></div>)}</div>}
       {box.total > 0
-        ? <div className={'rbox' + (box.ready ? ' rdy' : '')}><span className="bi">🧠<b>{box.total}</b></span><span className="rn">Caja de errores<small>{box.ready ? `${box.ready} listo${box.ready > 1 ? 's' : ''} para repasar` : `Se abre a las ${nhTime(box.next)} (en ${nhDur(box.next - Date.now())})`}{box.tomorrow ? ` · ${box.tomorrow} vuelve${box.tomorrow > 1 ? 'n' : ''} mañana` : ''} · cuenta para tu 100%</small></span>
-            {box.ready ? <button type="button" className="rbtn" onClick={startBox}>Repasar {Math.min(10, box.ready)}</button> : <span className="lock">🔒 {nhDur(box.next - Date.now())}</span>}</div>
+        ? <div className={'rbox' + (box.ready ? ' rdy' : '')}><span className="bi">🧠<b>{box.total}</b></span><span className="rn">Caja de errores<small>{box.ready ? `${box.ready} listo${box.ready > 1 ? 's' : ''} para repasar · también entran en ▶ Empezar` : <>Vuelven en <NhClock to={box.next} onDone={onBoxReady} /> · a las {nhTime(box.next)}</>} · cuenta para tu 100%</small></span>
+            {box.ready ? <button type="button" className="rbtn" onClick={() => startBox()}>Repasar {Math.min(MIX.CFG.boxMax, box.ready)}</button> : <span className="lock">🔒 <NhClock to={box.next} /></span>}</div>
         : (mats && mats.length > 0) ? <div className="bfoot">Lo que falles se guarda en tu caja de errores y vuelve 2 horas después 🧠</div> : null}
     </div>
   );
@@ -352,12 +484,14 @@ function NeuroPractice({ student, settings, onBack, helpers, extras, explore, co
           {extras}
         </>
       ) : <div>{explore}</div>}
+      {sheet && (() => { const n = nodes.find(x => x.key === sheet); return n && n.prog ? <NhSheet n={n} onClose={() => setSheet(null)} onMix={() => start('mix', n.key, n.viaMat)} onBox={() => startBox(n.key)}
+        onOpen={() => { setSheet(null); if (n.locked) { H.showLockToast && H.showLockToast(H.lockMsgOf(n.href)); return; } if (n.href && H.openMat) H.openMat(n.href); }} onReady={onBoxReady} /> : null; })()}
       {run && window.MixedPlayer && <MixedPlayer uid={uid} mats={run.pool} run={run} setRun={setRun} color={colorOf(run.pool)} onFinish={finish} onAnswered={onAnswered} />}
       {sum && window.MixedSummary && <MixedSummary uid={uid} mats={sum.pool} sum={sum} color={colorOf(sum.pool)}
-        pending={sum.pool.reduce((a, m) => a + MIX.matProgress(uid, m).pending, 0)}
+        pending={sum.pool.filter(m => !m.extra).reduce((a, m) => a + MIX.matProgress(uid, m).pending, 0)}
         onAgain={() => start(sum.mode === 'bonus' ? 'bonus' : 'mix')} onClose={() => { setSum(null); refresh(); }} />}
     </main>
   );
 }
 
-Object.assign(window, { NeuroPractice, NeuroFace });
+Object.assign(window, { NeuroPractice, NeuroFace, NeuroBoxHomeCard });

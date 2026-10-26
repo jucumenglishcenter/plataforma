@@ -118,7 +118,8 @@ function canTakeWindow(student, w) {
       if (hechas > 0 && hechas < nParts) return true;
     }
   } catch (e) {}
-  const r = window.JUCUM_DATA ? window.JUCUM_DATA.getStudentReadiness(student) : { apt: false };
+  const F = window.JUCUM_EXAMFLOW;   /* APTO-POR-EXAMEN-V1: el apto se mide con el módulo de ESTE examen */
+  const r = F && F.readinessForExam ? F.readinessForExam(student, getExam(w.examId)) : (window.JUCUM_DATA ? window.JUCUM_DATA.getStudentReadiness(student) : { apt: false });
   return !!r.apt;
 }
 

@@ -210,7 +210,7 @@ function ecAcceso(group, exam, mid, onChange) {
   const D = window.JUCUM_DATA, X = window.JUCUM_EXAMS, F = window.JUCUM_EXAMFLOW;
   const win = X.windowForExamGroup(exam.id, group.id), ann = F.getAnn(group.id, mid);
   const accOf = s => (ann && (ann.paused || []).includes(s.id)) ? 'pausa' : (win && (win.allowOverrides || []).includes(s.id)) ? 'hab' : 'auto';
-  const readyOf = s => { try { return D.getStudentReadiness(s) || { apt: false, overall: 0 }; } catch (e) { return { apt: false, overall: 0 }; } };
+  const readyOf = s => { try { return F.readinessForExam(s, exam) || { apt: false, overall: 0 }; } catch (e) { return { apt: false, overall: 0 }; } };
   const canEnter = s => { const a = accOf(s); return a === 'hab' || (a === 'auto' && !!readyOf(s).apt); };
   const setAcc = (s, v) => {
     const now = accOf(s); if (now === v) return;

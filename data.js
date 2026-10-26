@@ -1511,7 +1511,9 @@ function inGraceWeek(student) {
   return new Date() < end;
 }
 
-function getStudentMastery(student) {
+/* 🎯 APTO-POR-EXAMEN-V1 (24-oct-2026): scopeIds opcional = medir SOLO esos módulos (el del examen).
+ * Sin scopeIds, igual que siempre: los módulos que el alumno tiene abiertos. */
+function getStudentMastery(student, scopeIds) {
   if (!student) return { pct: 0, coverage: 0, quality: 0, done: 0, total: 0, active7: 0, constancyPct: 0 };
   const prog = getStudentProgress(student.id);
   const completed = prog.completed || {};
@@ -1524,6 +1526,7 @@ function getStudentMastery(student) {
     const active = mods.filter(m => activeIds.includes(m.id));
     if (active.length) scope = active;
   }
+  if (Array.isArray(scopeIds) && scopeIds.length) { const sc = mods.filter(m => scopeIds.includes(m.id)); if (sc.length) scope = sc; }
   let total = 0, done = 0, scoreSum = 0, scoreN = 0, partN = 0;
   scope.forEach(m => (m.activities || []).forEach(a => {
     total++;
@@ -1637,12 +1640,14 @@ function getDailyConstancy(student) {
   return { pct, target, daysOpen, metDays: met, activeDays: some, expected, since, minutes };
 }
 
-function getStudentReadiness(student) {
+/* 🎯 APTO-POR-EXAMEN-V1 · opts = { moduleIds, needCoverage, scopeLabel } para el apto de UN examen:
+ * examen de módulo → solo ese módulo (60%) · examen final → TODO el nivel (100%). Sin opts, igual. */
+function getStudentReadiness(student, opts) {
   if (!student) return { competencies:{}, practiceAvg:0, taskCompliance:null, overall:0, apt:false, threshold:75 };
   const prog = getStudentProgress(student.id);
   const completed = prog.completed || {};
   const mods = MODULE_CATALOG[student.level] || [];
-  const m = getStudentMastery(student);
+  const m = getStudentMastery(student, opts && opts.moduleIds);
   const constancyFactor = 0.8 + 0.2 * Math.min(1, (m.active7 || 0) / 5);
 
   const comp = {};
@@ -1652,7 +1657,7 @@ function getStudentReadiness(student) {
       if (!c.types.includes(a.type)) return;
       total++;
       const e = completed[`${mod.id}:${a.id}`];
-      if (e && entryPassed(e, student.level, student.group)) {
+      if (e && (entryPassed(e, student.level, student.group) || isLowStakesType(a.type))) { // NEURO-FIX-V1: resumen terminado (pasos 1-3) = hecho con cualquier nota, como en el resto de la plataforma
         done++;
         if (typeof e.score === 'number' && a.type !== 'story' && !isLowStakesType(a.type)) { const pct = scorePct(e.score); sSum += pct; sN++; }
         else pN++;
@@ -1744,7 +1749,7 @@ function getStudentReadiness(student) {
 
   overall = Math.max(0, Math.min(100, overall));
   // tope de seguridad: sin cubrir la mayoría del módulo no se puede ser "apto"
-  const needCoverage = 60;
+  const needCoverage = (opts && opts.needCoverage) || 60;
   const apt = overall >= 75 && coverageAll >= needCoverage / 100;
   /* 🔎 QUÉ le falta exactamente (22-ago-2026). El candado de cobertura era
    * INVISIBLE: un alumno con 81% veía "falta 0% para ser Apto" y su examen
@@ -1753,7 +1758,8 @@ function getStudentReadiness(student) {
   const blocker = apt ? null : (overall < 75 ? 'overall' : 'coverage');
   return { competencies: comp, practiceAvg, taskCompliance, taskDone, taskTotal, pillars, daily,
            overall, apt, threshold: 75, needCoverage, blocker,
-           coverage: m.coverage, quality: m.quality, daysInactive: inactive };
+           coverage: m.coverage, quality: m.quality, daysInactive: inactive,
+           scopeLabel: (opts && opts.scopeLabel) || null, done: m.done, total: m.total };
 }
 
 /* ── Registro de notas (boletín consolidado) ─────────────────────────
@@ -1887,7 +1893,7 @@ function getModuleStats(student, module) {
   (module.activities || []).forEach(a => {
     total++;
     const e = completed[`${module.id}:${a.id}`];
-    if (e && entryPassed(e, student.level, student.group)) { done++; if (typeof e.score === 'number' && a.type !== 'story' && !isLowStakesType(a.type)) { const pct = scorePct(e.score); sSum += pct; sN++; } else pN++; }
+    if (e && (entryPassed(e, student.level, student.group) || isLowStakesType(a.type))) { done++; if (typeof e.score === 'number' && a.type !== 'story' && !isLowStakesType(a.type)) { const pct = scorePct(e.score); sSum += pct; sN++; } else pN++; }
   });
   const coverage = total ? done / total : 0;
   const quality = sN ? (sSum / sN) / 100 : (pN ? 0.7 : 0);   // la participación ya no baja el promedio

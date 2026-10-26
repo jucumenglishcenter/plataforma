@@ -5,6 +5,7 @@
  * (🔊 / 🐢 con la voz del navegador; “Ver el texto” tras 2 escuchas).
  * Toda la lógica (lector, azar, caja de errores, guardado) vive en mixed.js (window.JUCUM_MIX).
  * Retroalimentación = la de cada material (En la historia · Regla · Español↔Inglés · explicación del error). */
+/* NEURO-FIX-V1 (26-oct-2026): errores de la caja dentro de la ronda (st.fromBox) · vuelven en 2 h también si se vuelven a fallar (script 38). */
 const MIX_CSS = `
 .mx-card{background:radial-gradient(circle at 50% 0%,#2A3D80,#131D47 78%);border-radius:18px;padding:14px;color:#fff;display:flex;flex-direction:column;gap:12px;box-shadow:0 6px 18px rgba(18,28,69,.3);margin-top:14px}
 .mx-h{display:flex;align-items:center;gap:10px}.mx-h b{font-family:'Fredoka',sans-serif;font-weight:600;font-size:16.5px;flex:1}.mx-h span{font-size:12px;font-weight:800;color:#9FE9FF;white-space:nowrap}
@@ -177,6 +178,7 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
       </div>
       <div className="mx-q">
         <span className="mx-chip">{mxIcon(mat)} {mat.name}</span>
+        {st.fromBox && run.mode !== 'box' && <span className="mx-tag" style={{ margin: '-6px 0 0' }}>🧠 Tu error de antes · ¡otra oportunidad!</span>}
         {q.kind === 'fill' ? (
           <>
             <div className="mx-hint">Completa la oración</div>
@@ -280,7 +282,7 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
               </>
             );
           })()}
-          {!ok && <div className="mx-cajanote">{run.mode === 'bonus' ? '⭐ Sin problema: vuelve en otra ronda de esta semana' : run.mode === 'box' ? '🧠 Vuelve mañana a tu caja, sin problema' : '🧠 Va a tu caja de errores · la verás en 2 h'}</div>}
+          {!ok && <div className="mx-cajanote">{run.mode === 'bonus' ? '⭐ Sin problema: vuelve en otra ronda de esta semana' : (run.mode === 'box' || st.fromBox) ? '🧠 Vuelve a tu caja en 2 h, sin problema' : '🧠 Va a tu caja de errores · la verás en 2 h'}</div>}
           {run.lastWon && <div className="mx-won">🎉 ¡Completaste {(mats.find(m => m.key === run.lastWon.key) || {}).name}! Tu nota: {run.lastWon.score}%</div>}
         </div>
       )}
@@ -310,7 +312,7 @@ function MixedSummary({ uid, mats, sum, color, pending, onAgain, onClose }) {
         ); })}
         {sum.won.map(w => <div className="mx-srow" key={'w' + w.key} style={{ borderColor: '#A5D6A7', background: '#F1FAF2', color: '#1B5E20' }}>🎉 ¡Completaste {(mats.find(m => m.key === w.key) || {}).name}! Nota registrada: {w.score}%</div>)}
         {wrong > 0 && sum.mode === 'mix' && <div className="mx-sbox">🧠 {wrong} a tu caja de errores. Se abre a las <b>{mxTime(box.next || (Date.now() + MIX.CFG.boxMs))}</b>: repasar después de un descanso ayuda a que tu cerebro lo guarde.</div>}
-        {wrong > 0 && sum.mode === 'box' && <div className="mx-sbox">🌙 {wrong} vuelve{wrong > 1 ? 'n' : ''} mañana a tu caja. ¡Paso a paso!</div>}
+        {wrong > 0 && sum.mode === 'box' && <div className="mx-sbox">🧠 {wrong} vuelve{wrong > 1 ? 'n' : ''} a tu caja en 2 h. ¡Paso a paso!</div>}
         {wrong > 0 && sum.mode === 'bonus' && <div className="mx-sbox" style={{ background: '#FFFBEA', borderColor: '#E9C45A', color: '#5A3E00' }}>⭐ {wrong} vuelve{wrong > 1 ? 'n' : ''} en otra ronda de esta semana. No te quita puntos.</div>}
         {/* XP-EXPLICA-V1 (23-oct-2026): honesto — las rondas mixtas y la caja no dan XP al responder */}
         {(sum.mode === 'mix' || sum.mode === 'box') && !sum.won.length && <div style={{ fontSize: 12, fontWeight: 700, color: '#6B5A48', lineHeight: 1.45 }}>🧠 Esta ronda entrenó tu memoria: las rondas no dan XP al responder. Para ver cómo ganar XP, toca <b>⚡</b> en Mi práctica.</div>}

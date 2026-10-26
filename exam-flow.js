@@ -401,6 +401,19 @@ function notaOficial(list, ret, desde) {
       return f === g;
     } catch (e) { return true; }
   }
+  /* 🎯 APTO-POR-EXAMEN-V1 (24-oct-2026, pedido de la usuaria): el apto de un examen se mide con
+   * SU módulo, no con todos los abiertos (caso Valentino: M1 completo, salía “falta módulo 54/60%”
+   * porque contaba el M2 recién empezado). Examen FINAL (suelto) = TODO el nivel al 100%: sin
+   * todo lo demás hecho no se da el final. */
+  function readinessForExam(student, exam) {
+    const D = window.JUCUM_DATA;
+    if (!D || !student) return { apt: false, overall: 0 };
+    const mods = (D.MODULE_CATALOG[student.level] || []).map(m => m.id);
+    const ids = ((exam && exam.moduleIds) || []).filter(id => mods.includes(id));
+    if (exam && !ids.length) return D.getStudentReadiness(student, { moduleIds: mods, needCoverage: 100, scopeLabel: 'nivel' });
+    if (exam) return D.getStudentReadiness(student, { moduleIds: ids, needCoverage: 60, scopeLabel: 'módulo' });
+    return D.getStudentReadiness(student);
+  }
   function infoForModule(student, mod) {
     const D = window.JUCUM_DATA, X = window.JUCUM_EXAMS;
     if (!D || !X || !student || !mod) return { phase: 'none' };
@@ -417,7 +430,7 @@ function notaOficial(list, ret, desde) {
     if (res && fr && !despuesDe(res.gradedAt, fr)) res = null;   /* la profesora aceptó que lo dé de nuevo */
     if (res) return { phase: 'done', exam: exam, win: win, ann: ann, result: res, isForms: isForms };
     if (isForms) return { phase: 'none' };                       // Forms sin nota propia: nada que mostrar
-    const r = D.getStudentReadiness(student);
+    const r = readinessForExam(student, exam);
     const overridden = !!(win && (win.allowOverrides || []).includes(student.id));
     /* ⏸ PANEL-UNICO-V1: la profesora puede PAUSAR el acceso de un alumno a este examen */
     const paused = !!(ann && (ann.paused || []).includes(student.id));
@@ -576,7 +589,7 @@ function notaOficial(list, ret, desde) {
     getAnn: getAnn, setAnn: setAnn, getPre: getPre, setPre: setPre,
     isPreexamActivity: isPreexamActivity, preOpenNow: preOpenNow, preexamVisibleFor: preexamVisibleFor,
     annForWindow: annForWindow, winEffectiveOpen: winEffectiveOpen, infoForModule: infoForModule,
-    annFin: annFin, enFechaAnn: enFechaAnn, abiertoAhoraHasta: abiertoAhoraHasta,
+    annFin: annFin, enFechaAnn: enFechaAnn, readinessForExam: readinessForExam, abiertoAhoraHasta: abiertoAhoraHasta,
     registerM1Forms: registerM1Forms, formsWindowFor: formsWindowFor, eventsForDay: eventsForDay, hydrate: hydrate,
     despuesDe: despuesDe, freshFor: freshFor, desdePara: desdePara, setFresh: setFresh, retryQs: retryQs, yaRindieron: yaRindieron,
     getCfg: getCfg, setCfg: setCfg, minGradeFor: minGradeFor, notaOficial: notaOficial, notaOficialPartes: notaOficialPartes, examDesde: examDesde, partesDeExamen: partesDeExamen, lblParte: lblParte, faltanPartes: faltanPartes, notaExamen: notaExamen, canonPart: canonPart,
