@@ -27,7 +27,7 @@
   if (window.JUCUM_MIX) return;
 
   var CFG = { levels: { 'pre-a1': 1 }, size: 12, minPer: 2, maxPer: 4, maxMats: 6,
-    boxMs: 2 * 3600e3, retryMs: 2 * 3600e3, cacheMs: 6 * 3600e3, secPerQ: 35, maxSecQ: 90, boxInMix: 3, boxMax: 10 };
+    boxMs: 2 * 3600e3, retryMs: 2 * 3600e3, cacheMs: 6 * 3600e3, secPerQ: 35, maxSecQ: 90, boxInMix: 3, boxMax: 10, xpOk: 2, xpTry: 1, xpExtra: 1, xpDayCap: 80, maxExtras: 4 };
   var STATE_KEY = 'jucum_mix_v1';        // HEAVY (config.js)
   var CACHE_KEY = 'jucum_mix_cache_v1';  // HEAVY (config.js)
   var HOST = /^https:\/\/jucumenglishcenter\.github\.io\//i;
@@ -181,6 +181,8 @@
           var a = pi < 0 ? 0 : pi, b = a + 1 < paras.length ? a + 1 : a - 1, ix = [a, b].filter(function (x) { return x >= 0 && x < paras.length; }).sort(function (x, y) { return x - y; });
           it.paras = ix.filter(function (x, z) { return ix.indexOf(x) === z; }).map(function (x) { return { en: String(paras[x].en || ''), es: String(paras[x].es || '') }; });
           it.proof = proof; it.qtype = String(q.type || '');
+          var sents = [], pIdx = -1; it.paras.forEach(function (pp) { (String(pp.en).match(/[^.!?]+[.!?]+["”’]?|[^.!?]+$/g) || []).forEach(function (x) { x = x.trim(); if (!x) return; if (pIdx < 0 && low && x.toLowerCase().replace(/[.!?"”’]+$/, '').indexOf(low) >= 0) pIdx = sents.length; sents.push(x); }); });
+          if (pIdx >= 0 && sents.length >= 3) { it.sents = sents; it.proofIdx = pIdx; }
         }
         out.push(it);
       });
@@ -206,6 +208,69 @@
     if (!arr) return { items: [], warn: ['No se encontraron las preguntas dentro del material'] };
     var items = kind === 'fill' ? normFill(arr, warn) : kind === 'transform' ? normTrans(arr, warn) : normIdent(arr, warn);
     return { items: items, warn: warn, raw: arr.length };
+  }
+  /* 📚🗣🧱 FASE 2 · EXTRAS (NEURO-FIX-V2, 26-oct): el Resumen (STEPS[].checks) y la Story (GLOSS +
+   * STORYDATA) también entrenan dentro de la ronda. NO cuentan para ninguna nota ni para el 100 % de
+   * una neurona: solo variedad + práctica. Se recuerdan en el equipo (u.xs) para no repetir. */
+  function extraKindOf(url) { if (!HOST.test(String(url || ''))) return null; if (/\/gramatica\/[^/]+\.html(\?|#|$)/i.test(url)) return 'sum'; if (/\/m\d+\/story\.html(\?|#|$)/i.test(url)) return 'story'; return null; }
+  function tokens(s) { return String(s || '').replace(/[.,!?;:"“”‘’()]/g, ' ').split(/\s+/).filter(Boolean); }
+  function parseExtra(html, kind) {
+    var out = [];
+    if (kind === 'sum') {
+      var st = parseArr(extractArray(html, 'STEPS')); if (!Array.isArray(st)) return out;
+      st.forEach(function (S, si) { (S && S.checks || []).forEach(function (c, ci) {
+        var os = c && c.opts ? (Array.isArray(c.opts) ? c.opts : (c.opts.es || c.opts.en || [])) : [];
+        if (os.length < 2 || !(c.correct >= 0 && c.correct < os.length)) return;
+        var qt = pickLang(c.q); if (!qt) return; os = os.map(String);
+        if (Object.keys(os.reduce(function (o, x) { o[x.toLowerCase()] = 1; return o; }, {})).length !== os.length) return;
+        out.push({ id: hash('s|' + qt + '|' + os[c.correct]), kind: 'sum', extra: true, q: qt, opts: os, correct: os[c.correct], why: pickLang(c.fb && c.fb.why), tip: pickLang(c.fb && c.fb.tip), step: si + 1 });
+      }); });
+      return out;
+    }
+    var G = parseArr(extractArray(html, 'GLOSS')), words = [];
+    (Array.isArray(G) ? G : []).forEach(function (g) { var w = String(g && g.w || '').trim(); if (/^[A-Za-z']+$/.test(w)) words.push(w); });
+    (Array.isArray(G) ? G : []).forEach(function (g) {
+      var w = String(g && g.w || '').trim(), ex = String(g && g.ex || '');
+      if (!/^[A-Za-z']+$/.test(w) || !ex) return; var re = new RegExp('\\b' + w + '\\b', 'i'); if (!re.test(ex)) return;
+      var alt = words.filter(function (x) { return x.toLowerCase() !== w.toLowerCase() && !new RegExp('\\b' + x + '\\b', 'i').test(ex); });
+      if (alt.length < 2) return;
+      out.push({ id: hash('v|' + w + '|' + ex), kind: 'vocab', extra: true, word: w, ex: ex, es: String(g.es || ''), alt: alt, opts: [w], correct: w });
+    });
+    var SD = parseArr(extractArray(html, 'STORYDATA', '{'));
+    if (SD && typeof SD === 'object') Object.keys(SD).forEach(function (k) {
+      ((SD[k] || {}).paras || []).forEach(function (p) { (Array.isArray(p) ? p : []).forEach(function (pair) {
+        if (!Array.isArray(pair) || pair.length < 2) return; var en = String(pair[0] || ''), es = String(pair[1] || ''); if (/["“”]/.test(en)) return;
+        var tk = tokens(en); if (tk.length < 3 || tk.length > 7) return;
+        var dis = shuffle(words.filter(function (x) { return tk.map(function (t) { return t.toLowerCase(); }).indexOf(x.toLowerCase()) < 0; })).slice(0, 2);
+        if (dis.length < 2) return;
+        out.push({ id: hash('t|' + en), kind: 'stiles', extra: true, src: es, en: en, answer: tk, alts: [], tiles: tk.concat(dis), opts: [], correct: tk.join(' ') });
+      }); });
+    });
+    return out;
+  }
+  var xmem = {};
+  function loadExtra(url) {
+    var kind = extraKindOf(url); if (!kind) return Promise.resolve({ ok: false, items: [] });
+    if (xmem[url] && AD.now() - xmem[url].at < CFG.cacheMs) return Promise.resolve(xmem[url].res);
+    return AD.fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(function (html) {
+      var items = parseExtra(html, kind), res = { ok: items.length > 0, kind: kind, items: items }; xmem[url] = { at: AD.now(), res: res }; return res;
+    }).catch(function () { return { ok: false, items: [] }; });
+  }
+  /* Extras del día: resúmenes de los temas del set + la Story del módulo de las prácticas del set. */
+  function extraMaterials(student) {
+    var D = window.JUCUM_DATA, TT = window.JUCUM_TT; if (!D || !TT || !student) return Promise.resolve([]);
+    var items = []; try { items = TT.getTodayPracticeForStudent(student).items || []; } catch (e) {}
+    var mods = D.MODULE_CATALOG[student.level] || [], want = {}, list = [];
+    items.forEach(function (it) {
+      var mod = mods.filter(function (m) { return m.id === it.moduleId; })[0]; if (!mod) return;
+      var a = (mod.activities || []).filter(function (x) { return x.id === it.activityId; })[0]; if (!a) return;
+      var add = function (x) { var k = mod.id + ':' + x.id; if (want[k] || !extraKindOf(x.url)) return; want[k] = 1; list.push({ key: 'x:' + k, moduleId: mod.id, activityId: x.id, url: x.url, xkind: extraKindOf(x.url), name: x.type === 'summary' ? '📚 ' + x.name : '🗣 Vocabulario · ' + mod.name, short: x.type === 'summary' ? 'Resumen' : 'Vocabulario', extra: true, noProg: true }); };
+      if (a.type === 'summary') add(a);
+      if (a.group) (mod.activities || []).forEach(function (x) { if (x.type === 'summary' && x.group === a.group) add(x); });
+      (mod.activities || []).forEach(function (x) { if (x.type === 'story') add(x); });
+    });
+    return Promise.all(list.map(function (m) { return loadExtra(m.url).then(function (r) { m.ok = r.ok; m.all = r.items || []; m.items = []; return m; }); }))
+      .then(function (ms) { return ms.filter(function (m) { return m.ok; }); });
   }
   var mem = {};
   function loadMaterial(url) {
@@ -266,11 +331,11 @@
     }
     if (!best) best = shuffle(items.slice());
     var bags = {};
-    best.forEach(function (it) { if (it.q.kind === 'transform') return; var n = it.q.opts.length; bags[n] = (bags[n] || 0) + 1; });
+    best.forEach(function (it) { if (it.q.tiles) return; var n = it.q.opts.length; bags[n] = (bags[n] || 0) + 1; });
     Object.keys(bags).forEach(function (n) { var c = bags[n], off = Math.floor(rnd() * n), b = []; for (var i = 0; i < c; i++) b.push((i + off) % n); bags[n] = shuffle(b); });
     var pos = [];
     best.forEach(function (it, k) {
-      if (it.q.kind === 'transform') { pos.push(null); return; }
+      if (it.q.tiles) { pos.push(null); return; }
       var n = it.q.opts.length, bag = bags[n], forb = {}, pp = pos.filter(function (x) { return x != null; });
       if (pp.length >= 2 && pp[pp.length - 1] === pp[pp.length - 2]) forb[pp[pp.length - 1]] = 1;
       var idx = -1; for (var i = 0; i < bag.length; i++) if (!forb[bag[i]]) { idx = i; break; }
@@ -279,12 +344,42 @@
       pos.push(p);
     });
     return best.map(function (it, k) {
-      if (it.q.kind === 'transform') return { mat: it.mat, id: it.q.id, q: it.q, opts: null, ans: null, bank: bankOrder(it.q), fromBox: !!it.fromBox };
+      if (it.q.tiles) return { mat: it.mat, id: it.q.id, q: it.q, opts: null, ans: null, bank: bankOrder(it.q), fromBox: !!it.fromBox, noXp: !!it.noXp, pres: 'tiles' };
       var cor = it.q.correct, dis = shuffle(it.q.opts.filter(function (o) { return o !== cor; })), opts = [], di = 0;
       for (var p = 0; p < it.q.opts.length; p++) opts.push(p === pos[k] ? cor : dis[di++]);
-      return { mat: it.mat, id: it.q.id, q: it.q, opts: opts, ans: pos[k], fromBox: !!it.fromBox };
+      var st = { mat: it.mat, id: it.q.id, q: it.q, opts: opts, ans: pos[k], fromBox: !!it.fromBox, noXp: !!it.noXp, pres: 'mcq' };
+      presOf(st, !!it.retry || !!it.fromBox); return st;
     });
   }
+  /* 🎲 FORMATOS (NEURO-FIX-V2): la MISMA pregunta del material puede salir en otro formato.
+   * 1.ª vez: opción múltiple · 🎧 escucha y completa (Fill in) · 🔎 caza el error (Identification).
+   * Al volver de la caja / repaso bonus (más exigente): ✍️ escríbelo tú o caza el error.
+   * La nota sigue siendo la del material (las de la 1.ª vez son de dificultad parecida). */
+  function canSpeak() { try { return !!(window.speechSynthesis && window.SpeechSynthesisUtterance); } catch (e) { return false; } }
+  function huntOf(q) {
+    var info = q.info || {}, best = null;
+    q.opts.forEach(function (o) { if (o === q.correct) return; var x = info[o] || {}; var ew = String(x.errorWord || '').trim(), cw = String(x.correctWord || '').trim();
+      if (!ew || !cw || /\s/.test(ew) || /\s/.test(cw)) return; var tk = tokens(o); if (tk.filter(function (t) { return t.toLowerCase() === ew.toLowerCase(); }).length !== 1) return;
+      if (!best) best = { sent: o, err: ew, want: cw, type: x.errorType || '', exp: x.explanation || '' }; });
+    if (!best) return null;
+    var fx = [best.want]; q.opts.forEach(function (o) { var x = info[o] || {}; [x.errorWord, x.correctWord].forEach(function (w) { w = String(w || '').trim(); if (w && !/\s/.test(w) && fx.map(function (y) { return y.toLowerCase(); }).indexOf(w.toLowerCase()) < 0 && w.toLowerCase() !== best.err.toLowerCase()) fx.push(w); }); });
+    if (fx.length < 2) { var base = best.want.replace(/(ed|d|s)$/i, ''); if (base && base.toLowerCase() !== best.want.toLowerCase() && base.toLowerCase() !== best.err.toLowerCase()) fx.push(base); }
+    if (fx.length < 2) return null;
+    best.fix = shuffle(fx.slice(0, 3)); return best;
+  }
+  function writeOf(q) {
+    if (q.kind === 'fill') { var w = String(q.correct || ''); if (!/^[A-Za-z'-]{2,}$/.test(w)) return null; return { want: w, sent: q.sentence, es: q.tr || '' }; }
+    if (q.kind === 'identify') { var h = huntOf(q); if (!h) return null; var tk = tokens(q.correct); if (tk.filter(function (t) { return t.toLowerCase() === h.want.toLowerCase(); }).length !== 1) return null;
+      var re = new RegExp('\\b' + h.want.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i'); return { want: h.want, sent: q.correct.replace(re, '_____'), es: ((q.info || {})[q.correct] || {}).es || '' }; }
+    return null;
+  }
+  function presOf(st, retry) {
+    var q = st.q, k = q.kind, r = rnd();
+    if (k === 'fill') { if (retry && r < .55) { var w = writeOf(q); if (w) { st.pres = 'write'; st.w = w; return; } } if (!retry && r < .35 && canSpeak()) { st.pres = 'listen'; st.say = String(q.sentence).replace(/_{2,}/, q.correct); } return; }
+    if (k === 'identify') { if (retry && r < .5) { var w2 = writeOf(q); if (w2) { st.pres = 'write'; st.w = w2; return; } } if (r < (retry ? .9 : .4)) { var h = huntOf(q); if (h) { st.pres = 'hunt'; st.h = h; } } return; }
+    if (k === 'read' && q.sents) st.pres = 'proof';
+  }
+  function wordNorm(x) { return String(x || '').toLowerCase().replace(/[^a-z'-]/g, ''); }
   function arrange(items) { var r = null; for (var t = 0; t < 80; t++) { r = arrangeOnce(items); if (runs(r.filter(function (x) { return x.ans != null; }).map(function (x) { return x.ans; })) <= 2) return r; } return r; }
   function interleaveByKey(list) { // reparte las respuestas (some/any/…) antes de elegir
     var g = {}; list.forEach(function (it) { var k = String(it.correct).toLowerCase(); (g[k] = g[k] || []).push(it); });
@@ -307,8 +402,10 @@
     mats.forEach(function (m) { pend[m.key] = m.extra || (opts.only && m.key !== opts.only) || (!opts.only && skip.indexOf(m.key) >= 0) ? [] : interleaveByKey(shuffle((m.items || []).filter(function (q) { return !rec(u, m.key, q.id); }))); });
     var pendTot = mats.reduce(function (a, m) { return a + pend[m.key].length; }, 0);
     var errs = opts.noBox ? [] : readyBox(u, mats, t, opts.only).slice(0, pendTot ? CFG.boxInMix : CFG.boxMax);
-    if (!pendTot) return opts.countOnly ? { n: errs.length, errs: errs.length } : (errs.length ? arrange(shuffle(errs)) : []);
-    size = Math.max(1, size - errs.length);
+    errs.forEach(function (e) { if ((opts.skip || []).indexOf(e.mat) >= 0) e.noXp = true; });
+    if (!pendTot) return opts.countOnly ? { n: errs.length, errs: errs.length, areas: areasOf(errs) } : (errs.length ? arrange(shuffle(errs)) : []);
+    var xs = opts.noBox ? [] : pickExtras(u, opts.extras || [], mats.filter(function (m) { return pend[m.key].length; }), errs, size, pendTot);
+    size = Math.max(1, size - errs.length - xs.length);
     var use = mats.filter(function (m) { return pend[m.key].length; })
       .sort(function (a, b) { return (matProgress(uid, a).pct - matProgress(uid, b).pct) + (rnd() - .5) * 8; })
       .slice(0, CFG.maxMats).map(function (m) { return m.key; });
@@ -323,9 +420,36 @@
       if (!best) break; q[best]++; tot++;
     }
     var items = [];
-    if (opts.countOnly) return { n: tot + errs.length, errs: errs.length };
+    if (opts.countOnly) { var cs = []; use.forEach(function (k) { pend[k].slice(0, q[k]).forEach(function (qq) { cs.push({ mat: k, q: qq }); }); }); return { n: tot + errs.length + xs.length, errs: errs.length, extras: xs.length, areas: areasOf(cs.concat(errs, xs)) }; }
     use.forEach(function (k) { pend[k].slice(0, q[k]).forEach(function (qq) { items.push({ mat: k, q: qq }); }); });
-    return arrange(items.concat(errs));
+    if (opts.noBox) items.forEach(function (x) { x.retry = true; });
+    var seq = arrange(items.concat(errs, xs.filter(function (x) { return x.q.kind !== 'stiles'; })));
+    xs.filter(function (x) { return x.q.kind === 'stiles'; }).forEach(function (x) { seq = seq.concat(arrange([x])); }); // 🧱 el reto va al final
+    return seq;
+  }
+  function areaOf(kind) { return kind === 'read' ? 'read' : kind === 'listen' ? 'listen' : kind === 'sum' ? 'sum' : (kind === 'vocab' || kind === 'stiles') ? 'voc' : 'gram'; }
+  function areasOf(list) { var a = {}; list.forEach(function (x) { a[areaOf(x.q.kind)] = 1; }); return Object.keys(a).length; }
+  /* Receta: mínimo 3 áreas por ronda. Si las prácticas del día no alcanzan, Neuro suma Resumen y
+   * Vocabulario (y un 🧱 reto final con la Story). También rellena cuando quedan pocas preguntas. */
+  function pickExtras(u, xmats, useMats, errs, size, pendTot) {
+    if (!xmats.length) return [];
+    var core = {}; useMats.forEach(function (m) { (m.items || []).slice(0, 1).forEach(function (q) { core[areaOf(q.kind)] = 1; }); }); errs.forEach(function (e) { core[areaOf(e.q.kind)] = 1; });
+    var nAreas = Object.keys(core).length, room = Math.max(0, size - errs.length - Math.min(pendTot, size));
+    var seen = u.xs || {}, t = AD.now(), byKind = { sum: [], vocab: [], stiles: [] };
+    xmats.forEach(function (m) { (m.all || []).forEach(function (q) { if (byKind[q.kind]) byKind[q.kind].push({ mat: m.key, q: q, seen: seen[q.id] || 0 }); }); });
+    Object.keys(byKind).forEach(function (k) { byKind[k] = shuffle(byKind[k]).sort(function (a, b) { return a.seen - b.seen; }); });
+    var plan = [];
+    if (nAreas < 3 && byKind.sum.length) plan.push('sum');
+    if (nAreas + plan.length < 3 && byKind.vocab.length) plan.push('vocab');
+    if (nAreas + plan.length < 3 && byKind.sum.length > 1) plan.push('sum');
+    if (byKind.stiles.length) plan.push('stiles');
+    while (plan.length < Math.min(CFG.maxExtras, room + 1) && (byKind.sum.length + byKind.vocab.length) > plan.length) plan.push(plan.filter(function (x) { return x === 'sum'; }).length <= plan.filter(function (x) { return x === 'vocab'; }).length && byKind.sum.length ? 'sum' : 'vocab');
+    plan = plan.slice(0, CFG.maxExtras);
+    var out = [], used = {};
+    plan.forEach(function (k) { var c = byKind[k].filter(function (x) { return !used[x.q.id]; })[0]; if (!c) return; used[c.q.id] = 1;
+      var q = c.q; if (k === 'vocab') { q = Object.assign({}, q, { opts: [q.word].concat(shuffle(q.alt.slice()).slice(0, 2)) }); }
+      out.push({ mat: c.mat, q: q, extra: true }); });
+    return out;
   }
   function metrics(seq) {
     var by = {}; seq.forEach(function (x) { (by[x.mat] = by[x.mat] || []).push(ansKeyText(x)); });
@@ -336,9 +460,18 @@
 
   /* ── RESPONDER ──────────────────────────────────────────────────────────── */
   var hooks = { onMaterialDone: null };
+  function payXp(u, n) { var d = peruDay(); u.xpd = u.xpd && u.xpd.d === d ? u.xpd : { d: d, n: 0 }; var g = Math.max(0, Math.min(n, CFG.xpDayCap - u.xpd.n)); u.xpd.n += g; return g; }
+  function xpToday(uid) { var u = getU(uid), d = peruDay(); return u.xpd && u.xpd.d === d ? u.xpd.n : 0; }
   function answer(uid, mats, step, chosen, mode) {
     var u = getU(uid), mk = step.mat, id = step.id, r = rec(u, mk, id) || { s: null, f: null, a: 0, r: 0, due: 0, at: 0 };
-    var ok = (step.q && step.q.kind === 'transform') ? transOk(step.q, chosen) : chosen === step.ans, mat = mats.filter(function (m) { return m.key === mk; })[0];
+    var ok = step.pres === 'write' ? wordNorm(chosen) === wordNorm(step.w.want)
+      : step.pres === 'hunt' ? !!(chosen && wordNorm(chosen.fix) === wordNorm(step.h.want) && (chosen.misses || 0) <= 1)
+      : (step.q && step.q.tiles) ? transOk(step.q, chosen) : chosen === step.ans, mat = mats.filter(function (m) { return m.key === mk; })[0];
+    if (step.q && step.q.extra) { // 📚🗣🧱 extras: no tocan notas ni neuronas
+      u.xs = u.xs || {}; u.xs[id] = AD.now(); var ks = Object.keys(u.xs); if (ks.length > 400) ks.sort(function (a, b) { return u.xs[a] - u.xs[b]; }).slice(0, ks.length - 400).forEach(function (k) { delete u.xs[k]; });
+      var xx = mode !== 'bonus' && ok ? payXp(u, CFG.xpExtra) : 0; putU(uid, u);
+      return { ok: ok, matDone: false, score: null, due: 0, extra: true, xp: xx };
+    }
     if (mode === 'bonus') { // ⭐ repaso de la semana: solo se guardan los aciertos (los errores vuelven en otra ronda de la semana, NO van a la caja)
       if (ok) {
         setRec(u, mk, id, { s: 'ok', f: r.f != null ? r.f : true, a: (r.a || 0) + 1, r: 0, due: 0, at: AD.now() });
@@ -348,13 +481,16 @@
       return { ok: ok, matDone: false, score: null, due: 0, bonus: true };
     }
     var before = mat ? matProgress(uid, mat).pct : 0;
-    var atext = (step.q && step.q.kind === 'transform') ? transNorm(chosen) : (step.opts && step.opts[chosen] != null ? String(step.opts[chosen]) : '');
+    var atext = step.pres === 'write' ? String(chosen || '').trim() : step.pres === 'hunt' ? (chosen ? chosen.fix + (chosen.misses ? ' (' + chosen.misses + ' toques)' : '') : '') : (step.q && step.q.tiles) ? transNorm(chosen) : (step.opts && step.opts[chosen] != null ? String(step.opts[chosen]) : '');
     var nr = { s: r.s, f: r.f, a: (r.a || 0) + 1, r: r.r || 0, due: r.due || 0, at: AD.now(), fa: r.fa != null ? r.fa : atext, la: atext }; // NT-V1: qué respondió (1.ª vez y última)
     if (nr.f == null) nr.f = ok;
     if (ok) { nr.s = 'ok'; nr.due = 0; }
     else if (r.s !== 'ok') { if (mode === 'box' || step.fromBox) nr.r = (r.r || 0) + 1; nr.s = 'box'; nr.due = AD.now() + (nr.r > 0 ? CFG.retryMs : CFG.boxMs); }
+    /* ⚡ XP por intento (pedido de la usuaria 26-oct): mientras el material NO esté completo, cada respuesta en Neuro da XP
+     * (+2 acierto · +1 intento). Al completarlo deja de dar (ya recibe el XP del material). Tope diario de seguridad. */
+    var gx = (!step.noXp && before < 100 && r.s !== 'ok') ? payXp(u, ok ? CFG.xpOk : CFG.xpTry) : 0;
     setRec(u, mk, id, nr); putU(uid, u);
-    var res = { ok: ok, matDone: false, score: null, due: nr.due };
+    var res = { ok: ok, matDone: false, score: null, due: nr.due, xp: gx };
     if (mat) { var p = matProgress(uid, mat); if (before < 100 && p.pct >= 100 && p.graded == null) { res.matDone = true; res.score = p.firstPct; var u2 = getU(uid); u2.g[mk] = p.firstPct; putU(uid, u2); try { hooks.onMaterialDone && hooks.onMaterialDone(uid, mat, p.firstPct); } catch (e) {} } }
     var pend = Object.keys(getU(uid).out).length; if (pend >= 4) flush(uid);
     return res;
@@ -656,11 +792,12 @@
   try { document.addEventListener('visibilitychange', function () { if (document.hidden) { var s = window.JUCUM_MIX && window.JUCUM_MIX._lastUid; if (s) flush(s); } }); } catch (e) {}
 
   window.JUCUM_MIX = {
-    VERSION: 'NEURO-FIX-V1', CFG: CFG, enabledFor: enabledFor, kindOf: kindOf, parseHtml: parseHtml, loadMaterial: loadMaterial,
+    VERSION: 'NEURO-FIX-V2', CFG: CFG, enabledFor: enabledFor, kindOf: kindOf, parseHtml: parseHtml, loadMaterial: loadMaterial,
     pullBox: pullBox, boxMaterials: boxMaterials, boxSummary: boxSummary, isPreview: isPreview, now: function () { return AD.now(); },
     todayMaterials: todayMaterials, matProgress: matProgress, buildSession: buildSession, arrange: arrange, metrics: metrics, runs: runs,
     answer: answer, flush: flush, pull: pull, refreshReady: refreshReady, boxStatus: boxStatus, addSeconds: addSeconds, merge: merge,
     hooks: hooks, plain: plain, _lastUid: null, transOk: transOk, bankOrder: bankOrder, teacherFetch: teacherFetch,
+    extraMaterials: extraMaterials, parseExtra: parseExtra, wordNorm: wordNorm, xpToday: xpToday, areasOf: areasOf,
     weekReviews: weekReviews, weekState: function (uid) { return getU(uid).wk || null; }, live: live, weekMonday: weekMonday, weekDayIdx: weekDayIdx, LVREV: LVREV,
     _setAdapter: function (o) { Object.keys(o || {}).forEach(function (k) { AD[k] = o[k]; }); mem = {}; },
     _keys: { STATE_KEY: STATE_KEY, CACHE_KEY: CACHE_KEY }

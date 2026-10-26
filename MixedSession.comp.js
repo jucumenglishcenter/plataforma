@@ -5,7 +5,8 @@
  * (🔊 / 🐢 con la voz del navegador; “Ver el texto” tras 2 escuchas).
  * Toda la lógica (lector, azar, caja de errores, guardado) vive en mixed.js (window.JUCUM_MIX).
  * Retroalimentación = la de cada material (En la historia · Regla · Español↔Inglés · explicación del error). */
-/* NEURO-FIX-V1 (26-oct-2026): errores de la caja dentro de la ronda (st.fromBox) · vuelven en 2 h también si se vuelven a fallar (script 38). */
+/* NEURO-FIX-V2 (26-oct-2026): formatos ✍️ escríbelo · 🎧 escucha · 🔎 caza el error · 🧩 ¿dónde lo dice? · extras 📚 resumen · 🗣 vocabulario · 🧱 reto; ⚡ XP por intento.
+ * NEURO-FIX-V1 (26-oct-2026): errores de la caja dentro de la ronda (st.fromBox) · vuelven en 2 h también si se vuelven a fallar (script 38). */
 const MIX_CSS = `
 .mx-card{background:radial-gradient(circle at 50% 0%,#2A3D80,#131D47 78%);border-radius:18px;padding:14px;color:#fff;display:flex;flex-direction:column;gap:12px;box-shadow:0 6px 18px rgba(18,28,69,.3);margin-top:14px}
 .mx-h{display:flex;align-items:center;gap:10px}.mx-h b{font-family:'Fredoka',sans-serif;font-weight:600;font-size:16.5px;flex:1}.mx-h span{font-size:12px;font-weight:800;color:#9FE9FF;white-space:nowrap}
@@ -140,7 +141,9 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
   const [tray, setTray] = React.useState([]);
   const fbRef = React.useRef(null);
   React.useEffect(() => { setShow({}); setTray([]); }, [run.k]);
-  const isTr = q.kind === 'transform', isRL = q.kind === 'read' || q.kind === 'listen';
+  const isTr = !!q.tiles, isRL = q.kind === 'read' || q.kind === 'listen', pres = st.pres || 'mcq';
+  const [typed, setTyped] = React.useState(''), [hunt, setHunt] = React.useState({ hit: false, miss: [] }), [proof, setProof] = React.useState({ done: false, wrong: [] });
+  React.useEffect(() => { setTyped(''); setHunt({ hit: false, miss: [] }); setProof({ done: false, wrong: [] }); }, [run.k]);
   const [plays, setPlays] = React.useState(0), [speaking, setSpeaking] = React.useState(false);
   React.useEffect(() => { setPlays(0); setSpeaking(false); mxStop(); }, [run.k]);
   React.useEffect(() => () => mxStop(), []);
@@ -150,7 +153,7 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
     if (answered) return;
     const r = MIX.answer(uid, mats, st, i, run.mode);
     const secs = run.secs + Math.min(MIX.CFG.maxSecQ, (Date.now() - run.shownAt) / 1000);
-    setRun({ ...run, chosen: i, secs, res: run.res.concat([{ mat: st.mat, ok: r.ok }]), won: r.matDone ? run.won.concat([{ key: st.mat, score: r.score }]) : run.won, lastWon: r.matDone ? { key: st.mat, score: r.score } : null });
+    setRun({ ...run, chosen: i, secs, res: run.res.concat([{ mat: st.mat, ok: r.ok, xp: r.xp || 0, extra: !!r.extra }]), won: r.matDone ? run.won.concat([{ key: st.mat, score: r.score }]) : run.won, lastWon: r.matDone ? { key: st.mat, score: r.score } : null });
     try { onAnswered && onAnswered(run, r, secs); } catch (e) {}
   };
   const next = () => {
@@ -158,10 +161,12 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
     setRun({ ...run, k: run.k + 1, chosen: null, shownAt: Date.now(), lastWon: null });
   };
   const L = 'ABCD';
-  const ok = answered && (isTr ? MIX.transOk(q, run.chosen) : run.chosen === st.ans);
+  const lastRes = answered ? run.res[run.res.length - 1] : null, ok = !!(lastRes && lastRes.ok), gotXp = lastRes ? lastRes.xp || 0 : 0;
   const cls = (i) => !answered ? '' : i === st.ans ? 'ok' : i === run.chosen ? 'no' : 'dim';
-  const chosenText = answered ? (isTr ? (run.chosen || []).join(' ') : st.opts[run.chosen]) : null;
-  const rightText = isTr ? q.answer.join(' ') : st.opts[st.ans];
+  const chosenText = answered ? (isTr ? (run.chosen || []).join(' ') : pres === 'write' ? String(run.chosen || '') : pres === 'hunt' ? (run.chosen && run.chosen.fix) : st.opts[run.chosen]) : null;
+  const rightText = isTr ? q.answer.join(' ') : pres === 'write' ? st.w.want : pres === 'hunt' ? st.h.want : st.opts[st.ans];
+  const checkWrite = () => { if (typed.trim()) choose(typed.trim()); };
+  const tapWord = (w) => { if (answered || hunt.hit) return; if (MIX.wordNorm(w) === MIX.wordNorm(st.h.err)) setHunt({ ...hunt, hit: true }); else if (hunt.miss.indexOf(w) < 0) setHunt({ ...hunt, miss: hunt.miss.concat([w]) }); };
   const checkTr = () => { if (!tray.length) return; choose(tray.map(i => q.tiles[i])); };
   const html = (s) => ({ __html: s || '' });
   return (
@@ -174,14 +179,42 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
       {run.mode === 'box' && <span className="mx-tag">🧠 Caja de errores · repaso 2 h después</span>}
       {run.mode === 'bonus' && <span className="mx-tag bon">⭐ Repaso bonus · opcional · cada acierto x2 XP · puedes salir cuando quieras</span>}
       <div className="mx-mini">
-        {ids.map(k => { const m = mats.find(x => x.key === k); const p = MIX.matProgress(uid, m).pct; return <div key={k} className={k === st.mat ? 'cur' : ''} style={{ transform: k === st.mat ? 'scale(1.15)' : 'none', transition: 'transform .3s' }} title={m.name + ' · ' + p + '%'}><MxRing m={m} color={color(k)} size={38} pct={p} small /></div>; })}
+        {ids.filter(k => { const m = mats.find(x => x.key === k); return m && !m.noProg; }).map(k => { const m = mats.find(x => x.key === k); const p = MIX.matProgress(uid, m).pct; return <div key={k} className={k === st.mat ? 'cur' : ''} style={{ transform: k === st.mat ? 'scale(1.15)' : 'none', transition: 'transform .3s' }} title={m.name + ' · ' + p + '%'}><MxRing m={m} color={color(k)} size={38} pct={p} small /></div>; })}
       </div>
       <div className="mx-q">
         <span className="mx-chip">{mxIcon(mat)} {mat.name}</span>
-        {st.fromBox && run.mode !== 'box' && <span className="mx-tag" style={{ margin: '-6px 0 0' }}>🧠 Tu error de antes · ¡otra oportunidad!</span>}
-        {q.kind === 'fill' ? (
+        {st.fromBox && run.mode !== 'box' && <span className="mx-tag" style={{ margin: '-6px 0 0', whiteSpace: 'nowrap' }}>🧠 Tu error de antes</span>}
+        {pres === 'write' ? (
           <>
-            <div className="mx-hint">Completa la oración</div>
+            <div className="mx-hint">✍️ Escríbelo tú</div>
+            {st.w.es && <div className="mx-rev tr" style={{ borderLeft: 0, borderRadius: 11 }}>🇪🇸 {st.w.es}</div>}
+            <div className="mx-sent">{String(st.w.sent).split(/_{2,}/).map((part, i, arr) => <React.Fragment key={i}>{part}{i < arr.length - 1 && <span className="mx-blank">{answered ? st.w.want : '?'}</span>}</React.Fragment>)}</div>
+            {!answered && <><div className="mx-hint" style={{ fontFamily: 'ui-monospace,monospace', letterSpacing: '.2em' }}>{st.w.want[0]} {Array(st.w.want.length - 1).fill('_').join(' ')} <span style={{ letterSpacing: 0, fontFamily: 'inherit' }}>({st.w.want.length} letras)</span></div>
+              <input className="mx-src" style={{ width: '100%', boxSizing: 'border-box', outline: 'none' }} value={typed} autoComplete="off" autoCapitalize="off" spellCheck={false} placeholder="Escribe la palabra" onChange={(e) => setTyped(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') checkWrite(); }} /></>}
+          </>
+        ) : pres === 'hunt' ? (
+          <>
+            <div className="mx-hint">🔎 Caza el error · toca la palabra que está mal</div>
+            <div className="mx-bank">{String(st.h.sent).split(/\s+/).map((w, i) => { const isErr = MIX.wordNorm(w) === MIX.wordNorm(st.h.err); return <button type="button" key={i} className="mx-tile" disabled={answered || hunt.hit} onClick={() => tapWord(w)} style={(hunt.hit || answered) && isErr ? { borderColor: '#E65100', background: '#FFF0E0', color: '#B23C00', textDecoration: 'line-through' } : hunt.miss.indexOf(w) >= 0 ? { opacity: .5 } : null}>{w}</button>; })}</div>
+            {!answered && hunt.miss.length > 0 && !hunt.hit && <div className="mx-rev">Esa palabra está bien 👍 Busca otra.</div>}
+            {(hunt.hit || answered) && <><div className="mx-hint">¡La encontraste! ¿Cómo se escribe bien?</div>
+              <div className="mx-opts">{st.h.fix.map((f, i) => <button type="button" key={i} className={'mx-opt ' + (!answered ? '' : MIX.wordNorm(f) === MIX.wordNorm(st.h.want) ? 'ok' : (run.chosen && f === run.chosen.fix) ? 'no' : 'dim')} disabled={answered} onClick={() => choose({ fix: f, misses: hunt.miss.length })}><span className="lt">{L[i]}</span><span>{f}</span></button>)}</div></>}
+          </>
+        ) : q.kind === 'sum' ? (
+          <>
+            <div className="mx-hint">📚 Repaso del resumen · paso {q.step}</div>
+            <div className="mx-sent" style={{ fontSize: 18 }} dangerouslySetInnerHTML={html(q.q)}></div>
+          </>
+        ) : q.kind === 'vocab' ? (
+          <>
+            <div className="mx-hint">🗣 Palabra en contexto</div>
+            <div className="mx-play"><button type="button" className={'mx-pbtn' + (speaking ? ' on' : '')} onClick={() => speak(q.ex, .9)}>🔊 Escuchar la oración</button></div>
+            <div className="mx-sent">{q.ex.split(new RegExp('\\b' + q.word + '\\b', 'i')).map((part, i, arr) => <React.Fragment key={i}>{part}{i < arr.length - 1 && <span className="mx-blank">{answered ? q.word : '\u00A0'}</span>}</React.Fragment>)}</div>
+          </>
+        ) : q.kind === 'fill' ? (
+          <>
+            <div className="mx-hint">{pres === 'listen' ? '🎧 Escucha y completa' : 'Completa la oración'}</div>
+            {pres === 'listen' && <div className="mx-play"><button type="button" className={'mx-pbtn' + (speaking ? ' on' : '')} onClick={() => speak(st.say, .9, true)}>🔊 {plays ? 'Escuchar otra vez' : 'Escuchar'}</button><button type="button" className="mx-sbtn" onClick={() => speak(st.say, .62, true)}>🐢 Lento</button></div>}
             <div className="mx-sent">{q.sentence.split(/_{2,}/).map((part, i, arr) => <React.Fragment key={i}>{part}{i < arr.length - 1 && <span className="mx-blank">{answered ? st.opts[st.ans] : '\u00A0'}</span>}</React.Fragment>)}</div>
             {!answered && (q.hint || q.tr) && (
               <div className="mx-sup">
@@ -196,7 +229,7 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
           <>
             <div className="mx-hint">Lee y responde</div>
             <div className="mx-pass">
-              <div className="tt"><span style={{ flex: 1 }}>📖 {q.storyTitle}</span><button type="button" className="mx-sbtn" style={{ minHeight: 36, padding: '5px 10px' }} onClick={() => speaking ? (mxStop(), setSpeaking(false)) : speak(q.paras.map(p => p.en).join(' '), .9)}>{speaking ? '⏸ Parar' : '🔊 Escuchar'}</button></div>
+              <div className="tt"><span style={{ flex: 1 }}>📖 {q.storyTitle}</span><button type="button" className="mx-sbtn" style={{ minHeight: 36, padding: '5px 10px', flex: '0 0 auto', width: 'auto' }} onClick={() => speaking ? (mxStop(), setSpeaking(false)) : speak(q.paras.map(p => p.en).join(' '), .9)}>{speaking ? '⏸ Parar' : '🔊 Escuchar'}</button></div>
               {q.paras.map((p, i) => <React.Fragment key={i}><p dangerouslySetInnerHTML={html(answered ? mxHeard(p.en, q.proof.replace(/[.!?]+$/, '')) : p.en)}></p>{show.es && <p className="es">{p.es}</p>}</React.Fragment>)}
             </div>
             {!answered && <div className="mx-sup"><button type="button" className="tr" onClick={() => setShow({ ...show, es: !show.es })}>🔤 {show.es ? 'Ocultar español' : 'Ver en español'}</button></div>}
@@ -215,9 +248,9 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
           </>
         ) : isTr ? (
           <>
-            <div className="mx-hint">Arma la oración nueva</div>
+            <div className="mx-hint">{q.kind === 'stiles' ? '🧱 Reto · tradúcelo con las fichas' : 'Arma la oración nueva'}</div>
             {q.task && <div className="mx-task" dangerouslySetInnerHTML={html(q.task)}></div>}
-            <div className="mx-src"><small>Oración de partida</small>{q.src}</div>
+            <div className="mx-src"><small>{q.kind === 'stiles' ? '🇪🇸 En español' : 'Oración de partida'}</small>{q.src}</div>
             {!answered && (q.hint || q.tr) && (
               <div className="mx-sup">
                 {q.hint && <button type="button" onClick={() => setShow({ ...show, hint: !show.hint })}>💡 Pista</button>}
@@ -239,14 +272,26 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
         ) : (
           <div className="mx-hint" style={{ fontSize: 15, color: '#1E2433', fontFamily: "'Fredoka',sans-serif", fontWeight: 600 }}>¿Cuál oración está bien escrita?</div>
         )}
-        {!isTr && <div className="mx-opts">
+        {!isTr && pres !== 'write' && pres !== 'hunt' && <div className="mx-opts">
           {st.opts.map((o, i) => <button type="button" key={i} className={'mx-opt ' + cls(i)} disabled={answered} onClick={() => choose(i)}><span className="lt">{L[i]}</span><span>{o}</span></button>)}
         </div>}
       {answered && (
         <div className={'mx-fb ' + (ok ? 'ok' : 'no')} ref={fbRef}>
-          <div className="mx-ft">{ok ? (run.mode === 'bonus' ? '✅ ¡Correcto! +2 XP' : '✅ ¡Correcto!') : 'Casi… veamos por qué'}</div>
+          <div className="mx-ft">{ok ? (run.mode === 'bonus' ? '✅ ¡Correcto! +2 XP' : '✅ ¡Correcto!' + (gotXp ? ' +' + gotXp + ' XP' : '')) : 'Casi… veamos por qué' + (gotXp ? ' · +' + gotXp + ' XP por intentarlo' : '')}</div>
           {!ok && <div className="mx-cmp"><span className="yo">Tu respuesta<b>{chosenText}</b></span><span className="ok2">Correcta<b>{rightText}</b></span></div>}
-          {q.kind === 'fill' ? (
+          {pres === 'write' || pres === 'hunt' ? (
+            <>
+              {pres === 'hunt' && <div className="mx-blk err"><small>⚠ {st.h.type || 'El error'}</small><div style={{ marginBottom: 3 }}><b style={{ color: '#B86A00', textDecoration: 'line-through' }}>{st.h.err}</b> → <b style={{ color: '#2E7D32' }}>{st.h.want}</b></div><span dangerouslySetInnerHTML={html(st.h.exp)}></span></div>}
+              {pres === 'write' && q.kind === 'fill' && (q.rule || q.why) && <div className="mx-blk rule"><small>📐 Regla</small><span dangerouslySetInnerHTML={html(q.rule || q.why)}></span></div>}
+              {pres === 'write' && q.kind === 'identify' && <div className="mx-blk"><small style={{ color: '#2E7D32' }}>✓ La oración completa</small>{q.correct}</div>}
+            </>
+          ) : q.kind === 'sum' ? (
+            <>{q.why && <div className="mx-blk rule"><small>📐 Por qué</small><span dangerouslySetInnerHTML={html(q.why)}></span></div>}{q.tip && <div className="mx-blk es"><small>💡 Recuerda</small><span dangerouslySetInnerHTML={html(q.tip)}></span></div>}</>
+          ) : q.kind === 'vocab' ? (
+            <div className="mx-blk es"><small>🗣 Significa</small><b>{q.word}</b> = {q.es}<div style={{ marginTop: 4, fontStyle: 'italic' }}>{q.ex}</div></div>
+          ) : q.kind === 'stiles' ? (
+            <div className="mx-blk story"><small>📖 De tu historia</small><i>{q.en}</i></div>
+          ) : q.kind === 'fill' ? (
             <>
               {(q.story || q.why) && <div className="mx-blk story"><small>📖 En la historia</small>{q.story && <i style={{ display: 'block', marginBottom: 3 }} dangerouslySetInnerHTML={html(q.story)}></i>}<span dangerouslySetInnerHTML={html(q.why)}></span></div>}
               {!ok && q.rule && <div className="mx-blk rule"><small>📐 Regla</small><span dangerouslySetInnerHTML={html(q.rule)}></span></div>}
@@ -258,6 +303,7 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
             <>
               {q.kind === 'listen'
                 ? <div className="mx-blk"><small style={{ color: '#0277BD' }}>🎧 Lo que dice el audio</small><div className="mx-say" style={{ marginTop: 4 }} dangerouslySetInnerHTML={html(mxHeard(q.audio, q.heard))}></div>{q.audioEs && <div style={{ fontSize: 12.5, color: '#7A6A55', fontStyle: 'italic', marginTop: 4 }}>{q.audioEs}</div>}<div style={{ marginTop: 6 }}><button type="button" className="mx-sbtn" style={{ minHeight: 36, padding: '5px 10px' }} onClick={() => speak(q.audio, .8)}>🔊 Escuchar otra vez</button></div></div>
+                : pres === 'proof' ? <div className="mx-blk story"><small>🧩 ¿Dónde lo dice? Toca la oración que lo prueba</small><div style={{ lineHeight: 1.7, marginTop: 4 }}>{q.sents.map((x, i) => <span key={i} onClick={() => { if (proof.done) return; if (i === q.proofIdx) setProof({ ...proof, done: true }); else if (proof.wrong.indexOf(i) < 0) setProof({ ...proof, wrong: proof.wrong.concat([i]) }); }} style={{ cursor: proof.done ? 'default' : 'pointer', borderRadius: 5, padding: '1px 2px', marginRight: 3, background: proof.done && i === q.proofIdx ? '#C8EFD1' : proof.wrong.indexOf(i) >= 0 ? '#FFE2B8' : '#F3EEE0', boxShadow: proof.done && i === q.proofIdx ? '0 0 0 2px #2EA84B' : 'none' }}>{x}</span>)}</div><div style={{ marginTop: 5, fontWeight: 800, fontSize: 12.5 }}>{proof.done ? '✓ ¡Esa es la prueba!' : proof.wrong.length ? 'Esa no lo dice. Busca otra 🔍' : 'Así compruebas tu respuesta en el texto.'}</div></div>
                 : q.proof && <div className="mx-blk story"><small>📍 La prueba en el texto</small><i>{q.proof}</i></div>}
               {(q.skill || q.tip) && <div className="mx-blk rule"><small>💡 Cómo encontrar la respuesta</small>{q.skill && <span dangerouslySetInnerHTML={html(q.skill)}></span>}{q.tip && <div style={{ marginTop: 3 }} dangerouslySetInnerHTML={html(q.tip)}></div>}</div>}
               {!ok && q.note && <div className="mx-blk es"><small>📐 Para recordar</small><span dangerouslySetInnerHTML={html(q.note)}></span></div>}
@@ -282,11 +328,12 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
               </>
             );
           })()}
-          {!ok && <div className="mx-cajanote">{run.mode === 'bonus' ? '⭐ Sin problema: vuelve en otra ronda de esta semana' : (run.mode === 'box' || st.fromBox) ? '🧠 Vuelve a tu caja en 2 h, sin problema' : '🧠 Va a tu caja de errores · la verás en 2 h'}</div>}
+          {!ok && !q.extra && <div className="mx-cajanote">{run.mode === 'bonus' ? '⭐ Sin problema: vuelve en otra ronda de esta semana' : (run.mode === 'box' || st.fromBox) ? '🧠 Vuelve a tu caja en 2 h, sin problema' : '🧠 Va a tu caja de errores · la verás en 2 h'}</div>}
           {run.lastWon && <div className="mx-won">🎉 ¡Completaste {(mats.find(m => m.key === run.lastWon.key) || {}).name}! Tu nota: {run.lastWon.score}%</div>}
         </div>
       )}
       </div>
+      {!answered && pres === 'write' && <div className="mx-foot"><button type="button" className="mx-next mx-check" disabled={!typed.trim()} onClick={checkWrite}>Comprobar</button></div>}
       {!answered && isTr && <div className="mx-foot"><button type="button" className="mx-next mx-check" disabled={!tray.length} onClick={checkTr}>Comprobar</button></div>}
       {answered && <div className={'mx-foot ' + (ok ? 'ok' : 'no')}><button type="button" className="mx-next" onClick={next}>{run.k + 1 >= run.seq.length ? 'Ver resultado' : ok ? 'Seguir' : 'Entendido, seguir'}</button></div>}
     </div>
@@ -295,7 +342,7 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
 
 function MixedSummary({ uid, mats, sum, color, pending, onAgain, onClose }) {
   const MIX = window.JUCUM_MIX;
-  const ok = sum.res.filter(r => r.ok).length, wrong = sum.res.length - ok;
+  const ok = sum.res.filter(r => r.ok).length, wrong = sum.res.filter(r => !r.ok && !r.extra).length; // los extras (resumen, vocabulario, reto) nunca van a la caja
   const keys = [...new Set(sum.res.map(r => r.mat))];
   const [anim, setAnim] = React.useState(false);
   React.useEffect(() => { const t = setTimeout(() => setAnim(true), 350); return () => clearTimeout(t); }, []);
@@ -305,9 +352,10 @@ function MixedSummary({ uid, mats, sum, color, pending, onAgain, onClose }) {
       <div className="mx-sum">
         <div className="big">{sum.mode === 'box' ? '🧠' : sum.mode === 'bonus' ? '⭐' : '🎉'}</div>
         <h2>{sum.mode === 'box' ? '¡Errores repasados!' : sum.mode === 'bonus' ? '¡Repaso bonus hecho!' : '¡Sesión completada!'}</h2>
+        {sum.mode !== 'bonus' && sum.xp > 0 && <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 22, color: '#B87400' }}>+{sum.xp} XP</div>}
         {sum.mode === 'bonus' && sum.xp > 0 && <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 22, color: '#B87400' }}>+{sum.xp} XP</div>}
         <div style={{ fontSize: 14, fontWeight: 800, color: '#5B4A3A' }}>{ok} de {sum.res.length} bien{sum.mode === 'box' && ok ? ' · lo que acertaste ya cuenta para tu avance' : ''}</div>
-        {keys.map(k => { const m = mats.find(x => x.key === k); const b = sum.before[k] || 0, a = sum.after[k] || 0; return (
+        {keys.filter(k => { const m = mats.find(x => x.key === k); return m && !m.noProg; }).map(k => { const m = mats.find(x => x.key === k); const b = sum.before[k] || 0, a = sum.after[k] || 0; return (
           <div className="mx-srow" key={k}><span style={{ fontSize: 16 }}>{mxIcon(m)}</span><span className="sn">{m.name}</span><div className="pb"><i style={{ width: (anim ? a : b) + '%', background: color(k) }}></i></div><em>{a}%{a > b ? <small style={{ display: 'block', fontSize: 10, color: '#2EA84B' }}>+{a - b}</small> : null}</em></div>
         ); })}
         {sum.won.map(w => <div className="mx-srow" key={'w' + w.key} style={{ borderColor: '#A5D6A7', background: '#F1FAF2', color: '#1B5E20' }}>🎉 ¡Completaste {(mats.find(m => m.key === w.key) || {}).name}! Nota registrada: {w.score}%</div>)}
@@ -315,7 +363,7 @@ function MixedSummary({ uid, mats, sum, color, pending, onAgain, onClose }) {
         {wrong > 0 && sum.mode === 'box' && <div className="mx-sbox">🧠 {wrong} vuelve{wrong > 1 ? 'n' : ''} a tu caja en 2 h. ¡Paso a paso!</div>}
         {wrong > 0 && sum.mode === 'bonus' && <div className="mx-sbox" style={{ background: '#FFFBEA', borderColor: '#E9C45A', color: '#5A3E00' }}>⭐ {wrong} vuelve{wrong > 1 ? 'n' : ''} en otra ronda de esta semana. No te quita puntos.</div>}
         {/* XP-EXPLICA-V1 (23-oct-2026): honesto — las rondas mixtas y la caja no dan XP al responder */}
-        {(sum.mode === 'mix' || sum.mode === 'box') && !sum.won.length && <div style={{ fontSize: 12, fontWeight: 700, color: '#6B5A48', lineHeight: 1.45 }}>🧠 Esta ronda entrenó tu memoria: las rondas no dan XP al responder. Para ver cómo ganar XP, toca <b>⚡</b> en Mi práctica.</div>}
+        {(sum.mode === 'mix' || sum.mode === 'box') && !sum.xp && !sum.won.length && <div style={{ fontSize: 12, fontWeight: 700, color: '#6B5A48', lineHeight: 1.45 }}>🧠 Esta ronda entrenó tu memoria. Tus prácticas de hoy ya estaban completas: el XP por intento se gana mientras una práctica no está terminada. Toca <b>⚡</b> en Mi práctica para ver más.</div>}
         <div className="mx-sbtn">
           {pending > 0 && (sum.mode === 'mix' || sum.mode === 'bonus') && <button type="button" className="mx-b1" style={sum.mode === 'bonus' ? { background: 'linear-gradient(180deg,#FFCA28,#F59E00)', color: '#3D2A00' } : null} onClick={onAgain}>{sum.mode === 'bonus' ? '⭐ Otra ronda bonus' : '▶ Otra ronda'}</button>}
           <button type="button" className="mx-b2" onClick={onClose}>Volver a Mi práctica</button>

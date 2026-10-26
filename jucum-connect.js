@@ -757,14 +757,29 @@
         try { if (!localStorage.getItem(ATTEMPT_KEY)) localStorage.setItem(ATTEMPT_KEY, String(Date.now())); } catch (e) {}
         var prev = res.prev, msg;
         if (res.offline) msg = '📡 Sin internet en este momento. Tu resultado (' + (sc != null ? sc + '% · ' : '') + minutes + ' min) quedó guardado en ESTE equipo y se registrará solo en tu próxima práctica con conexión.';
-        else if (res.gated) msg = '🕐 Sacaste ' + sc + '%, pero tu nota registrada sigue en ' + prev + '%: la nota puede cambiar recién MEDIA HORA después de tu intento anterior. Tu práctica de hoy SÍ quedó registrada — repasa el feedback y vuelve a intentarlo en ~' + res.waitMin + ' min para que la nota también cuente.';
+        else if (res.gated) msg = '🕐 Sacaste ' + sc + '%. Tu nota registrada sigue en ' + prev + '%: la próxima nota cuenta en <b id="jec-gate-cd" style="font-size:16px;color:#8D4E00;font-variant-numeric:tabular-nums">' + res.waitMin + ':00</b> (media hora después de tu intento anterior). Tu práctica de hoy SÍ quedó registrada: repasa el feedback mientras tanto.';
         else if (prev == null) msg = '✅ Práctica registrada · ' + minutes + ' min' + (sc != null ? ' · ' + sc + '%' : '');
         else if (sc != null && sc > prev) msg = '🎉 ¡Mejoraste tu nota! Antes ' + prev + '% → ahora ' + sc + '%.';
         else if (sc != null && sc === prev) msg = '👍 Practicaste de nuevo. Tu nota (' + prev + '%) se mantiene.';
         else if (sc != null) msg = '👍 Lo intentaste de nuevo. Tu mejor nota (' + prev + '%) se mantiene.';
         else msg = '✅ Práctica registrada · ' + minutes + ' min';
         showResultCard(pct, msg, sc != null, lowStakes);
+        /* NEURO-FIX-V2 · 2C (26-oct): reloj EN VIVO de la media hora en la tarjeta final + línea de XP semanal */
+        if (res.gated) { var gEnd = Date.now() + gateLeftMs(partId); var giv = setInterval(function () { var el = document.getElementById('jec-gate-cd'); if (!el) { clearInterval(giv); return; } var l = gEnd - Date.now();
+          if (l <= 0) { clearInterval(giv); if (el.parentNode) el.parentNode.innerHTML = '✅ ¡Ya pasó la media hora! Si lo intentas ahora, tu nota SÍ puede cambiar.'; return; } var s2 = Math.ceil(l / 1000); el.textContent = Math.floor(s2 / 60) + ':' + String(s2 % 60).padStart(2, '0'); }, 1000); }
+        if (!demo && !res.offline && prev != null) xpWeekLine();
       });
+    }
+    function xpWeekLine() {
+      try {
+        var p = new Date(Date.now() - 5 * 3600e3), today = p.toISOString().slice(0, 10), dw = (p.getUTCDay() + 6) % 7; p.setUTCDate(p.getUTCDate() - dw); var mon = p.toISOString().slice(0, 10); // día-ok
+        var nx = new Date(Date.parse(mon + 'T00:00:00Z') + 7 * 86400e3), MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'];
+        sb.from('daily_sessions').select('day').eq('user_id', uid).eq('module_id', modId).eq('activity_id', actId).gte('day', mon).lt('day', today).limit(1).then(function (r) {
+          if (!r || r.error || !r.data || !r.data.length) return; var el = document.getElementById('jec-xp-line'); if (!el) return;
+          var dd = Math.max(1, Math.ceil((nx.getTime() + 5 * 3600e3 - Date.now()) / 86400e3));
+          el.innerHTML = '⚡ Este material ya te dio XP esta semana. Puedes repasarlo igual: vuelve a darte XP el <b>lunes ' + nx.getUTCDate() + ' ' + MES[nx.getUTCMonth()] + '</b> (en ' + dd + (dd === 1 ? ' día' : ' días') + ').'; el.style.display = 'block';
+        }, function () {});
+      } catch (e) {}
     }
 
     /* Registra el progreso quedándonos con la MEJOR nota (nunca baja una nota
@@ -979,6 +994,7 @@
         '<div style="font-size:14px;line-height:1.55;color:#333;margin-bottom:14px;">' + m.text + '</div>' +
         retryHtml +
         '<div style="font-size:12px;font-weight:700;color:#555;background:#F5F5F0;border-radius:10px;padding:9px 12px;margin-bottom:16px;">' + statusMsg + '</div>' +
+        '<div id="jec-xp-line" style="display:none;font-size:12px;font-weight:700;color:#5A4300;background:#FFF9E5;border:1.5px solid #F5DC8B;border-radius:10px;padding:9px 12px;margin:-8px 0 16px;"></div>' +
         '<button id="jec-rc-btn" style="padding:12px 28px;border:none;border-radius:24px;background:#1F3A8A;color:#fff;font-weight:800;font-size:14px;cursor:pointer;">Entendido ✓</button>' +
         '</div></div>';
       document.body.appendChild(ov);
