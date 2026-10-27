@@ -190,7 +190,8 @@ function StudentTaskPreview({ assignment, onClose }) {
 
 /* ── editor de instrucciones estructuradas (dentro del formulario) ── */
 function StructuredEditor({ value, onChange }) {
-  const s = value || emptyStructured();
+  const e0 = emptyStructured(), v0 = value || {};
+  const s = { ...e0, ...v0, resource: { ...e0.resource, ...(v0.resource || {}) }, steps: Array.isArray(v0.steps) ? v0.steps : e0.steps, focus: Array.isArray(v0.focus) ? v0.focus : e0.focus, materials: Array.isArray(v0.materials) ? v0.materials : e0.materials };   // TASK-EDIT-V1: tolera bloques incompletos
   const set = (patch) => onChange({ ...s, ...patch });
   const setStep = (i, k, v) => set({ steps: s.steps.map((x, j) => j === i ? { ...x, [k]: v } : x) });
   const setFocus = (i, k, v) => set({ focus: s.focus.map((x, j) => j === i ? { ...x, [k]: (k === 'items' ? v.split(',').map(t => t.trim()).filter(Boolean) : v) } : x) });
@@ -426,13 +427,20 @@ function tbgInfo(a, T, STUDENTS) {
   else st = (a.dueAt && new Date(a.dueAt).getTime() < now) ? 'closed' : 'open';
   return { ds, nSub: ids.length, recips: T.recipientsOf(a, STUDENTS).length, rev, st, doc: ds ? (ds.docTitle || ds.file || '') : '' };
 }
+/* TASK-EDIT-V1 (27-oct-2026): el menú ⋯ se pinta con position:fixed junto al botón. Dentro del paquete de un
+ * documento (contenedor con overflow:hidden) quedaba RECORTADO e invisible → “ya no puedo editar mis tareas”. */
 function TaskMoreMenu({ items }) {
-  const [open, setOpen] = tUseState(false); const ref = tUseRef(null);
-  React.useEffect(() => { if (!open) return; const off = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }; document.addEventListener('mousedown', off); return () => document.removeEventListener('mousedown', off); }, [open]);
+  const [open, setOpen] = tUseState(false); const ref = tUseRef(null); const btn = tUseRef(null); const [pos, setPos] = tUseState(null);
+  const place = () => { const b = btn.current; if (!b) return; const r = b.getBoundingClientRect(), n = items.filter(Boolean).length, h = n * 36 + 14, W = 240;
+    const up = r.bottom + 4 + h > window.innerHeight && r.top - 4 - h > 0;
+    setPos({ left: Math.max(8, Math.min(window.innerWidth - W - 8, r.right - W)), top: up ? r.top - 4 - h : r.bottom + 4 }); };
+  React.useEffect(() => { if (!open) return; place(); const off = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }; const shut = () => setOpen(false);
+    document.addEventListener('mousedown', off); window.addEventListener('scroll', shut, true); window.addEventListener('resize', shut);
+    return () => { document.removeEventListener('mousedown', off); window.removeEventListener('scroll', shut, true); window.removeEventListener('resize', shut); }; }, [open]);
   return (
     <div ref={ref} style={{position:'relative', flex:'none'}} onClick={e => e.stopPropagation()}>
-      <button className="att-btn" title="Más opciones" style={{width:38, padding:'6px 0', fontSize:16, lineHeight:1}} onClick={() => setOpen(o => !o)}>⋯</button>
-      {open && <div style={{position:'absolute', right:0, top:'calc(100% + 4px)', background:'#fff', border:'1px solid #E2DED3', borderRadius:12, boxShadow:'0 12px 30px rgba(0,0,0,.16)', padding:6, zIndex:60, minWidth:230}}>
+      <button ref={btn} className="att-btn" title="Más opciones (editar, fecha, duplicar…)" style={{width:38, padding:'6px 0', fontSize:16, lineHeight:1}} onClick={() => setOpen(o => !o)}>⋯</button>
+      {open && pos && <div style={{position:'fixed', left:pos.left, top:pos.top, width:240, background:'#fff', border:'1px solid #E2DED3', borderRadius:12, boxShadow:'0 12px 30px rgba(0,0,0,.16)', padding:6, zIndex:3000}}>
         {items.filter(Boolean).map((it, i) => <button key={i} onClick={() => { setOpen(false); it.on(); }} style={{display:'block', width:'100%', textAlign:'left', border:'none', background:'none', padding:'8px 10px', borderRadius:8, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit', color: it.danger ? '#C62828' : '#333', whiteSpace:'nowrap'}} onMouseEnter={e => e.currentTarget.style.background = '#F3F1EA'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>{it.t}</button>)}
       </div>}
     </div>);
@@ -519,7 +527,14 @@ function TeacherAssignments({ onBack, embedded, groupId: gidProp, onGroupChange,
 
   const closeView = () => { setViewing(null); refresh(); };
   if (viewing && window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.isDocset(viewing) && window.DocSetResults) return (
-    <Wrap0 embedded={embedded}><button className="back-btn" onClick={closeView}>← Tareas</button><TaskSafe key={viewing.id} onClose={closeView}><DocSetResults a={viewing} /></TaskSafe></Wrap0>);
+    <Wrap0 embedded={embedded}>
+      <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
+        <button className="back-btn" onClick={closeView}>← Tareas</button><span style={{flex:1}}></span>
+        <button className="btn-settings" onClick={() => setEditing(viewing)}>✏️ Editar tarea</button>
+      </div>
+      <TaskSafe key={viewing.id + ':' + viewing.title + ':' + (viewing.description || '').length + ':' + (viewing.dueAt || '')} onClose={closeView}><DocSetResults a={viewing} /></TaskSafe>
+      {editing && <AssignmentForm initial={editing} onClose={() => setEditing(null)} onSaved={() => { const id = editing.id; setEditing(null); const f = T.getAssignments().find(x => x.id === id); if (f) setViewingRaw(f); refresh(); }} />}
+    </Wrap0>);
   if (viewing) return <TaskSafe key={viewing.id} onClose={closeView}><TeacherSubmissions assignment={viewing} embedded={embedded} onBack={closeView} /></TaskSafe>;
 
   const Wrap = embedded ? 'div' : 'main';
@@ -837,8 +852,11 @@ function AssignmentForm({ onClose, onSaved, initial, prefill }) {
   const initMeta = parseTaskMeta(P0 || {});
   const [title, setTitle] = tUseState(P0?.title || '');
   const [desc, setDesc] = tUseState(initMeta.plain);
-  const [structured, setStructured] = tUseState(initMeta.structured || emptyStructured());
-  const [showStruct, setShowStruct] = tUseState(hasStructured(initMeta.structured));
+  /* TASK-EDIT-V1: una tarea del documento trae SOLO {docset} en el bloque oculto. El editor estructurado no es para
+   * ella (se caía leyendo pasos/foco que no existen) → se oculta y, al guardar, el bloque docset se conserva SIEMPRE. */
+  const docsetKeep = initMeta.structured && initMeta.structured.docset ? initMeta.structured.docset : null;
+  const [structured, setStructured] = tUseState(() => { const s0 = initMeta.structured || {}; const { docset, ...rest } = s0; return { ...emptyStructured(), ...rest }; });
+  const [showStruct, setShowStruct] = tUseState(() => { const s0 = initMeta.structured || {}; const { docset, ...rest } = s0; return hasStructured(rest); });
   const [preview, setPreview] = tUseState(false);
   const [due, setDue] = tUseState(toLocalInput(P0?.dueAt));
   const [groupId, setGroupId] = tUseState(P0?.groupId || GROUPS[0]?.id || '');
@@ -871,7 +889,7 @@ function AssignmentForm({ onClose, onSaved, initial, prefill }) {
       groupId,
       targetStudentIds: mode === 'students' ? picked : [],
       title: title.trim(),
-      description: buildTaskDescription(desc, showStruct ? structured : null),
+      description: buildTaskDescription(desc, docsetKeep ? { docset: docsetKeep } : (showStruct ? structured : null)),
       dueAt: due ? new Date(due).toISOString() : null,
       gradable,
       attachments: finalAtt,
@@ -908,6 +926,9 @@ function AssignmentForm({ onClose, onSaved, initial, prefill }) {
             <textarea className="eval-textarea" rows={5} value={desc} onChange={e => setDesc(e.target.value)} placeholder="Una introducción breve o el contexto de la tarea…" />
           </div>
 
+          {docsetKeep ? (
+          <div className="settings-block"><div className="settings-hint" style={{margin:0}}>✍️ Los ejercicios de esta tarea vienen del documento <b>{docsetKeep.docTitle || docsetKeep.file || ''}</b> y se conservan tal cual. Aquí cambias título, instrucciones, fecha y a quién va.</div></div>
+          ) : (
           <div className="settings-block">
             <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
               <div className="settings-label" style={{margin:0, flex:1}}>📋 Instrucciones estructuradas <span style={{fontSize:11, fontWeight:700, color:'var(--text-soft)'}}>(como las prácticas)</span></div>
@@ -921,6 +942,7 @@ function AssignmentForm({ onClose, onSaved, initial, prefill }) {
               </div>
             )}
           </div>
+          )}
 
           <div className="settings-block">
             <div className="settings-label">Grupo</div>
@@ -995,7 +1017,7 @@ function AssignmentForm({ onClose, onSaved, initial, prefill }) {
           </div>
         </div>
       </div>
-      {preview && <StudentTaskPreview assignment={{ title: title || 'Tarea', dueAt: due ? new Date(due).toISOString() : null, gradable, description: buildTaskDescription(desc, structured) }} onClose={() => setPreview(false)} />}
+      {preview && <StudentTaskPreview assignment={{ title: title || 'Tarea', dueAt: due ? new Date(due).toISOString() : null, gradable, description: buildTaskDescription(desc, docsetKeep ? { docset: docsetKeep } : structured) }} onClose={() => setPreview(false)} />}
     </div>
   );
 }
