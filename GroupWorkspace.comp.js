@@ -524,7 +524,6 @@ function GroupWorkspace({ groupId, onBack, onSelectStudent, onClassic }) {
               <button type="button" onClick={() => { setMenu(false); setShowReport(true); }}>📄 Reporte PDF</button>
               <button type="button" onClick={() => { setMenu(false); if (window.JUCUM_STUDENT_PREVIEW) window.JUCUM_STUDENT_PREVIEW.open(groupId); }}>👁 Ver como alumno</button>
               {closedMembers.length > 0 && <button type="button" onClick={() => { setMenu(false); setWin('closed'); }}>⏸ Con avance cerrado ({closedMembers.length})</button>}
-              {onClassic && <button type="button" onClick={() => { setMenu(false); onClassic(); }}>↩ Vista anterior (lista larga)</button>}
               {!grdFinished && window.FinishGroupModal && <><hr /><button type="button" style={{ color: '#8A5A00' }} onClick={() => { setMenu(false); setShowFinish(true); }}>🎓 Finalizar grupo…</button></>}
             </div>}
           </div>

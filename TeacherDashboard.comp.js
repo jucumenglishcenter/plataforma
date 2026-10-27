@@ -575,18 +575,16 @@ function GroupModulesQuick({ groupId, onChanged }) {
 }
 
 /* 👥 GROUP-WS-V1 (16-oct-2026): la página del grupo es GroupWorkspace (GroupWorkspace.comp.js, una pantalla:
- * botones con ventanas + lista y ficha rápida). La vista anterior sigue como GroupDetailClassic y se
- * elige desde ⋯ → “Vista anterior” (preferencia chica en localStorage jucum_group_view_v1). */
-const GW_VIEW_KEY = 'jucum_group_view_v1';
+ * botones con ventanas + lista y ficha rápida).
+ * SIN-VISTA-ANTERIOR-V1 (27-oct-2026, pedido de la usuaria: “generaba confusiones”): ya NO se ofrece la vista
+ * anterior (se quitó ⋯ → “Vista anterior” y el aviso). Quien la tenía guardada en jucum_group_view_v1 entra
+ * igual a la vista nueva y la preferencia se borra. GroupDetailClassic queda SOLO como respaldo si
+ * GroupWorkspace no llegara a cargar. */
 function GroupDetail(props) {
-  const [view, setView] = React.useState(() => { try { return localStorage.getItem(GW_VIEW_KEY) || 'ws'; } catch (e) { return 'ws'; } });
-  const pick = (v) => { setView(v); try { if (window.JUCUM_STORE) window.JUCUM_STORE.set(GW_VIEW_KEY, v); else localStorage.setItem(GW_VIEW_KEY, v); } catch (e) {} };
+  React.useEffect(() => { try { localStorage.removeItem('jucum_group_view_v1'); } catch (e) {} }, []);
   const GW = window.GroupWorkspace;
-  if (GW && view !== 'classic') return <GW {...props} onClassic={() => pick('classic')} />;
-  return (<>
-    {GW && <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',background:'#F3F6FD',border:'1.5px solid #C5D6F2',borderRadius:12,padding:'8px 12px',margin:'0 0 10px',fontSize:13,fontWeight:700,color:'#33415C'}}><span style={{flex:1,minWidth:200}}>Estás en la vista anterior del grupo.</span><button type="button" className="btn-settings" onClick={() => pick('ws')}>Volver a la vista nueva</button></div>}
-    <GroupDetailClassic {...props} />
-  </>);
+  if (GW) return <GW {...props} />;
+  return <GroupDetailClassic {...props} />;
 }
 
 function GroupDetailClassic({ groupId, onBack, onSelectStudent }) {
