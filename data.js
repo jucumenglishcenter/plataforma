@@ -436,8 +436,8 @@ const ACHIEVEMENT_DEFS = {
   first:      { icon:'🌱', name:'Primer paso',     how:'Completa tu primera práctica.',                 metric:'practices', goal:1,   decay:true, color:'#66BB6A', colorDark:'#2E7D32', glow:'rgba(102,187,106,0.45)' },
   practice5:  { icon:'📚', name:'Constante',       how:'Completa 5 prácticas en total.',                metric:'practices', goal:5,   decay:true, color:'#42A5F5', colorDark:'#1565C0', glow:'rgba(66,165,245,0.45)' },
   practice15: { icon:'🏅', name:'Dedicado/a',      how:'Completa 15 prácticas en total.',               metric:'practices', goal:15,  decay:true, color:'#FFB300', colorDark:'#FF8F00', glow:'rgba(255,179,0,0.5)' },
-  streak3:    { icon:'🔥', name:'En racha',        how:'Practica 3 días seguidos.',                     metric:'streak',    goal:3,   decay:true, color:'#FF7043', colorDark:'#E64A19', glow:'rgba(255,112,67,0.45)' },
-  streak7:    { icon:'⚡', name:'Imparable',       how:'Practica 7 días seguidos sin fallar un día.',   metric:'streak',    goal:7,   decay:true, color:'#FFCA28', colorDark:'#F9A825', glow:'rgba(255,202,40,0.5)' },
+  streak3:    { icon:'🔥', name:'En racha',        how:'Logra una racha de 3 días.',                    metric:'streak',    goal:3, color:'#FF7043', colorDark:'#E64A19', glow:'rgba(255,112,67,0.45)' },
+  streak7:    { icon:'⚡', name:'Imparable',       how:'Logra una racha de 7 días.',                    metric:'streak',    goal:7, color:'#FFCA28', colorDark:'#F9A825', glow:'rgba(255,202,40,0.5)' },
   hour1:      { icon:'⏱️', name:'Una hora',        how:'Acumula 60 minutos de práctica.',               metric:'minutes',   goal:60,  decay:true, unit:' min', color:'#26C6DA', colorDark:'#00838F', glow:'rgba(38,198,218,0.45)' },
   hours5:     { icon:'🏆', name:'Maratón',         how:'Acumula 5 horas (300 min) de práctica.',        metric:'minutes',   goal:300, decay:true, unit:' min', color:'#FFD54F', colorDark:'#F57F17', glow:'rgba(255,213,79,0.55)' },
   perfect:    { icon:'⭐', name:'Sin errores',     how:'Saca 100% en cualquier quiz.',                  metric:'perfect',   goal:1,   color:'#AB47BC', colorDark:'#6A1B9A', glow:'rgba(171,71,188,0.45)' },
@@ -463,7 +463,7 @@ function _medalCurrent(student, metric) {
   const entries = Object.values(prog.completed || {});
   switch (metric) {
     case 'practices': return entries.filter(e => entryPassed(e, student.level, student.group)).length;
-    case 'streak':    return student.streak || 0;
+    case 'streak':    return getBestStreak(student);   // RACHA-AMABLE-V1: medalla por RÉCORD (ganada no se apaga)
     case 'minutes':   return student.totalMinutes || 0;
     case 'perfect':   return entries.filter(e => typeof e.score === 'number' && e.score >= 100).length;
     case 'avg':       return student.avgScore || 0;
@@ -1053,15 +1053,15 @@ const BONUS_KEY = 'jucum_bonus_xp_v1';          // formato viejo: solo para migr
 const BONUS2_KEY = 'jucum_bonus_xp_v2';         // {ev:{id:[alumno, semana, xp, ts]}} (HEAVY en config.js)
 const BONUS_CLOUD = 'bonus_xp_v2';
 const BONUS_RAW_WEEKS = 3;                      // semanas con registros sueltos; las anteriores se compactan
-let _bonusAgg = null;
-function _bonusIsMax(id) { return id.indexOf('legacy:') === 0 || id.indexOf('arch:') === 0; }
+let _bonusAgg = null, _stkAgg = null;
+function _bonusIsMax(id) { return id.indexOf('legacy:') === 0 || id.indexOf('arch:') === 0 || id.indexOf('stkb:') === 0 || id.indexOf('stka:') === 0; }
 function _bonusFromOld(old) { const ev = {}; try { Object.keys(old || {}).forEach(wk => { const m = old[wk] || {}; Object.keys(m).forEach(sid => { const x = Number(m[sid]) || 0; if (x) ev['legacy:' + wk + ':' + sid] = [sid, wk, x, 0]; }); }); } catch (e) {} return { ev }; }
 function _bonusLedger() {
   try { const v = JSON.parse(localStorage.getItem(BONUS2_KEY) || 'null'); if (v && v.ev) return v; } catch (e) {}
   let old = {}; try { old = JSON.parse(localStorage.getItem(BONUS_KEY) || '{}'); } catch (e) {}
   const v = _bonusFromOld(old); _bonusSave(v); return v;
 }
-function _bonusSave(v) { _bonusAgg = null; try { if (window.JUCUM_STORE) window.JUCUM_STORE.setJSON(BONUS2_KEY, v); else localStorage.setItem(BONUS2_KEY, JSON.stringify(v)); } catch (e) {} }
+function _bonusSave(v) { _bonusAgg = null; _stkAgg = null; try { if (window.JUCUM_STORE) window.JUCUM_STORE.setJSON(BONUS2_KEY, v); else localStorage.setItem(BONUS2_KEY, JSON.stringify(v)); } catch (e) {} }
 function _bonusMerge(a, b) {
   const ev = { ...((a && a.ev) || {}) };
   Object.keys((b && b.ev) || {}).forEach(id => { const e = b.ev[id]; if (!Array.isArray(e)) return; const p = ev[id]; if (!p || (_bonusIsMax(id) && (Number(e[2]) || 0) > (Number(p[2]) || 0))) ev[id] = e; });
@@ -1070,7 +1070,11 @@ function _bonusMerge(a, b) {
 function _bonusCompact(v) {
   const cut = (() => { const d = new Date(weekId() + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 7 * BONUS_RAW_WEEKS); return d.toISOString().slice(0, 10); })(); /* día-ok */
   const ev = { ...v.ev }; const sums = {};
-  Object.keys(ev).forEach(id => { if (id.indexOf('arch:') === 0) return; const e = ev[id]; if (!(e[1] < cut)) return; const k = e[1] + ':' + e[0]; sums[k] = (sums[k] || 0) + (Number(e[2]) || 0); delete ev[id]; });
+  /* 🔥 RACHA-AMABLE-V1: el XP de racha por día ('stk:<alumno>:<día>') se junta en 'stka:<alumno>' = [alumno, último día, suma] */
+  const sa = {};
+  Object.keys(ev).forEach(id => { if (id.indexOf('stk:') !== 0) return; const e = ev[id]; if (!Array.isArray(e)) { delete ev[id]; return; } const a = ev['stka:' + e[0]], last = a ? a[1] : ''; if (e[1] <= last) { delete ev[id]; return; } if (e[1] < cut) { (sa[e[0]] = sa[e[0]] || []).push(e); delete ev[id]; } });
+  Object.keys(sa).forEach(sid => { const a = ev['stka:' + sid]; let last = a ? a[1] : '', sum = a ? Number(a[2]) || 0 : 0; sa[sid].forEach(e => { sum += Number(e[2]) || 0; if (e[1] > last) last = e[1]; }); ev['stka:' + sid] = [sid, last, sum, 0]; });
+  Object.keys(ev).forEach(id => { if (id.indexOf('arch:') === 0 || id.indexOf('stk') === 0) return; const e = ev[id]; if (!(e[1] < cut)) return; const k = e[1] + ':' + e[0]; sums[k] = (sums[k] || 0) + (Number(e[2]) || 0); delete ev[id]; });
   Object.keys(sums).forEach(k => { const [wk, sid] = [k.slice(0, 10), k.slice(11)]; const id = 'arch:' + wk + ':' + sid; const p = ev[id]; if (!p || sums[k] > (Number(p[2]) || 0)) ev[id] = [sid, wk, sums[k], 0]; });
   return { ev };
 }
@@ -1079,7 +1083,7 @@ function _getBonusState() {
   if (_bonusAgg) return _bonusAgg;
   const v = _bonusLedger(); const arch = {}; const out = {};
   Object.keys(v.ev).forEach(id => { if (id.indexOf('arch:') === 0) { const e = v.ev[id]; arch[e[1] + ':' + e[0]] = 1; } });
-  Object.keys(v.ev).forEach(id => { const e = v.ev[id]; if (!Array.isArray(e)) return; if (id.indexOf('arch:') !== 0 && arch[e[1] + ':' + e[0]]) return; out[e[1]] = out[e[1]] || {}; out[e[1]][e[0]] = (out[e[1]][e[0]] || 0) + (Number(e[2]) || 0); });
+  Object.keys(v.ev).forEach(id => { const e = v.ev[id]; if (!Array.isArray(e) || id.indexOf('stk') === 0) return; if (id.indexOf('arch:') !== 0 && arch[e[1] + ':' + e[0]]) return; out[e[1]] = out[e[1]] || {}; out[e[1]][e[0]] = (out[e[1]][e[0]] || 0) + (Number(e[2]) || 0); });
   _bonusAgg = out; return out;
 }
 let _bonusPushT = null;
@@ -1154,7 +1158,7 @@ function markWeekSeen(studentId) { try { localStorage.setItem('jucum_week_seen_'
  *   = XP por actividad completada (1 vez · fuente: activityEarnedXP)
  *   + bono semanal re-ganable (repasar en semanas distintas)
  *   + bonos persistentes (asistencia/encuesta)
- *   + 30 XP por día de racha (tope 14) + 50 XP por logro
+ *   + XP de racha ganado día a día (+10/+20/+30, se queda · RACHA-AMABLE-V1) + 50 XP por logro
  *   − penalización suave por inactividad
  */
 function getStudentXP(student) {
@@ -1172,7 +1176,7 @@ function _getStudentXPRaw(student) {
   }
   xp += weeklyReEarnXP(student);        // cada semana que lo repasan vuelve a dar XP
   xp += getBonusXPTotal(student.id);    // asistencia perfecta, encuesta, etc.
-  xp += Math.min(student.streak || 0, 14) * 30;
+  { const sx = getStreakXPTotal(student.id); xp += sx == null ? Math.min(student.streak || 0, 14) * 30 : sx; }   // RACHA-AMABLE-V1: XP de racha GANADO (no se pierde)
   xp += (student.achievements?.length || 0) * 50;
   // PASO 2 · Bono por terminar la práctica dirigida a tiempo Y aprobada
   xp += getDirectedBonusXP(student);
@@ -2362,9 +2366,55 @@ function getBestStreak(student) {
   let all = {};
   try { all = JSON.parse(localStorage.getItem(BEST_STREAK_KEY) || '{}'); } catch {}
   const cur = (student && student.streak) || 0;
-  const best = Math.max(all[student.id] || 0, cur);
+  const best = Math.max(all[student.id] || 0, cur, (student && student.streakInfo && student.streakInfo.best) || 0);
   if (best !== (all[student.id] || 0)) { all[student.id] = best; try { localStorage.setItem(BEST_STREAK_KEY, JSON.stringify(all)); } catch {} }
   return best;
+}
+
+/* 🔥 RACHA-AMABLE-V1 (27-oct-2026 · aprobado por la usuaria, ver "Espejo - Rachas.html")
+ * El día cuenta al llegar a la META del grupo (dailyTargetMin) · domingo libre · 1 escudo 🛡 por semana
+ * (automático, cubre UN día) · XP de racha por día cumplido (+10 días 1–2 · +20 del 3 al 6 · +30 desde el 7.º)
+ * GANADO y guardado en el ledger bonus_xp_v2 con id fijo 'stk:<alumno>:<día>' (idempotente entre equipos).
+ * Al cambiar, cada alumno conserva su XP de racha viejo en 'stkb:<alumno>' = min(racha vieja al 27-oct, 14) × 30.
+ * Motor puro: rachas.js (window.JUCUM_STREAK). Minutos por día: window.__JEC_DAYMIN (daily_sessions, 120 días). */
+const STREAK_CUTOVER = '2026-10-28';
+function computeStreakInfo(student, todayMin) {
+  const ST = window.JUCUM_STREAK, M = window.__JEC_DAYMIN;
+  if (!ST || !M || !student) return null;
+  const src = M[student.id] || {}, mins = {}; Object.keys(src).forEach(d => { mins[d] = src[d]; });
+  const today = ST.peruToday();
+  if (todayMin > 0) mins[today] = Math.max(mins[today] || 0, todayMin);
+  const goal = (getGroupSettings(student.group) || {}).dailyTargetMin || 15;
+  return ST.compute(mins, goal, today);
+}
+function getStreakXPTotal(studentId) {
+  if (!_stkAgg) {
+    const v = _bonusLedger(), base = {}, arch = {}, loose = {};
+    Object.keys(v.ev).forEach(id => { const e = v.ev[id]; if (!Array.isArray(e)) return;
+      if (id.indexOf('stkb:') === 0) base[e[0]] = Number(e[2]) || 0;
+      else if (id.indexOf('stka:') === 0) arch[e[0]] = e; });
+    Object.keys(v.ev).forEach(id => { if (id.indexOf('stk:') !== 0) return; const e = v.ev[id]; if (!Array.isArray(e)) return; const a = arch[e[0]]; if (a && e[1] <= a[1]) return; loose[e[0]] = (loose[e[0]] || 0) + (Number(e[2]) || 0); });
+    _stkAgg = { base, arch, loose };
+  }
+  const sid = String(studentId);
+  if (!(sid in _stkAgg.base)) return null;   // aún sin base: se sigue mostrando el cálculo viejo
+  return _stkAgg.base[sid] + (_stkAgg.arch[sid] ? Number(_stkAgg.arch[sid][2]) || 0 : 0) + (_stkAgg.loose[sid] || 0);
+}
+/* Escribe en el ledger el XP de los días cumplidos (solo con los días de la nube y el ledger ya bajados). */
+function awardStreakXP(student, info) {
+  const ST = window.JUCUM_STREAK;
+  if (!ST || !student || !info || !window.__JEC_DAYMIN || !(window.__JEC_OK && window.__JEC_OK.days) || !window.__JEC_BONUS_OK) return;
+  const v = _bonusLedger(), sid = String(student.id); let ch = false;
+  if (!v.ev['stkb:' + sid]) {
+    const old = ST.legacy(window.__JEC_DAYMIN[student.id] || {}, ST.addD(STREAK_CUTOVER, -1));
+    v.ev['stkb:' + sid] = [sid, STREAK_CUTOVER, Math.min(old, 14) * 30, Date.now()]; ch = true;
+  }
+  const a = v.ev['stka:' + sid], last = a ? a[1] : '', minDay = ST.addD(ST.peruToday(), -20);
+  Object.keys(info.xpDays || {}).forEach(d => {
+    if (d < STREAK_CUTOVER || d <= last || d < minDay) return;
+    const id = 'stk:' + sid + ':' + d; if (!v.ev[id]) { v.ev[id] = [sid, d, info.xpDays[d], Date.now()]; ch = true; }
+  });
+  if (ch) { _bonusSave(v); clearTimeout(_bonusPushT); _bonusPushT = setTimeout(() => { _bonusSync(); }, 1500); }
 }
 
 /* ── PASO 5 · "Refuerzo" · práctica extra OPCIONAL ────────────────────────
@@ -2478,6 +2528,7 @@ window.JUCUM_DATA = { getDailyConstancy, getModuleOpenedAt, LEVELS, GROUPS, STUD
   getReviews, recordReviewAttempt, getDueReviews, getLastReviewResult, markReviewResultSeen, getRetention, reviewTrend, loadReviewsFromCloud, getDropExplanation, ackDropExplanation,
   /* PASO 4 · ruta de módulos + récord de racha */
   getModuleRoute, getFocusModuleId, getBestStreak,
+  computeStreakInfo, awardStreakXP, getStreakXPTotal, STREAK_CUTOVER,   // 🔥 RACHA-AMABLE-V1
   /* PASO 5 · refuerzo opcional + estructuras latentes ★ */
   getRefuerzo, latentGate,
   /* Neuro/XP honestos: días reales sin practicar + pérdida por inactividad */
@@ -2697,16 +2748,19 @@ function jecPagedDaily(cols, applyFilter, done) {
       /* 🔥 Racha multi-equipo: días REALES con práctica según daily_sessions (una fila
        * por alumno/día/material, nunca se sobreescribe — a diferencia de entry.date).
        * Ventana de 90 días para rachas largas. computeStats une estos días con lo local. */
-      var sinceDays = new Date(Date.now() - 5 * 3600000 - 90 * 86400000).toISOString().slice(0, 10);
-      jecPagedDaily('user_id,day', function (q) { return q.gte('day', sinceDays); }, function (rows2, ok) {
+      var sinceDays = new Date(Date.now() - 5 * 3600000 - 120 * 86400000).toISOString().slice(0, 10); // día-ok
+      jecPagedDaily('user_id,day,minutes', function (q) { return q.gte('day', sinceDays); }, function (rows2, ok) {
         if (!ok && window.__JEC_DAYS) return;   // incompleta: se conserva lo anterior
-        var dmap = {};
+        var dmap = {}, mmap = {};
         rows2.forEach(function (x) {
           if (!x.day) return;
           dmap[x.user_id] = dmap[x.user_id] || {};
           dmap[x.user_id][x.day] = true;
+          /* 🔥 RACHA-AMABLE-V1: minutos REALES por día (suma de los materiales) → el día cuenta al llegar a la meta */
+          mmap[x.user_id] = mmap[x.user_id] || {};
+          mmap[x.user_id][x.day] = (mmap[x.user_id][x.day] || 0) + (Number(x.minutes) || 0);
         });
-        window.__JEC_DAYS = dmap;
+        window.__JEC_DAYS = dmap; window.__JEC_DAYMIN = mmap;
         if (ok) { window.__JEC_OK = window.__JEC_OK || {}; window.__JEC_OK.days = Date.now(); }
         // Recalcula rachas ya con los días de la nube (la UI refresca sola cada 20 s).
         try { if (window.JUCUM_SYNC && window.JUCUM_SYNC.computeStats) window.JUCUM_SYNC.computeStats(); } catch (e) {}

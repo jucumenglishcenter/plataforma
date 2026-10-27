@@ -11,6 +11,34 @@
  * Solo LEE datos (mismas fuentes que la tabla anterior). Lo anterior sigue como GroupDetailClassic
  * (⋯ → “Vista anterior”, se recuerda en localStorage jucum_group_view_v1). Prefijo gw* (scope global). */
 const GW_CSS = `
+.gw-bd{position:absolute;top:-7px;right:-7px;min-width:21px;height:21px;border-radius:11px;background:#E65100;color:#fff;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;padding:0 6px;box-shadow:0 0 0 2px #F5F3EC}
+.rk-kp{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.rk-kp div{background:#fff;border:1px solid #E6E1D3;border-radius:12px;padding:9px 12px;display:flex;flex-direction:column;gap:1px}
+.rk-kp b{font-family:'Fredoka',sans-serif;font-weight:600;font-size:22px;color:#0D1B5A;line-height:1.1}
+.rk-kp span{font-size:11.5px;font-weight:800;color:#6B6252}
+.rk-pend{background:#FFF6DD;border:1.5px solid #F0C66B;border-radius:14px;padding:11px 13px;display:flex;flex-direction:column;gap:8px}
+.rk-pend h4{margin:0;font-family:'Fredoka',sans-serif;font-weight:600;font-size:15px;color:#7A4A00}
+.rk-pp{display:flex;flex-wrap:wrap;gap:6px}
+.rk-pp button{background:#fff;border:1px solid #F0D58A;border-radius:12px;padding:4px 10px;font-size:12px;font-weight:800;color:#5A3A00;white-space:nowrap}
+.rk-pend small{font-size:11.5px;font-weight:700;color:#7A5A20}
+.rk-calm{background:#E9F7EC;border:1.5px solid #B7E1C1;border-radius:14px;padding:10px 13px;font-size:13px;font-weight:800;color:#1D4D25}
+.rk-seg{display:flex;background:#EAE6DB;border-radius:10px;padding:3px;gap:2px;align-self:flex-start}
+.rk-seg button{border:0;background:none;padding:6px 12px;border-radius:8px;font-weight:800;font-size:12px;color:#6B6252;white-space:nowrap}
+.rk-seg button.on{background:#fff;color:#1F3A8A;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.rk-ls{background:#fff;border:1px solid #E6E1D3;border-radius:14px;padding:4px 12px}
+.rk-r,.rk-hd{display:grid;grid-template-columns:minmax(140px,1.2fr) 52px minmax(0,1.7fr) 74px;gap:10px;align-items:center}
+.rk-r{padding:8px 0;border-bottom:1px solid #F2EEE5;font-size:13px;border-left:0;border-right:0;border-top:0;background:none;width:100%;text-align:left;color:inherit}
+.rk-r:last-child{border-bottom:0}.rk-r:hover{background:#FBFAF6}
+.rk-r .nm{display:flex;flex-direction:column;min-width:0}.rk-r .nm b{font-weight:800;color:#1E2433;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rk-r .nm small{font-size:11px;font-weight:700;color:#8a7f6a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rk-r .fx{font-family:'Fredoka',sans-serif;font-weight:600;font-size:16px;color:#C25400;white-space:nowrap}.rk-r .fx.z{color:#A9A08E}
+.rk-r .tm{font-size:12px;font-weight:900;text-align:right;white-space:nowrap}
+.rk-st{display:flex;gap:3px}
+.rk-st i{flex:1;min-width:0;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:10.5px;background:#F1F3F8}
+.rk-st i.on{background:#FFB74D}.rk-st i.shield{background:#90CAF9}.rk-st i.free{background:#E8F5E9}.rk-st i.broke{background:#EF9A9A}.rk-st i.pending{background:#FFF3C4;outline:1.5px dashed #F0B44A}
+.rk-hd{font-size:10.5px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#8a7f6a;padding:8px 0 4px;border-bottom:1px solid #EEE9DD}.rk-hd span:last-child{text-align:right}
+.rk-lg{display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;font-weight:800;color:#6B6252}.rk-lg span{display:flex;align-items:center;gap:4px}.rk-lg i{width:12px;height:12px;border-radius:3px;display:inline-block}
+@media(max-width:620px){.rk-r,.rk-hd{grid-template-columns:minmax(0,1fr) 48px 70px}.rk-st,.rk-hd .sx{display:none}}
 .gw,.gw *,.gw-ov,.gw-ov *{box-sizing:border-box}
 .gw{display:flex;flex-direction:column;gap:12px;font-family:'Nunito',sans-serif;color:#2A2A2A}
 .gw button{font-family:inherit;cursor:pointer}
@@ -194,6 +222,42 @@ function GwWin({ ico, title, sub, onClose, children }) {
       </div>
     </div>
   );
+}
+
+/* ── 🔥 Rachas del grupo (ventana) · RACHA-AMABLE-V1 (27-oct-2026, “Propuesta - Rachas en el grupo.html”) ──
+ * ÚNICO lugar del profesor donde se ven las rachas: 4 números · ⏳ en juego hoy · lista con 14 días. */
+const RK_ICO = { on: '🔥', shield: '🛡', free: '😴', broke: '✗', pending: '⏳', off: '' };
+function gwStreakRisk(s) { const i = s && s.streakInfo; return !!(i && i.streak > 0 && !i.todayCounts && !i.isSunday); }
+function GwStreaks({ group, models, onPick }) {
+  const [sort, setSort] = React.useState('racha');
+  const L = models.map(x => x.s).filter(s => s.streakInfo);
+  if (!L.length) return <div className="gw-note">Las rachas aparecen cuando se terminan de bajar los días de práctica de la nube (unos segundos).</div>;
+  const goal = L[0].streakInfo.goal;
+  const nm2 = (n) => String(n || '').split(' ').slice(0, 2).join(' ');
+  const conR = L.filter(s => s.streakInfo.streak > 0).length, done = L.filter(s => s.streakInfo.todayCounts).length;
+  const risk = L.filter(gwStreakRisk).sort((a, b) => b.streakInfo.streak - a.streakInfo.streak);
+  const best = L.reduce((m, s) => (!m || s.streakInfo.best > m.streakInfo.best) ? s : m, null);
+  const sunday = L[0].streakInfo.isSunday;
+  const cmp = sort === 'racha' ? (a, b) => b.streakInfo.streak - a.streakInfo.streak || b.streakInfo.best - a.streakInfo.best
+    : sort === 'hoy' ? (a, b) => (a.streakInfo.todayCounts - b.streakInfo.todayCounts) || (a.streakInfo.todayMin - b.streakInfo.todayMin)
+    : (a, b) => String(a.fullName).localeCompare(String(b.fullName));
+  return (<>
+    <div className="rk-kp"><div><b>{conR}</b><span>de {L.length} con racha</span></div><div><b>{done}</b><span>ya cumplieron hoy</span></div><div><b>{risk.length}</b><span>con racha en juego hoy</span></div><div><b>{best ? best.streakInfo.best : 0}</b><span>mejor racha{best && best.streakInfo.best ? ' · ' + nm2(best.fullName) : ''}</span></div></div>
+    {risk.length ? <div className="rk-pend"><h4>⏳ En juego hoy · aún no llegan a {goal} min</h4>
+      <div className="rk-pp">{risk.map(s => <button type="button" key={s.id} onClick={() => onPick(s.id)}>{nm2(s.fullName)} · 🔥{s.streakInfo.streak} · {Math.round(s.streakInfo.todayMin)}/{goal} min{s.streakInfo.shieldLeft ? ' · 🛡' : ''}</button>)}</div>
+      <small>🛡 = si hoy no llega, el escudo de la semana le cubre el día. Sin 🛡, hoy se le corta. A las 19:00 les llega el aviso.</small></div>
+      : <div className="rk-calm">{sunday ? '😴 Hoy es domingo libre: nadie pierde su racha.' : '✅ Nadie con racha en juego en este momento.'}</div>}
+    <div className="rk-seg">{[['racha', 'Por racha'], ['hoy', 'Pendientes hoy'], ['az', 'A–Z']].map(o => <button type="button" key={o[0]} className={sort === o[0] ? 'on' : ''} onClick={() => setSort(o[0])}>{o[1]}</button>)}</div>
+    <div className="rk-ls"><div className="rk-hd"><span>Alumno</span><span>Racha</span><span className="sx">Últimos 14 días</span><span>Hoy</span></div>
+      {L.slice().sort(cmp).map(s => { const i = s.streakInfo, last = i.days.slice(-14); while (last.length < 14) last.unshift({ st: 'off' });
+        return (<button type="button" className="rk-r" key={s.id} onClick={() => onPick(s.id)}>
+          <span className="nm"><b>{s.fullName}</b><small>récord {i.best} · 🛡 {i.shieldLeft ? 'disponible' : 'usado'}</small></span>
+          <span className={'fx' + (i.streak ? '' : ' z')}>🔥 {i.streak}</span>
+          <span className="rk-st">{last.map((d, k) => <i key={k} className={d.st} title={(d.d || '') + ' · ' + Math.round(d.m || 0) + ' min'}>{RK_ICO[d.st] || ''}</i>)}</span>
+          <span className="tm" style={{ color: i.todayCounts ? '#2E7D32' : '#B25E00' }}>{Math.round(i.todayMin)} / {i.goal} min</span>
+        </button>); })}</div>
+    <div className="rk-lg"><span><i style={{ background: '#FFB74D' }}></i>🔥 cumplió</span><span><i style={{ background: '#90CAF9' }}></i>🛡 escudo</span><span><i style={{ background: '#E8F5E9' }}></i>😴 domingo libre</span><span><i style={{ background: '#EF9A9A' }}></i>✗ se cortó</span><span><i style={{ background: '#FFF3C4', outline: '1.5px dashed #F0B44A' }}></i>⏳ hoy</span></div>
+  </>);
 }
 
 /* ── 🧠 Práctica de hoy (ventana) ── */
@@ -486,6 +550,8 @@ function GroupWorkspace({ groupId, onBack, onSelectStudent, onClassic }) {
     ['ref', '🎯', 'Qué reforzar', lowW ? lowW.c.label.replace('Comprensión ', '') + ' · ' + lowW.v + '%' : 'aún sin datos'],
     ['err', '❌', 'Lo que más falla', neuroOn ? 'preguntas · 1.er intento' : 'materiales con nota baja'],
     ['champ', '🏆', 'Campeones', champ ? champ.student.fullName.split(' ')[0] + ' · ' + (champ.xp || 0).toLocaleString() + ' XP' : 'de la semana'],
+    (() => { const ms = models.map(x => x.s), ok = ms.filter(s => s.streakInfo), n = ok.filter(s => s.streakInfo.streak > 0).length, rk = ok.filter(gwStreakRisk).length, h = Number(new Date(Date.now() - 5 * 3600e3).toISOString().slice(11, 13));
+      return ['rachas', '🔥', 'Rachas', ok.length ? (n ? n + ' de ' + ms.length + ' con racha' : 'nadie con racha aún') : 'cargando…', rk && h >= 18 ? rk : 0]; })(),   // RACHA-AMABLE-V1
   ];
   const pick = (id) => { setWin(null); setF('all'); setQ(''); setSel(id); };
   const lv = level.color || '#F9A825';
@@ -495,6 +561,7 @@ function GroupWorkspace({ groupId, onBack, onSelectStudent, onClassic }) {
     hoy: { t: 'Práctica de hoy', s: 'quién practicó, cómo le fue y a quién buscar', b: <GwToday group={group} models={models} onPick={pick} /> },
     ref: { t: 'Qué reforzar en clase', s: 'por qué, a quién y con qué' + (clsMod ? ' · ' + clsMod.name : ''), b: <GwReinforce group={group} models={models} onPick={pick} /> },
     err: { t: 'Lo que más falla el grupo', s: neuroOn ? 'últimos 14 días · solo cuenta el primer intento' : 'módulos abiertos', b: neuroOn ? <NG group={group} students={members} onOpen={pick} only="gf" /> : <GwFails group={group} models={models} onPick={pick} /> },
+    rachas: { t: 'Rachas del grupo', s: 'el día cuenta con ' + ((models[0] && models[0].s.streakInfo && models[0].s.streakInfo.goal) || 15) + ' min · domingo libre · 1 🛡 por semana', b: <GwStreaks group={group} models={models} onPick={pick} /> },
     champ: { t: 'Campeones de la semana', s: 'XP de este grupo · hasta el lunes', b: TCH ? <TCH groupId={groupId} levelColor={level.dark} /> : null },
     closed: { t: 'Con avance cerrado', s: closedMembers.length + ' alumno' + (closedMembers.length === 1 ? '' : 's') + ' · se pueden reabrir', b: window.ClosedStudentsList ? React.createElement(window.ClosedStudentsList, { list: closedMembers, onChanged: refresh, onOpen: onSelectStudent }) : null },
   };
@@ -529,7 +596,7 @@ function GroupWorkspace({ groupId, onBack, onSelectStudent, onClassic }) {
           </div>
         </div>
       </div>
-      <div className="gw-tb">{TB.map(b => <button type="button" key={b[0]} className="gw-tw" onClick={() => setWin(b[0])}><span className="gw-ti">{b[1]}</span><span><b>{b[2]}</b><small>{b[3]}</small></span></button>)}</div>
+      <div className="gw-tb">{TB.map(b => <button type="button" key={b[0]} className="gw-tw" onClick={() => setWin(b[0])}><span className="gw-ti">{b[1]}</span><span><b>{b[2]}</b><small>{b[3]}</small></span>{b[4] ? <span className="gw-bd" title={b[4] + ' con racha en juego hoy'}>{b[4]}</span> : null}</button>)}</div>
       <div className="gw-sp">
         <div className="gw-cl">
           <div className="gw-clh">

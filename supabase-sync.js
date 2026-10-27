@@ -752,6 +752,14 @@
       let streak = 0, cur = Date.now();
       if (!days.has(dayStr(cur))) cur -= DAY;
       while (days.has(dayStr(cur))) { streak++; cur -= DAY; }
+      /* 🔥 RACHA-AMABLE-V1 (27-oct): con los minutos por día de la nube manda la racha nueva
+       * (meta del grupo · domingo libre · 1 escudo por semana) y se acredita su XP ganado. */
+      s.streakInfo = null;
+      try {
+        let tm = 0; try { tm = (D.getStudentProgress(s.id) || {}).todayMinutes || 0; } catch (e) {}
+        const info = D.computeStreakInfo ? D.computeStreakInfo(s, tm) : null;
+        if (info) { streak = info.streak; s.streakInfo = info; if (D.awardStreakXP) D.awardStreakXP(s, info); }
+      } catch (e) {}
 
       // completed modules of the student's CURRENT level
       const mods = (D.MODULE_CATALOG[s.level] || []).filter(m => (m.activities || []).length > 0);

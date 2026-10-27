@@ -75,7 +75,7 @@ function HowToTopModal({ student, onClose }) {
           {step('📚','Haz tus prácticas', 'Cada actividad nueva te da XP. Las historias suman por el tiempo que las lees.')}
           {step('✅','Aprueba (no corras)', 'Con menos del '+thr+'% solo ganas puntos de participación. Apruébala y te llevas TODOS tus XP.')}
           {step('🔁','Vuelve cada semana', '¡NUEVO! Cada semana puedes volver a practicar tus materiales y ganar XP extra (una vez por material por semana).')}
-          {step('🔥','Mantén tu racha', 'Practica todos los días: cada día seguido te da +30 XP.')}
+          {step('🔥','Mantén tu racha', 'Cada día que llegas a tu meta suma a tu racha y te da XP (+10, +20 y hasta +30 por día). El domingo es libre y tienes 1 escudo 🛡 por semana.')}
           <div style={{fontSize:11, fontWeight:800, letterSpacing:'.06em', textTransform:'uppercase', color:'#8B5CF6', marginTop:6}}>Los dos tableros</div>
           {step('🏅','Top del grupo', 'Se ordena por tu constancia y dominio (cuánto practicas y apruebas). Practica seguido y aprueba para subir.')}
           {step('🏆','Liga semanal', 'El Top 3 de XP de la semana se corona cada lunes. ¡El campeón #1 elige el fondo de todo el grupo!')}
@@ -487,15 +487,19 @@ function StudentDashboard({ user, onLogout }) {
       });
       localStorage.setItem(todayKey, '1');
     }
-    // Streak warning — practiced yesterday but not today, after 6pm
-    if (student.streak > 0 && todayMin === 0 && peruHour() >= 18) {
+    // 🔥 RACHA-AMABLE-V1: aviso a las 19:00 si el día AÚN NO cuenta (no llega a la meta) y no es domingo libre
+    const si = student.streakInfo;
+    const atRisk = si ? (si.streak > 0 && !si.todayCounts && !si.isSunday) : (!window.JUCUM_STREAK && student.streak > 0 && todayMin === 0);
+    if (atRisk && peruHour() >= 19) {
       const streakKey = `jucum_streak_warn_${student.id}_${peruDayKey()}`;
       if (!localStorage.getItem(streakKey)) {
         window.JUCUM_NOTIF.pushNotif(student.id, {
           type: 'streak',
           link: 'practica',
           title: '🔥 Tu racha está en peligro',
-          body: `Lleva ${student.streak} día${student.streak === 1 ? '' : 's'} seguidos. Practica antes de medianoche para no perderla.`,
+          body: si
+            ? `Llevas ${si.streak} día${si.streak === 1 ? '' : 's'}. Te faltan ${Math.ceil(si.left)} min de tu meta (${si.goal} min) para que hoy cuente. ${si.shieldLeft ? 'Si hoy no llegas, tu escudo 🛡 de la semana cubre el día.' : 'Ya usaste tu escudo 🛡 esta semana: hoy sí cuenta.'} Tienes hasta las 11:59 pm.`
+            : `Lleva ${student.streak} día${student.streak === 1 ? '' : 's'} seguidos. Practica antes de medianoche para no perderla.`,
         });
         localStorage.setItem(streakKey, '1');
       }
@@ -512,16 +516,20 @@ function StudentDashboard({ user, onLogout }) {
     const today = peruDayKey();
     const tMin = progress.todayMinutes || 0;
     const goal = settings.dailyTargetMin || 15;
-    if (tMin >= goal) {
+    const si = student.streakInfo, STK = window.JUCUM_STREAK;
+    if (si ? si.todayCounts : tMin >= goal) {
       const k = `jucum_goalbonus_${student.id}_${today}`;
       if (!localStorage.getItem(k)) {
         const streakNow = Math.max(1, (student.streak || 0));
-        const gained = Math.min(streakNow, 14) * 30;
-        const tomorrow = Math.min(streakNow + 1, 14) * 30;
+        /* RACHA-AMABLE-V1: XP por día cumplido (+10/+20/+30) que se queda aunque la racha se corte */
+        const gained = si && STK ? STK.perDay(streakNow) : Math.min(streakNow, 14) * 30;
+        const tomorrow = si && STK ? STK.perDay(streakNow + 1) : Math.min(streakNow + 1, 14) * 30;
         window.JUCUM_NOTIF.pushNotif(student.id, {
           type: 'streak', link: 'practica',
           title: `🔥 ¡Meta cumplida! Racha de ${streakNow} día${streakNow === 1 ? '' : 's'}`,
-          body: tomorrow > gained
+          body: si
+            ? `Hoy cuenta para tu racha: +${gained} XP que ya son tuyos (no se pierden). ${tomorrow > gained ? 'Vuelve mañana y gana +' + tomorrow + ' XP' : 'Vuelve mañana: sigues ganando +' + tomorrow + ' XP por día'} — mientras más larga tu racha, más XP.`
+            : tomorrow > gained
             ? `Tu racha te da +${gained} XP. Vuelve mañana y sube a +${tomorrow} XP — mientras más larga tu racha, más XP. ¿Quieres más hoy? Los refuerzos ✨ también suman.`
             : `Tu racha te da +${gained} XP (¡tope alcanzado!). No la sueltes — y los refuerzos ✨ siguen sumando XP extra.`,
         });
@@ -559,7 +567,7 @@ function StudentDashboard({ user, onLogout }) {
     if (localStorage.getItem(key)) return;
     let kind = null;
     if (student.lastActiveDays >= 3) kind = 'inactive';
-    else if (student.streak >= 1 && (progress.todayMinutes || 0) === 0 && peruHour() >= 18) kind = 'streak';
+    else if ((student.streakInfo ? (student.streakInfo.streak > 0 && !student.streakInfo.todayCounts && !student.streakInfo.isSunday) : (student.streak >= 1 && (progress.todayMinutes || 0) === 0)) && peruHour() >= 19) kind = 'streak'; // RACHA-AMABLE-V1
     if (!kind) return;
     setAlertKind(kind);
     localStorage.setItem(key, '1');
@@ -1493,6 +1501,7 @@ function DayCard({ student, streak, todayMin, target }) {
   const met = todayMin>=target;
   const pct = Math.min(100, Math.round(todayMin/Math.max(1,target)*100));
   const tip = streak>=7?'¡Imparable! Sigue así.':streak>=3?'¡Vas muy bien! No la rompas hoy.':streak>0?'Construye tu hábito día a día.':'Practica hoy para empezar tu racha.';
+  const si = student && student.streakInfo;   // RACHA-AMABLE-V1
   return (
     <div className="scard" style={{borderTop:'4px solid #F4B400', display:'flex', flexDirection:'column'}}>
       <div style={{textAlign:'center', fontSize:10.5, fontWeight:800, letterSpacing:'.08em', textTransform:'uppercase', color:'#C28A00'}}>🔥 Tu constancia</div>
@@ -1500,6 +1509,10 @@ function DayCard({ student, streak, todayMin, target }) {
       <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize:52, color:'#E58A00', textAlign:'center', lineHeight:.95}}>{streak}</div>
       <div style={{textAlign:'center', fontWeight:800, color:'#B26A00', fontSize:13, marginTop:2}}>{streak===1?'día seguido':'días seguidos'}</div>
       <div style={{textAlign:'center', fontSize:12, fontWeight:700, color:'var(--text-soft,#6B6B6B)', marginTop:8}}>{tip}</div>
+      {si && <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'center',marginTop:9}}>
+        <span style={{fontSize:11.5,fontWeight:800,borderRadius:12,padding:'4px 10px',background:si.shieldLeft?'#E3EEFB':'#F1F3F8',color:si.shieldLeft?'#0D47A1':'#6B6B6B'}}>🛡 {si.shieldLeft ? 'Escudo disponible' : 'Escudo usado esta semana'}</span>
+        {si.isSunday && <span style={{fontSize:11.5,fontWeight:800,borderRadius:12,padding:'4px 10px',background:'#E8F5E9',color:'#1B5E20'}}>😴 Hoy es domingo libre</span>}
+      </div>}
       {best>0 && <div style={{display:'flex',alignItems:'center',gap:9,background:'#FFF8EC',border:'1px solid #F3DFB6',borderRadius:11,padding:'8px 11px',marginTop:12}}>
         <span style={{fontSize:19}}>🏆</span>
         <div style={{flex:1,textAlign:'left'}}><div style={{fontSize:12,fontWeight:800,color:'#9c5d00'}}>Tu récord: {best} {best===1?'día':'días'}</div>
@@ -1510,7 +1523,7 @@ function DayCard({ student, streak, todayMin, target }) {
           <span style={{color:'#1B5E20'}}>🎯 Meta de hoy</span><span style={{color:'#1B5E20'}}>{todayMin} / {target} min</span>
         </div>
         <div style={{height:11,background:'#E9EFE9',borderRadius:7,overflow:'hidden'}}><span style={{display:'block',height:'100%',width:pct+'%',background:'linear-gradient(90deg,#43C463,#2EA84B)',borderRadius:7}}></span></div>
-        <div style={{fontSize:11,fontWeight:700,color:'var(--text-soft,#6B6B6B)',marginTop:5}}>{met?<>🎉 <b>¡Meta cumplida!</b> Sigue si quieres más XP.</>:<>Te faltan <b>{target-todayMin} min</b> para tu meta.</>}</div>
+        <div style={{fontSize:11,fontWeight:700,color:'var(--text-soft,#6B6B6B)',marginTop:5}}>{met?<>🎉 <b>¡Meta cumplida!</b> {si ? 'Hoy cuenta para tu racha.' : 'Sigue si quieres más XP.'}</>:<>Te faltan <b>{target-todayMin} min</b> para tu meta{si && !si.isSunday ? ' y para que hoy cuente en tu racha' : ''}.</>}</div>
       </div>
     </div>
   );
@@ -1984,7 +1997,7 @@ function NeuroCoach({ student, defaultOpen, startTopic }) {
       <span style={{display:'block'}}>✅ Cada práctica <b>nueva</b> te da XP <b>una vez</b>: si la apruebas (≥{thrN}%), mientras mejor tu nota, más XP (si no, +5). Las <b>stories</b> dan XP por tiempo de lectura (10 min +5 · 20 min +10 · 30 min +15).</span>
       <span style={{display:'block', marginTop:6}}>🔁 <b>Repetir</b> una práctica te da la mitad de su XP <b>una vez por semana</b>. Si la repites otra vez esa semana, solo suma si mejoras tu nota.</span>
       {mixOn && <span style={{display:'block', marginTop:6}}>🧠 En las <b>rondas con Neuro</b> cada respuesta te da XP <b>mientras esa práctica no esté terminada</b>: <b>+2</b> si aciertas y <b>+1</b> por intentarlo (también en tu caja de errores). El repaso del resumen y el vocabulario dan <b>+1</b> por acierto. Cuando la práctica llega al 100 % recibes además su XP de siempre. Tope: 80 XP por día en las rondas.</span>}
-      <span style={{display:'block', marginTop:6}}>🔥 Tu <b>racha</b> suma <b>+30 XP por cada día seguido</b> (hasta 14). También suman tus medallas 🏅, tus tareas y tu participación en clase. ¡Mientras más constante, más XP! 💪</span>
+      <span style={{display:'block', marginTop:6}}>🔥 Tu <b>racha</b>: cada día que llegas a tu <b>meta de minutos</b> te da XP — <b>+10</b> los días 1 y 2, <b>+20</b> del 3 al 6 y <b>+30</b> desde el 7.º — y ese XP <b>ya no se pierde</b>. El domingo es libre y tienes <b>1 escudo 🛡 por semana</b> que cubre un día sin práctica. También suman tus medallas 🏅, tus tareas y tu participación en clase. ¡Mientras más constante, más XP! 💪</span>
     </span> },
     { q:'📚 ¿Cómo funcionan las prácticas?', a:<span>Se abren <b>en orden</b>: completa una para desbloquear la siguiente. Lee o escucha <b>sin traducir</b>, responde, y si fallas traduce <b>solo esa parte</b>. Vuelve al día siguiente para afianzar lo aprendido ✨</span> },
     { q:'🔁 ¿Por qué me vuelve a salir algo que ya hice?', a:<span>¡No es un error! Es el <b>repaso espaciado</b>: tu cerebro guarda mejor lo que repasa después de unos días de descanso. Cuando veas 🔁 en un módulo, esa práctica <b>toca repasarla</b> — hacerla de nuevo te da XP (una vez por semana) y fija lo aprendido para siempre 🧠</span> },
@@ -2261,7 +2274,7 @@ function StudentAlertModal({ kind, student, onClose }) {
     : {
         ico: '🔥',
         title: `Tu racha de ${student.streak} día${student.streak === 1 ? '' : 's'} está en peligro`,
-        body: 'Pasar al siguiente nivel depende de TU práctica constante, no de la suerte. Cada día que practicas te acerca a tu examen; cada día que lo dejas, retrocedes. Si quieres seguir avanzando con nosotros, no sueltes justo hoy: dedícale unos minutos y mantén el fuego encendido. 🔥',
+        body: (student.streakInfo ? `Te faltan ${Math.ceil(student.streakInfo.left)} min de tu meta para que hoy cuente${student.streakInfo.shieldLeft ? ' (si no llegas, tu escudo 🛡 de la semana cubre hoy)' : ''}. ` : '') + 'Pasar al siguiente nivel depende de TU práctica constante, no de la suerte. Cada día que practicas te acerca a tu examen; cada día que lo dejas, retrocedes. Si quieres seguir avanzando con nosotros, no sueltes justo hoy: dedícale unos minutos y mantén el fuego encendido. 🔥',
         cta: '✅ No romper mi racha',
       };
   return (
