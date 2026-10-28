@@ -298,7 +298,7 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
 
         {sel.classPlans.map(p => (
           <DayRow key={p.id} icon={isImported && isImported(p) ? '📄' : '📘'} tint="#EEF2FC" border="#C9D6F5" title={`${p.moduleName} · ${p.sessionLabel}`}
-            sub={`Plan de clase · ${p.lengthMin} min · ${(p.blocks || []).length} bloques${isImported && isImported(p) ? ' · 📄 del plan del teacher' : ''}${p.closing ? ' · 🏁 terminada' : (p.date && p.date <= todayYMD() ? ' · 🏁 sin cierre' : '')}`}
+            sub={`Plan de clase · ${p.lengthMin} min · ${(p.blocks || []).length} bloques${isImported && isImported(p) ? ' · 📄 del plan del teacher' : ''}${(p.closing || logFor(p.date).length) ? ' · ✅ cerrada' : (p.date && p.date <= todayYMD() ? ' · 🏁 sin cierre' : '')}`}
             onFollow={window.FollowUpModal && p.date && p.date <= todayYMD() ? () => setFollowPlan(p) : null}
             onPlay={() => onClassMode(p)} onOpen={() => onEditClass(p)} onPrint={() => printClassPlan(p)} onDup={() => setDupPlan(p)} onDelete={() => { TT.deleteClassPlan(p.id); onChange(); }} />
         ))}
@@ -311,10 +311,11 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
         {selLog.length > 0 ? (
           <div style={{marginTop:10, borderTop:'1px dashed #E3DCC9', paddingTop:10}}>
             <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:7, flexWrap:'wrap'}}>
-              <div style={{fontSize:12, fontWeight:800, color:'#2E7D32', flex:1}}>✅ Clase realizada</div>
-              <button onClick={() => setSummaryDate(selDate)} style={{...btnGhost, padding:'5px 11px', fontSize:12, borderColor:'#9FD3A4', color:'#2E7D32'}}>✏️ Ver / editar resumen</button>
+              {/* PLAN-CIERRE-V1 (28-oct, P2 aprobada): UNA tarjeta de cierre por día (antes: título + botón + caja que hacían lo mismo) */}
+              <div style={{fontSize:12.5, fontWeight:900, color:'#2E7D32', flex:1}}>✅ Clase cerrada</div>
+              <button onClick={() => setSummaryDate(selDate)} style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FD3A4', color:'#2E7D32', whiteSpace:'nowrap'}}>Ver y editar el cierre</button>
             </div>
-            <button onClick={() => setSummaryDate(selDate)} style={{display:'block', width:'100%', textAlign:'left', cursor:'pointer', border:'1px solid #BFE3C4', background:'#F3FAF4', borderRadius:11, padding:'9px 11px', font:'inherit'}}>
+            <div style={{display:'block', width:'100%', textAlign:'left', border:'1px solid #BFE3C4', background:'#F3FAF4', borderRadius:11, padding:'9px 11px'}}>
               {selLog.map(e => (
                 <span key={e.id} style={{display:'flex', alignItems:'center', gap:11, padding:'4px 0'}}>
                   <span style={{fontSize:11, fontWeight:800, color:'#2E7D32', background:'#E6F4E8', border:'1px solid #BFE3C4', borderRadius:7, padding:'3px 8px', whiteSpace:'nowrap'}}>⏰ {fmtLogClock(e.from)}</span>
@@ -322,13 +323,13 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
                   <span style={{fontSize:12, color:'#7a8a7c', fontWeight:800, whiteSpace:'nowrap'}}>{e.minutes} min</span>
                 </span>
               ))}
-              <span style={{display:'block', fontSize:11.5, color:'#5a8a5f', fontWeight:700, marginTop:5}}>👆 Toca para ver y EDITAR: asistencia, temas vistos y comentarios — y duplicar la clase a otro grupo.</span>
-            </button>
+              <span style={{display:'block', fontSize:11.5, color:'#5a8a5f', fontWeight:700, marginTop:5}}>En «Ver y editar el cierre»: asistencia, temas vistos, comentarios y duplicar la clase a otro grupo.</span>
+            </div>
           </div>
         ) : selDate <= todayYMD() && (   /* PLAN-BORRAR-V1: no se puede marcar como dada una clase de un día que aún no llega */
           <div style={{marginTop:10, borderTop:'1px dashed #E3DCC9', paddingTop:10, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
-            <div style={{fontSize:12, fontWeight:700, color:'#8a7f6a', flex:1, minWidth:180}}>¿Diste esta clase? Márcala tú mismo como realizada — podrás anotar asistencia, temas y comentarios.</div>
-            <button onClick={() => { TT.logClassMaterial({ date: selDate, groupId, materialName: '🏁 Clase realizada (marcada por el profesor)', minutes: (sel.classPlans[0] && sel.classPlans[0].lengthMin) || 0, source: 'manual-done' }); onChange(); setSummaryDate(selDate); }} style={{...btnGhost, padding:'7px 12px', fontSize:12.5, borderColor:'#9FD3A4', color:'#2E7D32'}}>🏁 Marcar clase realizada</button>
+            <div style={{fontSize:12.5, fontWeight:800, color:'#8a7f6a', flex:1, minWidth:180}}>🏁 Esta clase aún no tiene cierre <span style={{fontWeight:700}}>· asistencia, temas y comentarios</span></div>
+            <button onClick={() => { TT.logClassMaterial({ date: selDate, groupId, materialName: '🏁 Clase realizada (marcada por el profesor)', minutes: (sel.classPlans[0] && sel.classPlans[0].lengthMin) || 0, source: 'manual-done' }); onChange(); setSummaryDate(selDate); }} style={{...btnGhost, padding:'7px 12px', fontSize:12.5, borderColor:'#9FD3A4', color:'#2E7D32', whiteSpace:'nowrap'}}>🏁 Cerrar clase</button>
           </div>
         )}
       </div>
@@ -516,6 +517,18 @@ function DuplicateClassModal({ plan, onClose, onDone }) {
 
 /* PLAN-BORRAR-V1 (28-oct): la × pide confirmación — antes un toque borraba el plan o el set sin preguntar. */
 function DayRow({ icon, tint, border, title, sub, onOpen, openLabel, onDelete, onPlay, onDup, onTrack, onReport, onFollow, onPrint }) {
+  /* PLAN-FILA-V1 (28-oct, P1 aprobada): a la vista solo ▶ Modo clase · 📊 Avance · Abrir; lo demás va en «⋯ Más». */
+  const [more, setMore] = React.useState(false);
+  const boxRef = React.useRef(null);
+  React.useEffect(() => {
+    if (!more) return;
+    const h = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setMore(false); };
+    document.addEventListener('mousedown', h); document.addEventListener('touchstart', h);
+    return () => { document.removeEventListener('mousedown', h); document.removeEventListener('touchstart', h); };
+  }, [more]);
+  const del = onDelete ? () => { if (window.confirm('¿Eliminar «' + title + '»?\n\nSe quita del calendario' + (icon === '📝' ? ' y de la práctica de los alumnos.' : '.'))) onDelete(); } : null;
+  const extra = [onFollow && ['🔎 Seguimiento', onFollow], onReport && ['📤 Reporte', onReport], onPrint && ['🖨️ Imprimir / PDF', onPrint], onDup && ['⧉ Duplicar a otro grupo', onDup]].filter(Boolean);
+  const item = { display:'block', width:'100%', textAlign:'left', border:0, background:'none', padding:'9px 11px', borderRadius:8, fontFamily:'inherit', fontWeight:800, fontSize:13, color:'#2b2b2b', cursor:'pointer', whiteSpace:'nowrap' };
   return (
     <div style={{display:'flex', alignItems:'center', gap:11, border:'1px solid ' + border, background: tint, borderRadius:11, padding:'10px 12px', marginBottom:8, flexWrap:'wrap'}}>
       <span style={{fontSize:19}}>{icon}</span>
@@ -525,12 +538,18 @@ function DayRow({ icon, tint, border, title, sub, onOpen, openLabel, onDelete, o
       </div>
       {onPlay && <button onClick={onPlay} style={{...btnPrimary, padding:'6px 12px', fontSize:12.5, background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>▶ Modo clase</button>}
       {onTrack && <button onClick={onTrack} title="Quiénes ya hicieron estas prácticas" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#B7A8E0', color:'#5B3FA0'}}>📊 Avance</button>}
-      {onFollow && <button onClick={onFollow} title="Cómo va: en clase y en casa" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>🔎 Seguimiento</button>}
-      {onReport && <button onClick={onReport} title="Reporte de cumplimiento para devolver a Claude" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>📤 Reporte</button>}
       <button onClick={onOpen} style={{...btnGhost, padding:'6px 12px', fontSize:12.5}}>{openLabel || 'Abrir'}</button>
-      {onPrint && <button onClick={onPrint} title="Imprimir / guardar en PDF" style={{...btnGhost, padding:'6px 12px', fontSize:12.5}}>🖨️ Imprimir</button>}
-      {onDup && <button onClick={onDup} title="Duplicar a otro grupo" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>⧉ Duplicar</button>}
-      {onDelete && <button onClick={() => { if (window.confirm('¿Eliminar «' + title + '»?\n\nSe quita del calendario' + (icon === '📝' ? ' y de la práctica de los alumnos.' : '.'))) onDelete(); }} title="Eliminar" style={{...iconBtn, color:'#C0392B'}}>×</button>}
+      {(extra.length > 0 || del) && (
+        <span ref={boxRef} style={{position:'relative', display:'inline-flex'}}>
+          <button onClick={() => setMore(m => !m)} aria-expanded={more} title="Más opciones" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, whiteSpace:'nowrap'}}>⋯ {extra.length ? 'Más' : ''}</button>
+          {more && (
+            <div style={{position:'absolute', right:0, top:'calc(100% + 6px)', zIndex:40, background:'#fff', border:'1px solid #E3DCC9', borderRadius:12, boxShadow:'0 8px 22px rgba(0,0,0,.16)', padding:6, minWidth:200}}>
+              {extra.map(([t, fn]) => <button key={t} onClick={() => { setMore(false); fn(); }} style={item}>{t}</button>)}
+              {del && <button onClick={() => { setMore(false); del(); }} style={{...item, color:'#C0392B', borderTop: extra.length ? '1px solid #F0EADC' : 0, borderRadius: extra.length ? 0 : 8}}>🗑 Eliminar…</button>}
+            </div>
+          )}
+        </span>
+      )}
     </div>
   );
 }
@@ -748,6 +767,7 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
   const delMat = (bid, k) => setPlan(p => ({ ...p, blocks: p.blocks.map(b => b.id === bid ? { ...b, mats: (b.mats || []).filter((_, j) => j !== k) } : b) }));
   const addPending = (lines) => { const blk = { id: cpNewId(), emoji: '📌', title: 'Pendientes de la clase anterior', mins: 10, steps: lines.slice(), mats: [] };
     if (!plan) { const base = buildClassPlan({ ...cfg, date }, MODULE_CATALOG); setPlan({ ...base, blocks: [blk, ...cpWithMats(base.blocks, mod, cfg.themeGroup)] }); } else setPlan(p => ({ ...p, blocks: [blk, ...p.blocks] })); };
+  const [showRestart, setShowRestart] = React.useState(false);   // PLAN-EDITAR-V1
   const startFrom = (mode) => {
     if (plan && !window.confirm('¿Reemplazar los bloques que tienes ahora?')) return;
     const base = buildClassPlan({ ...cfg, date }, MODULE_CATALOG);
@@ -812,6 +832,13 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
           <Field label={autoTime && cpAutoStart(cfg.groupId) ? 'Hora de inicio (del grupo)' : 'Hora de inicio'}><input type="time" value={cfg.startTime} onChange={e => { setAutoTime(false); setCfg(c => ({ ...c, startTime: e.target.value })); }} style={selStyle} /></Field>
         </div>
         <div style={{display:'flex', gap:8, alignItems:'flex-start', background:'#EEF2FC', border:'1px solid #C9D4F0', borderRadius:10, padding:'8px 11px', fontSize:12.5, fontWeight:700, color:'#1F3A8A', lineHeight:1.45, marginTop:12}}>ℹ️ <span>Módulo: <b>{mod ? mod.name : '—'}</b> (el ▶ En clase del grupo · {cfg.level.toUpperCase()}). Los materiales van dentro de cada bloque.</span></div>
+        {/* PLAN-EDITAR-V1 (28-oct, P5 aprobada): con un plan ya escrito, «empezar de nuevo» queda escondido tras un enlace */}
+        {plan && !showRestart ? (
+          <div style={{display:'flex', gap:12, marginTop:14, flexWrap:'wrap', alignItems:'center'}}>
+            <button onClick={onCancel} style={btnGhost}>Cancelar</button>
+            <button onClick={() => setShowRestart(true)} style={{border:0, background:'none', padding:'4px 0', fontFamily:'inherit', fontWeight:800, fontSize:12.5, color:'#8a7f6a', textDecoration:'underline', cursor:'pointer', whiteSpace:'nowrap'}}>Reemplazar todo el contenido…</button>
+          </div>
+        ) : (
         <div style={{marginTop:16}}>
           <div style={lblStyle}>{plan ? '¿Empezar de nuevo desde…?' : '¿Cómo quieres empezar?'}</div>
           <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))', gap:9}}>
@@ -819,10 +846,11 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
               ['last', '📋 Copiar la última clase', lastPlan ? (lastPlan.sessionLabel || 'Clase') + ' · ' + fmtDateLong(lastPlan.date) : 'Este grupo aún no tiene clases guardadas.', !!lastPlan],
               ['blank', '⬜ Empezar en blanco', 'Sin nada escrito: escribe o pega lo tuyo.', true],
               ['pdf', '📄 Subir mis PDF', 'Plan de clase + práctica de la semana, palabra por palabra.', !!onImport]
-            ].map(([k, t, sub, ok]) => <button key={k} disabled={!ok} onClick={() => k === 'pdf' ? onImport() : startFrom(k)} style={{textAlign:'left', cursor: ok ? 'pointer' : 'not-allowed', opacity: ok ? 1 : .5, fontFamily:'inherit', border:'2px solid #E3DCC9', background:'#fff', borderRadius:12, padding:'10px 12px', display:'flex', flexDirection:'column', gap:3}}><b style={{fontSize:13.5, color:'#0D1B5A'}}>{t}</b><span style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700, lineHeight:1.35}}>{sub}</span></button>)}
+            ].map(([k, t, sub, ok]) => <button key={k} disabled={!ok} onClick={() => { if (k === 'pdf') { if (plan && !window.confirm('¿Salir de este plan para subir tus PDF?\n\nLo que no guardaste se pierde.')) return; onImport(); } else { startFrom(k); setShowRestart(false); } }} style={{textAlign:'left', cursor: ok ? 'pointer' : 'not-allowed', opacity: ok ? 1 : .5, fontFamily:'inherit', border:'2px solid #E3DCC9', background:'#fff', borderRadius:12, padding:'10px 12px', display:'flex', flexDirection:'column', gap:3}}><b style={{fontSize:13.5, color:'#0D1B5A'}}>{t}</b><span style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700, lineHeight:1.35}}>{sub}</span></button>)}
           </div>
-          <div style={{display:'flex', gap:10, marginTop:10, flexWrap:'wrap'}}><button onClick={onCancel} style={btnGhost}>Cancelar</button></div>
+          <div style={{display:'flex', gap:10, marginTop:10, flexWrap:'wrap'}}><button onClick={onCancel} style={btnGhost}>Cancelar</button>{plan && <button onClick={() => setShowRestart(false)} style={{...btnGhost, whiteSpace:'nowrap'}}>Mantener lo que tengo</button>}</div>
         </div>
+        )}
       </div>
 
       {plan && (
@@ -909,6 +937,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
   const [note, setNote] = React.useState(initial ? initial.note : '');
   const [guide, setGuide] = React.useState(() => (initial && initial.guide) ? initial.guide : null);
   const [favTick, setFavTick] = React.useState(0);
+  const [guideOpen, setGuideOpen] = React.useState(false);   // PLAN-INSTR-V1 (28-oct, P7 aprobada): instructivo cerrado por defecto
   const lang = (guide && guide.lang) || 'es';
   const setLang = (lg) => setGuide(g => g ? { ...g, lang: lg } : g);
   const regenGuide = () => setGuide(window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }));
@@ -923,6 +952,10 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
     if (s.type === 'summary' || s.type === 'grammar') { return s.tema ? ('Tema: ' + s.tema) : ''; }
     return '';
   };
+  /* PLAN-HISTORIA-V1 (28-oct, P6 aprobada): la historia/audio se elige UNA vez (paso 1); el instructivo la copia */
+  const RL_T = { story: 1, reading: 1, listening: 1 };
+  const pickFor = (s) => { if (!s || !RL_T[s.type]) return null; const byId = s.activityId ? picked.find(p => p.activityId === s.activityId && (!s.moduleId || p.moduleId === s.moduleId)) : null; if (byId) return byId; const same = picked.filter(p => p.type === s.type && !p.review); return same.length === 1 ? same[0] : null; };   // sets viejos sin activityId: si hay UNA sola actividad de ese tipo, es esa
+  const syncRL = (g) => g && Array.isArray(g.steps) ? { ...g, steps: g.steps.map(s => { const p = pickFor(s); if (!p) return s; const ns = { ...s, storyNo: p.storyNo || null, dialogNo: s.type === 'story' ? (p.dialogNo || p.storyNo || null) : (s.dialogNo || null) }; ns.focus = focusText(ns); return ns; }) } : g;
   const setStepMeta = (i, patch) => setGuide(g => ({ ...g, steps: g.steps.map((s, k) => { if (k !== i) return s; const ns = { ...s, ...patch }; ns.focus = focusText(ns); return ns; }) }));
   const moveStep = (i, dir) => setGuide(g => { const arr = g.steps.slice(); const j = i + dir; if (j < 0 || j >= arr.length) return g; const t = arr[i]; arr[i] = arr[j]; arr[j] = t; return { ...g, steps: arr }; });
   const delStep = (i) => setGuide(g => ({ ...g, steps: g.steps.filter((_, k) => k !== i) }));
@@ -953,7 +986,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
     if (!groupReal) { alert('⚠️ Primero elige la clase destino en “👥 Grupo destino”.\n\nEl grupo que tenía este set ya no existe en la nube, así que nadie lo recibiría.'); return; }
     if (!picked.length) { alert('Elige al menos una actividad.'); return; }
     if (!dates.length) { alert('Elige al menos un día en el calendario.'); return; }
-    const finalGuide = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang });
+    const finalGuide = syncRL(guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }));   // PLAN-HISTORIA-V1
     const ds = dates.slice().sort(); const rec = { groupId, level, themeGroup, title, activities: picked, dates, assignToStudents: assign, note, guide: { ...finalGuide, from: ds[0], to: ds[ds.length - 1] } };
     const destino = '“' + groupReal.name + '”' + (groupReal.schedule && !String(groupReal.name).includes(groupReal.schedule) ? ' (' + groupReal.schedule + ')' : '') + ' · ' + nAlumnos + ' alumno' + (nAlumnos === 1 ? '' : 's');
     if (initial && !initial._tpl) { TT.updatePracticePlan(initial.id, rec); alert('✅ Set actualizado para ' + destino); }
@@ -1052,7 +1085,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
                                   <option value="">Todas / libre</option>
                                   {[1,2,3,4].map(n => <option key={n} value={n}>{a.type === 'listening' ? 'Audio' : 'Historia'} #{n}</option>)}
                                 </select>
-                                <span style={{fontSize:10.5, fontWeight:700, color:'#8a7f6a'}}>se indica en el instructivo</span>
+                                <span style={{fontSize:10.5, fontWeight:700, color:'#8a7f6a'}}>el instructivo la copia sola</span>
                               </div>
                             )}
                             </React.Fragment>
@@ -1150,8 +1183,15 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
             <div style={{flex:1, fontSize:13, fontWeight:700, color:'#6b6453'}}>Aún no has generado el instructivo. Elige las actividades arriba y genera los pasos oficiales del nivel.</div>
             <button onClick={regenGuide} disabled={!picked.length} style={{...btnPrimary, background: picked.length ? 'linear-gradient(135deg,#3F5BB8,#0D1B5A)' : '#bbb', opacity: picked.length ? 1 : .6}}>⚡ Generar instructivo</button>
           </div>
+        ) : !guideOpen ? (
+          <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', background:'#F7F3FD', border:'1.5px solid #D9CEEC', borderRadius:12, padding:'11px 13px'}}>
+            <span style={{fontSize:20}}>📋</span>
+            <span style={{flex:1, minWidth:180, fontSize:13, fontWeight:800, color:'#4A2F8A'}}>Instructivo listo ✓ · {guide.steps.length} bloque{guide.steps.length === 1 ? '' : 's'} · {guide.steps.reduce((n, s) => n + ((s.linesEs || []).filter(Boolean).length), 0)} pasos</span>
+            <button onClick={() => setGuideOpen(true)} style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#B7A8E0', color:'#5B3FA0', whiteSpace:'nowrap'}}>Personalizar ›</button>
+          </div>
         ) : (
           <>
+            <div style={{display:'flex', justifyContent:'flex-end', marginBottom:6}}><button onClick={() => setGuideOpen(false)} style={{...btnGhost, padding:'5px 11px', fontSize:12, whiteSpace:'nowrap'}}>Cerrar instructivo ▴</button></div>
             <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:12, background:'#F4F7FD', border:'1px solid #D8E3F5', borderRadius:11, padding:'9px 12px'}}>
               <span style={{fontSize:12.5, fontWeight:800, color:'#1F3A8A'}}>🌐 Idioma de las instrucciones:</span>
               {[['es','Español'],['en','English'],['par','Paralelo (EN + ES)']].map(([k, lbl]) => (
@@ -1182,7 +1222,10 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
                       </select>
                     </div>
                   )}
-                  {(s.type === 'story' || s.type === 'reading' || s.type === 'listening') && (
+                  {pickFor(s) && (
+                    <div style={{fontSize:12, fontWeight:800, color:'#6C4FB0', marginBottom:8}}>{s.type === 'listening' ? '🎧 Escuchar: ' : '📖 Leer: '}<b style={{color:'#2b2b2b'}}>{pickFor(s).storyNo ? (s.type === 'listening' ? 'Audio #' : 'Historia #') + pickFor(s).storyNo : 'la que elija el alumno'}</b> <span style={{color:'#8a7f6a', fontWeight:700}}>· la del paso 1</span></div>
+                  )}
+                  {!pickFor(s) && (s.type === 'story' || s.type === 'reading' || s.type === 'listening') && (
                     <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:8, flexWrap:'wrap'}}>
                       <span style={{fontSize:11.5, fontWeight:800, color:'#6C4FB0'}}>{s.type === 'listening' ? '🎧 ¿Qué audio?:' : '📖 ¿Qué leer?:'}</span>
                       <select value={s.storyNo || ''} onChange={e => setStepMeta(i, { storyNo: e.target.value ? Number(e.target.value) : null })} style={{...selStyle, width:'auto'}}>
