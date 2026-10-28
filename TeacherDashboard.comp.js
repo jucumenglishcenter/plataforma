@@ -302,8 +302,7 @@ function GroupsView({ stats, onSelectGroup, onLeads, onClosed, teacherName }) {
         <div className="kpi"><div className="kpi-ico">🎯</div><div className="kpi-num">{actGroups.length}</div><div className="kpi-lbl">Grupos activos</div></div>
       </div>
 
-      {/* 📊 SEGUIMIENTO-V1 (28-oct, A + E aprobadas): solo los sets que necesitan atención (si todo va bien, no aparece) */}
-      {window.SegAttentionCard && <SegAttentionCard />}
+      {/* 📊 SEGUIMIENTO-V1 · SEG-GRUPO-V1 (28-oct): los avisos de prácticas ya NO van en Inicio (pedido de la usuaria) → botón «📊 Prácticas» dentro de cada grupo */}
 
       <div className="sec-head" style={{marginTop:18,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
         <div className="sec-title">Mis grupos</div>

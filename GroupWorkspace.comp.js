@@ -563,6 +563,7 @@ function GroupWorkspace({ groupId, onBack, onSelectStudent, onClassic }) {
     err: { t: 'Lo que más falla el grupo', s: neuroOn ? 'últimos 14 días · solo cuenta el primer intento' : 'módulos abiertos', b: neuroOn ? <NG group={group} students={members} onOpen={pick} only="gf" /> : <GwFails group={group} models={models} onPick={pick} /> },
     rachas: { t: 'Rachas del grupo', s: 'el día cuenta con ' + ((models[0] && models[0].s.streakInfo && models[0].s.streakInfo.goal) || 15) + ' min · domingo libre · 1 🛡 por semana', b: <GwStreaks group={group} models={models} onPick={pick} /> },
     champ: { t: 'Campeones de la semana', s: 'XP de este grupo · hasta el lunes', b: TCH ? <TCH groupId={groupId} levelColor={level.dark} /> : null },
+    prac: { t: 'Prácticas del grupo', s: 'en curso y recién terminadas · se lee de la nube', b: window.SegGroupPractice ? <SegGroupPractice groupId={groupId} /> : null },   // SEG-GRUPO-V1
     closed: { t: 'Con avance cerrado', s: closedMembers.length + ' alumno' + (closedMembers.length === 1 ? '' : 's') + ' · se pueden reabrir', b: window.ClosedStudentsList ? React.createElement(window.ClosedStudentsList, { list: closedMembers, onChanged: refresh, onOpen: onSelectStudent }) : null },
   };
   const W = win && WINS[win];
@@ -596,7 +597,7 @@ function GroupWorkspace({ groupId, onBack, onSelectStudent, onClassic }) {
           </div>
         </div>
       </div>
-      <div className="gw-tb">{TB.map(b => <button type="button" key={b[0]} className="gw-tw" onClick={() => setWin(b[0])}><span className="gw-ti">{b[1]}</span><span><b>{b[2]}</b><small>{b[3]}</small></span>{b[4] ? <span className="gw-bd" title={b[4] + ' con racha en juego hoy'}>{b[4]}</span> : null}</button>)}</div>
+      <div className="gw-tb">{TB.map(b => <React.Fragment key={b[0]}><button type="button" className="gw-tw" onClick={() => setWin(b[0])}><span className="gw-ti">{b[1]}</span><span><b>{b[2]}</b><small>{b[3]}</small></span>{b[4] ? <span className="gw-bd" title={b[4] + ' con racha en juego hoy'}>{b[4]}</span> : null}</button>{b[0] === 'hoy' && window.SegGroupPracBtn ? <SegGroupPracBtn groupId={groupId} onOpen={() => setWin('prac')} /> : null}</React.Fragment>)}</div>
       <div className="gw-sp">
         <div className="gw-cl">
           <div className="gw-clh">

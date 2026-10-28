@@ -291,7 +291,7 @@ function SegExtendBox({ G, onCancel, onDone }) {
 }
 
 /* E · cierre del set (día siguiente: en el calendario y en Inicio) */
-function SegCloseCard({ plan, onTrack, onSeen }) {
+function SegCloseCard({ plan, onTrack, onSeen, compact }) {
   const S = window.JUCUM_SEG;
   const seg = useSegFacts(segGroupReq(plan));
   const [res, setRes] = React.useState(null);
@@ -308,18 +308,23 @@ function SegCloseCard({ plan, onTrack, onSeen }) {
     const r = S.carryToNext(G, seg.F.plans); if (r) setRes(r); else alert('No se pudo pasar. Inténtalo de nuevo.');
   };
   return (
-    <div style={{border:'1.5px solid #E3DCC9', borderRadius:12, padding:'11px 12px', display:'flex', flexDirection:'column', gap:8, background:'#FFFDF8', marginBottom:8}}>
+    <div style={{border: compact ? '1px solid #E6E1D3' : '1.5px solid #E3DCC9', borderRadius:12, padding: compact ? '10px 12px' : '11px 12px', display:'flex', flexDirection:'column', gap: compact ? 7 : 8, background: compact ? '#fff' : '#FFFDF8', marginBottom: compact ? 0 : 8}}>
+      {compact ? <>
+        <b style={{fontSize:13.5, lineHeight:1.3}}>🏁 {String(G.title || '').replace(/^📌\s*/, '')} · {G.full} de {G.n} lo completaron</b>
+        {G.missingRows.length ? <span style={{fontSize:12.5, fontWeight:700, color:'#6b6453'}}>Faltaron: <b style={{color:'#7A2A1E'}}>{G.missingRows.map(x => segFirst(x.st)).join(', ')}</b></span> : <span style={{fontSize:12.5, fontWeight:800, color:'#2E7D32'}}>¡Todos lo completaron!</span>}
+      </> : <>
       <b style={{fontSize:13.5}}>🏁 Terminó «{G.title}»{G.group ? ' · ' + G.group.name : ''} · {G.full} de {G.n} lo completaron</b>
       {G.missingRows.length ? <>
         <span style={{fontSize:12.5, fontWeight:700, color:'#6b6453'}}>No lo terminaron:</span>
         <div style={{display:'flex', flexWrap:'wrap', gap:5}}>{G.missingRows.map(x => <span key={x.st.id} title={x.ev.missing.map(c => c.name).join(' · ')} style={{background:'#FDECEA', color:'#7A2A1E', borderRadius:9, padding:'3px 9px', fontSize:12, fontWeight:800}}>{segFirst(x.st)}</span>)}</div>
       </> : <span style={{fontSize:12.5, fontWeight:800, color:'#2E7D32'}}>¡Todos lo completaron!</span>}
+      </>}
       <div style={{display:'flex', gap:7, flexWrap:'wrap', alignItems:'center'}}>
         {G.missingRows.length > 0 && (carried ? <span style={segOk}>✓ Lo pendiente pasó a «{carried.next.title}»{carried.n != null ? ' · ' + carried.n + ' alumno' + (carried.n === 1 ? '' : 's') : ''}</span>
           : nx ? <button type="button" onClick={pass} style={segBtnPu}>➡ Pasar lo pendiente al próximo set</button>
           : <span style={{fontSize:12, fontWeight:700, color:'#8a7f6a'}}>Para pasar lo pendiente, primero crea el próximo set del grupo.</span>)}
         {onTrack && <button type="button" onClick={() => onTrack(live)} style={segBtn}>Ver avance final</button>}
-        {onSeen && <button type="button" onClick={onSeen} style={segBtn}>✓ Entendido</button>}
+        {onSeen && <button type="button" onClick={onSeen} style={segBtn}>{compact ? '✓ Listo' : '✓ Entendido'}</button>}
       </div>
     </div>);
 }
@@ -364,4 +369,85 @@ function SegAttentionCard() {
     </div>);
 }
 
-Object.assign(window, { useSegFacts, segGroupReq, SegAgo, SegMark, MiSeguimiento, StudentSeguimiento, SegAlarmCard, SegSetChip, SegRemindBox, SegExtendBox, SegCloseCard, SegAttentionCard });
+/* SEG-GRUPO-V1 (28-oct, pedido de la usuaria): los avisos ya NO van en Inicio. Se revisan dentro del grupo con el
+ * botón «📊 Prácticas» (fila de herramientas de GroupWorkspace). Una línea por set, sin repetir el grupo ni las fechas,
+ * y los sets duplicados (mismo título y mismas fechas) se muestran una sola vez. Cálculo = JUCUM_SEG, igual que antes. */
+function segGroupPlans(S, plans, gid) {
+  const by = {};
+  S.relevantPlans(plans || []).filter(p => p.groupId === gid).forEach(p => {
+    const r = S.range(p); if (!r) return;
+    const k = String(p.title || '').trim() + '|' + r.from + '|' + r.to, o = by[k];
+    if (!o || String(p.savedAt || p.createdAt || '') > String(o.savedAt || o.createdAt || '')) by[k] = p;
+  });
+  return Object.values(by);
+}
+function segGroupReqAll(gid) {
+  const S = window.JUCUM_SEG, TT = window.JUCUM_TT;
+  if (!S || !TT || !gid) return { ids: [], groups: [], since: '' };
+  return { ids: S.groupStudents(gid, null).map(s => s.id), groups: [], since: S.sinceFor(segGroupPlans(S, TT.getPracticePlans(), gid)) };
+}
+function segGroupSummary(S, F, gid) {
+  const Gs = segGroupPlans(S, F.plans, gid).map(p => S.evalGroupSet(p, F)).filter(G => G && G.n);
+  const ORD = { end:0, none:1, most:2 };
+  const open = Gs.filter(G => G.phase === 'open').map(G => ({ G, al: S.alertOf(G) }))
+    .sort((a, b) => (a.al ? ORD[a.al.k] : 9) - (b.al ? ORD[b.al.k] : 9) || (a.G.to < b.G.to ? -1 : 1));
+  const closes = Gs.filter(G => G.phase === 'closed' && !S.seenClose(G.plan.id)).sort((a, b) => (a.to > b.to ? -1 : 1));
+  return { open, closes, alerts: open.filter(x => x.al).length, need: open.filter(x => x.al).length + closes.length };
+}
+/* Botón de la fila de herramientas del grupo (mismo estilo gw-tw) */
+function SegGroupPracBtn({ groupId, onOpen }) {
+  const S = window.JUCUM_SEG;
+  const seg = useSegFacts(segGroupReqAll(groupId));
+  const sm = seg.F && S ? segGroupSummary(S, seg.F, groupId) : null;
+  const first = sm && sm.open.find(x => x.al);
+  const sub = !sm ? (seg.err ? 'sin conexión' : 'cargando…') : first ? first.al.ic + ' ' + first.al.t.toLowerCase() + (sm.need > 1 ? ' · +' + (sm.need - 1) : '')
+    : sm.closes.length ? '🏁 ' + sm.closes.length + ' terminó' + (sm.closes.length === 1 ? '' : 'ron') : sm.open.length ? sm.open.length + ' en curso · van bien' : 'sin prácticas en curso';
+  return (
+    <button type="button" className="gw-tw" onClick={onOpen}>
+      <span className="gw-ti">📊</span><span><b>Prácticas</b><small>{sub}</small></span>
+      {sm && sm.need > 0 ? <span className="gw-bd" title={sm.need + ' práctica' + (sm.need === 1 ? '' : 's') + ' para revisar'}>{sm.need}</span> : null}
+    </button>);
+}
+/* Ventana «Prácticas del grupo» */
+function SegGroupPractice({ groupId }) {
+  const S = window.JUCUM_SEG;
+  const seg = useSegFacts(segGroupReqAll(groupId));
+  const [track, setTrack] = React.useState(null), [rem, setRem] = React.useState(null), [, bump] = React.useReducer(x => x + 1, 0);
+  const modal = track && window.PracticeSetProgress ? <PracticeSetProgress plan={track} onClose={() => setTrack(null)} /> : null;
+  if (!S) return null;
+  if (!seg.F) return <div style={{padding:16, fontSize:13, fontWeight:700, color:'#8a7f6a'}}>{seg.err ? 'No se pudo leer la nube. ' : 'Cargando de la nube…'}{seg.err && <button type="button" onClick={seg.reload} style={segBtn}>Reintentar</button>}</div>;
+  const sm = segGroupSummary(S, seg.F, groupId), t = S.today();
+  const TAG = { red:{ background:'#FDECEA', color:'#B23A2A' }, amb:{ background:'#FFE9B8', color:'#7A4A00' }, grn:{ background:'#E3F4E6', color:'#2E7D32' } };
+  const row = { background:'#fff', border:'1px solid #E6E1D3', borderRadius:12, padding:'10px 12px', display:'flex', flexDirection:'column', gap:7 };
+  const titleOf = (G) => String(G.title || '').replace(/^📌\s*/, '');
+  const datesOf = (G) => /→/.test(G.title || '') ? '' : S.fmtDay(G.from) + ' → ' + S.fmtDay(G.to) + ' · ';
+  return (
+    <div style={{display:'flex', flexDirection:'column', gap:10}}>
+      <div style={{display:'flex', alignItems:'center', gap:8}}><span style={{...segLbl, flex:1}}>En curso</span><SegAgo F={seg.F} busy={seg.busy} err={seg.err} onReload={seg.reload} /></div>
+      {!sm.open.length && <div style={{fontSize:13, fontWeight:700, color:'#8a7f6a'}}>No hay prácticas abiertas en este grupo.</div>}
+      {sm.open.map(({ G, al }) => { const miss = G.missingRows.length, pct = Math.round(G.full / G.n * 100), remToday = G.plan.remindedAt && window.JUCUM_DAY.of(G.plan.remindedAt) === t;
+        const tag = al ? { tone: al.tone, txt: al.ic + ' ' + al.t } : { tone: 'grn', txt: '✓ Va bien · ' + S.endsTxt(G.to, t) };
+        return (
+        <div key={G.plan.id} style={row}>
+          <div style={{display:'flex', alignItems:'flex-start', gap:8, flexWrap:'wrap'}}>
+            <b style={{flex:1, minWidth:180, fontSize:13.5, lineHeight:1.3}}>{titleOf(G)}</b>
+            <span style={{...TAG[tag.tone], borderRadius:8, padding:'3px 9px', fontSize:11.5, fontWeight:900, whiteSpace:'nowrap'}}>{tag.txt}</span>
+          </div>
+          <div style={{display:'flex', alignItems:'center', gap:9}}>
+            <div style={{flex:1, height:7, borderRadius:4, background:'#EEE9DD', overflow:'hidden'}}><i style={{display:'block', height:'100%', width:pct + '%', background: pct >= 70 ? '#2EA84B' : pct >= 40 ? '#F0A93B' : '#E53935'}}></i></div>
+            <span style={{fontSize:12, fontWeight:800, color:'#4A4A4A', whiteSpace:'nowrap'}}>{G.full} de {G.n}</span>
+          </div>
+          <div style={{display:'flex', alignItems:'center', gap:7, flexWrap:'wrap'}}>
+            <span style={{flex:1, minWidth:160, fontSize:12, fontWeight:700, color:'#8a7f6a'}}>{datesOf(G)}{G.none ? G.none + ' sin empezar' : 'todos empezaron'}{remToday ? ' · ✓ recordado hoy' : ''}</span>
+            {miss > 0 && <button type="button" onClick={() => setRem(rem === G.plan.id ? null : G.plan.id)} style={{...segBtnPu, padding:'6px 11px', fontSize:12}}>🔔 Recordar a {miss}</button>}
+            <button type="button" onClick={() => setTrack(G.plan)} style={{...segBtn, padding:'6px 11px', fontSize:12}}>Ver avance</button>
+          </div>
+          {rem === G.plan.id && <SegRemindBox G={G} onCancel={() => setRem(null)} />}
+        </div>); })}
+      {sm.closes.length > 0 && <span style={{...segLbl, marginTop:4}}>Terminaron</span>}
+      {sm.closes.map(G => <SegCloseCard key={'c' + G.plan.id} plan={G.plan} compact onTrack={setTrack} onSeen={() => { S.markSeenClose(G.plan.id); bump(); }} />)}
+      {modal}
+    </div>);
+}
+
+Object.assign(window, { SegGroupPracBtn, SegGroupPractice, segGroupPlans, useSegFacts, segGroupReq, SegAgo, SegMark, MiSeguimiento, StudentSeguimiento, SegAlarmCard, SegSetChip, SegRemindBox, SegExtendBox, SegCloseCard, SegAttentionCard });
