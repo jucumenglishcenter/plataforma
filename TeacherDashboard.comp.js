@@ -302,6 +302,9 @@ function GroupsView({ stats, onSelectGroup, onLeads, onClosed, teacherName }) {
         <div className="kpi"><div className="kpi-ico">🎯</div><div className="kpi-num">{actGroups.length}</div><div className="kpi-lbl">Grupos activos</div></div>
       </div>
 
+      {/* 📊 SEGUIMIENTO-V1 (28-oct, A + E aprobadas): solo los sets que necesitan atención (si todo va bien, no aparece) */}
+      {window.SegAttentionCard && <SegAttentionCard />}
+
       <div className="sec-head" style={{marginTop:18,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
         <div className="sec-title">Mis grupos</div>
         <span className="sec-meta">Click para ver los alumnos</span>
@@ -1089,6 +1092,8 @@ function StudentDetail({ studentId, onBack, onContact }) {
       </div>
 
       <ModuleTracker stu={stu} group={group} />
+      {/* 📅 SEGUIMIENTO-V1 (28-oct): el MISMO calendario que ve el alumno en «Mi seguimiento» (cálculo único, nube) */}
+      {window.MiSeguimiento && <div className="scard" style={{marginTop:16}}><MiSeguimiento student={stu} teacher /></div>}
       {/* 🧠 NT-V1 · práctica con Neuro del alumno */ window.NeuroStudentCard && window.JUCUM_MIX && window.JUCUM_MIX.enabledFor(stu) && <NeuroStudentCard student={stu} />}
 
       <div style={{marginTop:18}}><ReadinessCard student={stu} forTeacher /></div>

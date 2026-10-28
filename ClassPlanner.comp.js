@@ -154,10 +154,20 @@ function ClassPlanner({ onBack, onGoExams }) {
         <div className="welcome-text">
           <div className="eyebrow">🗓️ Planificador</div>
           <h1>Calendario de clases y prácticas</h1>
-          <p>Planea cada día: tu clase minuto a minuto y los sets de práctica para tus alumnos. Mira lo que ya diste y deja listas las próximas semanas.</p>
         </div>
-        {window.LevelStamp && <LevelStamp groupId={badgeGroup} />}
       </div>
+      {/* PLAN-GRUPO-V1 (28-oct, P4 aprobada): UN solo selector de grupo arriba, compartido por Calendario · Subir plan · Tareas.
+        * Se quitaron el sello de nivel duplicado y el párrafo del encabezado (la franja de nivel queda). */}
+      {(screen === 'calendar' || screen === 'import' || screen === 'tareas') && (
+        <div className="scard" style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:12, padding:'12px 16px'}}>
+          <span style={{fontSize:12, fontWeight:900, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'0.03em'}}>👥 Grupo</span>
+          {window.GroupPicker ? <GroupPicker value={curGroup || ''} onChange={e => setCurGroup(e.target.value)} style={{flex:'0 1 520px'}} /> : (
+          <select value={curGroup || ''} onChange={e => setCurGroup(e.target.value)} style={{...selStyle, width:'auto', minWidth:180, flex:'0 1 auto'}}>
+            {groupsSorted().map(g => <option key={g.id} value={g.id}>{groupOptionLabel(g)}</option>)}
+          </select>)}
+          <span style={{fontSize:11.5, color:'#A8A8A8', fontWeight:700}}>Vale para Calendario, Subir plan y Tareas</span>
+        </div>
+      )}
 
       <div className="mm-tabs" style={{flexWrap:'wrap'}}>
         <button className={`mm-tab ${screen === 'calendar' ? 'on' : ''}`} onClick={() => setScreen('calendar')}>📅 Calendario</button>
@@ -174,7 +184,7 @@ function ClassPlanner({ onBack, onGoExams }) {
         <ClassPlanEditor key={editPlan ? editPlan.id || 'tpl' : 'new'} onImport={window.PlanImport ? () => goImport() : null} date={selDate} initial={editPlan} defaultGroupId={defaultGroup || curGroup} onGroupSeen={setCurGroup} onClassMode={goClassMode} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
       )}
       {screen === 'import' && window.PlanImport && (
-        <PlanImport key={importRef ? importRef.k : 'imp'} importId={importRef && importRef.id} startTab={importRef && importRef.tab} onBack={() => { refresh(); setScreen('calendar'); }} onClassMode={goClassMode} />
+        <PlanImport key={importRef ? importRef.k : 'imp'} importId={importRef && importRef.id} startTab={importRef && importRef.tab} groupId={curGroup} onGroupChange={setCurGroup} onBack={() => { refresh(); setScreen('calendar'); }} onClassMode={goClassMode} />
       )}
       {screen === 'classmode' && (
         <ClassMode plan={classModePlan} onBack={() => setScreen('calendar')} />
@@ -183,7 +193,7 @@ function ClassPlanner({ onBack, onGoExams }) {
         <PracticePlanEditor key={editPractice ? editPractice.id || 'tpl' : 'new'} date={selDate} initial={editPractice} defaultGroupId={defaultGroup || curGroup} onGroupSeen={setCurGroup} onSaved={() => { refresh(); setScreen('calendar'); }} onCancel={() => setScreen('calendar')} />
       )}
       {screen === 'tareas' && (
-        <TeacherAssignments key={openTask ? openTask.k : 'list'} openId={openTask ? openTask.id : null} embedded groupId={curGroup} onGroupChange={setCurGroup} onBack={() => setScreen('calendar')} />
+        <TeacherAssignments key={openTask ? openTask.k : 'list'} openId={openTask ? openTask.id : null} embedded sharedPicker groupId={curGroup} onGroupChange={setCurGroup} onBack={() => setScreen('calendar')} />
       )}
       {screen === 'saved' && (
         <SavedItems onOpenClass={openClassPlan} onOpenPractice={(p) => { setEditPractice(p); setScreen('practice'); }} onChange={refresh} refreshKey={tick} />
@@ -216,18 +226,21 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
   const dsDays = (window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.classDays && groupId) ? window.JUCUM_DOCSETS.classDays(groupId) : {};   /* DOCSETS-FIX-V2: sets 🏫 de clase por día */
 
   const sel = day(selDate); const selLog = logFor(selDate); const selTasks = tasksFor(selDate);
+  /* SEGUIMIENTO-V1 · E: el día siguiente al cierre de un set aparece su balance final */
+  const SG = window.JUCUM_SEG;
+  const selClosing = (SG && window.SegCloseCard) ? TT.getPracticePlans().filter(p => p.groupId === groupId && SG.assigned(p) && SG.range(p).to === SG.addD(selDate, -1)) : [];
 
   return (
     <>
       <div className="scard">
-        <div style={{display:'flex', alignItems:'center', gap:9, marginBottom:12, flexWrap:'wrap'}}>
+        {!setGroupIdProp && <div style={{display:'flex', alignItems:'center', gap:9, marginBottom:12, flexWrap:'wrap'}}>
           <span style={{fontSize:12, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'0.03em'}}>👥 Grupo</span>
           {window.GroupPicker ? <GroupPicker value={groupId || ''} onChange={e => setGroupId(e.target.value)} style={{flex:'0 1 520px'}} /> : (
           <select value={groupId || ''} onChange={e => setGroupId(e.target.value)} style={{...selStyle, width:'auto', minWidth:180, flex:'0 1 auto'}}>
             {groupsSorted().map(g => <option key={g.id} value={g.id}>{groupOptionLabel(g)}</option>)}
           </select>)}
           <span style={{fontSize:11.5, color:'#A8A8A8', fontWeight:700}}>Este calendario es de este grupo</span>
-        </div>
+        </div>}
         <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:12}}>
           <button onClick={prevM} style={navBtn}>‹</button>
           <div style={{flex:1, textAlign:'center', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:17, textTransform:'capitalize'}}>{MONTHS_ES[cursor.m]} {cursor.y}</div>
@@ -272,7 +285,7 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
           {onOpenTasks && <button onClick={() => onOpenTasks()} style={{...btnGhost, padding:'7px 12px', borderColor:'#F0C28A', color:'#E65100'}}>＋ Tarea</button>}
         </div>
 
-        {sel.classPlans.length === 0 && sel.practicePlans.length === 0 && selLog.length === 0 && selTasks.length === 0 && !dsDays[selDate] && (window.JUCUM_EXAMFLOW ? window.JUCUM_EXAMFLOW.eventsForDay(groupId, selDate) : []).length === 0 && (
+        {sel.classPlans.length === 0 && sel.practicePlans.length === 0 && selLog.length === 0 && selTasks.length === 0 && !dsDays[selDate] && selClosing.length === 0 && (window.JUCUM_EXAMFLOW ? window.JUCUM_EXAMFLOW.eventsForDay(groupId, selDate) : []).length === 0 && (
           <div className="empty-state" style={{padding:'22px 0'}}><div className="icon">🗓️</div>Nada planeado para este día. Agrega un plan de clase, un set de práctica o una tarea.</div>
         )}
 
@@ -305,8 +318,10 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
         {sel.practicePlans.map(p => (
           <DayRow key={p.id} icon="📝" tint="#F4EEFB" border="#D9CEEC" title={p.title}
             sub={`${(p.activities || []).length} actividad(es) · ${p.assignToStudents !== false ? '👥 asignado a alumnos' : '🙋 solo para mí'} · ${(p.dates || []).length} día(s)`}
+            chip={window.SegSetChip && p.assignToStudents !== false ? <SegSetChip plan={p} /> : null}
             onTrack={() => setTrackSet(p)} onOpen={() => onEditPractice(p)} onDelete={() => { TT.deletePracticePlan(p.id); onChange(); }} />
         ))}
+        {selClosing.map(p => <SegCloseCard key={'cl' + p.id} plan={p} onTrack={setTrackSet} />)}
         {window.DocSetDayCard && dsDays[selDate] && <DocSetDayCard groupId={groupId} date={selDate} plan={sel.classPlans[0] || null} onChange={onChange} />}
         {selLog.length > 0 ? (
           <div style={{marginTop:10, borderTop:'1px dashed #E3DCC9', paddingTop:10}}>
@@ -337,7 +352,7 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
       {dupPlan && <DuplicateClassModal plan={dupPlan} onClose={() => setDupPlan(null)} onDone={() => { setDupPlan(null); onChange(); }} />}
       {dupTask && window.DuplicateTaskModal && <DuplicateTaskModal task={dupTask} onClose={() => setDupTask(null)} onDone={() => { setDupTask(null); onChange(); }} onEditCopy={pf => { setDupTask(null); setDupTaskEdit(pf); }} />}
       {dupTaskEdit && window.AssignmentForm && <AssignmentForm prefill={dupTaskEdit} onClose={() => setDupTaskEdit(null)} onSaved={() => { setDupTaskEdit(null); onChange(); }} />}
-      {trackSet && <PracticeSetProgress plan={trackSet} onClose={() => setTrackSet(null)} />}
+      {trackSet && <PracticeSetProgress plan={trackSet} onClose={() => setTrackSet(null)} onChanged={onChange} />}
       {followPlan && window.FollowUpModal && <FollowUpModal plan={followPlan} onClose={() => setFollowPlan(null)} />}
     </>
   );
@@ -516,7 +531,7 @@ function DuplicateClassModal({ plan, onClose, onDone }) {
 }
 
 /* PLAN-BORRAR-V1 (28-oct): la × pide confirmación — antes un toque borraba el plan o el set sin preguntar. */
-function DayRow({ icon, tint, border, title, sub, onOpen, openLabel, onDelete, onPlay, onDup, onTrack, onReport, onFollow, onPrint }) {
+function DayRow({ icon, tint, border, title, sub, chip, onOpen, openLabel, onDelete, onPlay, onDup, onTrack, onReport, onFollow, onPrint }) {
   /* PLAN-FILA-V1 (28-oct, P1 aprobada): a la vista solo ▶ Modo clase · 📊 Avance · Abrir; lo demás va en «⋯ Más». */
   const [more, setMore] = React.useState(false);
   const boxRef = React.useRef(null);
@@ -536,6 +551,7 @@ function DayRow({ icon, tint, border, title, sub, onOpen, openLabel, onDelete, o
         <div style={{fontWeight:800, fontSize:13.5}}>{title}</div>
         <div style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700}}>{sub}</div>
       </div>
+      {chip}
       {onPlay && <button onClick={onPlay} style={{...btnPrimary, padding:'6px 12px', fontSize:12.5, background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)'}}>▶ Modo clase</button>}
       {onTrack && <button onClick={onTrack} title="Quiénes ya hicieron estas prácticas" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#B7A8E0', color:'#5B3FA0'}}>📊 Avance</button>}
       <button onClick={onOpen} style={{...btnGhost, padding:'6px 12px', fontSize:12.5}}>{openLabel || 'Abrir'}</button>
@@ -562,126 +578,152 @@ function DayRow({ icon, tint, border, title, sub, onOpen, openLabel, onDelete, o
 function PSMark({ s, size }) {
   const z = size || 16;
   if (s === 'ok') return <span style={{width:z, height:z, borderRadius:'50%', background:'#2EA84B', color:'#fff', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:z*0.62, fontWeight:900, lineHeight:1, flexShrink:0}}>✓</span>;
+  if (s === 'low') return <span style={{width:z, height:z, borderRadius:'50%', background:'#E9967A', color:'#fff', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:z*0.62, fontWeight:900, lineHeight:1, flexShrink:0}}>!</span>;
   if (s === 'mod') return <span style={{width:z, height:z, borderRadius:'50%', background:'#E4EDFB', border:'2px dashed #7D97D1', color:'#1B3B6F', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:z*0.6, fontWeight:900, lineHeight:1, flexShrink:0, boxSizing:'border-box'}}>≠</span>;
   if (s === 'other') return <span style={{width:z, height:z, borderRadius:'50%', background:'#FFF3D6', border:'2px solid #E0A62E', color:'#8A6D1A', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:z*0.55, fontWeight:900, lineHeight:1, flexShrink:0, boxSizing:'border-box'}}>✓</span>;
   return <span style={{width:z, height:z, borderRadius:'50%', background:'#fff', border:'2px dashed #D8D4C8', display:'inline-block', flexShrink:0, boxSizing:'border-box'}}></span>;
 }
-function PracticeSetProgress({ plan, onClose }) {
-  const D = window.JUCUM_DATA;
+function PracticeSetProgress({ plan, onClose, onChanged }) {
+  const D = window.JUCUM_DATA, S = window.JUCUM_SEG;
   const group = (D.GROUPS || []).find(g => g.id === plan.groupId);
-  /* AVANCE-ACTIVOS-V1 (09-oct): fuera retirados, inactivos, avance cerrado y egresados */
-  const psOut = (s) => { const st = String(s.status || '').toLowerCase(); if (['retirado','retirada','retired','inactivo','inactiva','inactive','baja','withdrawn'].includes(st)) return true; if (s.closedAt) return true; try { const G = window.JUCUM_GRAD; if (G && G.isGraduated && G.isGraduated(s.id)) return true; } catch (e) {} return false; };
-  const allInGroup = (D.STUDENTS || []).filter(s => s.group === plan.groupId);
-  const students = allInGroup.filter(s => !psOut(s)).sort((a, b) => a.fullName.localeCompare(b.fullName));
-  const hiddenOut = allInGroup.length - students.length;
-  const acts = plan.activities || [];
-  const dates = plan.dates || [];
-  const dayOf = (iso) => { const t = Date.parse(iso || ''); return t ? new Date(t - 5 * 3600000).toISOString().slice(0, 10) : null; };
-  const shortOf = (a, i) => {
-    const base = ({ story:'Story', reading:'Reading', listening:'Listening', quizlet:'Quizlet' })[a.type]
-      || String(a.label || a.activityId).split('·')[0].trim();
-    const s = base.length > 15 ? base.slice(0, 14) + '…' : base;
-    return acts.some((b, j) => j !== i && (({ story:'Story', reading:'Reading', listening:'Listening', quizlet:'Quizlet' })[b.type] || String(b.label || b.activityId).split('·')[0].trim()) === base)
-      ? `${i + 1}· ${s}` : s;
+  /* SEGUIMIENTO-V1 (28-oct, «Propuesta - Avance de la practica.html» C aprobada): el cálculo vive en seguimiento.js
+   * (UNA sola función para 📊 Avance, 📅 Mi seguimiento, Inicio y la ficha) y lee la NUBE. Diseño 1b intacto + resumen,
+   * primero los que faltan, la actividad que más cuesta en rojo, 🔔 Recordar, ⏳ Extender a elección y 🚨 alerta (D) por set.
+   * PRACTICE-DAYS-V1 (22-oct) se mantiene: el día real sale de daily_sessions (día Perú del intento), no de la última fecha
+   * de progress; 'mod' = en la fecha hizo el MISMO material de OTRO módulo (no cuenta, se avisa). */
+  const seg = window.useSegFacts && window.segGroupReq ? window.useSegFacts(window.segGroupReq(plan)) : { F: null, err: new Error('falta Seguimiento.comp.js') };
+  const [tool, setTool] = React.useState(null);   // 'rem' | 'ext'
+  const [, tick] = React.useReducer(x => x + 1, 0);
+  React.useEffect(() => { const iv = setInterval(tick, 1000); return () => clearInterval(iv); }, []);
+  const F = seg.F;
+  const live = F ? ((F.plans || []).find(x => x.id === plan.id) || plan) : plan;
+  const G = F && S ? S.evalGroupSet(live, F) : null;
+  const acts = G ? G.acts : [];
+  const fmtD = (d) => S ? S.fmtDay(d) : d;
+  const shortOf = (x, i) => {
+    const nm = (b) => ({ story:'Story', reading:'Reading', listening:'Listening' })[b.type] || String(b.a.label || b.a.activityId).split('·')[0].trim();
+    const base = nm(x), s = base.length > 15 ? base.slice(0, 14) + '…' : base;
+    return acts.some((b, j) => j !== i && nm(b) === base) ? (i + 1) + '· ' + s : s;
   };
-  /* PRACTICE-DAYS-V1 (22-oct): el día real sale de daily_sessions (D.practiceDays), no de
-   * la última fecha de progress — repetirlo después ya no lo pasa a "otro día". 'mod' = en la
-   * fecha hizo el MISMO material pero de OTRO módulo (no cuenta para este set, se avisa). */
-  const rows = students.map(st => {
-    const completed = (D.getStudentProgress(st.id) || {}).completed || {};
-    const cells = acts.map(a => {
-      const e = completed[a.moduleId + ':' + a.activityId];
-      const pd = e && D.practiceDays ? D.practiceDays(st.id, a.moduleId, a.activityId) : [];
-      const inWin = dates.length ? pd.filter(x => dates.includes(x)) : pd;
-      if (e && (!dates.length || inWin.length)) {
-        const sc = (typeof e.score === 'number') ? Math.max(0, Math.min(100, Math.round(e.score))) : null;
-        return { a, s:'ok', d: inWin[inWin.length - 1] || dayOf(e.date), sc };
-      }
-      const wm = (dates.length && D.practicedElsewhere) ? D.practicedElsewhere(st, a.moduleId, a.activityId, dates) : [];
-      if (wm.length) return { a, s:'mod', wm, d: wm[0].day };
-      if (!e) return { a, s:'pend' };
-      return { a, s:'other', d: pd[pd.length - 1] || dayOf(e.date) };
-    });
-    return { st, cells, ok: cells.filter(c => c.s === 'ok').length, other: cells.filter(c => c.s === 'other').length };
-  });
-  const full = rows.filter(r => r.ok === acts.length).length;
-  const modCells = rows.reduce((n, r) => n + r.cells.filter(c => c.s === 'mod').length, 0);
-  const modNames = [...new Set(rows.flatMap(r => r.cells.filter(c => c.s === 'mod').flatMap(c => c.wm.map(w => w.name))))];
+  const shell = (body) => (
+    <div onClick={onClose} style={{position:'fixed', inset:0, zIndex:1001, background:'rgba(15,23,42,0.55)', backdropFilter:'blur(3px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
+      <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, width:'100%', maxWidth: Math.min(900, 340 + Math.max(acts.length, 2) * 120), boxShadow:'0 24px 60px rgba(0,0,0,0.35)', display:'flex', flexDirection:'column', maxHeight:'88vh'}}>{body}</div>
+    </div>);
+  const closeBtn = <button onClick={onClose} aria-label="Cerrar" style={{position:'absolute', top:14, right:14, width:32, height:32, borderRadius:'50%', border:'none', background:'#FAFAF6', color:'#8a7f6a', fontSize:14, fontWeight:800, cursor:'pointer'}}>✕</button>;
+  if (!G) return shell(
+    <div style={{padding:'18px 20px', position:'relative'}}>
+      <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, color:'#5B3FA0', paddingRight:40}}>📊 Avance · {plan.title}</div>
+      <div style={{marginTop:14, padding:'18px 0', textAlign:'center', fontWeight:800, color:'#8a7f6a', fontSize:13.5, display:'flex', flexDirection:'column', gap:10, alignItems:'center'}}>
+        {seg.err && !F ? <><span>No pude traer el avance de la nube. Revisa el internet.</span>{seg.reload && <button onClick={seg.reload} style={{...btnGhost, padding:'7px 12px'}}>↻ Reintentar</button>}</> : F ? <span>Este set no tiene actividades que se puedan seguir (el Quizlet no cuenta).</span> : <span>Cargando el avance desde la nube…</span>}
+      </div>
+      {closeBtn}
+    </div>);
+  const rows = [...G.missingRows, ...G.rows.filter(x => x.ev.state === 'ok')];
+  const allInGroup = (D.STUDENTS || []).filter(s => s.group === plan.groupId).length;
+  const hiddenOut = Math.max(0, allInGroup - G.n);
+  const cellOf = (ev, k) => ev.cells.find(c => c.k === k && !c.carried) || null;
+  const carriedAny = G.rows.some(x => x.ev.cells.some(c => c.carried));
+  const modCells = G.rows.reduce((n, x) => n + x.ev.cells.filter(c => c.s === 'mod').length, 0);
+  const modNames = [...new Set(G.rows.flatMap(x => x.ev.cells.filter(c => c.s === 'mod').flatMap(c => (c.wm || []).map(w => w.name))))];
   const gsP = (D.getGroupSettings && D.getGroupSettings(plan.groupId)) || {};
   const openIds = gsP.activeModuleIds || (gsP.activeModuleId ? [gsP.activeModuleId] : []);
-  const closedMods = [...new Set(acts.map(a => a.moduleId).filter(m => m && openIds.length && !openIds.includes(m)))]
+  const closedMods = [...new Set(acts.map(x => x.a.moduleId).filter(m => m && openIds.length && !openIds.includes(m)))]
     .map(m => { const x = ((D.MODULE_CATALOG || {})[group && group.level] || []).find(y => y.id === m); return x ? x.name : m; });
-  const fmtD = (d) => { try { return new Date(d + 'T12:00:00').toLocaleDateString('es-PE', { day:'numeric', month:'short' }); } catch (e) { return d; } };
-  const cols = `minmax(150px, 220px) repeat(${Math.max(acts.length, 1)}, minmax(78px, 1fr)) 58px`;
-  const colTotal = (i) => rows.filter(r => r.cells[i] && r.cells[i].s === 'ok').length;
-  const colOther = (i) => rows.filter(r => r.cells[i] && r.cells[i].s === 'other').length;
-  return (
-    <div onClick={onClose} style={{position:'fixed', inset:0, zIndex:1001, background:'rgba(15,23,42,0.55)', backdropFilter:'blur(3px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
-      <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, width:'100%', maxWidth: Math.min(860, 320 + acts.length * 120), boxShadow:'0 24px 60px rgba(0,0,0,0.35)', display:'flex', flexDirection:'column', maxHeight:'86vh'}}>
-        <div style={{padding:'15px 20px 12px', borderBottom:'1.5px solid #E3DCC9', position:'relative'}}>
-          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, color:'#5B3FA0'}}>📊 Avance · {plan.title}</div>
-          <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginTop:3}}>
-            {group ? group.name : ''} · {acts.length} actividad(es) · {dates.length ? 'día(s): ' + dates.map(fmtD).join(' · ') : 'sin fecha fija'}
-          </div>
-          <div style={{fontSize:12.5, fontWeight:800, color: full ? '#2E7D32' : '#8a7f6a', marginTop:4}}>{full} de {students.length} completaron todo en la fecha{hiddenOut > 0 ? <span style={{color:'#a39a85', fontWeight:700}}> · {hiddenOut} retirado(s)/inactivo(s) no se cuentan</span> : null}</div>
-          {closedMods.length > 0 && <div style={{marginTop:8, fontSize:12, fontWeight:800, color:'#8A3B12', background:'#FFF1E6', border:'1px solid #F3C9A8', borderRadius:9, padding:'7px 10px'}}>⚠ Este set usa {closedMods.join(' y ')}, que hoy NO está abierto para el grupo: los alumnos no lo ven en su ruta y practican el módulo que sí tienen abierto. Ábrelo en 📦 Módulos del grupo.</div>}
-          {modCells > 0 && <div style={{marginTop:8, fontSize:12, fontWeight:800, color:'#1B3B6F', background:'#E4EDFB', border:'1px solid #C5D6F2', borderRadius:9, padding:'7px 10px'}}>≠ {modCells} tramo(s) en azul: en estas fechas el alumno hizo el MISMO material pero de otro módulo ({modNames.join(', ')}). Esa práctica sí está registrada, pero no es la de este set.</div>}
-          <button onClick={onClose} style={{position:'absolute', top:14, right:14, width:32, height:32, borderRadius:'50%', border:'none', background:'#FAFAF6', color:'#8a7f6a', fontSize:14, fontWeight:800, cursor:'pointer'}}>✕</button>
-        </div>
-        <div style={{padding:'12px 16px 6px', overflowY:'auto', overflowX:'auto'}}>
-          {!students.length ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">👥</div>Este grupo no tiene alumnos.</div> : (
-            <div style={{minWidth: 240 + acts.length * 86 + 62}}>
-              {/* Cabecera: las actividades del día, en su orden, UNA sola vez */}
-              <div style={{display:'grid', gridTemplateColumns:cols, gap:6, alignItems:'end', padding:'0 11px 6px'}}>
-                <span style={{fontSize:10.5, fontWeight:900, letterSpacing:'.05em', textTransform:'uppercase', color:'#A8A8A8'}}>Alumno</span>
-                {acts.map((a, i) => <span key={i} title={a.label || a.activityId} style={{textAlign:'center', fontSize:11.5, fontWeight:900, color:'#5B3FA0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{shortOf(a, i)}</span>)}
-                <span style={{textAlign:'right', fontSize:10.5, fontWeight:900, letterSpacing:'.05em', textTransform:'uppercase', color:'#A8A8A8'}}>Hecho</span>
-              </div>
-              {/* Una BARRA horizontal por alumno: avanza tramo a tramo */}
-              <div style={{display:'grid', gap:4}}>
-                {rows.map(({ st, cells, ok, other }) => {
-                  const all = acts.length > 0 && ok === acts.length;
-                  return (
-                    <div key={st.id} style={{display:'grid', gridTemplateColumns:cols, gap:6, alignItems:'center', padding:'6px 11px', borderRadius:10,
-                      background: all ? '#F4FAF5' : '#FCFCFA', border:'1px solid ' + (all ? '#CDEBD2' : '#EEE9DC')}}>
-                      <span style={{fontWeight:800, fontSize:12.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{st.fullName}</span>
-                      {cells.map((c, i) => (
-                        <span key={i} title={`${c.a.label || c.a.activityId} · ${c.s === 'ok' ? 'hecha en la fecha' + (c.sc != null ? ' · ' + c.sc + '%' : '') : c.s === 'other' ? 'la hizo otro día (' + fmtD(c.d) + ')' : c.s === 'mod' ? 'el ' + fmtD(c.d) + ' hizo este material pero de OTRO módulo (' + c.wm.map(w => w.name).join(', ') + ') — no cuenta para este set' : 'pendiente'}`}
-                          style={{height:24, display:'flex', alignItems:'center', justifyContent:'center', gap:4,
-                            borderRadius: i === 0 ? '8px 3px 3px 8px' : i === cells.length - 1 ? '3px 8px 8px 3px' : 3,
-                            background: c.s === 'ok' ? '#2EA84B' : c.s === 'other' ? '#F2C14E' : c.s === 'mod' ? '#E4EDFB' : '#EFEDE6',
-                            border: c.s === 'pend' ? '1px dashed #DAD5C6' : c.s === 'mod' ? '1px dashed #7D97D1' : 'none', boxSizing:'border-box',
-                            color: c.s === 'ok' ? '#fff' : c.s === 'other' ? '#6B4E00' : c.s === 'mod' ? '#1B3B6F' : '#B8B2A2',
-                            fontSize:10.5, fontWeight:900, whiteSpace:'nowrap', overflow:'hidden'}}>
-                          {c.s === 'ok' ? <>✓{c.sc != null ? ' ' + c.sc + '%' : ''}</> : c.s === 'other' ? <>✓ {fmtD(c.d)}</> : c.s === 'mod' ? <>≠ otro módulo</> : ''}
-                        </span>
-                      ))}
-                      <span style={{textAlign:'right', fontSize:12.5, fontWeight:800, whiteSpace:'nowrap', color: all ? '#2E7D32' : (ok || other) ? '#8A6D1A' : '#B5B5B5'}}>
-                        {ok}/{acts.length}{other ? <span title="hechas otro día" style={{color:'#B08A2E', fontSize:11}}> +{other}</span> : null}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-              {/* Total por actividad: dónde se atascaron */}
-              <div style={{display:'grid', gridTemplateColumns:cols, gap:6, alignItems:'center', padding:'8px 11px 4px', borderTop:'1px dashed #E3DCC9', marginTop:8}}>
-                <span style={{fontSize:10.5, fontWeight:900, letterSpacing:'.05em', textTransform:'uppercase', color:'#A8A8A8'}}>Total por actividad</span>
-                {acts.map((a, i) => (
-                  <span key={i} style={{textAlign:'center', fontSize:12, fontWeight:800, color: colTotal(i) ? '#2E7D32' : '#B5B5B5'}}>
-                    {colTotal(i)}/{students.length}{colOther(i) ? <span style={{color:'#B08A2E', fontSize:10.5}}> +{colOther(i)}</span> : ''}
-                  </span>
-                ))}
-                <span></span>
-              </div>
-            </div>
-          )}
-        </div>
-        <div style={{padding:'9px 18px 13px', borderTop:'1px dashed #E3DCC9', fontSize:11.5, fontWeight:700, color:'#8a7f6a', display:'flex', alignItems:'center', gap:7, flexWrap:'wrap'}}>
-          <PSMark s="ok" /> hecha en la fecha <span style={{opacity:.4}}>·</span> <PSMark s="other" /> la hizo otro día <span style={{opacity:.4}}>·</span> <PSMark s="pend" /> pendiente <span style={{opacity:.4}}>·</span> <PSMark s="mod" /> hizo el de otro módulo <span style={{opacity:.5}}>— pasa el cursor por un tramo para ver el detalle.</span>
-        </div>
+  const cols = 'minmax(150px, 220px) repeat(' + Math.max(acts.length, 1) + ', minmax(78px, 1fr))' + (carriedAny ? ' 78px' : '') + ' 58px';
+  const now = Date.now(), t = S.today();
+  const cdTxt = (() => { const s = Math.max(0, Math.floor((S.endMs(G.to) - now) / 1000)), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (d ? d + ' d ' : '') + h + ':' + String(m).padStart(2, '0') + ':' + String(x).padStart(2, '0'); })();
+  const assignedSet = live.assignToStudents !== false;
+  const miss = G.missingRows.length;
+  const remToday = live.remindedAt && window.JUCUM_DAY.of(live.remindedAt) === t;
+  const chip = (txt, color) => <span style={{fontSize:12, fontWeight:900, borderRadius:9, padding:'4px 9px', background:'#fff', color, border:'1px solid #E6DDF3', whiteSpace:'nowrap'}}>{txt}</span>;
+  const CELL = {
+    ok:   { bg:'#2EA84B', fg:'#fff', bd:'none' },
+    low:  { bg:'#FBE3DC', fg:'#A3361F', bd:'1px solid #F0A898' },
+    late: { bg:'#F2C14E', fg:'#6B4E00', bd:'none' },
+    prev: { bg:'#F2C14E', fg:'#6B4E00', bd:'none' },
+    mod:  { bg:'#E4EDFB', fg:'#1B3B6F', bd:'1px dashed #7D97D1' },
+    pend: { bg:'#EFEDE6', fg:'#B8B2A2', bd:'1px dashed #DAD5C6' },
+    na:   { bg:'#F7F5EF', fg:'#C2BCAC', bd:'1px solid #EEE9DC' } };
+  const cellTxt = (c) => !c ? '—' : c.s === 'ok' ? '✓' + (c.sc != null ? ' ' + c.sc + '%' : '') : c.s === 'low' ? c.sc + '%' : (c.s === 'late' || c.s === 'prev') ? '✓ ' + fmtD(c.d) : c.s === 'mod' ? '≠ otro módulo' : '';
+  const cellTitle = (c) => !c ? 'no se le pidió (ya lo tenía aprobado)' : (c.name + ' · ' + (c.s === 'ok' ? 'hecha en la fecha' + (c.sc != null ? ' · ' + c.sc + '%' : '') : c.s === 'low' ? 'la hizo en la fecha con ' + c.sc + '% (no aprobó)' : c.s === 'late' ? 'la hizo después del cierre (' + fmtD(c.d) + ')' : c.s === 'prev' ? 'la hizo antes del set (' + fmtD(c.d) + ')' : c.s === 'mod' ? 'el ' + fmtD(c.d) + ' hizo este material pero de OTRO módulo (' + (c.wm || []).map(w => w.name).join(', ') + ') — no cuenta para este set' : 'pendiente'));
+  const sep = (txt, color) => <div style={{fontSize:11, fontWeight:900, color, textTransform:'uppercase', letterSpacing:'.05em', margin:'6px 0 2px 11px'}}>{txt}</div>;
+  const rowEl = ({ st, ev }) => {
+    const all = ev.state === 'ok', other = ev.cells.filter(c => !c.carried && (c.s === 'late' || c.s === 'prev')).length;
+    const okMine = ev.cells.filter(c => !c.carried && c.s === 'ok').length, totMine = ev.cells.filter(c => !c.carried).length;
+    const car = ev.cells.filter(c => c.carried);
+    return (
+      <div key={st.id} style={{display:'grid', gridTemplateColumns:cols, gap:6, alignItems:'center', padding:'6px 11px', borderRadius:10, background: all ? '#F4FAF5' : '#FCFCFA', border:'1px solid ' + (all ? '#CDEBD2' : '#EEE9DC')}}>
+        <span style={{fontWeight:800, fontSize:12.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{st.fullName || st.name || st.username}</span>
+        {acts.map((x, i) => { const c = cellOf(ev, x.k), k = c ? c.s : 'na', v = CELL[k] || CELL.pend; return (
+          <span key={i} title={cellTitle(c)} style={{height:24, display:'flex', alignItems:'center', justifyContent:'center', gap:4,
+            borderRadius: i === 0 ? '8px 3px 3px 8px' : i === acts.length - 1 ? '3px 8px 8px 3px' : 3,
+            background:v.bg, border:v.bd, boxSizing:'border-box', color:v.fg, fontSize:10.5, fontWeight:900, whiteSpace:'nowrap', overflow:'hidden'}}>{cellTxt(c)}</span>); })}
+        {carriedAny && <span title={car.map(c => c.name + ': ' + (c.s === 'ok' ? 'hecha' : 'pendiente')).join(' · ')} style={{textAlign:'center', fontSize:11.5, fontWeight:900, color: !car.length ? '#C2BCAC' : car.every(c => c.s === 'ok') ? '#2E7D32' : '#A3361F'}}>{car.length ? car.filter(c => c.s === 'ok').length + '/' + car.length : '—'}</span>}
+        <span style={{textAlign:'right', fontSize:12.5, fontWeight:800, whiteSpace:'nowrap', color: all ? '#2E7D32' : (ev.started || other) ? '#8A6D1A' : '#B5B5B5'}}>
+          {okMine}/{totMine}{other ? <span title="hechas otro día" style={{color:'#B08A2E', fontSize:11}}> +{other}</span> : null}
+        </span>
+      </div>);
+  };
+  return shell(<>
+    <div style={{padding:'15px 20px 12px', borderBottom:'1.5px solid #E3DCC9', position:'relative', background:'#F4EEFB', borderRadius:'18px 18px 0 0'}}>
+      <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, color:'#3F2A78', paddingRight:40}}>📊 Avance · {live.title}{group ? ' · ' + group.name : ''}</div>
+      <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginTop:3}}>
+        {acts.length} actividad(es) · {G.from === G.to ? 'el ' + fmtD(G.from) : 'del ' + fmtD(G.from) + ' al ' + fmtD(G.to)}{hiddenOut > 0 ? <span style={{color:'#a39a85'}}> · {hiddenOut} retirado(s), inactivo(s) o nuevo(s) no se cuentan</span> : null}
       </div>
+      <div style={{display:'flex', gap:6, flexWrap:'wrap', marginTop:8, alignItems:'center'}}>
+        {chip('✓ ' + G.full + ' completo' + (G.full === 1 ? '' : 's'), '#2E7D32')}
+        {chip('◐ ' + G.part + ' en proceso', '#A15C00')}
+        {chip('○ ' + G.none + ' sin empezar', '#B23A2A')}
+        {G.phase === 'open' ? <span style={{fontSize:12, fontWeight:900, borderRadius:9, padding:'4px 9px', background:'#fff', color:'#3F2A78', border:'1px solid #E6DDF3', whiteSpace:'nowrap'}}>⏳ cierra en <b style={{fontVariantNumeric:'tabular-nums'}}>{cdTxt}</b></span>
+          : G.phase === 'closed' ? chip('🏁 cerró el ' + fmtD(G.to), '#6b6453') : chip('empieza el ' + fmtD(G.from), '#6b6453')}
+        <span style={{flex:1}}></span>
+        {window.SegAgo && <SegAgo F={F} busy={seg.busy} err={seg.err} onReload={seg.reload} />}
+      </div>
+      {closedMods.length > 0 && <div style={{marginTop:8, fontSize:12, fontWeight:800, color:'#8A3B12', background:'#FFF1E6', border:'1px solid #F3C9A8', borderRadius:9, padding:'7px 10px'}}>⚠ Este set usa {closedMods.join(' y ')}, que hoy NO está abierto para el grupo: los alumnos no lo ven en su ruta y practican el módulo que sí tienen abierto. Ábrelo en 📦 Módulos del grupo.</div>}
+      {modCells > 0 && <div style={{marginTop:8, fontSize:12, fontWeight:800, color:'#1B3B6F', background:'#E4EDFB', border:'1px solid #C5D6F2', borderRadius:9, padding:'7px 10px'}}>≠ {modCells} tramo(s) en azul: en estas fechas el alumno hizo el MISMO material pero de otro módulo ({modNames.join(', ')}). Esa práctica sí está registrada, pero no es la de este set.</div>}
+      {closeBtn}
     </div>
-  );
+    {assignedSet && G.n > 0 && (
+      <div style={{display:'flex', gap:7, flexWrap:'wrap', alignItems:'center', padding:'10px 16px', borderBottom:'1px solid #EEE8DA', flexDirection: tool ? 'column' : 'row'}}>
+        {tool === 'rem' && window.SegRemindBox ? <SegRemindBox G={G} onCancel={() => setTool(null)} />
+          : tool === 'ext' && window.SegExtendBox ? <SegExtendBox G={G} onCancel={() => setTool(null)} onDone={() => { if (onChanged) onChanged(); }} />
+          : <>
+            {G.phase === 'open' && miss > 0 && <button onClick={() => setTool('rem')} style={{...btnPrimary, padding:'7px 12px', fontSize:12.5, background:'linear-gradient(135deg,#7B5CC8,#5B3FA0)'}}>🔔 Recordar a {miss === 1 ? 'el que falta' : 'los ' + miss + ' que faltan'}</button>}
+            {remToday && <span style={{fontSize:12, fontWeight:800, color:'#2E7D32'}}>✓ Ya les recordaste hoy</span>}
+            <button onClick={() => setTool('ext')} style={{...btnGhost, padding:'7px 12px', fontSize:12.5}}>⏳ Extender…</button>
+            <button onClick={() => { S.setAlarm(live, !!live.noAlarm); if (onChanged) onChanged(); }} title="Tarjeta roja en el Inicio del alumno desde las 7 pm de la víspera del cierre, hasta que lo termine" style={{...btnGhost, padding:'7px 12px', fontSize:12.5, borderColor: live.noAlarm ? '#DDD3BE' : '#F2B8AE', color: live.noAlarm ? '#8a7f6a' : '#B23A2A'}}>🚨 Alerta la víspera: {live.noAlarm ? 'apagada · Encender' : 'activada · Apagar'}</button>
+          </>}
+      </div>)}
+    <div style={{padding:'10px 16px 6px', overflowY:'auto', overflowX:'auto'}}>
+      {!G.n ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">👥</div>Este grupo no tiene alumnos.</div> : (
+        <div style={{minWidth: 240 + acts.length * 86 + (carriedAny ? 84 : 0) + 62}}>
+          <div style={{display:'grid', gridTemplateColumns:cols, gap:6, alignItems:'end', padding:'0 11px 6px'}}>
+            <span style={{fontSize:10.5, fontWeight:900, letterSpacing:'.05em', textTransform:'uppercase', color:'#A8A8A8'}}>Alumno</span>
+            {acts.map((x, i) => <span key={i} title={(i === G.hard ? 'La que más cuesta · ' : '') + (x.a.label || x.a.activityId)} style={{textAlign:'center', fontSize:11.5, fontWeight:900, color: i === G.hard ? '#B23A2A' : '#5B3FA0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{i === G.hard ? '🔎 ' : ''}{shortOf(x, i)}</span>)}
+            {carriedAny && <span title="Lo que le faltó del set anterior (solo a quienes no lo terminaron)" style={{textAlign:'center', fontSize:11, fontWeight:900, color:'#5B3FA0'}}>↪ Pendientes</span>}
+            <span style={{textAlign:'right', fontSize:10.5, fontWeight:900, letterSpacing:'.05em', textTransform:'uppercase', color:'#A8A8A8'}}>Hecho</span>
+          </div>
+          <div style={{display:'grid', gap:4}}>
+            {G.missingRows.length > 0 && sep('Faltan · ' + G.missingRows.length, '#B23A2A')}
+            {G.missingRows.map(rowEl)}
+            {G.full > 0 && sep('Completos · ' + G.full, '#2E7D32')}
+            {rows.filter(x => x.ev.state === 'ok').map(rowEl)}
+          </div>
+          <div style={{display:'grid', gridTemplateColumns:cols, gap:6, alignItems:'center', padding:'8px 11px 4px', borderTop:'1px dashed #E3DCC9', marginTop:8}}>
+            <span style={{fontSize:10.5, fontWeight:900, letterSpacing:'.05em', textTransform:'uppercase', color:'#A8A8A8'}}>Total por actividad</span>
+            {acts.map((x, i) => (
+              <span key={i} style={{textAlign:'center', fontSize:12, fontWeight:900, color: i === G.hard ? '#B23A2A' : G.col[i] ? '#2E7D32' : '#B5B5B5'}}>{G.col[i]}/{G.n}</span>
+            ))}
+            {carriedAny && <span></span>}
+            <span></span>
+          </div>
+        </div>
+      )}
+    </div>
+    <div style={{padding:'9px 18px 13px', borderTop:'1px dashed #E3DCC9', fontSize:11.5, fontWeight:700, color:'#8a7f6a', display:'flex', alignItems:'center', gap:7, flexWrap:'wrap'}}>
+      <PSMark s="ok" /> hecha en la fecha <span style={{opacity:.4}}>·</span> <PSMark s="low" /> en la fecha, sin aprobar <span style={{opacity:.4}}>·</span> <PSMark s="other" /> la hizo otro día <span style={{opacity:.4}}>·</span> <PSMark s="pend" /> pendiente <span style={{opacity:.4}}>·</span> <PSMark s="mod" /> hizo el de otro módulo <span style={{opacity:.5}}>— completo = todas hechas entre el primer y el último día del set (y aprobadas las que tienen nota). El Quizlet no cuenta.</span>
+    </div>
+  </>);
 }
 
 /* ════════ Editor de PLAN DE CLASE ════════ */
@@ -1903,4 +1945,4 @@ function Field({ label, children, style }) {
   return (<label style={{display:'flex', flexDirection:'column', gap:5, ...(style || {})}}><span style={{fontSize:11.5, fontWeight:800, color:'#8a7f6a', textTransform:'uppercase', letterSpacing:'0.03em'}}>{label}</span>{children}</label>);
 }
 
-Object.assign(window, { ClassPlanner });
+Object.assign(window, { ClassPlanner, PracticeSetProgress, PSMark });

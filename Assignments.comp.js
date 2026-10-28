@@ -481,7 +481,7 @@ function TaskDateModal({ tasks, onClose, onDone }) {
       </div>
     </div>);
 }
-function TeacherAssignments({ onBack, embedded, groupId: gidProp, onGroupChange, openId }) {
+function TeacherAssignments({ onBack, embedded, groupId: gidProp, onGroupChange, openId, sharedPicker }) {   // PLAN-GRUPO-V1: sharedPicker = el grupo se elige arriba en el Planificador
   const { STUDENTS, GROUPS, LEVELS } = window.JUCUM_DATA;
   const T = window.JUCUM_TASKS;
   const [creating, setCreating] = tUseState(false);
@@ -666,7 +666,7 @@ function TeacherAssignments({ onBack, embedded, groupId: gidProp, onGroupChange,
         const L = lvOf(group);
         return (<>
           <div className="scard" style={{marginTop:16, display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', borderLeft:'6px solid ' + L.color}}>
-            <div style={{flex:'1 1 260px', maxWidth:480, minWidth:0}}>{pickerEl}</div>
+            {!sharedPicker && <div style={{flex:'1 1 260px', maxWidth:480, minWidth:0}}>{pickerEl}</div>}
             <div className="settings-hint" style={{margin:0}}>{mine.length} tarea{mine.length === 1 ? '' : 's'} en este grupo</div>
           </div>
           <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:8, margin:'12px 0 4px'}}>

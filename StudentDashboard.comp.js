@@ -621,6 +621,8 @@ function StudentDashboard({ user, onLogout }) {
         <div className="st-grp">Aprender</div>
         <button type="button" className={`st-it ${view==='practica'?'on':''}`} onClick={() => setView('practica')}><span className="st-ico">📚</span>Mi práctica</button>
         <button type="button" className={`st-it ${view==='tasks'?'on':''}`} onClick={() => setView('tasks')}><span className="st-ico">📝</span>Tareas</button>
+        {/* 📅 SEGUIMIENTO-V1 (28-oct): lo que me dejaron y si lo cumplí (calendario del mes) */}
+        {window.StudentSeguimiento && <button type="button" className={`st-it ${view==='seguimiento'?'on':''}`} onClick={() => setView('seguimiento')}><span className="st-ico">📅</span>Mi seguimiento</button>}
         <button type="button" className={`st-it ${view==='exam'?'on':''}`} onClick={() => setView('exam')}><span className="st-ico">🎓</span>Examen</button>
         <div className="st-grp">Comunidad</div>
         <button type="button" className={`st-it ${view==='mensajes'?'on':''}`} onClick={() => setView('mensajes')}><span className="st-ico jwave">👨‍🏫</span>Hablemos{msgUnread > 0 && <span className="nav-dot">{msgUnread > 9 ? '9+' : msgUnread}</span>}</button>
@@ -641,6 +643,8 @@ function StudentDashboard({ user, onLogout }) {
         <StudentProfile user={user} onBack={() => setView('dashboard')} />
       ) : view === 'tasks' ? (
         <StudentAssignments user={user} onBack={() => setView('dashboard')} />
+      ) : view === 'seguimiento' && window.StudentSeguimiento ? (
+        <StudentSeguimiento student={student} onBack={() => setView('dashboard')} />
       ) : view === 'exam' ? (
         <StudentExams user={user} onBack={() => setView('dashboard')} />
       ) : (view === 'avance' || view === 'report' || view === 'diagnosis') ? (
@@ -660,6 +664,8 @@ function StudentDashboard({ user, onLogout }) {
         <StudentPractice student={student} settings={settings} onBack={() => setView('dashboard')} />
       ) : (
       <main>
+        {/* 🚨 SEGUIMIENTO-V1 · 2B: alerta roja fija desde las 7 pm de la víspera del cierre hasta que termine el set */}
+        {window.SegAlarmCard && <SegAlarmCard student={student} onGo={() => setView('practica')} />}
         <div className="welcome" data-level={student.level} style={{background:'linear-gradient(135deg,'+level.color+','+level.dark+')'}}>
           <div className="welcome-text">
             <div className="eyebrow" style={{color:'#fff', opacity:1, textShadow:'0 1px 3px rgba(0,0,0,.4)'}}>{level.emoji} {level.code} · {group.name}</div>

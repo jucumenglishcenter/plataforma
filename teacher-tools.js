@@ -69,6 +69,11 @@
         if (a.onlyPending && passedBefore(a)) return;
         items.push(a);
       }));
+      /* SEGUIMIENTO-V1 (28-oct): «➡ Pasar lo pendiente al próximo set» → lo que le faltó del set anterior, SOLO a este alumno */
+      plans.forEach(p => ((p.carry && p.carry[student.id]) || []).forEach(a => {
+        if (!a || !a.moduleId || items.some(x => x.moduleId === a.moduleId && x.activityId === a.activityId)) return;
+        items.push({ ...a, label: '↪ Pendiente · ' + (a.label || a.activityId), carried: true });
+      }));
       if (items.some(a => a.prio)) items.sort((x, y) => (y.prio || 0) - (x.prio || 0));
       if (items.length) return { items, isGeneric: false, source: 'plan', planTitle: plans[0].title, planId: plans[0].id };
     }

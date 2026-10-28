@@ -22,21 +22,29 @@ function piMark(v) {
   return <span title="no lo hizo" style={{display:'inline-block', width:z, height:z, borderRadius:'50%', border:'2.5px solid #E53935', background:'#fff', verticalAlign:'middle', boxSizing:'border-box'}}></span>;
 }
 
-function PlanImport({ importId, startTab, onBack, onClassMode }) {
+function PlanImport({ importId, startTab, onBack, onClassMode, groupId, onGroupChange }) {
   const PI = window.JUCUM_PLANIMPORT;
   const [rec, setRec] = React.useState(() => (importId && PI ? PI.get(importId) : null));
   const [tab, setTab] = React.useState(startTab || 'read');
+  /* PLAN-GRUPO-V1 (28-oct, P4 aprobada): el grupo sale del selector único del Planificador. Al abrir una subida,
+   * el selector pasa a SU grupo; si la profesora cambia el grupo arriba, se vuelve al paso 1 con el nuevo. */
+  React.useEffect(() => { if (rec && rec.groupId && onGroupChange && rec.groupId !== groupId) onGroupChange(rec.groupId); }, [rec && rec.id]);
+  const prevG = React.useRef(groupId);
+  React.useEffect(() => { if (prevG.current === groupId) return; prevG.current = groupId; if (rec && groupId && rec.groupId !== groupId) setRec(null); }, [groupId]);
   if (!PI) return <div className="scard">Falta cargar plan-import.js.</div>;
-  if (!rec) return <PiStart onBack={onBack} onOpen={(r) => { setRec(r); setTab('read'); }} />;
+  if (!rec) return <PiStart groupId={groupId} onBack={onBack} onOpen={(r) => { setRec(r); setTab('read'); }} />;
   return <PiReview rec={rec} setRec={setRec} tab={tab} setTab={setTab} onBack={() => setRec(null)} onExit={onBack} onClassMode={onClassMode} />;
 }
 
 /* ════════ Paso 1 · grupo + documentos ════════ */
-function PiStart({ onBack, onOpen }) {
+function PiStart({ onBack, onOpen, groupId }) {
   const PI = window.JUCUM_PLANIMPORT; const D = window.JUCUM_DATA;
   const groups = (typeof groupsSorted === 'function' ? groupsSorted() : (D.GROUPS || [])).filter(g => !g.finishedAt);
-  const [gid, setGid] = React.useState(null);
+  const shared = groupId !== undefined;   // PLAN-GRUPO-V1: con el selector único de arriba ya no se elige aquí
+  const [gidOwn, setGid] = React.useState(null);
+  const gid = shared ? (groupId || null) : gidOwn;
   const [day, setDay] = React.useState('');
+  React.useEffect(() => { setDay(''); }, [gid]);
   const meta = gid && PI.groupMeta ? PI.groupMeta(gid) : null;
   const dayEff = day || (meta && meta.next[0]) || '';
   const [what, setWhat] = React.useState('class');   // 'class' = plan + práctica · 'classOnly' = solo plan · 'practice' = solo práctica
@@ -63,6 +71,19 @@ function PiStart({ onBack, onOpen }) {
     <>
       {drafts.length > 0 && <PiUploadsBar drafts={drafts} gName={gName} onOpen={onOpen} onChanged={() => setTick(t => t + 1)} />}
       <div className="scard" style={{marginBottom:16}}>
+        {shared ? (() => { const g = (D.GROUPS || []).find(x => x.id === gid); const lvc = g ? (({ 'pre-a1':'#F9A825', a1:'#2196F3', a2:'#2EA84B' })[g.level] || '#999') : '#999';
+          const n = g ? (D.STUDENTS || []).filter(s => s.group === g.id && s.active !== false).length : 0;
+          const cm = g && D.getClassModuleId ? (D.MODULE_CATALOG[g.level] || []).find(m => m.id === D.getClassModuleId(g.id)) : null;
+          return (<>
+            <div className="sec-title" style={{marginBottom:8}}>1 · Grupo del plan</div>
+            {g ? <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', border:'1.5px solid #C9D6F5', borderLeft:'7px solid ' + lvc, borderRadius:12, background:'#EEF2FC', padding:'9px 12px'}}>
+              <span style={{display:'flex', flexDirection:'column', gap:2, flex:1, minWidth:200}}>
+                <span style={{fontWeight:800, fontSize:13.5}}>{g.name}</span>
+                <span style={{fontSize:11.5, color:'#8a7f6a', fontWeight:700}}>{String(g.level).toUpperCase()}{g.schedule ? ' · ' + g.schedule : ''} · {n} alumnos{cm ? ' · ▶ En clase: ' + cm.name : ''}</span>
+              </span>
+              <span style={{fontSize:11.5, color:'#3F5BB8', fontWeight:800}}>¿Otro grupo? Cámbialo arriba en «👥 Grupo».</span>
+            </div> : <div style={{fontSize:12.5, fontWeight:800, color:'#8E1B1B'}}>Elige el grupo arriba en «👥 Grupo».</div>}
+          </>); })() : (<>
         <div className="sec-title" style={{marginBottom:4}}>1 · ¿Para qué grupo es este plan?</div>
         <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginBottom:10}}>Los materiales, los links de Quizlet y la práctica de los alumnos salen del módulo de este grupo.</div>
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:8}}>
@@ -76,6 +97,7 @@ function PiStart({ onBack, onOpen }) {
                 {cm && <span style={{fontSize:11, color:'#3F5BB8', fontWeight:800}}>▶ En clase: {cm.name}</span>}
               </button>); })}
         </div>
+        </>)}
         {meta && (
           <div style={{marginTop:12, borderTop:'1px dashed #E3DCC9', paddingTop:12, display:'flex', flexDirection:'column', gap:8}}>
             <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center'}}>
