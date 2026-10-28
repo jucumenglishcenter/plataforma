@@ -2383,9 +2383,9 @@ function computeStreakInfo(student, todayMin) {
   if (!ST || !M || !student) return null;
   const src = M[student.id] || {}, mins = {}; Object.keys(src).forEach(d => { mins[d] = src[d]; });
   const today = ST.peruToday();
-  if (todayMin > 0) mins[today] = Math.max(mins[today] || 0, todayMin);
+  if (todayMin > 0 || today in mins) mins[today] = Math.max(mins[today] || 0, todayMin || 0);
   const goal = (getGroupSettings(student.group) || {}).dailyTargetMin || 15;
-  return ST.compute(mins, goal, today);
+  return ST.compute(mins, goal, today, STREAK_CUTOVER);   // RACHA-PREVIA-V1: antes del cambio cuenta cualquier práctica
 }
 function getStreakXPTotal(studentId) {
   if (!_stkAgg) {
