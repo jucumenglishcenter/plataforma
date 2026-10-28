@@ -607,7 +607,7 @@ function PracticeSetProgress({ plan, onClose, onChanged }) {
   };
   const shell = (body) => (
     <div onClick={onClose} style={{position:'fixed', inset:0, zIndex:1001, background:'rgba(15,23,42,0.55)', backdropFilter:'blur(3px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
-      <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, width:'100%', maxWidth: Math.min(900, 340 + Math.max(acts.length, 2) * 120), boxShadow:'0 24px 60px rgba(0,0,0,0.35)', display:'flex', flexDirection:'column', maxHeight:'88vh'}}>{body}</div>
+      <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, width:'100%', maxWidth: Math.min(900, Math.max(680, 340 + acts.length * 120)), boxShadow:'0 24px 60px rgba(0,0,0,0.35)', maxHeight:'90vh', overflowY:'auto'}}>{body}</div>
     </div>);
   const closeBtn = <button onClick={onClose} aria-label="Cerrar" style={{position:'absolute', top:14, right:14, width:32, height:32, borderRadius:'50%', border:'none', background:'#FAFAF6', color:'#8a7f6a', fontSize:14, fontWeight:800, cursor:'pointer'}}>✕</button>;
   if (!G) return shell(
@@ -665,7 +665,7 @@ function PracticeSetProgress({ plan, onClose, onChanged }) {
       </div>);
   };
   return shell(<>
-    <div style={{padding:'15px 20px 12px', borderBottom:'1.5px solid #E3DCC9', position:'relative', background:'#F4EEFB', borderRadius:'18px 18px 0 0'}}>
+    <div style={{padding:'13px 20px 10px', borderBottom:'1.5px solid #E3DCC9', position:'sticky', top:0, zIndex:2, background:'#F4EEFB', borderRadius:'18px 18px 0 0'}}>
       <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, color:'#3F2A78', paddingRight:40}}>📊 Avance · {live.title}{group ? ' · ' + group.name : ''}</div>
       <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginTop:3}}>
         {acts.length} actividad(es) · {G.from === G.to ? 'el ' + fmtD(G.from) : 'del ' + fmtD(G.from) + ' al ' + fmtD(G.to)}{hiddenOut > 0 ? <span style={{color:'#a39a85'}}> · {hiddenOut} retirado(s), inactivo(s) o nuevo(s) no se cuentan</span> : null}
@@ -684,17 +684,17 @@ function PracticeSetProgress({ plan, onClose, onChanged }) {
       {closeBtn}
     </div>
     {assignedSet && G.n > 0 && (
-      <div style={{display:'flex', gap:7, flexWrap:'wrap', alignItems:'center', padding:'10px 16px', borderBottom:'1px solid #EEE8DA', flexDirection: tool ? 'column' : 'row'}}>
+      <div style={{display:'flex', gap:7, flexWrap:'wrap', alignItems:'center', padding:'10px 16px', borderBottom:'1px solid #EEE8DA', flexDirection: tool ? 'column' : 'row', alignItems: tool ? 'stretch' : 'center'}}>
         {tool === 'rem' && window.SegRemindBox ? <SegRemindBox G={G} onCancel={() => setTool(null)} />
           : tool === 'ext' && window.SegExtendBox ? <SegExtendBox G={G} onCancel={() => setTool(null)} onDone={() => { if (onChanged) onChanged(); }} />
           : <>
-            {G.phase === 'open' && miss > 0 && <button onClick={() => setTool('rem')} style={{...btnPrimary, padding:'7px 12px', fontSize:12.5, background:'linear-gradient(135deg,#7B5CC8,#5B3FA0)'}}>🔔 Recordar a {miss === 1 ? 'el que falta' : 'los ' + miss + ' que faltan'}</button>}
+            {G.phase === 'open' && miss > 0 && <button onClick={() => setTool('rem')} style={{...btnPrimary, padding:'7px 12px', fontSize:12.5, whiteSpace:'nowrap', background:'linear-gradient(135deg,#7B5CC8,#5B3FA0)'}}>🔔 Recordar a {miss === 1 ? 'el que falta' : 'los ' + miss + ' que faltan'}</button>}
             {remToday && <span style={{fontSize:12, fontWeight:800, color:'#2E7D32'}}>✓ Ya les recordaste hoy</span>}
-            <button onClick={() => setTool('ext')} style={{...btnGhost, padding:'7px 12px', fontSize:12.5}}>⏳ Extender…</button>
-            <button onClick={() => { S.setAlarm(live, !!live.noAlarm); if (onChanged) onChanged(); }} title="Tarjeta roja en el Inicio del alumno desde las 7 pm de la víspera del cierre, hasta que lo termine" style={{...btnGhost, padding:'7px 12px', fontSize:12.5, borderColor: live.noAlarm ? '#DDD3BE' : '#F2B8AE', color: live.noAlarm ? '#8a7f6a' : '#B23A2A'}}>🚨 Alerta la víspera: {live.noAlarm ? 'apagada · Encender' : 'activada · Apagar'}</button>
+            <button onClick={() => setTool('ext')} style={{...btnGhost, padding:'7px 12px', fontSize:12.5, whiteSpace:'nowrap'}}>⏳ Extender…</button>
+            <button onClick={() => { S.setAlarm(live, !!live.noAlarm); if (onChanged) onChanged(); }} title="Tarjeta roja en el Inicio del alumno desde las 7 pm de la víspera del cierre, hasta que lo termine" style={{...btnGhost, padding:'7px 12px', fontSize:12.5, whiteSpace:'nowrap', borderColor: live.noAlarm ? '#DDD3BE' : '#F2B8AE', color: live.noAlarm ? '#8a7f6a' : '#B23A2A'}}>🚨 Alerta la víspera: {live.noAlarm ? 'apagada · Encender' : 'activada · Apagar'}</button>
           </>}
       </div>)}
-    <div style={{padding:'10px 16px 6px', overflowY:'auto', overflowX:'auto'}}>
+    <div style={{padding:'10px 16px 6px', overflowX:'auto'}}>
       {!G.n ? <div className="empty-state" style={{padding:'16px 0'}}><div className="icon">👥</div>Este grupo no tiene alumnos.</div> : (
         <div style={{minWidth: 240 + acts.length * 86 + (carriedAny ? 84 : 0) + 62}}>
           <div style={{display:'grid', gridTemplateColumns:cols, gap:6, alignItems:'end', padding:'0 11px 6px'}}>

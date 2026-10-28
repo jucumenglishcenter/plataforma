@@ -668,6 +668,8 @@ function TeacherAssignments({ onBack, embedded, groupId: gidProp, onGroupChange,
           <div className="scard" style={{marginTop:16, display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', borderLeft:'6px solid ' + L.color}}>
             {!sharedPicker && <div style={{flex:'1 1 260px', maxWidth:480, minWidth:0}}>{pickerEl}</div>}
             <div className="settings-hint" style={{margin:0}}>{mine.length} tarea{mine.length === 1 ? '' : 's'} en este grupo</div>
+            {/* 📦 TAREAS-CORREGIR-V1 (28-oct): todo lo «por revisar» en un ZIP por alumno para que Claude lo corrija + subir sus correcciones */}
+            {window.CorrectionsBar && <div style={{marginLeft:'auto'}}><CorrectionsBar group={group} onDone={refresh} /></div>}
           </div>
           <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:8, margin:'12px 0 4px'}}>
             {Object.keys(LAB).map(k => { const on = f === k; return (
@@ -1362,7 +1364,7 @@ function StudentTaskCard({ a, student, onChange }) {
       {activity && linkAtt && <TaskActivityPanel a={a} link={linkAtt} student={student} onSubmitGrade={onActivityDone} onCaptureAttach={onCaptureAttach} onClose={() => setActivity(false)} />}
 
       {sub && sub.status === 'graded' && sub.feedback && (
-        <div className="eval-feedback"><div className="eval-fb-lbl">📝 Retroalimentación del profesor</div><div className="eval-fb-text">{sub.feedback}</div></div>
+        <div className="eval-feedback"><div className="eval-fb-lbl">📝 Retroalimentación del profesor</div><div className="eval-fb-text" style={{whiteSpace:'pre-wrap'}}>{sub.feedback}</div></div>
       )}
 
       {open && (
