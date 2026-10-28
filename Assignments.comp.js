@@ -668,8 +668,7 @@ function TeacherAssignments({ onBack, embedded, groupId: gidProp, onGroupChange,
           <div className="scard" style={{marginTop:16, display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', borderLeft:'6px solid ' + L.color}}>
             {!sharedPicker && <div style={{flex:'1 1 260px', maxWidth:480, minWidth:0}}>{pickerEl}</div>}
             <div className="settings-hint" style={{margin:0}}>{mine.length} tarea{mine.length === 1 ? '' : 's'} en este grupo</div>
-            {/* 📦 TAREAS-CORREGIR-V1 (28-oct): todo lo «por revisar» en un ZIP por alumno para que Claude lo corrija + subir sus correcciones */}
-            {window.CorrectionsBar && <div style={{marginLeft:'auto'}}><CorrectionsBar group={group} onDone={refresh} /></div>}
+            {/* 📦 TAREAS-CORREGIR-V1: ⬇/⬆ SOLO dentro de cada tarea (decisión de la usuaria 28-oct: «para que no haya confusiones y tengamos mayor control») */}
           </div>
           <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:8, margin:'12px 0 4px'}}>
             {Object.keys(LAB).map(k => { const on = f === k; return (
@@ -1089,6 +1088,8 @@ function TeacherSubmissions({ assignment, onBack, embedded }) {
 
       <div className="scard" style={{marginTop:14}}>
         <div className="sec-head"><div className="sec-title">Alumnos</div><span className="sec-meta">toca a un alumno para ver su entrega</span></div>
+        {/* 📦 TAREAS-CORREGIR-V1: también dentro de cada tarea (solo sus entregas por calificar) */}
+        {window.CorrectionsBar && assignment.gradable && (() => { const g = (window.JUCUM_DATA.GROUPS || []).find(x => x.id === assignment.groupId); return g ? <div style={{margin:'2px 0 12px'}}><CorrectionsBar group={g} taskId={assignment.id} /></div> : null; })()}
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:8, margin:'4px 0 12px'}}>
           {tile('done', '✅ ' + nDone + '/' + people.length, 'Entregaron')}
           {a.gradable && tile('grade', '🟨 ' + nToGrade, 'Por calificar', nToGrade ? '#B26A00' : null)}
