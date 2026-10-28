@@ -399,7 +399,7 @@
     /* Plan duplicado */
     const date0 = docDate || nextClassFrom(today, sugDays);
     const dup = hist.plans.find(p => p.date === date0);
-    if (dup) gaps.push({ id: 'dup', sev: 'need', t: 'Ya hay un plan de clase de este grupo ese día', why: `“${dup.moduleName} · ${dup.sessionLabel}” (${fmtDay(dup.date)}). No se reemplaza nada sin tu permiso.`, type: 'select', opts: ['new', 'replace'], optLabels: ['Guardar como plan aparte (el otro queda igual)', 'Usar el mismo plan (el anterior queda en el historial de versiones)'], sug: 'new', dupId: dup.id });
+    if (dup) gaps.push({ id: 'dup', sev: 'need', t: 'Ya hay un plan de clase de este grupo ese día', why: `“${dup.moduleName} · ${dup.sessionLabel}” (${fmtDay(dup.date)}). No se reemplaza nada sin tu permiso.`, type: 'select', opts: ['new', 'replace'], optLabels: ['Guardar como plan aparte (el otro queda igual)', 'Usar el mismo plan (el anterior queda en el historial de versiones)'], sug: (dup.source && dup.source.importId) ? 'replace' : 'new', dupId: dup.id });
     /* Contexto */
     const ctx = [];
     const add = (l, v) => { if (v) ctx.push([l, v]); };
@@ -595,7 +595,7 @@
     if (lost.length) gaps.push({ id: 'lost', sev: 'need', t: lost.length + ' renglón(es) del documento no quedaron en el plan', why: 'Para no cambiar tu texto, revísalos en “Revisar y editar”: ' + lost.map(l => '“' + l.slice(0, 90) + '”').join(' · '), type: 'select', opts: ['ok'], optLabels: ['Ya lo revisé'], sug: 'ok' });
     /* Plan del mismo día */
     const dup = onlyP ? null : groupHistory(groupId).plans.find(p => p.date === date);
-    if (dup) gaps.push({ id: 'dup', sev: 'need', t: 'Ya hay un plan de clase de este grupo ese día', why: '“' + (dup.moduleName || '') + ' · ' + (dup.sessionLabel || '') + '” (' + fmtDay(dup.date) + '). No se reemplaza nada sin tu permiso.', type: 'select', opts: ['new', 'replace'], optLabels: ['Guardar como plan aparte (el otro queda igual)', 'Usar el mismo plan (el anterior queda en el historial de versiones)'], sug: 'new', dupId: dup.id });
+    if (dup) gaps.push({ id: 'dup', sev: 'need', t: 'Ya hay un plan de clase de este grupo ese día', why: '“' + (dup.moduleName || '') + ' · ' + (dup.sessionLabel || '') + '” (' + fmtDay(dup.date) + '). No se reemplaza nada sin tu permiso.', type: 'select', opts: ['new', 'replace'], optLabels: ['Guardar como plan aparte (el otro queda igual)', 'Usar el mismo plan (el anterior queda en el historial de versiones)'], sug: (dup.source && dup.source.importId) ? 'replace' : 'new', dupId: dup.id });
     const q = byType(mod, 'quizlet'); const qField = { vocabulario: 'quizVocabulario', traducir: 'quizTraducir', ordenar: 'quizOrdenar' };
     [...new Set(practice.filter(p => p.quizKey).map(p => p.quizKey))].filter(k => !(q && q[qField[k]])).forEach(k => gaps.push({ id: 'qz-' + k, sev: 'need', t: 'Link de Quizlet “' + k + '”', why: 'La práctica pide este juego y el catálogo del módulo no tiene el link.', type: 'url', sug: '' }));
     const ctx = []; if (P && P.emph) ctx.push(['Énfasis', P.emph]); if (P && P.theme) ctx.push(['Tema', P.theme]);
@@ -680,6 +680,15 @@
   function remove(id) { const all = raw().map(r => r.id === id ? Object.assign({}, r, { _deleted: nowISO(), savedAt: nowISO() }) : r); w(KEY, all); cloudPush(all); }
   function gapsLeft(rec) { const a = rec.draft.answers || {}; return (rec.gaps || []).filter(g => g.sev === 'need' && a[g.id] === undefined).length; }
 
+  /* PLAN-DUP-V1 (28-oct · caso Pre-A1 Martes y Viernes 27-oct: el mismo PDF subido 2 veces = 2 planes + 2 sets).
+   * Si el plan que ya existe ese día vino de un PDF, se sugiere «Usar el mismo plan»; al elegirlo, la subida nueva
+   * toma el lugar de la anterior: actualiza SUS sets de práctica (no crea otros) y la anterior se retira de la lista. */
+  function prevImport(rec) {
+    const a = (rec.draft && rec.draft.answers) || {}; if ((rec.published && rec.published.classPlanId) || a.dup !== 'replace') return null;
+    const g = (rec.gaps || []).find(x => x.id === 'dup'); if (!g) return null;
+    const cp = window.JUCUM_TT.getClassPlans().find(p => p.id === g.dupId); const pid = cp && cp.source && cp.source.importId;
+    const r = pid && pid !== rec.id ? get(pid) : null; return r && r.published ? r : null;
+  }
   /* ════════ 7 · Publicar (plan de clase + un set de práctica por día) ════════ */
   function catalogMod(rec) { const D = window.JUCUM_DATA; return (D.MODULE_CATALOG[rec.draft.level] || []).find(m => m.id === (rec.draft.answers.module || rec.draft.moduleId)); }
   function publish(rec) {
@@ -703,7 +712,7 @@
     const cpId = TT.upsertClassPlan(classPlan);
     if (d.mode === 'jucum') return publishSetJ(rec, mod, e, a, drop, cpId);
     const qz = { traducir: a['qz-traducir'], ordenar: a['qz-ordenar'], vocabulario: a['qz-vocabulario'] };
-    const oldIds = (rec.published && rec.published.practicePlanIds) || {};
+    const prv = prevImport(rec); const oldIds = (rec.published && rec.published.practicePlanIds) || (prv && prv.published.practicePlanIds) || {};
     const newIds = {};
     e.practiceDays.forEach(day => {
       const acts = d.practice.filter(p => (p.days || []).includes(day) && !drop.has(p.activityId)).sort((x, y) => (y.prio || 0) - (x.prio || 0))
@@ -716,6 +725,7 @@
     Object.keys(oldIds).forEach(day => { if (!newIds[day]) TT.deletePracticePlan(oldIds[day]); });
     let r2 = Object.assign({}, rec, { status: 'published', published: { classPlanId: cpId, practicePlanIds: newIds, at: nowISO(), date: e.date } });
     r2 = addVersion(r2, 'Publicada');
+    if (prv) { try { remove(prv.id); } catch (x) {} }   // PLAN-DUP-V1
     return save(r2, { now: true });
   }
   /* Formato de la plataforma: UN set de práctica para todos los días hasta la próxima clase,
@@ -734,7 +744,7 @@
     const qz = { traducir: a['qz-traducir'], ordenar: a['qz-ordenar'], vocabulario: a['qz-vocabulario'] };
     const items = d.practice.filter(p => !drop.has(p.activityId)).map(p => (TT.fixRL ? TT.fixRL(p, mod) : p));
     const acts = items.filter(p => p.activityId).map(p => ({ moduleId: p.moduleId, activityId: p.activityId, label: p.label, type: p.type, note: '', quizKey: p.quizKey || null, quizUrl: (p.quizKey && qz[p.quizKey]) || null, onlyPending: !!p.onlyPending, prio: p.prio || 0, fromImport: true }));
-    const oldIds = (rec.published && rec.published.practicePlanIds) || {}; const newIds = {};
+    const prv = prevImport(rec); const oldIds = (rec.published && rec.published.practicePlanIds) || (prv && prv.published.practicePlanIds) || {}; const newIds = {};
     if (items.length && e.practiceDays.length) {
       const days = e.practiceDays; const title = (d.kind === 'practice' ? '📝 ' + (d.setTitle || 'Práctica') + ' · ' + mod.name + ' · ' : '📌 ' + mod.name + ' · ' + d.sessionLabel + ' · ') + fmtDay(days[0]) + (days.length > 1 ? ' → ' + fmtDay(days[days.length - 1]) : '');
       const body = { title, activities: acts, dates: days, assignToStudents: true, guide: guideJ(Object.assign({}, d, { practice: items }), mod) };
@@ -744,6 +754,7 @@
     Object.keys(oldIds).forEach(k => { if (!newIds[k]) TT.deletePracticePlan(oldIds[k]); });
     let r2 = Object.assign({}, rec, { status: 'published', published: { classPlanId: cpId, practicePlanIds: newIds, at: nowISO(), date: e.date } });
     r2 = addVersion(r2, 'Publicada');
+    if (prv) { try { remove(prv.id); } catch (x) {} }   // PLAN-DUP-V1
     return save(r2, { now: true });
   }
   /* Comprueba que lo publicado llegó a la nube; si no, vuelve a empujar (hasta 3 veces). */

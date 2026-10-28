@@ -325,7 +325,7 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
               <span style={{display:'block', fontSize:11.5, color:'#5a8a5f', fontWeight:700, marginTop:5}}>👆 Toca para ver y EDITAR: asistencia, temas vistos y comentarios — y duplicar la clase a otro grupo.</span>
             </button>
           </div>
-        ) : (
+        ) : selDate <= todayYMD() && (   /* PLAN-BORRAR-V1: no se puede marcar como dada una clase de un día que aún no llega */
           <div style={{marginTop:10, borderTop:'1px dashed #E3DCC9', paddingTop:10, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
             <div style={{fontSize:12, fontWeight:700, color:'#8a7f6a', flex:1, minWidth:180}}>¿Diste esta clase? Márcala tú mismo como realizada — podrás anotar asistencia, temas y comentarios.</div>
             <button onClick={() => { TT.logClassMaterial({ date: selDate, groupId, materialName: '🏁 Clase realizada (marcada por el profesor)', minutes: (sel.classPlans[0] && sel.classPlans[0].lengthMin) || 0, source: 'manual-done' }); onChange(); setSummaryDate(selDate); }} style={{...btnGhost, padding:'7px 12px', fontSize:12.5, borderColor:'#9FD3A4', color:'#2E7D32'}}>🏁 Marcar clase realizada</button>
@@ -514,6 +514,7 @@ function DuplicateClassModal({ plan, onClose, onDone }) {
   );
 }
 
+/* PLAN-BORRAR-V1 (28-oct): la × pide confirmación — antes un toque borraba el plan o el set sin preguntar. */
 function DayRow({ icon, tint, border, title, sub, onOpen, openLabel, onDelete, onPlay, onDup, onTrack, onReport, onFollow, onPrint }) {
   return (
     <div style={{display:'flex', alignItems:'center', gap:11, border:'1px solid ' + border, background: tint, borderRadius:11, padding:'10px 12px', marginBottom:8, flexWrap:'wrap'}}>
@@ -529,7 +530,7 @@ function DayRow({ icon, tint, border, title, sub, onOpen, openLabel, onDelete, o
       <button onClick={onOpen} style={{...btnGhost, padding:'6px 12px', fontSize:12.5}}>{openLabel || 'Abrir'}</button>
       {onPrint && <button onClick={onPrint} title="Imprimir / guardar en PDF" style={{...btnGhost, padding:'6px 12px', fontSize:12.5}}>🖨️ Imprimir</button>}
       {onDup && <button onClick={onDup} title="Duplicar a otro grupo" style={{...btnGhost, padding:'6px 12px', fontSize:12.5, borderColor:'#9FB0DA', color:'#3F5BB8'}}>⧉ Duplicar</button>}
-      {onDelete && <button onClick={onDelete} title="Eliminar" style={{...iconBtn, color:'#C0392B'}}>×</button>}
+      {onDelete && <button onClick={() => { if (window.confirm('¿Eliminar «' + title + '»?\n\nSe quita del calendario' + (icon === '📝' ? ' y de la práctica de los alumnos.' : '.'))) onDelete(); }} title="Eliminar" style={{...iconBtn, color:'#C0392B'}}>×</button>}
     </div>
   );
 }
