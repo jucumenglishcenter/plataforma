@@ -339,6 +339,9 @@ function LiveClassroom({ groupId, embedded, lockGroup, focusKeys, planId }) {
   const GROUPS = D.GROUPS || [];
   const [gid, setGid] = React.useState(groupId || (GROUPS[0] && GROUPS[0].id) || '');
   const [rows, setRows] = React.useState(null);
+  /* P1 · VIVO-NUBE-V1 (30-oct): «practicó hoy» también mira daily_sessions de la NUBE (JUCUM_SEG), no solo la copia del equipo */
+  const lcS = window.JUCUM_SEG;
+  const lcSeg = window.useSegFacts && lcS ? window.useSegFacts({ ids: (D.STUDENTS || []).filter(s => s.group === gid).map(s => s.id), groups: [], since: lcS.addD(lcS.today(), -45) }) : { F: null };
   const [meta, setMeta] = React.useState({ degraded:false, at:0 });
   const [big, setBig] = React.useState(false);
   const [showEmpty, setShowEmpty] = React.useState(false);
@@ -403,6 +406,7 @@ function LiveClassroom({ groupId, embedded, lockGroup, focusKeys, planId }) {
   const todayPeru = new Date(now - 5 * 3600000).toISOString().slice(0, 10);
   const practicedToday = (sid) => {
     try {
+      if (lcSeg.F && ((lcSeg.F.dayAct || {})[String(sid)] || {})[todayPeru]) return true;
       const c = (D.getStudentProgress(sid) || {}).completed || {};
       return Object.values(c).some(e => {
         const t = Date.parse((e && e.date) || '');

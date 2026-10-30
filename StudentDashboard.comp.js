@@ -340,7 +340,7 @@ function StudentDashboard({ user, onLogout }) {
   // 🏅 Insignias ganadas aún no celebradas en este equipo (A1/A2) — se muestran una tras otra
   const [badgeCeleb, setBadgeCeleb] = React.useState(() => { try { return !!(window.JUCUM_BADGES && window.JUCUM_BADGES.enabledFor(student) && window.JUCUM_BADGES.pending(student).length); } catch (e) { return false; } });
   React.useEffect(() => {
-    try { if (window.JUCUM_SURVEY) setSurveyDue(window.JUCUM_SURVEY.isSurveyDue(student)); } catch {}
+    try { if (window.JUCUM_SURVEY) { let later = ''; try { later = (JSON.parse(localStorage.getItem('jucum_survey_later_v1') || '{}') || {})[student.id] || ''; } catch (e) {} setSurveyDue(later !== (window.JUCUM_DAY ? window.JUCUM_DAY.today() : '-') && window.JUCUM_SURVEY.isSurveyDue(student)); } } catch {}
   }, [student && student.id]);
   const [alertKind, setAlertKind] = React.useState(null);
   const cloudReady = useCloudDaysReady();
@@ -591,13 +591,14 @@ function StudentDashboard({ user, onLogout }) {
   return (
     <>
       {showOnb && <Onboarding studentId={user.studentId} onClose={() => setShowOnb(false)} />}
-      {!showOnb && surveyDue && <SurveyModal student={student} onDone={() => setSurveyDue(false)} />}
+      {/* VENTANAS-UNA-A-LA-VEZ-V1 (30-oct): la encuesta va AL FINAL de la fila (antes salía junto a las demás ventanas) */}
       {!showOnb && celebrate && <PayCelebration payment={celebrate} onClose={closeCelebrate} />}
       {!showOnb && !celebrate && alertKind && <StudentAlertModal kind={alertKind} student={student} onClose={() => setAlertKind(null)} />}
       {!showOnb && !celebrate && !alertKind && dropExp && <DropExplainModal exp={dropExp} student={student} onClose={() => { try { window.JUCUM_DATA.ackDropExplanation(student); } catch {} setDropExp(null); }} onGo={() => { setDropExp(null); setView('dashboard'); }} />}
       {!showOnb && !celebrate && !alertKind && !dropExp && taskDue && <TaskDueCartel assignment={taskDue} onGo={() => { setTaskDue(null); setView('tasks'); }} onClose={() => setTaskDue(null)} />}
       {!showOnb && !celebrate && !alertKind && !dropExp && !taskDue && muteModal && <ForumMuteModal info={muteModal} onClose={() => setMuteModal(null)} />}
       {!showOnb && !celebrate && !alertKind && !dropExp && !taskDue && !muteModal && badgeCeleb && window.BadgeCelebration && <BadgeCelebration student={student} onDone={() => setBadgeCeleb(false)} />}
+      {!showOnb && !celebrate && !alertKind && !dropExp && !taskDue && !muteModal && !badgeCeleb && !showPayNotice && surveyDue && <SurveyModal student={student} onDone={() => setSurveyDue(false)} />}
       {showPayNotice && window.PayNoticeModal && <PayNoticeModal status={acct} student={student} onClose={closePayNotice} onGo={() => { closePayNotice(); setView('payments'); }} />}
       <header className="app-header st-hdr">
         <button type="button" className={`st-burger ${sideOpen ? 'on' : ''}`} data-tut="nav" onClick={toggleSide} aria-label={sideOpen ? 'Ocultar menú' : 'Mostrar menú'} title={sideOpen ? 'Ocultar menú' : 'Mostrar menú'}>
@@ -1176,7 +1177,7 @@ function linkFor(a, mod, studentId, _dep) {
         const tg = lk.prev && lk.prev.url ? lk.prev : null; const dep = _dep || 0;
         if (tg && dep < 6) { const ph = linkFor(tg, mod, studentId, dep + 1); const g2 = isLockHref(ph) ? lockGoOf(ph) : (ph ? { url: ph, name: tg.name || '' } : null); if (g2 && g2.url) go = '#jgo:' + encodeURIComponent(g2.url) + '#jgn:' + encodeURIComponent(g2.name || ''); }
       } catch (e) {}
-      return '#jlock:' + encodeURIComponent(lk.msg || 'Primero completa la actividad anterior') + go;
+      return '#jlock:' + encodeURIComponent(lk.msg || 'Primero completa la actividad anterior') + go + '#jan:' + encodeURIComponent((a.name || '') + (a.type === 'grammar' && a.group && /^T\d+/.test(a.group) && !/\bT\d+\b/.test(a.name || '') ? ' ' + a.group.match(/^T\d+/)[0] : ''));
     }
     if (lk && lk.sum) lockQ += `&jucum_sum=${encodeURIComponent(lk.sum.id)}&jucum_sumname=${encodeURIComponent(lk.sum.name || '')}`;
     if (lk && lk.prev) lockQ += `&jucum_prev=${encodeURIComponent(lk.prev.id)}&jucum_prevname=${encodeURIComponent(lk.prev.name || '')}&jucum_prevlow=${lk.low ? 1 : 0}&jucum_pass=${lk.need}`;
@@ -1196,8 +1197,22 @@ function linkFor(a, mod, studentId, _dep) {
   return `${base}${sep}jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent(mod.id)}&jucum_act=${encodeURIComponent(a.id)}&jucum_kind=${encodeURIComponent(a.type||'')}${free}${lockQ}`;
 }
 function isLockHref(h) { return typeof h === 'string' && h.indexOf('#jlock:') === 0; }
-function lockMsgOf(h) { try { return decodeURIComponent(String(h).slice(7).split('#jgo:')[0]); } catch (e) { return 'Primero completa la actividad anterior'; } }
-function lockGoOf(h) { try { const s = String(h || ''); const i = s.indexOf('#jgo:'); if (i < 0) return null; const r = s.slice(i + 5).split('#jgn:'); return { url: decodeURIComponent(r[0]), name: r[1] ? decodeURIComponent(r[1]) : '' }; } catch (e) { return null; } }
+function lockParts(h) { const o = { msg: 'Primero completa la actividad anterior' }; try { const ps = String(h || '').slice(7).split('#j'); o.msg = decodeURIComponent(ps[0]); ps.slice(1).forEach(p => { const k = p.slice(0, 2), v = decodeURIComponent(p.slice(3)); if (k === 'go') o.url = v; else if (k === 'gn') o.name = v; else if (k === 'an') o.an = v; }); } catch (e) {} return o; }
+function lockMsgOf(h) { return lockParts(h).msg; }
+function lockGoOf(h) { const p = lockParts(h); return p.url ? { url: p.url, name: p.name || '' } : null; }
+/* P6b · TRABADO-AVISO-V1 (30-oct): si el alumno toca 2 veces el MISMO candado en el día, se le avisa al teacher
+ * (notificación con título fijo, marcada como leída para no encender la campanita del alumno). */
+function lockStuck(h) {
+  try {
+    const u = JSON.parse(localStorage.getItem('jucum_user') || 'null'); const sid = u && u.studentId; if (!sid || !window.JUCUM_NOTIF) return;
+    const p = lockParts(h); const an = p.an || p.msg; const day = window.JUCUM_DAY ? window.JUCUM_DAY.today() : '';
+    const k = 'jucum_stuck_v1'; let m = {}; try { m = JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch (e) {}
+    if (m.d !== day || m.u !== sid) m = { d: day, u: sid, n: {}, sent: {} };
+    m.n[an] = (m.n[an] || 0) + 1;
+    if (m.n[an] >= 2 && !m.sent[an]) { m.sent[an] = 1; window.JUCUM_NOTIF.pushNotif(sid, { type: 'stuck', title: '🔒 Le avisamos a tu teacher', body: 'Quiso abrir «' + an + '» y está cerrado: ' + p.msg + '.', link: 'practice', read: true }); }
+    localStorage.setItem(k, JSON.stringify(m));
+  } catch (e) {}
+}
 function showLockToast(msg, go) {
   try {
     const old = document.getElementById('jec-lock-toast'); if (old) old.remove();
@@ -1224,6 +1239,7 @@ if (!window.__JEC_LOCK_CLICK) {
     if (!el) return;
     e.preventDefault(); e.stopPropagation();
     const h = el.getAttribute('href');
+    lockStuck(h);
     showLockToast(lockMsgOf(h), lockGoOf(h));
   }, true);
 }
@@ -1234,7 +1250,7 @@ if (!window.__JEC_LOCK_CLICK) {
  * guardián cargado, navega igual: nunca bloquea. */
 function openMat(href) {
   if (!href) return;
-  if (isLockHref(href)) return showLockToast(lockMsgOf(href), lockGoOf(href));
+  if (isLockHref(href)) { lockStuck(href); return showLockToast(lockMsgOf(href), lockGoOf(href)); }
   if (window.JUCUM_GATE) return window.JUCUM_GATE.go(href);
   window.location.href = href;
 }

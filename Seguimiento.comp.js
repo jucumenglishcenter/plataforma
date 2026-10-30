@@ -424,8 +424,9 @@ function SegGroupPractice({ groupId }) {
   const titleOf = (G) => String(G.title || '').replace(/^📌\s*/, '');
   const datesOf = (G) => /→/.test(G.title || '') ? '' : S.fmtDay(G.from) + ' → ' + S.fmtDay(G.to) + ' · ';
   return (
-    <div style={{display:'flex', flexDirection:'column', gap:10}}>
-      <div style={{display:'flex', alignItems:'center', gap:8}}><span style={{...segLbl, flex:1}}>En curso</span><SegAgo F={seg.F} busy={seg.busy} err={seg.err} onReload={seg.reload} /></div>
+    <div {...(window.FU_TLROOT || {})} style={{display:'flex', flexDirection:'column', gap:10}}>
+      {window.StuckAlert && <StuckAlert groupId={groupId} />}
+      <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}><span style={{...segLbl, flex:1}}>En curso</span>{window.TLangToggle && <TLangToggle />}<SegAgo F={seg.F} busy={seg.busy} err={seg.err} onReload={seg.reload} /></div>
       {!sm.open.length && <div style={{fontSize:13, fontWeight:700, color:'#8a7f6a'}}>No hay prácticas abiertas en este grupo.</div>}
       {sm.open.map(({ G, al }) => { const miss = G.missingRows.length, pct = Math.round(G.full / G.n * 100), remToday = G.plan.remindedAt && window.JUCUM_DAY.of(G.plan.remindedAt) === t;
         const tag = al ? { tone: al.tone, txt: al.ic + ' ' + al.t } : { tone: 'grn', txt: '✓ Va bien · ' + S.endsTxt(G.to, t) };

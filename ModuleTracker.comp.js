@@ -50,7 +50,16 @@ function ModuleTracker({ stu, group }) {
   const settings = D.getGroupSettings(group.id);
   const mods = D.MODULE_CATALOG[group.level] || [];
   const progress = D.getStudentProgress(stu.id);
-  const completed = progress.completed || {};
+  /* P1 · FICHA-NUBE-V1 (30-oct): «lo hizo / nota / día» sale de la NUBE (JUCUM_SEG, igual que el 📊 Avance y Mi seguimiento);
+   * de la copia del equipo solo se toman los minutos. Mientras la nube no responde: «Cargando…», nunca un estado a medias. */
+  const S = window.JUCUM_SEG;
+  const seg = window.useSegFacts && S ? window.useSegFacts({ ids: [stu.id], groups: [], since: S.addD(S.today(), -45) }) : { F: null };
+  const localC = progress.completed || {};
+  const completed = React.useMemo(() => {
+    if (!seg.F) return {}; const c = (seg.F.prog || {})[String(stu.id)] || {}, o = {};
+    Object.keys(c).forEach(k => { const l = localC[k] || {}; o[k] = { score: c[k].score, date: c[k].day ? c[k].day + 'T12:00:00-05:00' : l.date, minutes: l.minutes }; });
+    return o;
+  }, [seg.F && seg.F.at, stu.id]);
   const activeIds = (settings.activeModuleIds && settings.activeModuleIds.length)
     ? settings.activeModuleIds : (settings.activeModuleId ? [settings.activeModuleId] : []);
   const live = useLiveRow(stu.id);
@@ -69,6 +78,7 @@ function ModuleTracker({ stu, group }) {
   });
   // Orden cronológico (como la ruta del alumno): el actual se señala, no se reordena.
   if (!stats.length) return null;
+  if (!seg.F) return <div className="scard" style={{marginTop:18, fontSize:13, fontWeight:800, color:'#8a7f6a'}}>{seg.err ? 'No pude traer el avance por módulo de la nube. Revisa el internet.' : 'Cargando el avance por módulo desde la nube…'}</div>;
 
   // Módulo que manda: el activo con pendientes → el activo → donde está en vivo → el último con avance
   const liveMod = live && cls.fresh ? live.module_id : null;
@@ -105,10 +115,12 @@ function ModuleTracker({ stu, group }) {
   const liveHere = liveMod === mod.id && cls.fresh;
 
   return (
-    <div className="scard" style={{marginTop:18}}>
+    <div className="scard" {...(window.FU_TLROOT || {})} style={{marginTop:18}}>
       <div className="sec-head">
         <div className="sec-title">📦 Avance por módulo</div>
         <span className="sec-meta">se muestra el módulo actual · toca otro para verlo</span>
+        {window.TLangToggle && <TLangToggle />}
+        {window.SegAgo && <SegAgo F={seg.F} busy={seg.busy} err={seg.err} onReload={seg.reload} />}
       </div>
 
       {/* Ruta de módulos — igual que "Mi ruta" del alumno: el actual señalado, el resto a un toque */}

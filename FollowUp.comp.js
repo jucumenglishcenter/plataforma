@@ -237,9 +237,10 @@ function FollowUpPanel({ plan, where, onAddPending, startOpen }) {
   const prev = idx > 0 ? list[idx - 1] : null, nxt = idx >= 0 && idx < list.length - 1 ? list[idx + 1] : null;
   const homeTxt = F.sets.length ? fuDay(F.homeFrom) + ' → ' + fuDay(F.homeTo) : null;
   return (
-    <div className="scard" style={{marginBottom:16, border:'2px solid #9FB0DA', display:'flex', flexDirection:'column', gap:10}}>
+    <div className="scard" {...FU_TLROOT} style={{marginBottom:16, border:'2px solid #9FB0DA', display:'flex', flexDirection:'column', gap:10}}>
       <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
         <div className="sec-title" style={{flex:1, minWidth:200}}>{head}</div>
+        <TLangToggle />
         <button onClick={() => setRep(r => !r)} style={fuBtn}>📤 {rep ? 'Ocultar reporte' : 'Reporte para tu Claude'}</button>
         <button onClick={() => setOpen(o => !o)} style={open ? fuBtn : fuBtnP}>{open ? '▲ Ocultar' : '▼ Ver todo'}</button>
       </div>
@@ -259,6 +260,7 @@ function FollowUpPanel({ plan, where, onAddPending, startOpen }) {
         {F.closing ? <span style={fuChip('#E8F5E9', '#1B5E20')}>🏁 Clase terminada</span> : (F.day <= fuToday() ? <span style={fuChip('#FFF4E5', '#7A4A00')}>🏁 Sin cierre</span> : null)}
       </div>
       {F.alerts.length > 0 && <div style={{display:'flex', gap:9, background:'#FFF4E5', border:'1px solid #FFCC80', borderRadius:10, padding:'9px 12px', fontSize:12.5, fontWeight:700, color:'#7A4A00', lineHeight:1.45}}>⚠<div>{F.alerts.map((a, i) => <div key={i}>{a}</div>)}</div></div>}
+      {window.StuckAlert && <StuckAlert groupId={cur.groupId} />}
       {F.pend.length > 0 && (
         <div style={{display:'flex', flexDirection:'column', gap:6}}>
           <div style={{fontSize:12.5, fontWeight:800, color:'#0D1B5A'}}>Pendientes: <span style={{fontWeight:700, color:'#444'}}>{F.pend.join(' · ')}</span></div>
@@ -348,4 +350,67 @@ function ClassCloseModal({ plan, onClose, onSaved, onOpenRoster, onOpenEval }) {
     </div>
   );
 }
-Object.assign(window, { FollowUpPanel, FollowUpModal, ClassCloseModal, fuLastPlan, fuPickPlan, fuReport, fuData });
+/* 🌐 P7 · TEACHER-ES-EN-V1 (30-oct-2026, aprobado): botón ES / EN en las pantallas de seguimiento del teacher.
+ * El traductor del navegador cambiaba el sentido («pendiente» → «earring»). Las raíces llevan data-tlang + translate="no"
+ * (el navegador ya no las toca) y aquí se traducen con un diccionario propio. Los nombres de alumnos y de materiales no se tocan. */
+const FU_EN = [
+  [/alumnos ya recibieron/g, 'students already got'], [/alumno ya recibió/g, 'student already got'], [/ los 2 recordatorios y /g, ' the 2 reminders and '], [/^siguen$/g, 'still'], [/^sigue$/g, 'still'], [/ sin ponerse al día\./g, ' have not caught up.'],
+  [/Los avisos automáticos ya no le llegarán: conviene hablarle en clase\./g, 'Automatic reminders will no longer reach them: talk to them in class.'], [/le falta /g, 'missing '], [/ avisos, el último /g, ' reminders, last on '], [/(\d+) avisos/g, '$1 reminders'],
+  [/Recordatorios automáticos/g, 'Automatic reminders'], [/^activados$/g, 'on'], [/^apagados$/g, 'off'], [/^ de $/g, ' of '], [/Sesión (\d+)/g, 'Session $1'],
+  [/Antes de planificar: seguimiento de la clase/g, 'Before planning: class follow-up'], [/Seguimiento de esta clase/g, 'Follow-up of this class'], [/Seguimiento por clase/g, 'Follow-up by class'],
+  [/Reporte para tu Claude/g, 'Report for your Claude'], [/Ocultar reporte/g, 'Hide report'], [/Ver todo/g, 'Show all'], [/Ocultar/g, 'Hide'],
+  [/sin set de práctica para esta clase/g, 'no practice set for this class'], [/No hubo set de práctica para esta clase\./g, 'There was no practice set for this class.'],
+  [/Cargando la práctica desde la nube…/g, 'Loading practice from the cloud…'], [/Cargando el ritmo desde la nube…/g, 'Loading the pace from the cloud…'], [/Cargando el avance por módulo desde la nube…/g, 'Loading module progress from the cloud…'], [/Cargando el avance desde la nube…/g, 'Loading progress from the cloud…'], [/Cargando desde la nube…/g, 'Loading from the cloud…'], [/Cargando de la nube…/g, 'Loading from the cloud…'],
+  [/Práctica en casa/g, 'Home practice'], [/Sin asistencia/g, 'No attendance'], [/Asistieron/g, 'Attended'], [/Clase terminada/g, 'Class finished'], [/Sin cierre/g, 'Not closed'], [/Sin set de práctica/g, 'No practice set'],
+  [/De dónde sale:/g, 'Where it comes from:'], [/la asistencia que tomaste y los materiales del plan que los alumnos hicieron/g, 'the attendance you took and the plan materials the students did'], [/ese día/g, 'that day'], [/\(datos de la nube\)\. Story, Resumen y Quizlet no llevan nota: ✓ = lo hizo\./g, '(cloud data). Story, Summary and Quizlet have no grade: ✓ = done.'],
+  [/el set de práctica de/g, 'the practice set of'], [/^esta$/g, 'this'], [/clase, con sus fechas reales\. Es la misma tabla del 📊 Avance: solo cuenta lo hecho dentro de esas fechas\. Toca un nombre para ver su seguimiento\./g, 'class, with its real dates. It is the same table as 📊 Progress: only what was done within those dates counts. Tap a name to see their follow-up.'],
+  [/Ningún material de la clase registró actividad that day\./g, 'No class material had activity that day.'], [/Faltó:/g, 'Absent:'], [/Al terminar marcaste:/g, 'When finishing you marked:'], [/Pendientes:/g, 'To do:'], [/Agregar los pendientes como bloque/g, 'Add the to-dos as a block'],
+  [/hecha that day/g, 'done that day'], [/la hizo otro día/g, 'did it another day'], [/no la hizo/g, 'not done'], [/faltó/g, 'absent'], [/nota baja/g, 'low grade'],
+  [/Historias y diálogos · veces trabajadas \(clase \+ casa\)/g, 'Stories and dialogues · times worked (class + home)'],
+  [/Avance/g, 'Progress'], [/actividad\(es\)/g, 'activity(ies)'], [/retirado\(s\), inactivo\(s\) o nuevo\(s\) no se cuentan/g, 'withdrawn, inactive or new students are not counted'],
+  [/completos?\b/g, 'complete'], [/en proceso/g, 'in progress'], [/sin empezar/g, 'not started'], [/cierra en/g, 'closes in'], [/cerró el/g, 'closed on'], [/empieza el/g, 'starts on'],
+  [/Actualizado recién/g, 'Just updated'], [/Actualizado hace/g, 'Updated'], [/Actualizando…/g, 'Updating…'], [/No pude actualizar · muestro lo de hace/g, 'Could not update · showing data from'],
+  [/Recordar a el que falta/g, 'Remind the missing student'], [/Recordar a los (\d+) que faltan/g, 'Remind the $1 missing'], [/Ya les recordaste hoy/g, 'You already reminded them today'], [/Extender…/g, 'Extend…'],
+  [/Alerta la víspera: activada · Apagar/g, 'Alert the day before: on · Turn off'], [/Alerta la víspera: apagada · Encender/g, 'Alert the day before: off · Turn on'],
+  [/Total por actividad/g, 'Total by activity'], [/Faltan · /g, 'Missing · '], [/Completos · /g, 'Complete · '], [/↪ Pendientes/g, '↪ Carried over'],
+  [/hecha en la fecha/g, 'done on time'], [/en la fecha, sin aprobar/g, 'on time, not passed'], [/hizo el de otro módulo/g, 'did the one from another module'], [/≠ otro módulo/g, '≠ other module'],
+  [/— completo = todas hechas entre el primer y el último día del set \(y aprobadas las que tienen nota\)\. El Quizlet no cuenta\./g, '— complete = all done between the first and last day of the set (and passed if graded). Quizlet does not count.'],
+  [/Ritmo de gramática/g, 'Grammar pace'], [/Recordatorios automáticos activados/g, 'Automatic reminders on'], [/Recordatorios automáticos apagados/g, 'Automatic reminders off'],
+  [/Una línea por tema: tócala para ver a cada alumno\./g, 'One line per topic: tap it to see each student.'], [/= le falta aprobar un paso/g, '= has not passed a step'], [/^anterior$/g, 'before'], [/al que va la clase\. Avisos automáticos: máximo 1 por día y 2 por paso\./g, 'the one the class is on. Automatic reminders: max 1 per day and 2 per step.'],
+  [/la clase va en/g, 'the class is at'], [/\(desde /g, '(since '], [/en el paso actual/g, 'on the current step'], [/atrasados?\b/g, 'behind'], [/Atrasado/g, 'Behind'], [/al día/g, 'up to date'], [/🔔 Recordar/g, '🔔 Remind'], [/✓ enviado/g, '✓ sent'],
+  [/hecho, sin aprobar/g, 'done, not passed'], [/resumen a medias/g, 'summary half done'], [/todavía no toca/g, 'not yet'], [/\baprobado\b/g, 'passed'], [/\bpendiente\b/g, 'pending'],
+  [/se trabó/g, 'got stuck'], [/veces se trabaron alumnos/g, 'times students got stuck'], [/alumno\b/g, 'student'], [/quiso abrir/g, 'tried to open'], [/y está cerrado:/g, 'and it is locked:'], [/Primero completa/g, 'First complete'], [/Primero aprueba/g, 'First pass'], [/Primero haz el resumen/g, 'First do the summary'],
+  [/\(tocaron 2 veces algo con candado · últimos 3 días\)\. Ya tienen el botón «Abrir →» a lo que falta; si siguen igual, conviene ayudarlos en clase\./g, '(tapped a locked item twice · last 3 days). They already have the «Open →» button to what is missing; if it continues, help them in class.'],
+  [/lo mismo que ve en su celular/g, 'the same as on their phone'], [/En curso/g, 'In progress'], [/Terminaron/g, 'Finished'], [/Recordar/g, 'Remind'], [/Ver avance/g, 'See progress'], [/Pasar lo pendiente/g, 'Carry over what is missing'],
+  [/Alumno/g, 'Student'], [/Hecho/g, 'Done'], [/En clase/g, 'In class'], [/Clase /g, 'Class '], [/práctica /g, 'practice '], [/ · en curso/g, ' · in progress'], [/ · cerrada/g, ' · closed'], [/hechas/g, 'done'],
+  [/Resumen (\d) de (\d)/g, 'Summary $1 of $2'], [/(\d+) de (\d+)/g, '$1 of $2'], [/Res\. /g, 'Sum. '], [/^Resumen$/g, 'Summary'], [/ del (?=\S)/g, ' from '], [/ al (?=\S)/g, ' to '], [/^del /g, 'from '], [/^el /g, 'on '],
+  [/\b(dom|lun|mar|mié|jue|vie|sáb)(?= \d)/g, d => ({ dom:'Sun', lun:'Mon', mar:'Tue', 'mié':'Wed', jue:'Thu', vie:'Fri', 'sáb':'Sat' })[d] || d],
+  [/(\d )(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)\b/g, (m, a, b) => a + ({ ene:'Jan', feb:'Feb', mar:'Mar', abr:'Apr', may:'May', jun:'Jun', jul:'Jul', ago:'Aug', sep:'Sep', oct:'Oct', nov:'Nov', dic:'Dec' })[b]]
+];
+const FU_TL = { orig: new WeakMap(), last: new WeakMap(), on() { try { return localStorage.getItem('jucum_teacher_lang_v1') === 'en'; } catch (e) { return false; } } };
+function fuTlTr(s) { let v = s; FU_EN.forEach(([re, to]) => { v = v.replace(re, to); }); return v; }
+function fuTlApply(root) {
+  if (!root) return; const en = FU_TL.on(); const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n;
+  while ((n = w.nextNode())) {
+    const pe = n.parentElement; if (!pe || pe.closest('input,textarea,pre,[data-tlang-skip]')) continue;
+    if (!/[A-Za-zÁÉÍÓÚáéíóúñ]/.test(n.nodeValue || '')) continue;
+    if (!FU_TL.orig.has(n) || n.nodeValue !== FU_TL.last.get(n)) FU_TL.orig.set(n, n.nodeValue);
+    const o = FU_TL.orig.get(n), v = en ? fuTlTr(o) : o;
+    if (n.nodeValue !== v) n.nodeValue = v; FU_TL.last.set(n, v);
+  }
+}
+function fuTlAll() { document.querySelectorAll('[data-tlang]').forEach(fuTlApply); }
+if (!window.__FU_TL_OBS && window.MutationObserver) {
+  let raf = 0; window.__FU_TL_OBS = new MutationObserver(() => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; fuTlAll(); }); });
+  const go = () => { try { window.__FU_TL_OBS.observe(document.body, { childList: true, subtree: true, characterData: true }); } catch (e) {} };
+  if (document.body) go(); else document.addEventListener('DOMContentLoaded', go);
+}
+const FU_TLROOT = { 'data-tlang': '1', translate: 'no' };
+function TLangToggle() {
+  const [en, setEn] = React.useState(FU_TL.on());
+  React.useEffect(() => { const f = () => setEn(FU_TL.on()); window.addEventListener('jucum-tlang', f); return () => window.removeEventListener('jucum-tlang', f); }, []);
+  const set = (v) => { try { localStorage.setItem('jucum_teacher_lang_v1', v); } catch (e) {} fuTlAll(); try { window.dispatchEvent(new Event('jucum-tlang')); } catch (e) {} };
+  const b = (on) => ({ border:'none', background: on ? '#0D1B5A' : 'transparent', color: on ? '#fff' : '#33415C', borderRadius:8, padding:'5px 10px', minHeight:32, fontWeight:900, fontSize:12, cursor:'pointer', fontFamily:'inherit' });
+  return <span translate="no" data-tlang-skip="1" title="Idioma de estas pantallas · Language of these screens" style={{display:'inline-flex', gap:2, border:'1.5px solid #D6DEEA', borderRadius:10, padding:2, background:'#fff'}}><button type="button" aria-pressed={!en} onClick={() => set('es')} style={b(!en)}>ES</button><button type="button" aria-pressed={en} onClick={() => set('en')} style={b(en)}>EN</button></span>;
+}
+Object.assign(window, { FollowUpPanel, FollowUpModal, ClassCloseModal, fuLastPlan, fuPickPlan, fuReport, fuData, TLangToggle, FU_TLROOT, fuTlAll });

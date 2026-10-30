@@ -588,7 +588,7 @@
     /* Práctica de la semana: una tarea por actividad, todos los días */
     const practice = (S ? S.acts : []).map((x, i) => { const f = matchJ(mod, x.title + ' ' + x.sub.join(' '), ctxGroup)[0];
       return { id: 'p' + i + '_' + Math.random().toString(36).slice(2, 5), moduleId: mod.id, activityId: f ? f.a.id : null, type: f ? f.a.type : 'custom', quizKey: (f && f.quizKey) || null,
-        label: x.title, emoji: x.e, sub: x.sub.slice(), steps: x.steps.slice(), tips: x.tips.slice(), note: '', noteEs: true, en: [x.title].concat(x.sub, x.steps, x.tips).join(' · '),
+        label: x.title.replace(/^\/\s*(\p{Extended_Pictographic}[\uFE0F\u200D\p{Extended_Pictographic}]*\s*)?/u, ''), emoji: x.e, sub: x.sub.slice(), steps: x.steps.slice(), tips: x.tips.slice(), note: '', noteEs: true, en: [x.title].concat(x.sub, x.steps, x.tips).join(' · '),
         onlyPending: /si\s+todav[ií]a\s+no\s+lo\s+has\s+completado|si\s+a[uú]n\s+no\s+lo/i.test(x.title), prio: 0, daily: 1, ai: 0, days: null, manual: false }; });
     const pRange = tRange || (S ? (onlyP ? docR : (jRange(S.headAll || [], date) || fileR)) : null);
     if (S && !tRange) { const nx = nextClassAfter(date, meta.days); const defTo = nx ? (() => { const x = parseYMD(nx); x.setDate(x.getDate() - 1); return ymd(x); })() : (() => { const x = parseYMD(date); x.setDate(x.getDate() + 6); return ymd(x); })();

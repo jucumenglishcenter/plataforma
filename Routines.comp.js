@@ -120,13 +120,15 @@ function rtGroupRhythm(groupId) {
   });
   return Object.values(themes).filter(t => t.cur > 0).map(t => { const acts = (t.mod.activities || []).filter(a => a.group === t.group); const steps = [0, 1, 2, 3].map(i => acts.find(a => rtStepOf(a) === i) || null); return { ...t, steps, sums: acts.filter(a => a.type === 'summary') }; });
 }
-function rtStudentState(student, th) {
-  const D = window.JUCUM_DATA; const prog = D.getStudentProgress(student.id) || { completed: {} };
+/* P1 · RITMO-NUBE-V1 (30-oct): con F (JUCUM_SEG.load) lee las notas de la NUBE, igual que el 📊 Avance */
+function rtProg(student, F) { if (F && F.prog) return { completed: F.prog[String(student.id)] || {} }; const D = window.JUCUM_DATA; return D.getStudentProgress(student.id) || { completed: {} }; }
+function rtStudentState(student, th, F) {
+  const D = window.JUCUM_DATA; const prog = rtProg(student, F);
   /* 📘 RESUMEN-2-DE-2 (30-oct): si el tema tiene 2+ resúmenes, el paso «Resumen» está hecho solo con TODOS */
   return th.steps.map((a, i) => { if (!a) return 'none'; const e = (prog.completed || {})[th.mod.id + ':' + a.id]; const done = i === 0 && th.sums && th.sums.length > 1 ? th.sums.every(x => (prog.completed || {})[th.mod.id + ':' + x.id]) : (e && (a.type === 'summary' || D.entryPassed(e, student.level, student.group))); if (done) return 'ok'; if (i < th.cur) return 'behind'; if (i === th.cur) return 'cur'; return 'wait'; });
 }
-function rtSumPart(student, th) {
-  const D = window.JUCUM_DATA; const c = ((D.getStudentProgress(student.id) || {}).completed) || {};
+function rtSumPart(student, th, F) {
+  const c = rtProg(student, F).completed || {};
   const n = (th.sums || []).length; return { n, done: n > 1 ? th.sums.filter(x => c[th.mod.id + ':' + x.id]).length : 0 };
 }
 function rtDaysSince(s) { if (!s) return 0; return Math.max(0, Math.round((Date.parse(rtToday()) - Date.parse(s)) / 86400000)); }
@@ -150,43 +152,101 @@ function useRtSentReminders(ids) {
 }
 function rtRemCount(rows, sid, th, i) { if (!rows) return { n: 0, last: null }; const b = rtRemBody(th, i); let n = 0, last = null; rows.forEach(r => { if (String(r.user_id) === String(sid) && String(r.body || '').startsWith(b)) { n++; if (!last || r.created_at > last) last = r.created_at; } }); return { n, last }; }
 function RhythmPanel({ groupId }) {
-  const D = window.JUCUM_DATA; const [tick, setTick] = React.useState(0); const [sent, setSent] = React.useState({});
-  const students = (D.STUDENTS || []).filter(s => s.group === groupId && s.active !== false && !s.closedAt);
+  /* P2 + P4 · RITMO-COMPACTO-V1 (30-oct): una línea por tema (se abre al tocarla), marcas iguales a las del 📊 Avance,
+   * «atrasado» como etiqueta al final de la fila, datos de la nube y «Actualizado hace…». */
+  const D = window.JUCUM_DATA, S = window.JUCUM_SEG; const [tick, setTick] = React.useState(0); const [sent, setSent] = React.useState({}); const [openK, setOpenK] = React.useState({});
+  const students = S ? S.groupStudents(groupId, null) : (D.STUDENTS || []).filter(s => s.group === groupId && s.active !== false && !s.closedAt);
   const remRows = useRtSentReminders(students.map(s => s.id).sort());
+  const seg = window.useSegFacts && S ? window.useSegFacts({ ids: students.map(s => s.id), groups: [], since: S.addD(S.today(), -45) }) : { F: null };
+  const F = seg.F;
   const ths = rtGroupRhythm(groupId); if (!ths.length) return null;
-  const alerts = []; ths.forEach(th => students.forEach(s => { const st = rtStudentState(s, th); st.forEach((x, i) => { if (x !== 'behind') return; const c = rtRemCount(remRows, s.id, th, i); if (c.n >= 2) alerts.push({ s, th, i, ...c }); }); }));
-  const alertOf = (s, th) => alerts.find(a => a.s.id === s.id && a.th === th);
   const nm = s => (s.fullName || s.username || '').split(' ').slice(0, 2).join(' ');
   const gs = D.getGroupSettings(groupId) || {}; const auto = gs.gramRemind !== false;
-  const dot = st => { const z = 15; if (st === 'ok') return <span style={{display:'inline-block', width:z, height:z, borderRadius:'50%', background:'#43A047'}}></span>; if (st === 'behind') return <span style={{display:'inline-block', width:z, height:z, borderRadius:'50%', border:'2.5px solid #E53935', boxSizing:'border-box'}}></span>; if (st === 'cur') return <span style={{display:'inline-block', width:z, height:z, borderRadius:'50%', border:'2.5px solid #FB8C00', background:'#FFF4E5', boxSizing:'border-box'}}></span>; if (st === 'none') return <span style={{color:'#ccc'}}>—</span>; return <span style={{display:'inline-block', width:z, height:z, borderRadius:'50%', border:'2px dashed #C9C3B3', boxSizing:'border-box'}}></span>; };
+  const box = { display:'flex', flexDirection:'column', gap:9, border:'1px solid #E3DCC9', borderRadius:12, padding:12, gridColumn:'1 / -1' };
+  const TLR = window.FU_TLROOT || {};
+  const head = (
+    <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
+      <b style={{fontFamily:"'Fredoka',sans-serif", fontSize:15.5, flex:1}}>🧭 Ritmo de gramática</b>
+      {window.SegAgo && F && <SegAgo F={F} busy={seg.busy} err={seg.err} onReload={seg.reload} />}
+      <label style={{display:'flex', alignItems:'center', gap:7, fontSize:12.5, fontWeight:800, cursor:'pointer', minHeight:32}}><input type="checkbox" checked={auto} onChange={e => { D.setGroupSettings(groupId, { gramRemind: e.target.checked }); setTick(x => x + 1); }} /> Recordatorios automáticos {auto ? 'activados' : 'apagados'}</label>
+    </div>);
+  if (!F) return <div {...TLR} style={box}>{head}<div style={{fontSize:12.5, color:'#8a7f6a', fontWeight:800}}>{seg.err ? 'No pude traer el ritmo de la nube. Revisa el internet.' : 'Cargando el ritmo desde la nube…'}</div></div>;
+  const alerts = []; ths.forEach(th => students.forEach(s => { const st = rtStudentState(s, th, F); st.forEach((x, i) => { if (x !== 'behind') return; const c = rtRemCount(remRows, s.id, th, i); if (c.n >= 2) alerts.push({ s, th, i, ...c }); }); }));
+  const alertOf = (s, th) => alerts.find(a => a.s.id === s.id && a.th === th);
+  const cellOf = (s, th, x, i) => {
+    if (x === 'none') return { k:'na' };
+    if (x === 'ok') { const e = (F.prog[String(s.id)] || {})[th.mod.id + ':' + th.steps[i].id]; const sc = e && typeof e.score === 'number' && i > 0 ? Math.round(e.score) : null; return { k:'ok', txt: '✓' + (sc != null ? ' ' + sc + '%' : '') }; }
+    if (i === 0) { const sp = rtSumPart(s, th, F); if (sp.done) return { k:'half', txt: sp.done + ' de ' + sp.n }; }
+    const e = (F.prog[String(s.id)] || {})[th.mod.id + ':' + (th.steps[i] || {}).id];
+    if (e && i > 0 && typeof e.score === 'number') return { k:'low', txt: Math.round(e.score) + '%' };
+    return { k: x === 'wait' ? 'wait' : 'pend', txt: '' };
+  };
+  const PILL = { ok:{ background:'#2EA84B', color:'#fff' }, low:{ background:'#FBE3DC', color:'#A3361F', border:'1px solid #F0A898' }, half:{ background:'linear-gradient(90deg,#2EA84B 50%,#EFEDE6 50%)', color:'#1D4D25', border:'1px solid #CFE7D3' }, pend:{ background:'#EFEDE6', color:'#B8B2A2', border:'1px dashed #DAD5C6' }, wait:{ background:'#F7F5EF', color:'#C2BCAC', border:'1px solid #EEE9DC' }, na:{ background:'transparent', color:'#C2BCAC' } };
+  const pill = (c, w) => <span style={{display:'inline-flex', alignItems:'center', justifyContent:'center', minWidth: w || 70, height:24, borderRadius:6, padding:'0 7px', boxSizing:'border-box', fontSize:10.5, fontWeight:900, whiteSpace:'nowrap', ...(PILL[c.k] || PILL.pend)}}>{c.k === 'na' ? '—' : c.txt}</span>;
   return (
-    <div style={{display:'flex', flexDirection:'column', gap:9, border:'1px solid #E3DCC9', borderRadius:12, padding:12, gridColumn:'1 / -1'}}>
-      <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
-        <b style={{fontFamily:"'Fredoka',sans-serif", fontSize:15.5, flex:1}}>🧭 Ritmo de gramática</b>
-        <label style={{display:'flex', alignItems:'center', gap:7, fontSize:12.5, fontWeight:800, cursor:'pointer'}}><input type="checkbox" checked={auto} onChange={e => { D.setGroupSettings(groupId, { gramRemind: e.target.checked }); setTick(t => t + 1); }} /> Recordatorios automáticos {auto ? 'activados' : 'apagados'}</label>
-      </div>
-      <div style={{fontSize:12, color:'#7a705c', fontWeight:700}}>Fuera del ritmo = le falta aprobar un paso <b>anterior</b> al que va la clase. Avisos automáticos: máximo 1 por día y 2 por paso.</div>
+    <div {...TLR} style={box}>
+      {head}
+      <div style={{fontSize:12, color:'#7a705c', fontWeight:700}}>Una línea por tema: tócala para ver a cada alumno. <b>Atrasado</b> = le falta aprobar un paso <b>anterior</b> al que va la clase. Avisos automáticos: máximo 1 por día y 2 por paso.</div>
       {alerts.length > 0 && (
         <div style={{display:'flex', gap:10, alignItems:'flex-start', border:'1.5px solid #F5B7B1', background:'#FDEDEC', borderRadius:12, padding:'10px 12px', color:'#7B241C', fontSize:12.5, lineHeight:1.5}}>
           <span style={{fontSize:18}}>⚠️</span>
           <div style={{flex:1}}><b>{alerts.length === 1 ? '1 alumno ya recibió' : alerts.length + ' alumnos ya recibieron'} los 2 recordatorios y {alerts.length === 1 ? 'sigue' : 'siguen'} sin ponerse al día.</b> Los avisos automáticos ya no le llegarán: conviene hablarle en clase.
-            <div style={{display:'flex', flexDirection:'column', gap:3, marginTop:6}}>{alerts.map(a => <span key={a.s.id + a.th.group + a.i}>· <b>{nm(a.s)}</b> — le falta {RT_STEP[a.i]} · {a.th.group.replace(/^T\d+\s*·\s*/, '')} ({a.n} avisos{a.last ? ', el último ' + rtDay(new Date(Date.parse(a.last) - 5 * 3600000).toISOString().slice(0, 10)) : ''})</span>)}</div>
+            <div style={{display:'flex', flexDirection:'column', gap:3, marginTop:6}}>{alerts.map(a => <span key={a.s.id + a.th.group + a.i}>· <b>{nm(a.s)}</b> — le falta {RT_STEP[a.i]} · {a.th.group.replace(/^T\d+\s*·\s*/, '')} ({a.n} avisos{a.last ? ', el último ' + rtDay(window.JUCUM_DAY ? window.JUCUM_DAY.of(a.last) : String(a.last).slice(0, 10)) : ''})</span>)}</div>
           </div>
         </div>)}
-      {ths.map(th => (
-        <div key={th.mod.id + th.group} style={{overflowX:'auto', overflowY:'hidden'}}>
-          <div style={{fontSize:12.5, fontWeight:800, color:'#1F3A8A', margin:'4px 0'}}>{th.group} · la clase va en <b>{RT_STEP[th.cur]}</b> (desde {rtDay(th.since)})</div>
-          <table style={{borderCollapse:'collapse', width:'100%', minWidth:440}}>
-            <thead><tr><th style={{fontSize:10.5, color:'#8a7f6a', textAlign:'left', padding:4}}>Alumno</th>{RT_STEP.map((s, i) => <th key={i} style={{fontSize:10.5, color: i === th.cur ? '#3F5BB8' : '#8a7f6a', padding:4}}>{s}{i === th.cur ? ' ▶' : ''}</th>)}<th></th></tr></thead>
-            <tbody>{students.map(s => { const st = rtStudentState(s, th); const behind = st.indexOf('behind'); const key = s.id + th.group;
-              const al = alertOf(s, th);
-              return <tr key={s.id}><td style={{fontWeight:800, fontSize:12.5, padding:'5px 4px', borderTop:'1px solid #F2ECDD', whiteSpace:'nowrap'}}>{nm(s)}{al && <span title={al.n + ' recordatorios recibidos sin ponerse al día'} style={{marginLeft:6, fontSize:10.5, fontWeight:900, background:'#FDEDEC', color:'#B03A2E', border:'1px solid #F5B7B1', borderRadius:6, padding:'1px 6px'}}>⚠ {al.n} avisos</span>}</td>{st.map((x, i) => { const sp = i === 0 && x !== 'ok' ? rtSumPart(s, th) : null; return <td key={i} style={{textAlign:'center', borderTop:'1px solid #F2ECDD'}}>{sp && sp.done ? <span title={'Resumen ' + sp.done + ' de ' + sp.n + ' hecho'} style={{display:'inline-flex', alignItems:'center', gap:3, fontSize:10.5, fontWeight:900, color:'#92510F'}}><span style={{display:'inline-block', width:15, height:15, borderRadius:'50%', background:'linear-gradient(90deg,#FB8C00 50%,#FFE0B2 50%)'}}></span>{sp.done}/{sp.n}</span> : dot(x)}</td>; })}
-                <td style={{borderTop:'1px solid #F2ECDD', textAlign:'right'}}>{behind >= 0 ? (sent[key] ? <span style={{fontSize:11.5, fontWeight:800, color:'#2E7D32'}}>✓ enviado</span> : <button onClick={() => { if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(s.id, rtReminderText(s, th, behind)); setSent(x => ({ ...x, [key]: 1 })); }} style={{border:'1.5px solid #D6DEEA', background:'#fff', borderRadius:9, padding:'3px 9px', fontSize:11.5, fontWeight:800, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap'}}>🔔 Recordar</button>) : <span style={{fontSize:11, color:'#8a7f6a', fontWeight:700}}>{st.includes('cur') ? 'en el paso actual' : 'al día'}</span>}</td></tr>; })}</tbody>
-          </table>
-        </div>))}
-      <div style={{display:'flex', gap:12, flexWrap:'wrap', fontSize:11, color:'#6B7280', fontWeight:800}}><span>{dot('ok')} aprobado</span><span>{dot('behind')} le falta un paso anterior</span><span>{dot('cur')} paso actual, en plazo</span><span>{dot('wait')} todavía no toca</span><span style={{display:'inline-flex', alignItems:'center', gap:4}}><span style={{display:'inline-block', width:15, height:15, borderRadius:'50%', background:'linear-gradient(90deg,#FB8C00 50%,#FFE0B2 50%)'}}></span> resumen 1 de 2 (le falta el otro)</span></div>
+      {ths.map(th => {
+        const k = th.mod.id + th.group, rows = students.map(s => { const st = rtStudentState(s, th, F); return { s, st, behind: st.indexOf('behind'), cur: st.includes('cur') }; });
+        const nB = rows.filter(r => r.behind >= 0).length, nC = rows.filter(r => r.behind < 0 && r.cur).length, nOk = rows.length - nB - nC, isOpen = !!openK[k];
+        return (
+          <div key={k} style={{display:'flex', flexDirection:'column', gap:6}}>
+            <button type="button" onClick={() => setOpenK(o => ({ ...o, [k]: !o[k] }))} aria-expanded={isOpen} style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', border:'1px solid #E3DCC9', borderRadius:10, padding:'9px 11px', background:'#fff', cursor:'pointer', fontFamily:'inherit', textAlign:'left', minHeight:44}}>
+              <span style={{fontSize:12.5, fontWeight:800, color:'#1F3A8A', flex:1, minWidth:200}}>{th.group} · la clase va en <b>{RT_STEP[th.cur]}</b> (desde {rtDay(th.since)})</span>
+              <span style={{fontSize:11.5, fontWeight:800, borderRadius:8, padding:'2px 8px', background:'#E3F4E6', color:'#2E7D32'}}>{nOk} al día</span>
+              {nC > 0 && <span style={{fontSize:11.5, fontWeight:800, borderRadius:8, padding:'2px 8px', background:'#FFF5E1', color:'#7A4A00'}}>{nC} en el paso actual</span>}
+              {nB > 0 && <span style={{fontSize:11.5, fontWeight:800, borderRadius:8, padding:'2px 8px', background:'#FDECEA', color:'#B23A2A'}}>{nB} atrasado{nB === 1 ? '' : 's'}</span>}
+              <span style={{fontSize:13, fontWeight:900, color:'#5B3FA0'}}>{isOpen ? '▲' : '▼'}</span>
+            </button>
+            {isOpen && (
+              <div style={{overflowX:'auto', overflowY:'hidden'}}>
+                <table style={{borderCollapse:'collapse', width:'100%', minWidth:520}}>
+                  <thead><tr><th style={{fontSize:10.5, color:'#8a7f6a', textAlign:'left', padding:4}}>Alumno</th>{RT_STEP.map((s2, i) => <th key={i} style={{fontSize:10.5, color: i === th.cur ? '#3F5BB8' : '#8a7f6a', padding:4}}>{s2}{i === th.cur ? ' ▶' : ''}</th>)}<th></th></tr></thead>
+                  <tbody>{rows.map(({ s, st, behind, cur }) => { const key = s.id + th.group; const al = alertOf(s, th);
+                    return <tr key={s.id}><td style={{fontWeight:800, fontSize:12.5, padding:'5px 4px', borderTop:'1px solid #F2ECDD', whiteSpace:'nowrap'}}>{nm(s)}{al && <span title={al.n + ' recordatorios recibidos sin ponerse al día'} style={{marginLeft:6, fontSize:10.5, fontWeight:900, background:'#FDEDEC', color:'#B03A2E', border:'1px solid #F5B7B1', borderRadius:6, padding:'1px 6px'}}>⚠ {al.n} avisos</span>}</td>
+                      {st.map((x, i) => <td key={i} style={{textAlign:'center', borderTop:'1px solid #F2ECDD', padding:3}}>{pill(cellOf(s, th, x, i))}</td>)}
+                      <td style={{borderTop:'1px solid #F2ECDD', textAlign:'right', whiteSpace:'nowrap'}}>{behind >= 0 ? <span style={{display:'inline-flex', alignItems:'center', gap:6}}><span style={{fontSize:11, fontWeight:900, color:'#B23A2A', background:'#FDECEA', borderRadius:7, padding:'2px 7px'}}>atrasado</span>{sent[key] ? <span style={{fontSize:11.5, fontWeight:800, color:'#2E7D32'}}>✓ enviado</span> : <button onClick={() => { if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(s.id, rtReminderText(s, th, behind)); setSent(x2 => ({ ...x2, [key]: 1 })); }} style={{border:'1.5px solid #D6DEEA', background:'#fff', borderRadius:9, padding:'5px 10px', minHeight:32, fontSize:11.5, fontWeight:800, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap'}}>🔔 Recordar</button>}</span> : <span style={{fontSize:11, color:'#8a7f6a', fontWeight:700}}>{cur ? 'en el paso actual' : 'al día'}</span>}</td></tr>; })}</tbody>
+                </table>
+              </div>)}
+          </div>);
+      })}
+      <div style={{display:'flex', gap:10, flexWrap:'wrap', alignItems:'center', fontSize:11, color:'#6B7280', fontWeight:800}}>{pill({ k:'ok', txt:'✓' }, 34)} aprobado {pill({ k:'low', txt:'73%' }, 34)} hecho, sin aprobar {pill({ k:'half', txt:'1 de 2' }, 44)} resumen a medias {pill({ k:'pend', txt:'' }, 34)} pendiente {pill({ k:'wait', txt:'' }, 34)} todavía no toca</div>
     </div>
   );
+}
+/* P6b · TRABADO-AVISO-V1 (30-oct): alumnos que tocaron 2+ veces el mismo candado (últimos 3 días), para el teacher */
+function StuckAlert({ groupId }) {
+  const D = window.JUCUM_DATA, S = window.JUCUM_SEG;
+  const studs = S ? S.groupStudents(groupId, null) : (D.STUDENTS || []).filter(s => s.group === groupId);
+  const ids = studs.map(s => String(s.id)).filter(x => RT_UUID.test(x)).sort(); const key = ids.join(',');
+  const [rows, setRows] = React.useState(null);
+  React.useEffect(() => {
+    let off = false; const sb = window.JUCUM_SB && window.JUCUM_SB.getClient && window.JUCUM_SB.getClient(); if (!sb || !ids.length) return;
+    const since = new Date(Date.now() - 3 * 86400000).toISOString();
+    Promise.resolve(sb.from('notifications').select('user_id,body,created_at').in('user_id', ids).eq('title', '🔒 Le avisamos a tu teacher').gte('created_at', since).order('created_at', { ascending: false }).limit(200))
+      .then(x => { if (!off && x && !x.error) setRows(x.data || []); }, () => {});
+    return () => { off = true; };
+  }, [key]);
+  if (!rows || !rows.length) return null;
+  const seen = {}, list = [];
+  rows.forEach(x => { const k = x.user_id + '|' + x.body; if (seen[k]) return; seen[k] = 1; const s = studs.find(y => String(y.id) === String(x.user_id)); if (s) list.push({ s, body: String(x.body || '').replace(/^Quiso abrir /, 'quiso abrir '), at: x.created_at }); });
+  if (!list.length) return null;
+  const nm = s => (s.fullName || s.username || '').split(' ').slice(0, 2).join(' ');
+  return (
+    <div style={{display:'flex', gap:10, alignItems:'flex-start', border:'1.5px solid #F5B7B1', background:'#FDEDEC', borderRadius:12, padding:'10px 12px', color:'#7B241C', fontSize:12.5, lineHeight:1.5}}>
+      <span style={{fontSize:18}}>🔒</span>
+      <div style={{flex:1}}><b>{list.length === 1 ? '1 alumno se trabó' : list.length + ' veces se trabaron alumnos'}</b> (tocaron 2 veces algo con candado · últimos 3 días). Ya tienen el botón «Abrir →» a lo que falta; si siguen igual, conviene ayudarlos en clase.
+        <div style={{display:'flex', flexDirection:'column', gap:3, marginTop:6}}>{list.slice(0, 8).map((x, i) => <span key={i}>· <b>{nm(x.s)}</b> — {x.body} <span style={{color:'#A04A40'}}>({rtDay(window.JUCUM_DAY ? window.JUCUM_DAY.of(x.at) : '')})</span></span>)}</div>
+      </div>
+    </div>);
 }
 /* Alumno: aviso en su inicio + recordatorio automático (1/día, 2 por paso) */
 const RT_REM_KEY = 'jucum_rhythm_rem_v1';
@@ -221,4 +281,4 @@ function StudentRhythmNotice({ student }) {
   );
 }
 window.JUCUM_RT_SAVE = rtSave;
-Object.assign(window, { RoutinePicker, RoutinesManager, RhythmPanel, StudentRhythmNotice, rtTypeOf, rtList, rtGroupRhythm });
+Object.assign(window, { RoutinePicker, RoutinesManager, RhythmPanel, StuckAlert, StudentRhythmNotice, rtTypeOf, rtList, rtGroupRhythm });

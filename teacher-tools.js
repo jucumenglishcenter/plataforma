@@ -91,6 +91,8 @@
    * «Resumen k de N» y el que falte (y no lo tenga hecho de antes) se agrega a su lado, en el orden del catálogo:
    * así el alumno nunca queda con el Fill in cerrado por un resumen que no ve en su lista (caso Levi). */
   function withSummaryParts(items, prog, passedBefore) {
+    /* VENTANAS-UNA-A-LA-VEZ-V1 (30-oct): «📗 / 📕 Comprensión…» del documento dejaba la etiqueta como «/ 📕 Comprensión…» */
+    items = items.map(it => it && typeof it.label === 'string' && /^\s*\/\s/.test(it.label) ? { ...it, label: it.label.replace(/^\s*\/\s*(\p{Extended_Pictographic}[\uFE0F\u200D\p{Extended_Pictographic}]*\s*)?/u, '') } : it);
     try {
       const cat = (window.JUCUM_DATA && window.JUCUM_DATA.MODULE_CATALOG) || {};
       const findMod = id => { for (const lv of Object.keys(cat)) { const m = (cat[lv] || []).find(x => x.id === id); if (m) return m; } return null; };

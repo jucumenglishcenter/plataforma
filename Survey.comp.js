@@ -74,6 +74,8 @@ function SurveyModal({ student, onDone }) {
 
           <div className="modal-actions" style={{justifyContent:'center'}}>
             <button className="btn-save" onClick={submit} style={{minWidth:220}}>Enviar y ganar +60 XP 🎉</button>
+            {/* VENTANAS-UNA-A-LA-VEZ-V1 (30-oct, auditoría como usuario): antes no había cómo salir sin enviar */}
+            <button type="button" onClick={() => { try { const k = 'jucum_survey_later_v1'; const m = JSON.parse(localStorage.getItem(k) || '{}'); m[student.id] = window.JUCUM_DAY ? window.JUCUM_DAY.today() : ''; localStorage.setItem(k, JSON.stringify(m)); } catch (e) {} onDone(); }} style={{minWidth:120, minHeight:44, border:'1.5px solid #DDD3BE', background:'#fff', borderRadius:12, fontWeight:800, fontSize:13.5, color:'#5A5140', cursor:'pointer', fontFamily:'inherit'}}>Ahora no</button>
           </div>
         </div>
       </div>

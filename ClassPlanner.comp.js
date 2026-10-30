@@ -615,9 +615,9 @@ function PracticeSetProgress({ plan, onClose, onChanged, embed }) {
       </div>
     </div>) : null;
   const shell = (body) => embed ? (
-    <div style={{border:'1.5px solid #E3DCC9', borderRadius:16, overflow:'hidden', background:'#fff'}}>{body}{whoEl}</div>) : (
+    <div {...(window.FU_TLROOT || {})} style={{border:'1.5px solid #E3DCC9', borderRadius:16, overflow:'hidden', background:'#fff'}}>{body}{whoEl}</div>) : (
     <div onClick={onClose} style={{position:'fixed', inset:0, zIndex:1001, background:'rgba(15,23,42,0.55)', backdropFilter:'blur(3px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
-      <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, width:'100%', maxWidth: Math.min(900, Math.max(680, 340 + acts.length * 120)), boxShadow:'0 24px 60px rgba(0,0,0,0.35)', maxHeight:'90vh', overflowY:'auto'}}>{body}</div>
+      <div {...(window.FU_TLROOT || {})} onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, width:'100%', maxWidth: Math.min(900, Math.max(680, 340 + acts.length * 120)), boxShadow:'0 24px 60px rgba(0,0,0,0.35)', maxHeight:'90vh', overflowY:'auto'}}>{body}</div>
       {whoEl}
     </div>);
   const closeBtn = embed ? null : <button onClick={onClose} aria-label="Cerrar" style={{position:'absolute', top:14, right:14, width:32, height:32, borderRadius:'50%', border:'none', background:'#FAFAF6', color:'#8a7f6a', fontSize:14, fontWeight:800, cursor:'pointer'}}>✕</button>;
@@ -688,6 +688,7 @@ function PracticeSetProgress({ plan, onClose, onChanged, embed }) {
         {G.phase === 'open' ? <span style={{fontSize:12, fontWeight:900, borderRadius:9, padding:'4px 9px', background:'#fff', color:'#3F2A78', border:'1px solid #E6DDF3', whiteSpace:'nowrap'}}>⏳ cierra en <b style={{fontVariantNumeric:'tabular-nums'}}>{cdTxt}</b></span>
           : G.phase === 'closed' ? chip('🏁 cerró el ' + fmtD(G.to), '#6b6453') : chip('empieza el ' + fmtD(G.from), '#6b6453')}
         <span style={{flex:1}}></span>
+        {!embed && window.TLangToggle && <TLangToggle />}
         {window.SegAgo && <SegAgo F={F} busy={seg.busy} err={seg.err} onReload={seg.reload} />}
       </div>
       {closedMods.length > 0 && <div style={{marginTop:8, fontSize:12, fontWeight:800, color:'#8A3B12', background:'#FFF1E6', border:'1px solid #F3C9A8', borderRadius:9, padding:'7px 10px'}}>⚠ Este set usa {closedMods.join(' y ')}, que hoy NO está abierto para el grupo: los alumnos no lo ven en su ruta y practican el módulo que sí tienen abierto. Ábrelo en 📦 Módulos del grupo.</div>}
