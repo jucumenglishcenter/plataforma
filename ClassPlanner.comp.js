@@ -583,7 +583,7 @@ function PSMark({ s, size }) {
   if (s === 'other') return <span style={{width:z, height:z, borderRadius:'50%', background:'#FFF3D6', border:'2px solid #E0A62E', color:'#8A6D1A', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:z*0.55, fontWeight:900, lineHeight:1, flexShrink:0, boxSizing:'border-box'}}>✓</span>;
   return <span style={{width:z, height:z, borderRadius:'50%', background:'#fff', border:'2px dashed #D8D4C8', display:'inline-block', flexShrink:0, boxSizing:'border-box'}}></span>;
 }
-function PracticeSetProgress({ plan, onClose, onChanged }) {
+function PracticeSetProgress({ plan, onClose, onChanged, embed }) {
   const D = window.JUCUM_DATA, S = window.JUCUM_SEG;
   const group = (D.GROUPS || []).find(g => g.id === plan.groupId);
   /* SEGUIMIENTO-V1 (28-oct, «Propuesta - Avance de la practica.html» C aprobada): el cálculo vive en seguimiento.js
@@ -593,6 +593,7 @@ function PracticeSetProgress({ plan, onClose, onChanged }) {
    * de progress; 'mod' = en la fecha hizo el MISMO material de OTRO módulo (no cuenta, se avisa). */
   const seg = window.useSegFacts && window.segGroupReq ? window.useSegFacts(window.segGroupReq(plan)) : { F: null, err: new Error('falta Seguimiento.comp.js') };
   const [tool, setTool] = React.useState(null);   // 'rem' | 'ext'
+  const [who, setWho] = React.useState(null);     // P5 · FICHA-DESDE-TABLERO-V1: tocar un nombre → su 📅 Mi seguimiento
   const [, tick] = React.useReducer(x => x + 1, 0);
   React.useEffect(() => { const iv = setInterval(tick, 1000); return () => clearInterval(iv); }, []);
   const F = seg.F;
@@ -601,15 +602,25 @@ function PracticeSetProgress({ plan, onClose, onChanged }) {
   const acts = G ? G.acts : [];
   const fmtD = (d) => S ? S.fmtDay(d) : d;
   const shortOf = (x, i) => {
-    const nm = (b) => ({ story:'Story', reading:'Reading', listening:'Listening' })[b.type] || String(b.a.label || b.a.activityId).split('·')[0].trim();
+    const nm = (b) => ({ story:'Story', reading:'Reading', listening:'Listening' })[b.type] || (b.type === 'summary' ? (r => r ? 'Res. ' + r : 'Resumen')(String(b.a.label || '').replace(/\([^)]*\)/g, '').split('·').slice(1).join('·').trim()) : '') || String(b.a.label || b.a.activityId).split('·')[0].trim();   // RESUMEN-2-DE-2: «Res. Going to» · «Res. Will»
     const base = nm(x), s = base.length > 15 ? base.slice(0, 14) + '…' : base;
     return acts.some((b, j) => j !== i && nm(b) === base) ? (i + 1) + '· ' + s : s;
   };
-  const shell = (body) => (
+  /* 🏠 EN-CASA-REAL-V1 (30-oct): `embed` = la MISMA tabla dentro del seguimiento del Modo clase (sin ventana) */
+  const whoEl = who && window.MiSeguimiento ? (
+    <div onClick={() => setWho(null)} style={{position:'fixed', inset:0, zIndex:1003, background:'rgba(15,23,42,0.55)', display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'30px 14px', overflowY:'auto'}}>
+      <div onClick={e => e.stopPropagation()} style={{background:'#F5F7FB', borderRadius:18, padding:16, maxWidth:760, width:'100%', display:'flex', flexDirection:'column', gap:10}}>
+        <div style={{display:'flex', alignItems:'center', gap:10}}><b style={{flex:1, fontFamily:"'Fredoka',sans-serif", fontSize:17, color:'#0D1B5A'}}>📅 {who.fullName || who.username} · lo mismo que ve en su celular</b><button onClick={() => setWho(null)} aria-label="Cerrar" style={{width:36, height:36, borderRadius:'50%', border:'none', background:'#fff', fontWeight:800, cursor:'pointer'}}>✕</button></div>
+        <MiSeguimiento student={who} teacher />
+      </div>
+    </div>) : null;
+  const shell = (body) => embed ? (
+    <div style={{border:'1.5px solid #E3DCC9', borderRadius:16, overflow:'hidden', background:'#fff'}}>{body}{whoEl}</div>) : (
     <div onClick={onClose} style={{position:'fixed', inset:0, zIndex:1001, background:'rgba(15,23,42,0.55)', backdropFilter:'blur(3px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
       <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, width:'100%', maxWidth: Math.min(900, Math.max(680, 340 + acts.length * 120)), boxShadow:'0 24px 60px rgba(0,0,0,0.35)', maxHeight:'90vh', overflowY:'auto'}}>{body}</div>
+      {whoEl}
     </div>);
-  const closeBtn = <button onClick={onClose} aria-label="Cerrar" style={{position:'absolute', top:14, right:14, width:32, height:32, borderRadius:'50%', border:'none', background:'#FAFAF6', color:'#8a7f6a', fontSize:14, fontWeight:800, cursor:'pointer'}}>✕</button>;
+  const closeBtn = embed ? null : <button onClick={onClose} aria-label="Cerrar" style={{position:'absolute', top:14, right:14, width:32, height:32, borderRadius:'50%', border:'none', background:'#FAFAF6', color:'#8a7f6a', fontSize:14, fontWeight:800, cursor:'pointer'}}>✕</button>;
   if (!G) return shell(
     <div style={{padding:'18px 20px', position:'relative'}}>
       <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, color:'#5B3FA0', paddingRight:40}}>📊 Avance · {plan.title}</div>
@@ -653,7 +664,7 @@ function PracticeSetProgress({ plan, onClose, onChanged }) {
     const car = ev.cells.filter(c => c.carried);
     return (
       <div key={st.id} style={{display:'grid', gridTemplateColumns:cols, gap:6, alignItems:'center', padding:'6px 11px', borderRadius:10, background: all ? '#F4FAF5' : '#FCFCFA', border:'1px solid ' + (all ? '#CDEBD2' : '#EEE9DC')}}>
-        <span style={{fontWeight:800, fontSize:12.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{st.fullName || st.name || st.username}</span>
+        <button type="button" onClick={() => setWho(st)} title="Ver su seguimiento (lo mismo que ve el alumno)" style={{fontWeight:800, fontSize:12.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textAlign:'left', border:'none', background:'none', padding:0, color:'#1F3A8A', textDecoration:'underline', textDecorationColor:'#C9D4F0', textUnderlineOffset:3, cursor:'pointer', fontFamily:'inherit', minHeight:24}}>{st.fullName || st.name || st.username}</button>
         {acts.map((x, i) => { const c = cellOf(ev, x.k), k = c ? c.s : 'na', v = CELL[k] || CELL.pend; return (
           <span key={i} title={cellTitle(c)} style={{height:24, display:'flex', alignItems:'center', justifyContent:'center', gap:4,
             borderRadius: i === 0 ? '8px 3px 3px 8px' : i === acts.length - 1 ? '3px 8px 8px 3px' : 3,
@@ -665,7 +676,7 @@ function PracticeSetProgress({ plan, onClose, onChanged }) {
       </div>);
   };
   return shell(<>
-    <div style={{padding:'13px 20px 10px', borderBottom:'1.5px solid #E3DCC9', position:'sticky', top:0, zIndex:2, background:'#F4EEFB', borderRadius:'18px 18px 0 0'}}>
+    <div style={{padding:'13px 20px 10px', borderBottom:'1.5px solid #E3DCC9', position: embed ? 'relative' : 'sticky', top:0, zIndex:2, background:'#F4EEFB', borderRadius: embed ? 0 : '18px 18px 0 0'}}>
       <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, color:'#3F2A78', paddingRight:40}}>📊 Avance · {live.title}{group ? ' · ' + group.name : ''}</div>
       <div style={{fontSize:12, color:'#8a7f6a', fontWeight:700, marginTop:3}}>
         {acts.length} actividad(es) · {G.from === G.to ? 'el ' + fmtD(G.from) : 'del ' + fmtD(G.from) + ' al ' + fmtD(G.to)}{hiddenOut > 0 ? <span style={{color:'#a39a85'}}> · {hiddenOut} retirado(s), inactivo(s) o nuevo(s) no se cuentan</span> : null}
@@ -1483,7 +1494,7 @@ function ClassMode({ plan, onBack }) {
   const [closedPlan, setClosedPlan] = React.useState(plan.closing ? plan : null);
   const focusKeys = mats.filter(m => m.moduleId && m.activityId).map(m => m.moduleId + ':' + m.activityId);
   const cmRec = (plan.source && plan.source.importId && window.JUCUM_PLANIMPORT) ? window.JUCUM_PLANIMPORT.get(plan.source.importId) : null;
-  const cmPrev = cmRec && window.fuLastPlan ? window.fuLastPlan(plan.groupId, plan.date) : null;
+  const cmPrev = cmRec ? (window.fuPickPlan ? window.fuPickPlan(plan) : (window.fuLastPlan ? window.fuLastPlan(plan.groupId, plan.date) : null)) : null;   // CLASE-SELECTOR-V1: la clase cuya práctica está en curso
   const open = (m) => {
     if (m.type === 'quizlet') { setQuizPick({ ...m, quizLinks: cpQuizLinks(m, MODULE_CATALOG) }); return; }
     askTimer();

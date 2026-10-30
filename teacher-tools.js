@@ -75,7 +75,8 @@
         items.push({ ...a, label: '↪ Pendiente · ' + (a.label || a.activityId), carried: true });
       }));
       if (items.some(a => a.prio)) items.sort((x, y) => (y.prio || 0) - (x.prio || 0));
-      if (items.length) return { items, isGeneric: false, source: 'plan', planTitle: plans[0].title, planId: plans[0].id };
+      const items2 = withSummaryParts(items, prog, passedBefore);
+      if (items2.length) return { items: items2, isGeneric: false, source: 'plan', planTitle: plans[0].title, planId: plans[0].id };
     }
     // 2) legado: práctica por día de la semana (solo si el profe la dejó así)
     const wd = new Date(date + 'T12:00:00').getDay();
@@ -85,6 +86,32 @@
     //    Se CONGELA por alumno+día: si se recalculara en cada visita, al completar
     //    una actividad la lista cambiaría y el alumno nunca vería sus ✓ del día.
     return { items: frozenGeneric(student, date), isGeneric: true, source: 'generic' };
+  }
+  /* 📘 RESUMEN-2-DE-2 (30-oct-2026, pedido del teacher): si un tema tiene 2+ resúmenes, cada uno sale con
+   * «Resumen k de N» y el que falte (y no lo tenga hecho de antes) se agrega a su lado, en el orden del catálogo:
+   * así el alumno nunca queda con el Fill in cerrado por un resumen que no ve en su lista (caso Levi). */
+  function withSummaryParts(items, prog, passedBefore) {
+    try {
+      const cat = (window.JUCUM_DATA && window.JUCUM_DATA.MODULE_CATALOG) || {};
+      const findMod = id => { for (const lv of Object.keys(cat)) { const m = (cat[lv] || []).find(x => x.id === id); if (m) return m; } return null; };
+      const strip = s => String(s || '').replace(/^Resumen(\s+T\d+)?\s*·\s*/i, '');
+      const out = [];
+      items.forEach(it => {
+        const m = (it.type === 'summary' || /^sum-/.test(it.activityId || '')) ? findMod(it.moduleId) : null;
+        const a = m && (m.activities || []).find(x => x.id === it.activityId);
+        const sibs = a && a.group ? (m.activities || []).filter(x => x.type === 'summary' && x.group === a.group) : [];
+        if (sibs.length < 2) { out.push(it); return; }
+        const n = sibs.length;
+        sibs.forEach((sb, j) => {
+          const lab = 'Resumen ' + (j + 1) + ' de ' + n + ' · ';
+          if (sb === a) { if (!out.some(x => x.moduleId === it.moduleId && x.activityId === sb.id)) out.push({ ...it, label: lab + strip(it.label || a.name), sumPart: [j + 1, n], sumGroup: a.group }); return; }
+          if (items.some(x => x.moduleId === it.moduleId && x.activityId === sb.id) || out.some(x => x.moduleId === it.moduleId && x.activityId === sb.id)) return;
+          if (passedBefore({ moduleId: it.moduleId, activityId: sb.id, type: 'summary' })) return;
+          out.push({ moduleId: it.moduleId, activityId: sb.id, type: 'summary', label: lab + strip(sb.name), sumPart: [j + 1, n], sumGroup: a.group, sibling: true, fromImport: it.fromImport });
+        });
+      });
+      return out;
+    } catch (e) { return items; }
   }
   /* Set genérico del día congelado en este equipo. Clave chica (solo texto):
    * guarda únicamente el día actual, no acumula histórico. */

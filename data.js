@@ -2515,7 +2515,9 @@ function getActivityLock(student, mod, a, progress) {
   const ok = !!pe && (low || entryPassed(pe, student.level, grp));
   const need = passThreshold(student.level || 'pre-a1', grp);
   const pct = pe ? scorePct(pe.score) : null;
-  const msg = !pe ? `Primero completa «${prev.name}»` : `Primero aprueba «${prev.name}» (necesitas ${need}%${pct != null ? ', tienes ' + pct + '%' : ''})`;
+  /* CANDADO-CON-SALIDA-V1 (30-oct): «Transform» solo no dice de qué tema → «Transform T3» */
+  const pnm = prev.type === 'grammar' && prev.group && /^T\d+/.test(prev.group) && !/\bT\d+\b/.test(prev.name || '') ? prev.name + ' ' + prev.group.match(/^T\d+/)[0] : prev.name;
+  const msg = !pe ? `Primero completa «${pnm}»` : `Primero aprueba «${pnm}» (necesitas ${need}%${pct != null ? ', tienes ' + pct + '%' : ''})`;
   return { locked: !ok, prev, low, need, msg, sum: sumQ };
 }
 

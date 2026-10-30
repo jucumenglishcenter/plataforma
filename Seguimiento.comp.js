@@ -49,8 +49,10 @@ function useSegFacts(o) {
   React.useEffect(() => {
     const again = () => { if (document.visibilityState === 'visible' && Date.now() - last.current > 15000) run(true); };
     const chg = () => run(false);
+    /* P3 · SEG-REFRESCO-V1 (30-oct): con la pantalla a la vista se vuelve a traer de la nube cada minuto */
+    const iv = setInterval(() => { if (document.visibilityState === 'visible' && Date.now() - last.current > 55000) run(true); }, 60000);
     window.addEventListener('focus', again); document.addEventListener('visibilitychange', again); window.addEventListener('jucum-seg-change', chg);
-    return () => { window.removeEventListener('focus', again); document.removeEventListener('visibilitychange', again); window.removeEventListener('jucum-seg-change', chg); };
+    return () => { clearInterval(iv); window.removeEventListener('focus', again); document.removeEventListener('visibilitychange', again); window.removeEventListener('jucum-seg-change', chg); };
   }, [run]);
   return { F: st.key === key ? st.F : null, err: st.err, busy: st.busy, reload: () => run(true) };
 }

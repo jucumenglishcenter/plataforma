@@ -1154,7 +1154,7 @@ function ModChip({ student, moduleId, onlyReview }) {
     ? <span style={{display:'inline-flex', alignItems:'center', gap:3, fontSize:10.5, fontWeight:800, color:'#6B4200', background:'#FFE9B8', border:'1px solid #EFC46A', borderRadius:9, padding:'1px 7px', marginLeft:6, verticalAlign:'middle', whiteSpace:'nowrap'}}>{t.label} · repaso</span>
     : <span style={{display:'inline-flex', alignItems:'center', fontSize:10.5, fontWeight:800, color:'#1B3B6F', background:'#E4EDFB', border:'1px solid #C5D6F2', borderRadius:9, padding:'1px 7px', marginLeft:6, verticalAlign:'middle', whiteSpace:'nowrap'}}>{t.label}</span>;
 }
-function linkFor(a, mod, studentId) {
+function linkFor(a, mod, studentId, _dep) {
   // a.url = la URL real del material en GitHub Pages (se configura por actividad
   // al importar el catálogo). Sin url, el material aún NO está disponible: no
   // generamos enlace para no mandar al alumno a una página inexistente (404).
@@ -1167,7 +1167,17 @@ function linkFor(a, mod, studentId) {
     const D = window.JUCUM_DATA;
     const stu0 = (D.STUDENTS || []).find(s => s.id === studentId);
     const lk = (stu0 && D.getActivityLock) ? D.getActivityLock(stu0, mod, a) : null;
-    if (lk && lk.locked) return '#jlock:' + encodeURIComponent(lk.msg || 'Primero completa la actividad anterior');
+    /* 🔓 CANDADO-CON-SALIDA-V1 (30-oct-2026): el candado lleva el enlace de lo que falta (siguiendo la cadena
+     * si eso también está cerrado) → botón «Abrir … →» en la tarjeta y en el aviso. Caso Levi: el resumen que
+     * faltaba no estaba en su lista y no tenía cómo llegar. */
+    if (lk && lk.locked) {
+      let go = '';
+      try {
+        const tg = lk.prev && lk.prev.url ? lk.prev : null; const dep = _dep || 0;
+        if (tg && dep < 6) { const ph = linkFor(tg, mod, studentId, dep + 1); const g2 = isLockHref(ph) ? lockGoOf(ph) : (ph ? { url: ph, name: tg.name || '' } : null); if (g2 && g2.url) go = '#jgo:' + encodeURIComponent(g2.url) + '#jgn:' + encodeURIComponent(g2.name || ''); }
+      } catch (e) {}
+      return '#jlock:' + encodeURIComponent(lk.msg || 'Primero completa la actividad anterior') + go;
+    }
     if (lk && lk.sum) lockQ += `&jucum_sum=${encodeURIComponent(lk.sum.id)}&jucum_sumname=${encodeURIComponent(lk.sum.name || '')}`;
     if (lk && lk.prev) lockQ += `&jucum_prev=${encodeURIComponent(lk.prev.id)}&jucum_prevname=${encodeURIComponent(lk.prev.name || '')}&jucum_prevlow=${lk.low ? 1 : 0}&jucum_pass=${lk.need}`;
   } catch (e) {}
@@ -1186,24 +1196,35 @@ function linkFor(a, mod, studentId) {
   return `${base}${sep}jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent(mod.id)}&jucum_act=${encodeURIComponent(a.id)}&jucum_kind=${encodeURIComponent(a.type||'')}${free}${lockQ}`;
 }
 function isLockHref(h) { return typeof h === 'string' && h.indexOf('#jlock:') === 0; }
-function lockMsgOf(h) { try { return decodeURIComponent(h.slice(7)); } catch (e) { return 'Primero completa la actividad anterior'; } }
-function showLockToast(msg) {
+function lockMsgOf(h) { try { return decodeURIComponent(String(h).slice(7).split('#jgo:')[0]); } catch (e) { return 'Primero completa la actividad anterior'; } }
+function lockGoOf(h) { try { const s = String(h || ''); const i = s.indexOf('#jgo:'); if (i < 0) return null; const r = s.slice(i + 5).split('#jgn:'); return { url: decodeURIComponent(r[0]), name: r[1] ? decodeURIComponent(r[1]) : '' }; } catch (e) { return null; } }
+function showLockToast(msg, go) {
   try {
     const old = document.getElementById('jec-lock-toast'); if (old) old.remove();
     const t = document.createElement('div'); t.id = 'jec-lock-toast';
     t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:100000;background:#1B3B6F;color:#fff;font:700 14px/1.4 Nunito,system-ui,sans-serif;padding:12px 18px;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:min(92vw,440px);text-align:center;';
     t.textContent = '🔒 ' + msg;
+    if (go && go.url) {
+      const b = document.createElement('button'); b.type = 'button';
+      b.style.cssText = 'display:block;margin:9px auto 0;border:none;background:#fff;color:#1B3B6F;font:800 13.5px Nunito,system-ui,sans-serif;border-radius:10px;padding:8px 14px;cursor:pointer;min-height:40px;';
+      b.textContent = 'Abrir ' + (go.name ? '«' + go.name + '»' : 'lo que falta') + ' →';
+      b.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); try { t.remove(); } catch (e) {} openMat(go.url); };
+      t.appendChild(b);
+    }
     document.body.appendChild(t);
-    setTimeout(() => { try { t.remove(); } catch (e) {} }, 4200);
+    setTimeout(() => { try { t.remove(); } catch (e) {} }, go && go.url ? 8000 : 4200);
   } catch (e) {}
 }
 if (!window.__JEC_LOCK_CLICK) {
   window.__JEC_LOCK_CLICK = true;
   document.addEventListener('click', e => {
+    const gb = e.target && e.target.closest ? e.target.closest('[data-jgo]') : null;
+    if (gb) { e.preventDefault(); e.stopPropagation(); openMat(gb.getAttribute('data-jgo')); return; }
     const el = e.target && e.target.closest ? e.target.closest('a[href^="#jlock:"]') : null;
     if (!el) return;
     e.preventDefault(); e.stopPropagation();
-    showLockToast(lockMsgOf(el.getAttribute('href')));
+    const h = el.getAttribute('href');
+    showLockToast(lockMsgOf(h), lockGoOf(h));
   }, true);
 }
 
@@ -1213,7 +1234,7 @@ if (!window.__JEC_LOCK_CLICK) {
  * guardián cargado, navega igual: nunca bloquea. */
 function openMat(href) {
   if (!href) return;
-  if (isLockHref(href)) return showLockToast(lockMsgOf(href));
+  if (isLockHref(href)) return showLockToast(lockMsgOf(href), lockGoOf(href));
   if (window.JUCUM_GATE) return window.JUCUM_GATE.go(href);
   window.location.href = href;
 }
@@ -2456,17 +2477,22 @@ function TodayPracticeCard({ student }) {
           const href = (mod && a) ? linkFor(a, mod, student.id) : null;
           /* 📄 Plan del teacher: Quizlet abre el juego exacto que pidió (vocabulario/traducir/ordenar) */
           const qGame = (mod && a && a.type === 'quizlet') ? (() => { const gs = quizletGames(a); const g = gs.find(x => x.key === it.quizKey) || gs[0]; return g ? { ...g, url: it.quizUrl || g.url } : (it.quizUrl ? { key: it.quizKey, url: it.quizUrl } : null); })() : null;
-          const tint = st.st === 'ok' ? {background:'#F2FAF3', borderColor:'#BFE3C3'} : st.st === 'low' ? {background:'#FFFBF0', borderColor:'#F0DDB0'} : null;
+          /* 📘 RESUMEN-2-DE-2 (30-oct): parte de un tema con 2 resúmenes que aún falta y la otra ya está hecha → ámbar */
+          const partHalf = !!it.sumPart && st.st === 'todo' && !prog.completed[`${it.moduleId}:${it.activityId}`] && items.some((x, j) => j !== i && x.sumPart && x.sumGroup === it.sumGroup && x.moduleId === it.moduleId && prog.completed[`${x.moduleId}:${x.activityId}`]);
+          const tint = st.st === 'ok' ? {background:'#F2FAF3', borderColor:'#BFE3C3'} : (st.st === 'low' || partHalf) ? {background:'#FFFBF0', borderColor:'#F0DDB0'} : null;
           const lkd = isLockHref(href) && st.st !== 'ok' && st.st !== 'low';
+          const lgo = lkd ? lockGoOf(href) : null;
           const sub = lkd
-            ? <span style={{color:'#8A7F6A', fontWeight:800}}>🔒 {lockMsgOf(href)}</span>
+            ? <span style={{color:'#8A7F6A', fontWeight:800, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>🔒 {lockMsgOf(href)}{lgo && <span role="button" data-jgo={lgo.url} style={{display:'inline-flex', alignItems:'center', minHeight:34, background:'#1B3B6F', color:'#fff', borderRadius:9, padding:'5px 11px', fontSize:12, fontWeight:800, cursor:'pointer', whiteSpace:'nowrap'}}>Abrir →</span>}</span>
+            : partHalf
+            ? <span style={{color:'#92510F', fontWeight:800}}>Te falta esta parte del resumen · 8 min</span>
             : st.st === 'ok'
             ? <span style={{color:'#2E7D32', fontWeight:800}}>✓ Hecha hoy{st.pct != null ? ` · ${st.pct}%` : ''} — ¡bien ahí!</span>
             : st.st === 'low'
               ? <span style={{color:'#92510F', fontWeight:800}}>Hecha hoy · {st.pct}% — vuelve a intentarla (la nota cambia tras ½ hora)</span>
               : <span>{isGeneric ? 'Recomendado para ti' : (it.fromImport ? '📌 Según el plan de tu teacher' : 'Indicado por tu teacher')}{it.prio ? <b style={{color:'#AD1457'}}> · primero esto</b> : null}</span>;
           const inner = (<>
-            {badge(st)}
+            {partHalf ? <span style={{...badgeBase, borderColor:'#F0C66B', background:'linear-gradient(90deg,#FB8C00 50%,#FFE0B2 50%)', color:'transparent'}}>·</span> : badge(st)}
             <span className="next-ico">{typeIcon(it.type)}</span>
             <div className="next-info"><b>{it.label}<ModChip student={student} moduleId={it.moduleId} onlyReview /></b>{it.note ? <span style={{display:'block', fontSize:12, color:'#555', fontWeight:600, lineHeight:1.4, margin:'2px 0'}}>{it.note}</span> : null}{sub}</div>
             {(href || qGame) && !lkd && <span className="next-arr">→</span>}

@@ -507,6 +507,17 @@
     return null;
   }
   function daysBetween(a, b) { const out = []; if (!a || !b || a > b) return out; const d = parseYMD(a); let n = 0; while (ymd(d) <= b && n < 40) { out.push(ymd(d)); d.setDate(d.getDate() + 1); n++; } return out; }
+  /* 📘 RESUMEN-POR-NOMBRE-V1 (30-oct-2026): un tema puede tener 2 resúmenes (Going to · Will). Antes se tomaba
+   * siempre el PRIMERO del tema → «Resumen · Will» abría el de Going to y el Fill in quedaba con candado.
+   * Ahora se elige por las palabras PROPIAS de cada resumen; si el texto no nombra ninguno, van todos los del tema. */
+  function sumTk(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\([^)]*\)/g, ' ').split(/[^a-z0-9]+/).filter(w => w && !/^(resumen|resumenes|summary|summaries|repaso|gramatica|grammar|de|del|la|el|los|the|y|and|vs|si|todavia|no|lo|has|completado|completa|t\d+|p\d|practica|future)$/.test(w)); }
+  function sumsByName(list, text) {
+    if (!list || list.length < 2) return list ? list.slice(0, 1) : [];
+    const want = sumTk(String(text || '').replace(/^.*?(resumen(es)?|summar(y|ies)|repaso de gram[aá]tica)/i, ''));
+    const own = list.map(a => { const others = list.filter(b => b !== a).map(b => sumTk(b.name).concat(sumTk(b.id))); const mine = sumTk(a.name).concat(sumTk(a.id)); return mine.filter(w => !others.some(o => o.includes(w))); });
+    const hit = list.filter((a, i) => want.some(w => own[i].includes(w)));
+    return hit.length ? hit : list.slice();
+  }
   function matchJ(mod, text, ctxGroup) {
     const s = String(text || ''); const out = []; const push = (a, x) => { if (a && !out.some(o => o.a.id === a.id)) out.push({ a, ...(x || {}) }); };
     const tm = s.match(/\bT(\d+)\b/); const tg = tm ? groupsOf(mod).find(g => new RegExp('^T' + tm[1] + '\\b').test(g)) : null;
@@ -515,7 +526,7 @@
     if (/fill|\bP1\b|pr[aá]ctica\s*#?\s*1/i.test(s)) actOfKind(mod, grp, 'fill').slice(0, 1).forEach(a => push(a));
     if (/identif|\bP2\b|pr[aá]ctica\s*#?\s*2/i.test(s)) actOfKind(mod, grp, 'id').slice(0, 1).forEach(a => push(a));
     if (/transform|\bP3\b|pr[aá]ctica\s*#?\s*3/i.test(s)) actOfKind(mod, grp, 'tr').slice(0, 1).forEach(a => push(a));
-    if (/resumen|summary|repaso de gram/i.test(s) || (tg && /revis|repas|review/i.test(s))) actOfKind(mod, grp, 'summary').slice(0, 1).forEach(a => push(a));
+    if (/resumen|summary|repaso de gram/i.test(s) || (tg && /revis|repas|review/i.test(s))) sumsByName(actOfKind(mod, grp, 'summary'), s).forEach(a => push(a));
     if (out.length) return out;
     /* RL-FIX-V1 (17-oct): el nombre “Comprensión lectora/auditiva” gana a la palabra suelta “audio” de los pasos */
     const rk = window.JUCUM_TT && window.JUCUM_TT.rlKind ? window.JUCUM_TT.rlKind(s) : null;
