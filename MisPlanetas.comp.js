@@ -17,9 +17,11 @@
     '.mp-r1{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:900;color:#E8ECF8}.mp-r1 b{margin-left:auto;color:#FFC531;white-space:nowrap}',
     '.mp-seg{display:flex;gap:4px}.mp-seg span{flex:1;height:22px;border-radius:7px;background:#2C3F7E;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:900;color:#7F8DBA}',
     '.mp-seg span.on{background:#FFC531;color:#6B4A00;box-shadow:0 3px 0 #D9A000}.mp-seg span.nx{border:2px dashed #FFC531;color:#FFC531}',
+    '.mp-seg span.sp{flex:1.5;display:flex;gap:2px;background:none;border:0;padding:0;box-shadow:none}.mp-seg span.sp i{flex:1;height:22px;border-radius:7px;background:#2C3F7E;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:9.5px;font-weight:900;color:#7F8DBA}',
+    '.mp-seg span.sp i.on{background:#FFC531;color:#6B4A00;box-shadow:0 3px 0 #D9A000}.mp-seg span.sp.nx i:not(.on){border:2px dashed #FFC531;color:#FFC531}',
     '.mp-nl{display:flex;align-items:center;gap:9px;background:rgba(255,255,255,.06);border-radius:12px;padding:6px 9px;font-size:12.5px;font-weight:800;color:#E8ECF8;line-height:1.35}.mp-nl b{color:#FFC531}',
     '.mp-neu{position:relative;width:34px;height:30px;flex-shrink:0}.mp-neu .b{position:absolute;inset:0;border-radius:48% 48% 44% 44%/54% 54% 46% 46%;background:radial-gradient(circle at 38% 30%,#FFB3D1,#FF6FA5)}',
-    '.mp-neu i{position:absolute;top:9px;width:8px;height:8px;background:#fff;border-radius:50%}.mp-neu i.l{left:7px}.mp-neu i.r{right:7px}.mp-neu i:after{content:"";position:absolute;top:2px;left:3px;width:3px;height:3px;background:#2A2A2A;border-radius:50%}',
+    '.mp-neu i{position:absolute;top:8px;width:9px;height:9px;background:#fff;border-radius:50%;box-shadow:0 0 0 1px rgba(122,23,51,.45);z-index:1}.mp-neu i.l{left:6px}.mp-neu i.r{right:6px}.mp-neu i:after{content:"";position:absolute;top:2.5px;left:2.5px;width:4px;height:4px;background:#2A2A2A;border-radius:50%}',
     '.mp-neu u{position:absolute;left:50%;bottom:5px;width:10px;height:5px;margin-left:-5px;background:#7A1733;border-radius:0 0 6px 6px}.mp-neu.o u{width:6px;height:6px;margin-left:-3px;border-radius:50%}',
     '.mp-map{position:relative;margin:6px auto 0}',
     '.mp-it{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;z-index:1}',
@@ -269,7 +271,11 @@ function MisPlanetas({ student, onBack, onPractice, onTasks }) {
           : <>
             <div className="mp-goal">
               <div className="mp-r1"><span style={{whiteSpace:'nowrap'}}>🏁 Meta: {lvl}</span><b>{golds}/{total} · {all ? '¡completo!' : '¡te falta' + (total - golds > 1 ? 'n ' + (total - golds) : ' 1') + '!'}</b></div>
-              <div className="mp-seg">{list.map((p, i) => <span key={i} className={p.kind === 'gold' ? 'on' : i === cur ? 'nx' : ''}>{p.label}</span>)}</div>
+              <div className="mp-seg">{list.map((p, i) => {
+                /* 🏁 el Final (2 partes) es UNA ficha partida en dos: cada mitad se pinta al rendir su parte */
+                const ps = p.final && p.info.exam && F.partesDeExamen ? F.partesDeExamen(p.info.exam) : [];
+                if (ps.length > 1) return <span key={i} className={'sp' + (i === cur && p.kind !== 'gold' ? ' nx' : '')} title={'Final · ' + ps.length + ' partes'}>{ps.map((pt, k) => <i key={k} className={p.kind === 'gold' || (p.att && (p.att._detalle || []).some(d => d.part === pt.key)) ? 'on' : ''}>F{k + 1}</i>)}</span>;
+                return <span key={i} className={p.kind === 'gold' ? 'on' : i === cur ? 'nx' : ''}>{p.label}</span>; })}</div>
               <div className="mp-nl"><MpNeu o={curP && curP.kind === 'fail'} />{msg}</div>
               {cloud.err && <div style={{fontSize:11.5, fontWeight:800, color:'#FFB14D'}}>⚠ No pude traer tus notas de la nube; muestro las de este equipo.</div>}
             </div>
