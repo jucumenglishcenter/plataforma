@@ -646,7 +646,9 @@ function StudentDashboard({ user, onLogout }) {
       ) : view === 'seguimiento' && window.StudentSeguimiento ? (
         <StudentSeguimiento student={student} onBack={() => setView('dashboard')} />
       ) : view === 'exam' ? (
-        <StudentExams user={user} onBack={() => setView('dashboard')} />
+        /* 🪐 MIS-PLANETAS-V1 (30-oct): la sección Examen = «Mis planetas» (solo los exámenes del nivel) */
+        window.MisPlanetas ? <MisPlanetas student={student} onBack={() => setView('dashboard')} onPractice={() => setView('practica')} onTasks={() => setView('tasks')} />
+          : <StudentExams user={user} onBack={() => setView('dashboard')} />
       ) : (view === 'avance' || view === 'report' || view === 'diagnosis') ? (
         <StudentAvance user={user} student={student} onBack={() => setView('dashboard')} />
       ) : view === 'boletin' && window.StudentBoletin ? (
