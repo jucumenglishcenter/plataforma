@@ -7,11 +7,11 @@ const { useState: oUseState } = React;
 
 const STEPS = [
   { icon:'👋', title:'¡Bienvenido a JUCUM English Center!',
-    body:'Esta es tu plataforma de práctica de inglés. Aquí encontrarás todos los materiales que tu profesor active para ti.' },
+    body:'Esta es tu plataforma de práctica de inglés. Aquí encontrarás todos los materiales que tu teacher active para ti.' },
   { icon:'📦', title:'Tu módulo activo',
     body:'Cada módulo tiene actividades de Story, Lectura, Listening y Gramática. Complétalas en orden — cada una desbloquea la siguiente.' },
   { icon:'🎯', title:'Tu meta diaria',
-    body:'Tu profesor define cuántos minutos debes practicar al día. Mira el anillo morado para ver tu progreso. ¡Mantén tu racha 🔥!' },
+    body:'Tu teacher define cuántos minutos debes practicar al día. Mira el anillo morado para ver tu progreso. ¡Mantén tu racha 🔥!' },
   { icon:'🏆', title:'XP, medallas y foro',
     body:'Gana puntos por cada actividad, desbloquea medallas (bronce, plata, oro) y participa en el foro de tu grupo para preguntar a tus compañeros.' },
 ];

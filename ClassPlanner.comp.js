@@ -344,7 +344,7 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
         ) : selDate <= todayYMD() && (   /* PLAN-BORRAR-V1: no se puede marcar como dada una clase de un día que aún no llega */
           <div style={{marginTop:10, borderTop:'1px dashed #E3DCC9', paddingTop:10, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
             <div style={{fontSize:12.5, fontWeight:800, color:'#8a7f6a', flex:1, minWidth:180}}>🏁 Esta clase aún no tiene cierre <span style={{fontWeight:700}}>· asistencia, temas y comentarios</span></div>
-            <button onClick={() => { TT.logClassMaterial({ date: selDate, groupId, materialName: '🏁 Clase realizada (marcada por el profesor)', minutes: (sel.classPlans[0] && sel.classPlans[0].lengthMin) || 0, source: 'manual-done' }); onChange(); setSummaryDate(selDate); }} style={{...btnGhost, padding:'7px 12px', fontSize:12.5, borderColor:'#9FD3A4', color:'#2E7D32', whiteSpace:'nowrap'}}>🏁 Cerrar clase</button>
+            <button onClick={() => { TT.logClassMaterial({ date: selDate, groupId, materialName: '🏁 Clase realizada (marcada por el teacher)', minutes: (sel.classPlans[0] && sel.classPlans[0].lengthMin) || 0, source: 'manual-done' }); onChange(); setSummaryDate(selDate); }} style={{...btnGhost, padding:'7px 12px', fontSize:12.5, borderColor:'#9FD3A4', color:'#2E7D32', whiteSpace:'nowrap'}}>🏁 Cerrar clase</button>
           </div>
         )}
       </div>

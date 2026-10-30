@@ -197,7 +197,7 @@ function MrDrawer({ list, index, setIndex, reviews, bump, onClose, who }) {
   const [saved, setSaved] = mrState('');
   const [sending, setSending] = mrState(false);
   const D = window.JUCUM_DATA;
-  const reviewer = who || window.JUCUM_TEACHER_NAME || 'Profesor';
+  const reviewer = who || window.JUCUM_TEACHER_NAME || 'Teacher';
   const checklist = mrChecklist(a.type);
   const checked = review.checklist || {};
 

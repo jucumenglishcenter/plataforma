@@ -184,7 +184,7 @@ function ManageStudents({ onBack }) {
       {resetting && (
         <TeacherPasswordGate
           title="Confirmar reset de contraseña"
-          message={`Vas a resetear la contraseña de ${resetting.fullName} a "1234". Ingresa tu contraseña de profesor para confirmar.`}
+          message={`Vas a resetear la contraseña de ${resetting.fullName} a "1234". Ingresa tu contraseña de teacher para confirmar.`}
           confirmLabel="🔑 Resetear a 1234"
           onConfirm={() => doResetPassword(resetting)}
           onClose={() => setResetting(null)}
@@ -195,7 +195,7 @@ function ManageStudents({ onBack }) {
         <TeacherPasswordGate
           danger
           title="🗑️ Eliminar alumno"
-          message={`Vas a eliminar a ${deleting.fullName} (@${deleting.username}). Esto borra PARA SIEMPRE su cuenta y acceso, todo su progreso, XP y racha, sus tareas y notas, y su historial de práctica. Esta acción NO se puede deshacer. Ingresa tu contraseña de profesor para confirmar.`}
+          message={`Vas a eliminar a ${deleting.fullName} (@${deleting.username}). Esto borra PARA SIEMPRE su cuenta y acceso, todo su progreso, XP y racha, sus tareas y notas, y su historial de práctica. Esta acción NO se puede deshacer. Ingresa tu contraseña de teacher para confirmar.`}
           confirmLabel="🗑️ Eliminar definitivamente"
           onConfirm={() => doDelete(deleting)}
           onClose={() => setDeleting(null)}
@@ -330,7 +330,7 @@ function TeacherPasswordGate({ title, message, confirmLabel, onConfirm, onClose,
   const [err, setErr] = smUseState('');
   const [busy, setBusy] = smUseState(false);
   const submit = async () => {
-    if (!pwd) { setErr('Ingresa tu contraseña de profesor.'); return; }
+    if (!pwd) { setErr('Ingresa tu contraseña de teacher.'); return; }
     setBusy(true); setErr('');
     let ok = false;
     if (window.JUCUM_SB?.verifyTeacherPassword) ok = await window.JUCUM_SB.verifyTeacherPassword(pwd);
@@ -349,7 +349,7 @@ function TeacherPasswordGate({ title, message, confirmLabel, onConfirm, onClose,
         <div className="modal-body">
           <div className="settings-hint" style={{marginBottom:12}}>{message}</div>
           {err && <div className="err" style={{marginBottom:12}}>⚠ {err}</div>}
-          <input type="password" className="input-text" autoFocus placeholder="Contraseña del profesor"
+          <input type="password" className="input-text" autoFocus placeholder="Contraseña del teacher"
                  value={pwd} onChange={e => setPwd(e.target.value)}
                  onKeyDown={e => { if (e.key === 'Enter') submit(); }} style={{width:'100%'}} />
           <div className="modal-actions">

@@ -66,6 +66,9 @@
   document.head.appendChild(el);
 })();
 
+/* ✅ Módulos que la teacher dio por COMPLETADOS sin nota (pedido 30-oct-2026, SOLO este grupo): el planeta sale dorado con ✓,
+ * sin número, y no festeja. No toca notas ni otras pantallas. Grupo → ids de módulo. */
+const MP_DONE_SIN_NOTA = { 'df4b0fa8-048e-4840-999d-f6e73ec2657b': ['pa1-m1', 'pa1-m2'] };   // Pre-A1 - Lunes y Viernes
 const MP_LVL = { 'pre-a1': 'Pre-A1', a1: 'A1', a2: 'A2' };
 const MP_DOW = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 function mpShort(d) { if (!d) return ''; const x = window.JUCUM_DAY.parse(d); return MP_DOW[x.getDay()] + ' ' + x.getDate(); }
@@ -158,16 +161,20 @@ function mpPlanets(student, rows) {
     else if (p.att && !(man && !p.att._parcial && mg != null && mg > p.att.score)) { p.grade = p.att.score; p.kind = p.att._parcial ? 'half' : (p.att.score >= min ? 'gold' : 'fail'); }
     else if (man) { p.grade = mg; p.kind = (mg != null ? mg >= min : !!man.passed) ? 'gold' : 'fail'; p.byMan = true; }
     else p.kind = 'none';
+    if ((MP_DONE_SIN_NOTA[student.group] || []).indexOf(p.mod.id) >= 0) { p.kind = 'gold'; p.grade = null; p.noGrade = true; p.byMan = false; }
     p.date = p.att && !p.byMan ? window.JUCUM_DAY.of(p.att.created_at) : (man && man.gradedAt ? window.JUCUM_DAY.of(man.gradedAt) : (p.info.result && p.info.result.date) || null);
   });
   const live = (p) => p.kind !== 'gold' && !(p.byMan && p.kind === 'fail' && !(p.info.phase === 'today' || p.info.phase === 'announced')) && (p.kind === 'half' || p.info.phase === 'today' || p.info.phase === 'announced' || p.info.paused ||
     (p.kind === 'fail' && F.retOpenFor && (() => { const r = F.retOpenFor(student, p.mod.id, true); return r.has && r.inScope && (r.active || F.pDay() < r.ret.from); })()));
   let cur = out.findIndex(live);
-  if (cur < 0) { const fm = D.getFocusModuleId ? D.getFocusModuleId(student) : null; cur = out.findIndex(p => p.mod.id === fm && p.kind !== 'gold'); }
-  if (cur < 0) cur = out.findIndex(p => p.kind === 'none');
+  /* auditoría 30-oct: un examen SIN rendir que quedó ANTES de otros ya rendidos no es «el próximo» (caso Jhia: M3 sin
+   * rendir con M4–Final dorados) → queda como «sin rendir»; el próximo solo puede estar después del último rendido. */
+  let lastDone = -1; out.forEach((p, i) => { if (p.kind !== 'none') lastDone = i; });
+  if (cur < 0) { const fm = D.getFocusModuleId ? D.getFocusModuleId(student) : null; cur = out.findIndex((p, i) => i > lastDone && p.mod.id === fm && p.kind !== 'gold'); }
+  if (cur < 0) cur = out.findIndex((p, i) => i > lastDone && p.kind === 'none');
   out.forEach((p, i) => {
     p.cur = i === cur;
-    if (p.kind === 'none') p.kind = i === cur ? 'next' : (cur >= 0 && i > cur) || cur < 0 ? 'lock' : 'miss';
+    if (p.kind === 'none') p.kind = i === cur ? 'next' : (i < lastDone || (cur >= 0 && i < cur)) ? 'miss' : 'lock';
   });
   return { list: out, cur };
 }
@@ -178,11 +185,11 @@ function mpHorario(F, ann) {
 }
 function mpTag(p, F) {
   const inf = p.info;
-  if (p.kind === 'gold') return ['y', p.label + ' ✓'];
+  if (p.kind === 'gold') return ['y', p.label + (p.noGrade ? ' ✓ completado' : ' ✓')];
   if (p.kind === 'fail') return ['o', (p.grade != null ? p.grade + ' · ' : '') + '¡casi!'];
   if (p.kind === 'half') return ['y', 'Te falta la ' + (p.att && p.att._falta ? p.att._falta : 'otra parte')];
-  if (p.kind === 'lock') return ['', p.label];
-  if (p.kind === 'miss') return ['', p.label + ' · sin rendir'];
+  if (p.kind === 'lock') { const np = p.final && p.info.exam && F.partesDeExamen ? F.partesDeExamen(p.info.exam).length : 0; return ['', p.final ? '🏁 Final' + (np > 1 ? ' · ' + np + ' partes' : '') : p.label]; }
+  if (p.kind === 'miss') return ['', (p.final ? '🏁 Final' : p.label) + ' · sin rendir'];
   if (inf.phase === 'today') { const h = inf.ann && (F.abiertoAhoraHasta && F.abiertoAhoraHasta(inf.ann) ? new Date(Date.parse(inf.ann.openUntil) - 5 * 3600000).toISOString().slice(11, 16) : inf.ann.to); return ['g', '¡Abierto' + (h ? ' hasta ' + F.fmtHora(h) : '') + '!']; }
   if (inf.phase === 'announced' && inf.ann && inf.ann.date) return inf.days === 0 || inf.isToday ? ['y', 'HOY' + (inf.ann.from ? ' · ' + F.fmtHora(inf.ann.from) : '')] : ['', 'Examen · ' + mpShort(inf.ann.date)];
   if (inf.phase === 'waitgrade') return ['', 'Ya cerró'];
@@ -207,18 +214,19 @@ function MisPlanetas({ student, onBack, onPractice, onTasks }) {
     const mine = seen[student.id] = seen[student.id] || [];
     const lim = window.JUCUM_DAY.add(window.JUCUM_DAY.today(), -14);
     let show = null, changed = false;
-    list.forEach(p => { const id = p.info.exam && p.info.exam.id; if (p.kind !== 'gold' || !id || mine.indexOf(id) >= 0) return; mine.push(id); changed = true; if (!show && (!p.date || p.date >= lim)) show = p; });
+    list.forEach(p => { const id = p.info.exam && p.info.exam.id; if (p.kind !== 'gold' || !id || mine.indexOf(id) >= 0) return; mine.push(id); changed = true; if (!show && !p.noGrade && (!p.date || p.date >= lim)) show = p; });
     if (changed) { try { if (window.JUCUM_STORE) window.JUCUM_STORE.setJSON(KEY, seen); else localStorage.setItem(KEY, JSON.stringify(seen)); } catch (e) {} }
     if (show) setCelebrate(show);
   }, [ready, golds]);
 
-  const W = 300, ROW = 112, EXTRA = 34, TOP = 60, BOT = 62;
+  const W = 300, ROW = 112, EXTRA = 34, TOP = 62, BOT = 78;
   const OFF = [0, -70, 52, -60, 64, -46, 56, -64];
   /* el planeta actual (anillo de 112px + etiqueta) lleva espacio extra arriba y abajo */
   const gaps = list.slice(1).map((p, i) => ROW + ((i === cur || i + 1 === cur) ? EXTRA : 0));
-  const H = total ? TOP + BOT + gaps.reduce((a, b) => a + b, 0) + (cur === 0 ? EXTRA / 2 : 0) + (cur === total - 1 ? EXTRA : 0) : 0;
-  const pos = []; let yy = H - BOT - (cur === 0 ? EXTRA / 2 : 0);
-  list.forEach((p, i) => { if (i) yy -= gaps[i - 1]; pos.push({ x: W / 2 + OFF[i % OFF.length], y: yy }); });
+  /* 30-oct (pedido): el recorrido va de ARRIBA hacia ABAJO — M1 arriba, el Final abajo como la recta final */
+  const pos = []; let yy = TOP + (cur === 0 ? EXTRA / 2 : 0);
+  list.forEach((p, i) => { if (i) yy += gaps[i - 1]; pos.push({ x: W / 2 + OFF[i % OFF.length], y: yy }); });
+  const H = total ? yy + BOT + (cur === total - 1 ? EXTRA / 2 : 0) : 0;
   /* al abrir, la página baja sola hasta el planeta actual (o el último dorado) */
   const mapRef = React.useRef(null), scrolled = React.useRef(false);
   React.useEffect(() => {
@@ -240,10 +248,10 @@ function MisPlanetas({ student, onBack, onPractice, onTasks }) {
     if (curP.kind === 'half') return <span>{last}¡Vas a medio camino! Te falta la <b>{curP.att._falta}</b>.</span>;
     if (curP.kind === 'fail') return <span>¡Faltó poquito! Toca tu planeta y te digo <b>qué repasar</b>.</span>;
     if (inf.phase === 'today') return <span>{last}<b>¡Tu examen está abierto!</b> Toca el planeta para empezar.</span>;
-    if (inf.paused) return <span>Tu acceso está en pausa. Escríbele a tu profesora. 💬</span>;
+    if (inf.paused) return <span>Tu acceso está en pausa. Escríbele a tu teacher. 💬</span>;
     if (inf.phase === 'waitgrade') return <span>Ese examen ya cerró. Toca el planeta para ver qué sigue.</span>;
     const habil = inf.canTake && !r.apt;
-    if (inf.phase === 'announced' && (r.apt || habil)) return <span>{last}¡{r.apt ? 'Eres apto' : 'Tu profesora te habilitó'}! Tu examen es el <b>{mpShort(inf.ann && inf.ann.date)}</b>.</span>;
+    if (inf.phase === 'announced' && (r.apt || habil)) return <span>{last}¡{r.apt ? 'Eres apto' : 'Tu teacher te habilitó'}! Tu examen es el <b>{mpShort(inf.ann && inf.ann.date)}</b>.</span>;
     if (!r.apt) return <span>{last}Para ser apto te falta <b>{Math.max(0, 75 - r.overall)} %</b>{r.blocker === 'coverage' ? ' de tus prácticas' : ''}. Toca el planeta y te digo qué hacer.</span>;
     return <span>{last}¡Eres apto! Tu examen aún no tiene fecha.</span>;
   })();
@@ -257,7 +265,7 @@ function MisPlanetas({ student, onBack, onPractice, onTasks }) {
           {total > 0 && <span style={{fontSize:12, fontWeight:900, color:'#FFC531', background:'rgba(255,197,49,.14)', borderRadius:10, padding:'4px 9px', whiteSpace:'nowrap'}}>{golds}/{total} dorados</span>}
         </div>
         {!ready ? <div className="mp-goal" style={{alignItems:'center', padding:'26px 12px', fontWeight:800, color:'#C3CBE6'}}>Cargando tus planetas…</div>
-          : !total ? <div className="mp-goal"><div className="mp-nl"><MpNeu /><span>Tu profesora aún no publicó exámenes para {lvl}. Cuando haya, aparecerán aquí como planetas. 🪐</span></div></div>
+          : !total ? <div className="mp-goal"><div className="mp-nl"><MpNeu /><span>Tu teacher aún no publicó exámenes para {lvl}. Cuando haya, aparecerán aquí como planetas. 🪐</span></div></div>
           : <>
             <div className="mp-goal">
               <div className="mp-r1"><span style={{whiteSpace:'nowrap'}}>🏁 Meta: {lvl}</span><b>{golds}/{total} · {all ? '¡completo!' : '¡te falta' + (total - golds > 1 ? 'n ' + (total - golds) : ' 1') + '!'}</b></div>
@@ -358,12 +366,13 @@ function MpSheet({ p, student, lvl, onClose, onPractice, onTasks }) {
   const fecha = (d) => d ? new Date(d).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' }) : '';
   let body;
 
-  if (p.kind === 'lock') body = <div className="mp-card">{head('#9AA6CF', title, <>{p.mod.name}<br />Este planeta se desbloquea cuando llegues a este módulo. ¡Sigue avanzando! 🚀</>)}</div>;
+  if (p.noGrade) body = <div className="mp-card">{head('#FFC531', '¡Planeta completado!', <><b>{p.mod.name}</b> quedó completado. ✓</>)}</div>;
+  else if (p.kind === 'lock') body = <div className="mp-card">{head('#9AA6CF', title, <>{p.mod.name}<br />Este planeta se desbloquea cuando llegues a este módulo. ¡Sigue avanzando! 🚀</>)}</div>;
   else if ((inf.phase === 'done' && !att) || p.byMan) {
     const res = p.byMan ? Object.assign({}, p.man, { passed: p.kind === 'gold', grade: p.grade }) : (inf.result || {});
     body = <div className="mp-card">{head(res.passed ? '#FFC531' : '#FFB14D', res.passed ? '¡Planeta dominado!' : 'Aún no apruebas', p.mod.name)}
       {typeof res.grade === 'number' && <div className="mp-rw"><span><b>{res.grade}</b>tu nota</span><span><b>{min}</b>para aprobar</span></div>}
-      {res.feedback && <span className="mp-s">📝 Tu profesora: «{res.feedback}»</span>}</div>;
+      {res.feedback && <span className="mp-s">📝 Tu teacher: «{res.feedback}»</span>}</div>;
   } else if (att && att._parcial) {
     const ps = F.partesDeExamen ? F.partesDeExamen(ex) : [], urls = (ex.parts || []).filter(x => x.url);
     const abierto = !(inf.ann && inf.ann.date && F.pDay() < inf.ann.date);
@@ -385,16 +394,16 @@ function MpSheet({ p, student, lvl, onClose, onPractice, onTasks }) {
       const part0 = (ex.parts || []).find(x => x.url);
       const retry = part0 ? part0.url + (part0.url.includes('?') ? '&' : '?') + 'jucum_exam=1&jucum_retry=1&jucum_uid=' + encodeURIComponent(student.id) + '&jucum_mod=' + encodeURIComponent('exam-' + ex.id) + '&jucum_act=' + encodeURIComponent(part0.competency || '') + vq : null;
       const R = rs.ret, q = rs.reqs || {};
-      body = <div className="mp-card">{head('#FFB14D', '¡Faltó poquito! Sacaste ' + att.score, <>Necesitabas <b>{min}</b> en {p.mod.name}. Tu nota quedó registrada sola; tu profesora ve el detalle.</>)}
+      body = <div className="mp-card">{head('#FFB14D', '¡Faltó poquito! Sacaste ' + att.score, <>Necesitabas <b>{min}</b> en {p.mod.name}. Tu nota quedó registrada sola; tu teacher ve el detalle.</>)}
         {det && <span className="mp-s">🧩 {det}</span>}
         <span className="mp-s">Lo que más te costó: <b>{weak.length ? weak.join(' · ') : 'las prácticas del módulo'}</b>.</span>
         <button type="button" className="mp-cta" onClick={go(onPractice)}>Repasar en Mi práctica</button>
         {rs.has && rs.inScope ? (
           rs.open && retry ? <><a className="mp-cta o" href={retry} target="_blank" rel="noreferrer">🔁 Rendir mi recuperación</a><span className="mp-s" style={{textAlign:'center'}}>Abierta hasta el <b>{F.fmtFecha(R.to)}</b> · esta nota reemplaza la anterior.</span></>
-          : rs.blocked ? <span className="mp-s">⏸ Tu profesora habilitará tu nueva oportunidad. Sigue practicando. 💬</span>
+          : rs.blocked ? <span className="mp-s">⏸ Tu teacher habilitará tu nueva oportunidad. Sigue practicando. 💬</span>
           : F.pDay() < R.from ? <span className="mp-s">🔁 <b>Tu nueva oportunidad:</b> del <b>{F.fmtFecha(R.from)}</b> al <b>{F.fmtFecha(R.to)}</b>. Llega apto practicando cada día.</span>
           : rs.active ? <span className="mp-s">🔁 <b>Recuperación abierta</b> hasta el <b>{F.fmtFecha(R.to)}</b>. Te falta: apto <b>{q.overall}%/{q.threshold}%</b>{q.dias14 != null ? <> · práctica <b>{q.dias14}/{F.retMin} días</b></> : null} · avance <b>{q.avance || 0}/{q.avanceMin || 2} días</b>. Apenas cumplas, el botón aparece aquí.</span> : null
-        ) : <span className="mp-s">🔁 Si tu profesora te abre una nueva oportunidad, aparecerá aquí con su fecha.</span>}
+        ) : <span className="mp-s">🔁 Si tu teacher te abre una nueva oportunidad, aparecerá aquí con su fecha.</span>}
         {window.RetPlanBlock && rs.has && rs.inScope && !rs.blocked && <div style={{color:'#2A2A2A'}}><RetPlanBlock student={student} mod={p.mod} att={att} /></div>}</div>;
     }
   } else if (inf.phase === 'today' && inf.link) {
@@ -403,7 +412,7 @@ function MpSheet({ p, student, lvl, onClose, onPractice, onTasks }) {
       <div className="mp-rec"><b>Antes de empezar, recuerda:</b><span>🎧 Ponte los audífonos</span><span>📵 Quédate solo en la pestaña del examen</span><span>⭐ Vale tu primer intento</span></div>
       <a className="mp-cta g" href={inf.link} target="_blank" rel="noreferrer">Empezar{ps.length > 1 ? ' la ' + ps[0].label : ''}</a>
       <span className="mp-s" style={{textAlign:'center'}}>Tus respuestas se guardan solas. Al terminar, tu nota sale sola.</span></div>;
-  } else if (inf.paused) body = <div className="mp-card">{head('#9AA6CF', title, <>Hoy es tu examen, pero <b>tu acceso está en pausa</b>. Escríbele a tu profesora por 💬 Hablemos.</>)}</div>;
+  } else if (inf.paused) body = <div className="mp-card">{head('#9AA6CF', title, <>Hoy es tu examen, pero <b>tu acceso está en pausa</b>. Escríbele a tu teacher por 💬 Hablemos.</>)}</div>;
   else if (inf.phase === 'waitgrade') {
     const rs = F.retOpenFor ? F.retOpenFor(student, p.mod.id, true) : { has: false };
     body = <div className="mp-card">{head('#9AA6CF', title + ' · ya cerró', <>{p.mod.name}. Si lo rendiste, tu nota aparecerá aquí en un momento.</>)}
@@ -415,12 +424,12 @@ function MpSheet({ p, student, lvl, onClose, onPractice, onTasks }) {
     body = <div className="mp-card">{head('#8EE6F2', title, <>{p.mod.name}{inf.ann && inf.ann.date ? <> · <b>{F.fmtFecha(inf.ann.date)}</b> · {mpHorario(F, inf.ann)}</> : ' · aún sin fecha'}</>)}
       <div className="mp-rw">{inf.days != null && <span><b>{inf.days === 0 ? 'HOY' : inf.days}</b>{inf.days === 0 ? 'a la hora' : inf.days === 1 ? 'día' : 'días'}</span>}<span><b>{nParts}</b>{nParts === 1 ? 'parte' : 'partes'}</span><span><b>{min}</b>para aprobar</span></div>
       <div style={{display:'flex', alignItems:'center', gap:9}}><div className="mp-bar" style={{flex:1}}><span style={{width:Math.min(100, ok ? 100 : r.overall) + '%', background:color}}></span><i></i></div><b style={{fontSize:13, color, whiteSpace:'nowrap'}}>{habil ? '✓ habilitado' : r.apt ? '✓ APTO' : r.overall + ' %'}</b></div>
-      <span className="mp-s">{habil ? <>✅ <b>Tu profesora te habilitó</b>: no necesitas llegar al 75 %. El botón aparecerá aquí el día del examen.</>
+      <span className="mp-s">{habil ? <>✅ <b>Tu teacher te habilitó</b>: no necesitas llegar al 75 %. El botón aparecerá aquí el día del examen.</>
         : r.apt ? <>¡Eres apto! 🎉 Ojo: si dejas de practicar puede bajar del 75 %. Mantenlo con un poco cada día. El botón aparecerá aquí el día del examen.</>
         : r.blocker === 'coverage' ? <>Ya pasaste el 75 % ({r.overall} %), pero también hay que <b>terminar el módulo</b>: llevas <b>{r.coverage || 0} %</b> de tus prácticas aprobadas y necesitas <b>{r.needCoverage || 60} %</b>.</>
         : <>El examen se abre para alumnos <b>aptos (75 %)</b>. Te falta <b>{Math.max(0, 75 - r.overall)} %</b>: ¡aún estás a tiempo!</>}</span>
       {!ok && <MpGuide student={student} p={p} onPractice={go(onPractice)} onTasks={go(onTasks)} />}
-      <button type="button" className="mp-cta off" disabled>{inf.ann && inf.ann.date ? 'Se abre el ' + mpShort(inf.ann.date) + (inf.ann.from ? ' · ' + F.fmtHora(inf.ann.from) : '') : 'Tu profesora pondrá la fecha'}</button></div>;
+      <button type="button" className="mp-cta off" disabled>{inf.ann && inf.ann.date ? 'Se abre el ' + mpShort(inf.ann.date) + (inf.ann.from ? ' · ' + F.fmtHora(inf.ann.from) : '') : 'Tu teacher pondrá la fecha'}</button></div>;
   }
   const X = window.JUCUM_EXAMS;
   const canUp = !!(inf.win && F.winEffectiveOpen && F.winEffectiveOpen(inf.win) && X && X.canTakeWindow && X.canTakeWindow(student, inf.win) && window.TaskFilePicker && p.kind !== 'lock');
@@ -448,7 +457,7 @@ function MpUpload({ w, student }) {
     <div className="mp-card" style={{background:'#fff', color:'#2A2A2A'}}>
       <b style={{fontSize:13, fontWeight:900, color:'#13255E'}}>📎 Subir material (opcional · ej. audio de tu Speaking)</b>
       <window.TaskFilePicker attachments={attachments} setAttachments={setAttachments} allowRecord={true} />
-      {sent ? <div style={{fontSize:12.5, fontWeight:800, color:'#2E7D32'}}>✓ Enviado. Tu profesora ya lo puede ver.</div>
+      {sent ? <div style={{fontSize:12.5, fontWeight:800, color:'#2E7D32'}}>✓ Enviado. Tu teacher ya lo puede ver.</div>
         : <button type="button" className="mp-cta" style={{fontSize:13}} onClick={() => { try { X.submitExam(w.id, student.id, { attachments }); setSent(true); } catch (e) { alert('No se pudo enviar. Inténtalo de nuevo.'); } }}>{sub ? '🔄 Actualizar entrega' : '📨 Enviar material'}</button>}
     </div>);
 }

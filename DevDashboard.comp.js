@@ -115,7 +115,7 @@ function MaintenancePanel() {
           </div>
 
           <div style={{marginTop:20, background:'#FBF7F4', border:'1px solid #ECE2DC', borderRadius:11, padding:'13px 15px', fontSize:12.5, fontWeight:600, color:'#6B6B6B', lineHeight:1.55}}>
-            ℹ️ Al activarlo, los alumnos y profesores que estén dentro verán la pantalla de mantenimiento en pocos segundos (sin recargar). Tú sigues trabajando normalmente. Recuerda <b>desactivarlo</b> al terminar.
+            ℹ️ Al activarlo, los alumnos y teachers que estén dentro verán la pantalla de mantenimiento en pocos segundos (sin recargar). Tú sigues trabajando normalmente. Recuerda <b>desactivarlo</b> al terminar.
           </div>
         </div>
       </div>
@@ -195,7 +195,7 @@ function ErrorReportsPanel({ onCountChange }) {
       <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:14, flexWrap:'wrap'}}>
         <div style={{flex:1, minWidth:220}}>
           <h1 style={{fontFamily:"'Fredoka',sans-serif", fontSize:23, margin:0}}>🐞 Reportes de los materiales</h1>
-          <div style={{fontSize:12.5, color:'var(--text-soft)', fontWeight:700}}>Reportes del botón 🐞 en los materiales — de alumnos y del profesor (desde 📚 Materiales) · {counts.nuevo} nuevo{counts.nuevo===1?'':'s'} · {counts.revisando} en revisión · {counts.resuelto} resuelto{counts.resuelto===1?'':'s'}</div>
+          <div style={{fontSize:12.5, color:'var(--text-soft)', fontWeight:700}}>Reportes del botón 🐞 en los materiales — de alumnos y del teacher (desde 📚 Materiales) · {counts.nuevo} nuevo{counts.nuevo===1?'':'s'} · {counts.revisando} en revisión · {counts.resuelto} resuelto{counts.resuelto===1?'':'s'}</div>
         </div>
         <button className="btn-soft" onClick={load}>↻ Actualizar</button>
       </div>
@@ -208,7 +208,7 @@ function ErrorReportsPanel({ onCountChange }) {
 
       <div style={{display:'flex', alignItems:'center', gap:7, flexWrap:'wrap', marginBottom:14}}>
         <span style={{fontSize:11.5, fontWeight:800, color:'var(--text-mute,#A8A8A8)', textTransform:'uppercase', letterSpacing:'.05em'}}>Quién reporta</span>
-        {[['all','Todos'],['teacher','👨‍🏫 Profesor'],['student','👩‍🎓 Alumnos']].map(([k,l]) => {
+        {[['all','Todos'],['teacher','👨‍🏫 Teacher'],['student','👩‍🎓 Alumnos']].map(([k,l]) => {
           const n = k==='all' ? (rows||[]).length : (rows||[]).filter(r => k==='teacher' ? r.reporter==='teacher' : r.reporter!=='teacher').length;
           return <button key={k} onClick={() => setWhoF(k)} style={{border:'1.5px solid ' + (whoF===k?'#0D6E4F':'var(--border)'), background:whoF===k?'#0D6E4F':'#fff', color:whoF===k?'#fff':'var(--text-soft)', fontFamily:'inherit', fontWeight:800, fontSize:12, borderRadius:18, padding:'6px 13px', cursor:'pointer'}}>{l} {n}</button>;
         })}
@@ -219,14 +219,14 @@ function ErrorReportsPanel({ onCountChange }) {
       {rows !== null && shown.length === 0 && !err && (
         <div style={{padding:'38px 20px', textAlign:'center', color:'#999', fontWeight:700, background:'#fff', border:'1.5px dashed var(--border)', borderRadius:14}}>
           <div style={{fontSize:38, marginBottom:6}}>🎉</div>
-          {filter === 'abiertos' ? 'Sin reportes pendientes. Cuando un alumno toque 🐞 en su material —o el profesor envíe algo desde 📚 Materiales— aparecerá aquí.' : 'Nada en este filtro.'}
+          {filter === 'abiertos' ? 'Sin reportes pendientes. Cuando un alumno toque 🐞 en su material —o el teacher envíe algo desde 📚 Materiales— aparecerá aquí.' : 'Nada en este filtro.'}
         </div>
       )}
 
       <div style={{display:'flex', flexDirection:'column', gap:10}}>
         {shown.map(r => {
           const st = ST[r.status] || ST.nuevo;
-          const who = r.reporter === 'teacher' ? '👨‍🏫 Profesor' : (nameOf(r.user_id) || (r.user_id ? ('Alumno ' + r.user_id) : 'Anónimo (fuera de la plataforma)'));
+          const who = r.reporter === 'teacher' ? '👨‍🏫 Teacher' : (nameOf(r.user_id) || (r.user_id ? ('Alumno ' + r.user_id) : 'Anónimo (fuera de la plataforma)'));
           const grp = groupOf(r.group_id);
           const part = partLabel(r);
           return (

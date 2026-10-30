@@ -254,7 +254,7 @@
     (evals || []).forEach(e => {
       eByStudent[e.student_id] = eByStudent[e.student_id] || [];
       eByStudent[e.student_id].push({
-        id:e.id, date:e.created_at, teacherName:'Profesor',
+        id:e.id, date:e.created_at, teacherName:'Teacher',
         ratings:{ speaking:e.speaking, listening:e.listening, comprehension:e.comprehension },
         feedback:e.feedback, attachments:e.attachments || [],
       });

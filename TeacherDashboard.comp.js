@@ -57,10 +57,10 @@ function TeacherDashboard({ onLogout, user }) {
       <header className="app-header">
         <div className="app-logo">
           <img src={window.JUCUM_LOGO || 'logo-jucum.png'} alt="JUCUM EC" />
-          <div className="pgtitle">Panel del Profesor</div>
+          <div className="pgtitle">Panel del Teacher</div>
         </div>
         <div className="app-right">
-          <span className="role-pill t">👨‍🏫 Profesor</span>
+          <span className="role-pill t">👨‍🏫 Teacher</span>
           <a className={`nav-link ${['groups','group','student'].includes(view.kind)?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'groups'});}}>👥 Mis grupos</a>
           <a className={`nav-link ${view.kind==='planner'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'planner'});}}>🗓️ Planificar</a>
           <a className={`nav-link ${(view.kind==='assess'||view.kind==='evaluate'||view.kind==='exams')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'assess'});}}>📊 Evaluación</a>
@@ -716,7 +716,7 @@ function GroupDetailClassic({ groupId, onBack, onSelectStudent }) {
         <TeacherPasswordGate
           danger
           title="🗑️ Eliminar alumno"
-          message={`Vas a eliminar a ${deleting.fullName} (@${deleting.username}). Esto borra PARA SIEMPRE su cuenta y acceso, todo su progreso, XP y racha, sus tareas y notas, y su historial de práctica. Esta acción NO se puede deshacer. Ingresa tu contraseña de profesor para confirmar.`}
+          message={`Vas a eliminar a ${deleting.fullName} (@${deleting.username}). Esto borra PARA SIEMPRE su cuenta y acceso, todo su progreso, XP y racha, sus tareas y notas, y su historial de práctica. Esta acción NO se puede deshacer. Ingresa tu contraseña de teacher para confirmar.`}
           confirmLabel="🗑️ Eliminar definitivamente"
           onConfirm={() => {
             const { STUDENTS, saveStudents } = window.JUCUM_DATA;
@@ -1104,7 +1104,7 @@ function StudentDetail({ studentId, onBack, onContact }) {
 
         <div className="scard">
           <div className="sec-head">
-            <div className="sec-title">Diagnóstico del profesor</div>
+            <div className="sec-title">Diagnóstico del teacher</div>
             <span className="sec-meta">Auto-generado</span>
           </div>
           <DiagnoseStudent stu={stu} />
@@ -1137,7 +1137,7 @@ function StudentDetail({ studentId, onBack, onContact }) {
       {resetting && Gate && (
         <Gate
           title="Confirmar reset de contraseña"
-          message={`Vas a resetear la contraseña de ${stu.fullName} a "1234". Ingresa tu contraseña de profesor para confirmar.`}
+          message={`Vas a resetear la contraseña de ${stu.fullName} a "1234". Ingresa tu contraseña de teacher para confirmar.`}
           confirmLabel="🔑 Resetear a 1234"
           onConfirm={doReset}
           onClose={() => setResetting(false)}

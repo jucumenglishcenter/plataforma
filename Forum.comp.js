@@ -138,7 +138,7 @@ function NewPostBox({ user, groupId, onPost, muted }) {
     }
     const { STUDENTS } = window.JUCUM_DATA;
     const me = user.role === 'teacher'
-      ? { id: 'teacher', name: 'Profesor', role: 'teacher' }
+      ? { id: 'teacher', name: 'Teacher', role: 'teacher' }
       : (() => { const s = STUDENTS.find(s => s.id === user.studentId); return { id: s.id, name: s.fullName, role: 'student' }; })();
     window.JUCUM_FORUM.createPost(groupId, {
       authorId: me.id, authorName: me.name, authorRole: me.role,
@@ -202,7 +202,7 @@ function PostCard({ post, user, groupId, onChange }) {
     if (!replyBody.trim() && !replyMedia) return;
     const { STUDENTS } = window.JUCUM_DATA;
     const me = isTeacher
-      ? { id: 'teacher', name: 'Profesor', role: 'teacher' }
+      ? { id: 'teacher', name: 'Teacher', role: 'teacher' }
       : (() => { const s = STUDENTS.find(s => s.id === myId); return { id: s.id, name: s.fullName, role: 'student' }; })();
     if (!isTeacher) {
       const info = F.getMuteInfo ? F.getMuteInfo(me.id) : null;
@@ -232,7 +232,7 @@ function PostCard({ post, user, groupId, onChange }) {
         <div className="fpost-meta">
           <div className="fpost-author">
             {post.authorName}
-            {isTeacherPost && <span className="fpost-role">PROFESOR</span>}
+            {isTeacherPost && <span className="fpost-role">TEACHER</span>}
             {isAuthorMuted && !isTeacherPost && <span className="fpost-muted">🔇 silenciado</span>}
           </div>
           <div className="fpost-date">{dateStr}{post.pinned && <span className="pin-tag"> · 📌 Fijada</span>}</div>
@@ -308,7 +308,7 @@ function ReplyRow({ reply, post, user, groupId, onChange, isTeacher, kidsOf, dep
     if (!body.trim() && !media) return;
     const { STUDENTS } = window.JUCUM_DATA;
     const me = isTeacher
-      ? { id: 'teacher', name: 'Profesor', role: 'teacher' }
+      ? { id: 'teacher', name: 'Teacher', role: 'teacher' }
       : (() => { const s = STUDENTS.find(s => s.id === myId); return { id: s.id, name: s.fullName, role: 'student' }; })();
     if (!isTeacher) {
       const info = F.getMuteInfo ? F.getMuteInfo(me.id) : null;
@@ -335,7 +335,7 @@ function ReplyRow({ reply, post, user, groupId, onChange, isTeacher, kidsOf, dep
         <div className="freply-body">
           <div className="fpost-author sm">
             {reply.authorName}
-            {isTeacherReply && <span className="fpost-role">PROFESOR</span>}
+            {isTeacherReply && <span className="fpost-role">TEACHER</span>}
             <span className="fpost-date sm"> · {relativeTime(reply.date)}</span>
           </div>
           <div className="fpost-body sm">{reply.body}</div>
@@ -407,7 +407,7 @@ function BadWordsNotice({ onOk }) {
         En nuestro foro todos merecemos respeto. Las palabras tienen poder: pueden animar a un compañero… o hacerlo sentir muy mal. 💛<br/>
         Piensa un momento: ¿cómo te gustaría que te lo dijeran a ti? Seguro puedes expresar lo mismo de una forma amable y respetuosa. ¡Inténtalo de nuevo!
       </div>
-      <div style={{fontSize:12, color:'#8C5A00', marginTop:8, fontWeight:700}}>Tu mensaje no se publicó. El profesor recibe un aviso de estos intentos.</div>
+      <div style={{fontSize:12, color:'#8C5A00', marginTop:8, fontWeight:700}}>Tu mensaje no se publicó. El teacher recibe un aviso de estos intentos.</div>
       <button className="btn-save" style={{marginTop:10}} onClick={onOk}>Voy a escribirlo mejor 💪</button>
     </div>
   );

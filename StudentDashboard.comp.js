@@ -1093,7 +1093,7 @@ function PreexamChecklistRow({ it, mod, studentId }) {
   const pre = (F && stu) ? F.getPre(stu.group, mod.id) : null;
   const href = linkFor(a, mod, studentId);
   const sub = pre && pre.open
-    ? 'No es una nota · abierto por tu profesora' + (pre.toDate ? ' hasta el ' + new Date(pre.toDate + 'T12:00:00Z').toLocaleDateString('es-PE', { weekday:'short', day:'numeric', month:'short' }) + (pre.to ? ', ' + F.fmtHora(pre.to) : '') : '')
+    ? 'No es una nota · abierto por tu teacher' + (pre.toDate ? ' hasta el ' + new Date(pre.toDate + 'T12:00:00Z').toLocaleDateString('es-PE', { weekday:'short', day:'numeric', month:'short' }) + (pre.to ? ', ' + F.fmtHora(pre.to) : '') : '')
     : 'No es una nota · diagnóstico para reconocer qué dominas';
   return (
     <>
@@ -1110,7 +1110,7 @@ function PreexamChecklistRow({ it, mod, studentId }) {
           <div className="modal settings-modal" style={{maxWidth:500}} onClick={e => e.stopPropagation()}>
             <div className="modal-head"><div className="modal-title">🧭 ¿Por qué doy este pre-examen?</div><button className="modal-close" onClick={() => setWhy(false)}>✕</button></div>
             <div className="modal-body" style={{fontSize:13, lineHeight:1.6}}>
-              <p style={{margin:'0 0 10px'}}>Este pre-examen <b>no es una nota</b> y no decide si apruebas. Tu profesora lo abre para tu grupo como preparación. Es tu <b>brújula</b>: 🧭</p>
+              <p style={{margin:'0 0 10px'}}>Este pre-examen <b>no es una nota</b> y no decide si apruebas. Tu teacher lo abre para tu grupo como preparación. Es tu <b>brújula</b>: 🧭</p>
               {[['1', 'Descubres cuánto entiendes de verdad.', 'No lo que crees que sabes — lo que realmente dominas del tema.'], ['2', 'Reconoces las áreas que aún no dominas.', 'Cada pregunta que falles te señala exactamente qué practicar antes del examen real.'], ['3', 'Repasas y recuerdas todo lo visto en clase.', 'Responderlo ya es una forma de práctica que refuerza tu memoria.']].map(s => (
                 <div key={s[0]} style={{display:'flex', gap:10, marginBottom:11}}>
                   <span style={{width:24, height:24, borderRadius:'50%', background:'#FFF3E0', border:'1.5px solid #FFB74D', color:'#8A5100', fontWeight:800, fontSize:11, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>{s[0]}</span>
@@ -2119,7 +2119,7 @@ function StudentPractice({ student, settings, onBack }) {
                 ? <>El módulo <b>{selMod.name}</b> aún no está disponible — llegará más adelante en tu ruta.</>
                 : (student.level === 'a1' || student.level === 'a2')
                   ? <>El módulo <b>{selMod.name}</b> se abre cuando lo curses en clase con tu grupo. Mientras tanto, sigue con tu módulo actual.</>
-                  : <>El módulo <b>{selMod.name}</b> se abrirá cuando tu profesor lo active. Mientras tanto, sigue con tu módulo actual.</>}</div>
+                  : <>El módulo <b>{selMod.name}</b> se abrirá cuando tu teacher lo active. Mientras tanto, sigue con tu módulo actual.</>}</div>
             </div>
           ) : (
             <div className="scard">
@@ -2433,7 +2433,7 @@ function TodayPracticeCard({ student }) {
       <div style={{padding:'12px 15px', display:'flex', alignItems:'center', gap:11, background: allDone ? '#E9F7EA' : '#EAF3FE', borderBottom:'1px solid ' + (allDone ? '#BFE3C3' : '#C5DEF7')}}>
         <span style={{fontSize:20}}>{allDone ? '🎉' : '🗓️'}</span>
         <div style={{flex:1, fontSize:12.8, fontWeight:700, color: allDone ? '#1B5E20' : '#1B3B6F', lineHeight:1.4}}>
-          {allDone ? '¡Terminaste tu práctica de hoy!' : (isGeneric ? 'Tu plan recomendado para hoy' : 'Lo que tu profesor te dejó para hoy')}
+          {allDone ? '¡Terminaste tu práctica de hoy!' : (isGeneric ? 'Tu plan recomendado para hoy' : 'Lo que tu teacher te dejó para hoy')}
         </div>
         {ableN > 0 && <span style={{fontSize:11.5, fontWeight:800, color: allDone ? '#fff' : '#1B5E20', background: allDone ? '#2EA84B' : '#DDF0DE', borderRadius:14, padding:'4px 10px', whiteSpace:'nowrap'}}>{doneN}/{ableN} ✓</span>}
         <span style={{fontSize:11, fontWeight:700, color: allDone ? '#4C7A50' : '#5B7BA8', whiteSpace:'nowrap', textTransform:'capitalize'}}>{dayName}</span>
@@ -2464,7 +2464,7 @@ function TodayPracticeCard({ student }) {
             ? <span style={{color:'#2E7D32', fontWeight:800}}>✓ Hecha hoy{st.pct != null ? ` · ${st.pct}%` : ''} — ¡bien ahí!</span>
             : st.st === 'low'
               ? <span style={{color:'#92510F', fontWeight:800}}>Hecha hoy · {st.pct}% — vuelve a intentarla (la nota cambia tras ½ hora)</span>
-              : <span>{isGeneric ? 'Recomendado para ti' : (it.fromImport ? '📌 Según el plan de tu teacher' : 'Indicado por tu profesor')}{it.prio ? <b style={{color:'#AD1457'}}> · primero esto</b> : null}</span>;
+              : <span>{isGeneric ? 'Recomendado para ti' : (it.fromImport ? '📌 Según el plan de tu teacher' : 'Indicado por tu teacher')}{it.prio ? <b style={{color:'#AD1457'}}> · primero esto</b> : null}</span>;
           const inner = (<>
             {badge(st)}
             <span className="next-ico">{typeIcon(it.type)}</span>
@@ -2514,7 +2514,7 @@ function StudentNoGroup({ onLogout, student }) {
           </div>
           <p style={{marginTop:12, color:'var(--text-soft)', maxWidth:460, margin:'12px auto 0', lineHeight:1.6}}>
             Tu cuenta está activa, pero todavía <b>no estás asignado/a a ningún grupo</b>.
-            Pídele a tu profesor que te agregue a tu grupo para ver tus módulos y
+            Pídele a tu teacher que te agregue a tu grupo para ver tus módulos y
             empezar a practicar. 🌱
           </p>
         </div>

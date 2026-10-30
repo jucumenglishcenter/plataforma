@@ -428,7 +428,7 @@ function StudentExams({ user, onBack }) {
         <div className="welcome-text">
           <div className="eyebrow">🎓 Examen</div>
           <h1>Mi examen de avance</h1>
-          <p>Tu examen aparece aquí cuando el profesor lo habilita y alcanzas tu preparación.</p>
+          <p>Tu examen aparece aquí cuando el teacher lo habilita y alcanzas tu preparación.</p>
         </div>
       </div>
 
@@ -436,7 +436,7 @@ function StudentExams({ user, onBack }) {
 
       {windows.length === 0 ? (
         <>
-          <div className="scard" style={{marginTop:18}}><div className="empty-state"><div className="icon">🎓</div>Por ahora no tienes ningún examen habilitado. Tu profesor lo abrirá cuando corresponda — sigue practicando para llegar listo.</div></div>
+          <div className="scard" style={{marginTop:18}}><div className="empty-state"><div className="icon">🎓</div>Por ahora no tienes ningún examen habilitado. Tu teacher lo abrirá cuando corresponda — sigue practicando para llegar listo.</div></div>
           <div style={{marginTop:14}}><window.ReadinessCard student={student} /></div>
         </>
       ) : (
@@ -476,11 +476,11 @@ function StudentExamCard({ w, student, onChange }) {
           : <span className="mm-chip" style={{background:'#E8F5E9',color:'#2E7D32'}}>✓ Habilitado</span>}
       </div>
 
-      {res && res.feedback && <div className="eval-feedback" style={{marginBottom:10}}><div className="eval-fb-lbl">📝 Del profesor</div><div className="eval-fb-text">{res.feedback}</div></div>}
+      {res && res.feedback && <div className="eval-feedback" style={{marginBottom:10}}><div className="eval-fb-lbl">📝 Del teacher</div><div className="eval-fb-text">{res.feedback}</div></div>}
 
       {!res && (
         <div style={{background:'#FFF5F5', border:'1.5px solid #F2B8B5', borderRadius:12, padding:'11px 14px', marginBottom:12, fontSize:12.5, lineHeight:1.6, color:'#8C1D18', fontWeight:700}}>
-          📵 <b>Al rendir:</b> quédate SOLO en la pestaña del examen — cada salida queda <b>registrada</b> y tu profesor la verá. 💾 Tus respuestas escritas se guardan solas: si se corta el internet, vuelve a abrir desde aquí (mismo equipo) y continúas. 1️⃣ Vale tu <b>primer intento</b>. ¡Éxito! 💪
+          📵 <b>Al rendir:</b> quédate SOLO en la pestaña del examen — cada salida queda <b>registrada</b> y tu teacher la verá. 💾 Tus respuestas escritas se guardan solas: si se corta el internet, vuelve a abrir desde aquí (mismo equipo) y continúas. 1️⃣ Vale tu <b>primer intento</b>. ¡Éxito! 💪
         </div>
       )}
 
@@ -503,7 +503,7 @@ function StudentExamCard({ w, student, onChange }) {
         <div style={{display:'flex', justifyContent:'flex-end', marginTop:10}}>
           <button className="btn-save" onClick={() => { X.submitExam(w.id, student.id, { attachments }); onChange(); }}>{sub?'🔄 Actualizar entrega':'📨 Enviar material'}</button>
         </div>
-        {!res && <div className="settings-hint" style={{marginTop:8}}>Al terminar, tu resultado será enviado por el profesor más adelante.</div>}
+        {!res && <div className="settings-hint" style={{marginTop:8}}>Al terminar, tu resultado será enviado por el teacher más adelante.</div>}
       </div>
     </div>
   );

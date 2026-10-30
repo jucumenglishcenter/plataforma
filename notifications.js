@@ -78,8 +78,8 @@ function seedSampleNotifs() {
   const seeded = {
     s01: [
       { id:'n-s1', type:'achievement', title:'¡Logro desbloqueado!', body:'🌱 Primera Respuesta', date:new Date(now - 86400000*2).toISOString(), read:true },
-      { id:'n-s2', type:'module-activated', title:'Nuevo módulo disponible', body:'Tu profesor activó "Personal Identity". ¡Empieza ya!', date:new Date(now - 86400000).toISOString(), read:true },
-      { id:'n-s3', type:'teacher-feedback', title:'Evaluación recibida', body:'El profesor te evaluó: 4/5 en Speaking. Lee su retroalimentación.', date:new Date(now - 3600000*8).toISOString(), read:false },
+      { id:'n-s2', type:'module-activated', title:'Nuevo módulo disponible', body:'Tu teacher activó "Personal Identity". ¡Empieza ya!', date:new Date(now - 86400000).toISOString(), read:true },
+      { id:'n-s3', type:'teacher-feedback', title:'Evaluación recibida', body:'El teacher te evaluó: 4/5 en Speaking. Lee su retroalimentación.', date:new Date(now - 3600000*8).toISOString(), read:false },
       { id:'n-s4', type:'daily-reminder', title:'¿Listo para tu meta de hoy?', body:'Te faltan 7 min para tu meta diaria.', date:new Date(now - 3600000*2).toISOString(), read:false },
       { id:'n-s5', type:'forum-reply', title:'Sofía respondió tu pregunta', body:'"Hola Leo! There is es para una sola cosa…"', date:new Date(now - 3600000*7).toISOString(), read:false, link:'forum' },
     ],

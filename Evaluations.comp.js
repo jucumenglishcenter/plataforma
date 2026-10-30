@@ -122,7 +122,7 @@ function EvaluateForm({ student, onSave, onCancel }) {
         comprehension: included.comprehension ? ratings.comprehension : null,
       };
       window.JUCUM_EVAL.saveEvaluation(student.id, {
-        teacherName: 'Profesor',
+        teacherName: 'Teacher',
         ratings: finalRatings,
         feedback: feedback.trim(),
         attachments,
@@ -133,7 +133,7 @@ function EvaluateForm({ student, onSave, onCancel }) {
         window.JUCUM_NOTIF.pushNotif(student.id, {
           type: 'teacher-feedback',
           title: 'Evaluación recibida',
-          body: `El profesor te evaluó (${includedKeys.length} categoría${includedKeys.length===1?'':'s'}, promedio ${avgN}/5). Revisa la retroalimentación.`,
+          body: `El teacher te evaluó (${includedKeys.length} categoría${includedKeys.length===1?'':'s'}, promedio ${avgN}/5). Revisa la retroalimentación.`,
         });
       }
       onSave();
@@ -332,7 +332,7 @@ function TeacherEvaluate({ onBack, hideBack }) {
 function StudentEvaluations({ studentId, isStudent = false }) {
   const evals = window.JUCUM_EVAL.getEvaluations(studentId);
   if (evals.length === 0) {
-    return <div className="empty-state"><div className="icon">📋</div>{isStudent ? 'Aún no tienes evaluaciones del profesor.' : 'Este alumno aún no tiene evaluaciones registradas.'}</div>;
+    return <div className="empty-state"><div className="icon">📋</div>{isStudent ? 'Aún no tienes evaluaciones del teacher.' : 'Este alumno aún no tiene evaluaciones registradas.'}</div>;
   }
   return (
     <div className="eval-feed">
@@ -358,7 +358,7 @@ function EvalCard({ ev, studentId, isStudent }) {
       <div className="eval-card-head">
         <div>
           <div className="eval-card-date">📅 {dateStr} · {timeStr}</div>
-          <div className="eval-card-teacher">por {ev.teacherName || 'Profesor'}</div>
+          <div className="eval-card-teacher">por {ev.teacherName || 'Teacher'}</div>
         </div>
         <div className="eval-card-avg">
           <div className="eval-avg-num">{avg}</div>

@@ -29,7 +29,7 @@ function GradesRecord({ student, forTeacher }) {
       </div>
 
       {grades.length === 0 ? (
-        <div className="empty-state"><div className="icon">📋</div>{forTeacher ? 'Aún no hay notas registradas para este alumno.' : 'Aún no tienes notas registradas. Aparecerán aquí cuando rindas exámenes o el profesor califique tus tareas.'}</div>
+        <div className="empty-state"><div className="icon">📋</div>{forTeacher ? 'Aún no hay notas registradas para este alumno.' : 'Aún no tienes notas registradas. Aparecerán aquí cuando rindas exámenes o el teacher califique tus tareas.'}</div>
       ) : (
         <>
           {/* resumen */}

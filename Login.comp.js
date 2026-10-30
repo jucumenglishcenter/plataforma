@@ -85,7 +85,7 @@ function Login({ onLogin }) {
         </button>
 
         <div className="login-help">
-          ¿No tienes usuario? Pídele al profesor que te cree uno.<br/>
+          ¿No tienes usuario? Pídele al teacher que te cree uno.<br/>
           <b>JUCUM English Center</b> · Tingo María, Perú
         </div>
       </form>

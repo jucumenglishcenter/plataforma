@@ -626,7 +626,7 @@ function GroupWorkspace({ groupId, onBack, onSelectStudent, onClassic }) {
       {closing && window.CloseProgressModal && React.createElement(window.CloseProgressModal, { student: closing, onClose: () => setClosing(null), onDone: () => { setClosing(null); refresh(); } })}
       {deleting && window.TeacherPasswordGate && React.createElement(window.TeacherPasswordGate, {
         danger: true, title: '🗑️ Eliminar alumno', confirmLabel: '🗑️ Eliminar definitivamente',
-        message: `Vas a eliminar a ${deleting.fullName} (@${deleting.username}). Esto borra PARA SIEMPRE su cuenta y acceso, todo su progreso, XP y racha, sus tareas y notas, y su historial de práctica. Esta acción NO se puede deshacer. Ingresa tu contraseña de profesor para confirmar.`,
+        message: `Vas a eliminar a ${deleting.fullName} (@${deleting.username}). Esto borra PARA SIEMPRE su cuenta y acceso, todo su progreso, XP y racha, sus tareas y notas, y su historial de práctica. Esta acción NO se puede deshacer. Ingresa tu contraseña de teacher para confirmar.`,
         onConfirm: () => { const i = D.STUDENTS.findIndex(x => x.id === deleting.id); if (i >= 0) { D.STUDENTS.splice(i, 1); D.saveStudents(D.STUDENTS); } if (window.JUCUM_SB) window.JUCUM_SB.remove('users', deleting.id).catch(() => {}); setDeleting(null); setSel(null); refresh(); },
         onClose: () => setDeleting(null) })}
       {moving && <GwMoveModal student={moving} onClose={() => setMoving(null)} onDone={(dest) => { const n = moving.fullName; setMoving(null); setSel(null); refresh(); setFlash('✓ ' + n + ' ahora está en ' + dest.name); setTimeout(() => setFlash(''), 4000); }} />}

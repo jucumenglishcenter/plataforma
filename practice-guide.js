@@ -263,7 +263,7 @@
     if (lang === 'par') intro = (guide.introEn || guide.intro || '');
     var closing = lang === 'en' ? (guide.closingEn || guide.closing || '') : (guide.closingEs || guide.closing || '');
     if (lang === 'par') closing = (guide.closingEn || guide.closing || '');
-    var noteLbl = lang === 'en' ? 'Note from your teacher:' : 'Nota de tu profesor:';
+    var noteLbl = lang === 'en' ? 'Note from your teacher:' : 'Nota de tu teacher:';
     var noteHTML = guide.note ? '<div class="jg-note"><span class="ic">📌</span><div><b>' + noteLbl + '</b> ' + esc(guide.note) + '</div></div>' : '';
     var hi = opts.studentName ? ((lang === 'en' ? 'Hi, ' : '¡Hola, ') + esc(opts.studentName) + (lang === 'en' ? '! ' : '! ')) : '';
     var stepsLbl = (lang === 'en' ? ' step' : ' paso') + (guide.steps.length === 1 ? '' : 's');

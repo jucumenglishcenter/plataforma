@@ -146,7 +146,7 @@
     const pays = GATE.pays || loadPayments().filter(p => p.studentId === student.id);
     return PG().classify(GATE.ctl, GATE.rows[student.id], pays, student.group);
   }
-  function whoAmI() { const me = sessionUser(); return me.role === 'admin' ? 'Administración' : me.role === 'teacher' ? 'Profesor' : (me.name || me.role || ''); }
+  function whoAmI() { const me = sessionUser(); return me.role === 'admin' ? 'Administración' : me.role === 'teacher' ? 'Teacher' : (me.name || me.role || ''); }
   async function gateLog(sid, action, detail) {
     try { await window.JUCUM_SB.getClient().from('pay_log').insert({ who: whoAmI(), student_id: sid || '', action, detail: detail || '' }); } catch (e) {}
   }

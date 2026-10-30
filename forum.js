@@ -42,7 +42,7 @@ function findPostById(postId) {
   return null;
 }
 function _forumName(userId) {
-  if (userId === 'teacher') return 'El profesor';
+  if (userId === 'teacher') return 'El teacher';
   try { const s = (window.JUCUM_DATA.STUDENTS || []).find(s => s.id === userId); return s ? s.fullName.split(' ')[0] : 'Alguien'; }
   catch { return 'Alguien'; }
 }
@@ -90,7 +90,7 @@ function getMuteInfo(studentId) {
     until: m.until, since: m.since, reason: m.reason || null,
     daysLeft: Math.max(1, Math.ceil((new Date(m.until) - Date.now()) / 86400000)),
     reasonEmoji: r ? r.emoji : '🔇',
-    reasonLabel: r ? r.label : 'Decisión del profesor',
+    reasonLabel: r ? r.label : 'Decisión del teacher',
     reasonStudent: r ? r.student : null,
   };
 }
@@ -299,7 +299,7 @@ function seedSampleForum() {
   const data = {
     g1: { posts: [
       { id:'p-seed1', date:new Date(now - 86400000*2).toISOString(), pinned:true,
-        authorId:'teacher', authorName:'Profesor', authorRole:'teacher',
+        authorId:'teacher', authorName:'Teacher', authorRole:'teacher',
         title:'📌 Bienvenidos al foro del grupo',
         body:'Hola a todos! Este espacio es para preguntas, dudas o conversación sobre el curso. Recuerden ser respetuosos y ayudarse entre ustedes. Yo voy a fijar las preguntas más importantes 📌',
         replies:[]
@@ -310,7 +310,7 @@ function seedSampleForum() {
         body:'Profe, ¿podemos saber la fecha del primer examen? Quiero organizar mi estudio.',
         replies:[
           { id:'r-seed1', date:new Date(now - 3600000*20).toISOString(),
-            authorId:'teacher', authorName:'Profesor', authorRole:'teacher',
+            authorId:'teacher', authorName:'Teacher', authorRole:'teacher',
             body:'Hola Ana! El examen del Módulo 1 será el viernes 23 de mayo. Voy a fijar esta pregunta para que todos lo vean.' },
         ]
       },

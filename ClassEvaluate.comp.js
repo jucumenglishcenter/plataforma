@@ -82,7 +82,7 @@ function ClassEvaluate({ groupId, planLabel, onClose }) {
       const xp = ceXP(row);
       try {
         window.JUCUM_EVAL.saveEvaluation(st.id, {
-          teacherName:'Profesor', ratings,
+          teacherName:'Teacher', ratings,
           feedback:(note ? note + ' · ' : '') + '📋 Clase' + (planLabel ? ` · ${planLabel}` : '') + ' · ' + detalle.join(' · '),
           attachments:[], kind:'clase',
         });
@@ -91,7 +91,7 @@ function ClassEvaluate({ groupId, planLabel, onClose }) {
       if (window.JUCUM_NOTIF) {
         const best = crits.filter(c => row[c.key] === 'exc').map(c => c.label);
         window.JUCUM_NOTIF.pushNotif(st.id, {
-          type:'teacher-feedback', title:`📋 Tu profesor te evaluó en clase (+${xp} XP)`,
+          type:'teacher-feedback', title:`📋 Tu teacher te evaluó en clase (+${xp} XP)`,
           body: best.length ? `¡Excelente en ${best.join(' · ')}! Sigue así. 🌟` : 'Revisa tu evaluación en tu perfil. Vas avanzando. 💪',
         });
       }

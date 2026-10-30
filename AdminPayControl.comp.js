@@ -583,12 +583,12 @@ function PcDialogs({ dlg, setDlg, rows, ctl, groups, say, bump, onClose }) {
       <PcM title={`Ver avance · ${pcFirst(s)}`} onClose={onClose} foot={<>{Cancel}<button className="pc3-b pri" disabled={busy} onClick={async () => {
         if (!f.why.trim()) { setErr('Escribe el motivo (queda en el historial).'); return; }
         setBusy(true);
-        if (f.tv) { const res = await P.gateSet(s.id, { teacher_allow: allow + 1 }, 'vista extra al profesor', f.why); if (!res.ok) { setErr(res.error); setBusy(false); return; } }
+        if (f.tv) { const res = await P.gateSet(s.id, { teacher_allow: allow + 1 }, 'vista extra al teacher', f.why); if (!res.ok) { setErr(res.error); setBusy(false); return; } }
         P.gateLog(s.id, 'vio avance (emergencia)', f.why); setBusy(false); setDlg({ ...dlg, open: true });
       }}>Abrir avance</button></>}>
         <div>Está en pausa por pago. Tú siempre puedes ver su avance; queda registrado en su historial.</div>
         <label className="pc3-fld">Motivo<input className="pc3-in" value={f.why} placeholder="Ej.: reunión con el apoderado" onChange={e => up('why', e.target.value)} /></label>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 700 }}><input type="checkbox" checked={f.tv} onChange={e => up('tv', e.target.checked)} /> Dar también 1 vista más al profesor ({left} disponible{left === 1 ? '' : 's'} ahora)</label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 700 }}><input type="checkbox" checked={f.tv} onChange={e => up('tv', e.target.checked)} /> Dar también 1 vista más al teacher ({left} disponible{left === 1 ? '' : 's'} ahora)</label>
         {Err}
       </PcM>
     );
@@ -788,7 +788,7 @@ function TeacherPayLock({ student, onBack, onUnlock }) {
   const [busy, setBusy] = React.useState(false);
   const use = async () => {
     setBusy(true);
-    const res = await P.gateSet(student.id, { teacher_views: (r.teacher_views || 0) + 1 }, 'profesor usó su vista', '');
+    const res = await P.gateSet(student.id, { teacher_views: (r.teacher_views || 0) + 1 }, 'teacher usó su vista', '');
     setBusy(false);
     if (!res.ok) { alert('No se pudo registrar: ' + res.error); return; }
     onUnlock();

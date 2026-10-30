@@ -53,7 +53,7 @@ function pzAdd(students, s, date, kind) {
   if (n * PZ_XP <= PZ_XPMAX) {
     xp = PZ_XP; try { if (D && D.addBonusXP) D.addBonusXP(s.id, xp); } catch (e) {}
     const kl = (PZ_KINDS.find(x => x[0] === kind) || PZ_KINDS[0])[2].toLowerCase();
-    try { if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(s.id, { type: 'teacher-feedback', title: '🙋 ¡Participaste en clase! (+' + xp + ' XP)', body: 'Tu profesor registró que ' + kl + ' en clase (' + n + (n === 1 ? ' vez' : ' veces') + ' hoy). ¡Sigue así! ⭐', link: 'progress' }); } catch (e) {}
+    try { if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(s.id, { type: 'teacher-feedback', title: '🙋 ¡Participaste en clase! (+' + xp + ' XP)', body: 'Tu teacher registró que ' + kl + ' en clase (' + n + (n === 1 ? ' vez' : ' veces') + ' hoy). ¡Sigue así! ⭐', link: 'progress' }); } catch (e) {}
   }
   pzMaybeNewRound(students, date, gid); pzPing();
   return xp;

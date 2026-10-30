@@ -231,7 +231,7 @@ function ModuleTracker({ stu, group }) {
                         {e && e.minutes ? <span style={{color:'#999', fontSize:11.5, fontWeight:700}}>{Math.round(e.minutes)}m</span> : null}
                         {e && e.date ? <span style={{color:'#B0B0B0', fontSize:11}}>{mtDate(e.date)}</span> : null}
                         {!e && !here && <span style={{color:'#BBB', fontSize:11.5, fontWeight:700}}>pendiente</span>}
-                        {url && <a href={url} target="_blank" rel="noopener" title="Abrir el material como profesor"
+                        {url && <a href={url} target="_blank" rel="noopener" title="Abrir el material como teacher"
                           style={{fontSize:11, fontWeight:800, color:'#1F3A8A', textDecoration:'none', border:'1px solid #C5CAE9', background:'#F3F5FD', borderRadius:9, padding:'2px 7px'}}>abrir</a>}
                       </div>
                     );

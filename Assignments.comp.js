@@ -1365,7 +1365,7 @@ function StudentTaskCard({ a, student, onChange }) {
       {activity && linkAtt && <TaskActivityPanel a={a} link={linkAtt} student={student} onSubmitGrade={onActivityDone} onCaptureAttach={onCaptureAttach} onClose={() => setActivity(false)} />}
 
       {sub && sub.status === 'graded' && sub.feedback && (
-        <div className="eval-feedback"><div className="eval-fb-lbl">📝 Retroalimentación del profesor</div><div className="eval-fb-text" style={{whiteSpace:'pre-wrap'}}>{sub.feedback}</div></div>
+        <div className="eval-feedback"><div className="eval-fb-lbl">📝 Retroalimentación del teacher</div><div className="eval-fb-text" style={{whiteSpace:'pre-wrap'}}>{sub.feedback}</div></div>
       )}
 
       {open && (

@@ -775,7 +775,7 @@ function ModuleExamBanner({ mod, studentId }) {
             : passed
             ? <>🏁 <b>¡Felicitaciones!</b> Terminaste <b>{mod.name}</b> con éxito — tu constancia se nota.{(att.attempt_no || 1) === 1 ? <> ¡Y a tu <b>primer intento</b>! 🏅</> : <> Aprobado en tu intento <b>{att.attempt_no}</b> — la perseverancia paga. 🙌</>}{weak.length ? <> Para dominarlo del todo, dale un repaso extra a: <b>{weak.join(' · ')}</b>.</> : <> Dominaste todas las partes del examen. 🌟</>}</>
             : <>Terminaste el examen de <b>{mod.name}</b> y tu nota quedó registrada automáticamente. Aún hay temas que necesitas seguir repasando: <b>{weak.length ? weak.join(' · ') : 'las prácticas del módulo'}</b>. Cada minuto de práctica cuenta — síguele con tus repasos diarios. 💪</>}
-          <br/>Tu profesora ya ve tu resultado con el detalle pregunta por pregunta. La <b>nota final del módulo</b> combina examen + práctica diaria — mírala en <b>Mi avance</b>.
+          <br/>Tu teacher ya ve tu resultado con el detalle pregunta por pregunta. La <b>nota final del módulo</b> combina examen + práctica diaria — mírala en <b>Mi avance</b>.
           {att._detalle && att._detalle.length && (att._totalPartes > 1 || (F.partesDeExamen && info.exam && F.partesDeExamen(info.exam).length > 1)) ? (() => {
             const falta = F.faltanPartes && info.exam ? F.faltanPartes(info.exam, att._detalle) : null;
             if (!falta) return <><br/>🧩 {att._detalle.map(d => (F.lblParte ? F.lblParte(info.exam, d.part) : d.part) + ': ' + d.score).join(' · ')} → tu nota final es el <b>promedio: {att.score}</b>.</>;
@@ -818,7 +818,7 @@ function ModuleExamBanner({ mod, studentId }) {
                 </>
               );
               if (rs.open && passed) return null;
-              if (rs.blocked) return <div style={{marginTop:9, background:'#F7F5EF', border:'1.5px solid var(--border)', borderRadius:10, padding:'8px 11px', fontSize:12, color:'#777', fontWeight:700}}>⏸ Tu profesora habilitará tu nueva oportunidad — sigue practicando tu plan y consulta con ella. 💬</div>;
+              if (rs.blocked) return <div style={{marginTop:9, background:'#F7F5EF', border:'1.5px solid var(--border)', borderRadius:10, padding:'8px 11px', fontSize:12, color:'#777', fontWeight:700}}>⏸ Tu teacher habilitará tu nueva oportunidad — sigue practicando tu plan y consulta con ella. 💬</div>;
               if (!rs.active) return F.pDay() < R.from ? (
                 <>
                   <div style={{marginTop:9, background:'#FFF3E0', border:'1.5px solid #FFB74D', borderRadius:10, padding:'8px 11px', fontSize:12, color:'#8A5100', fontWeight:700}}>🔁 <b>Tu nueva oportunidad:</b> del <b>{F.fmtFecha(R.from)}</b> al <b>{F.fmtFecha(R.to)}</b>. Llega apto practicando cada día: 📘 resúmenes · ✏️ gramática · 📗 stories.</div>
@@ -835,7 +835,7 @@ function ModuleExamBanner({ mod, studentId }) {
               );
             }
             /* Sin ventana configurada NO hay repetición automática: la profesora la abre (23-ago-2026) */
-            return passed ? null : <div style={{marginTop:9, background:'#F7F5EF', border:'1.5px solid var(--border)', borderRadius:10, padding:'8px 11px', fontSize:12, color:'#777', fontWeight:700, lineHeight:1.55}}>🔁 Si tu profesora te abre una <b>nueva oportunidad</b>, aparecerá aquí con su fecha. Mientras tanto, repite las prácticas de los temas marcados arriba y entrena con el 🧭 <b>pre-examen</b> de tu módulo. 💪</div>;
+            return passed ? null : <div style={{marginTop:9, background:'#F7F5EF', border:'1.5px solid var(--border)', borderRadius:10, padding:'8px 11px', fontSize:12, color:'#777', fontWeight:700, lineHeight:1.55}}>🔁 Si tu teacher te abre una <b>nueva oportunidad</b>, aparecerá aquí con su fecha. Mientras tanto, repite las prácticas de los temas marcados arriba y entrena con el 🧭 <b>pre-examen</b> de tu módulo. 💪</div>;
           })()}
         </div>
       </>
@@ -850,7 +850,7 @@ function ModuleExamBanner({ mod, studentId }) {
           'Resultado de tu examen', mod.name + ' · ' + (res.passed ? 'Aprobaste' : 'Aún no apruebas'), info.isForms ? 'rendido por Google Forms, fuera de la plataforma' : null,
           typeof res.grade === 'number' ? cd(res.grade, '/100') : null)}
         <div style={{background:'#fff', padding:'12px 15px', fontSize:12.5, lineHeight:1.6, color:'#4A4A44', fontWeight:600}}>
-          {res.feedback && <><b>📝 Tu profesora:</b> "{res.feedback}"<br/></>}
+          {res.feedback && <><b>📝 Tu teacher:</b> "{res.feedback}"<br/></>}
           Tu <b>nota final del módulo</b> combina este examen con tu práctica diaria — mírala en <b>Mi avance</b>.
         </div>
       </>
@@ -870,7 +870,7 @@ function ModuleExamBanner({ mod, studentId }) {
             {rs.open && link2
               ? <>Cumples tus requisitos — puedes rendirlo <b>ahora</b>, dentro de la ventana. 📵 Quédate solo en la pestaña del examen; tus respuestas se guardan solas.
                   <a href={link2} target="_blank" rel="noreferrer" style={{display:'block', textAlign:'center', marginTop:10, borderRadius:24, padding:'13px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:16, color:'#fff', textDecoration:'none', background:'linear-gradient(135deg,#E11930,#B71C1C)', boxShadow:'0 6px 18px rgba(225,25,48,.45)'}}>🎓 Dar mi examen ahora</a></>
-              : <>Para que tu examen se abra te falta: <b>apto {q.overall}% / {q.threshold}%</b>{q.dias14 != null ? <> · <b>práctica {q.dias14}/{F.retMin} días</b></> : null} · <b>avance {q.avance || 0}/{q.avanceMin || 2} días en tu ventana</b>. Practica cada día 📘 resúmenes · ✏️ gramática · 📗 stories — apenas cumplas, el botón aparece <b>aquí solo</b>. Tu profesora ve tu avance y puede abrirte el examen. 💪</>}
+              : <>Para que tu examen se abra te falta: <b>apto {q.overall}% / {q.threshold}%</b>{q.dias14 != null ? <> · <b>práctica {q.dias14}/{F.retMin} días</b></> : null} · <b>avance {q.avance || 0}/{q.avanceMin || 2} días en tu ventana</b>. Practica cada día 📘 resúmenes · ✏️ gramática · 📗 stories — apenas cumplas, el botón aparece <b>aquí solo</b>. Tu teacher ve tu avance y puede abrirte el examen. 💪</>}
             <RetPlanBlock student={student} mod={mod} att={null} />
           </div>
         </>
@@ -888,7 +888,7 @@ function ModuleExamBanner({ mod, studentId }) {
         {head('linear-gradient(135deg,#8C1D18,#B3261E)', '🎓', 'Examen del módulo · es hoy', mod.name, F.fmtFecha(info.ann?.date || F.pDay()) + (horario ? ' · ' + horario : ''), cd('HOY', '¡éxito!', {background:'rgba(255,255,255,.25)'}))}
         <div style={{background:'#fff', padding:'12px 15px'}}>
           <div style={{fontSize:12.5, lineHeight:1.6, color:'#4A4A44', fontWeight:600}}>
-            {info.r && info.r.apt ? <>Llegaste <b>Apto ({info.r.overall}%)</b> gracias a tu constancia. </> : <>Tu profesora te <b>habilitó</b> para rendirlo. </>}
+            {info.r && info.r.apt ? <>Llegaste <b>Apto ({info.r.overall}%)</b> gracias a tu constancia. </> : <>Tu teacher te <b>habilitó</b> para rendirlo. </>}
             📵 Quédate solo en la pestaña del examen, tus respuestas se guardan solas y vale tu <b>primer intento</b>.
           </div>
           <a href={info.link} target="_blank" rel="noreferrer" style={{display:'block', textAlign:'center', marginTop:10, width:'100%', border:'none', borderRadius:24, padding:'13px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:16, cursor:'pointer', color:'#fff', textDecoration:'none', background:'linear-gradient(135deg,#E11930,#B71C1C)', boxShadow:'0 6px 18px rgba(225,25,48,.45)'}}>🎓 Dar mi examen ahora</a>
@@ -900,7 +900,7 @@ function ModuleExamBanner({ mod, studentId }) {
   if (info.paused) return box('#D5CDBB', (
     <>
       {head('linear-gradient(135deg,#77746B,#4E4B44)', '⏸', 'Examen del módulo', mod.name)}
-      <div style={{padding:'12px 16px', fontSize:13, fontWeight:700, lineHeight:1.6, background:'#fff'}}>Hoy es tu examen, pero <b>tu acceso está en pausa</b>. Escríbele a tu profesora por 💬 Hablemos para que te lo habilite.</div>
+      <div style={{padding:'12px 16px', fontSize:13, fontWeight:700, lineHeight:1.6, background:'#fff'}}>Hoy es tu examen, pero <b>tu acceso está en pausa</b>. Escríbele a tu teacher por 💬 Hablemos para que te lo habilite.</div>
     </>
   ));
   /* announced · apto, habilitado por la profesora, o aún no */
@@ -920,13 +920,13 @@ function ModuleExamBanner({ mod, studentId }) {
           </div>
           <b style={{fontSize:13, color}}>{r.overall}%</b>
           {habil
-            ? exfPill('#E8F5E9', '#2E7D32', '✅ Habilitada por tu profesora', 'apt')
+            ? exfPill('#E8F5E9', '#2E7D32', '✅ Habilitada por tu teacher', 'apt')
             : exfPill(r.apt ? '#E8F5E9' : '#FFF8E1', r.apt ? '#2E7D32' : '#E65100', r.apt ? '✓ Apto'
                 : r.blocker === 'coverage' ? '📚 Te falta terminar el módulo' : 'Falta ' + Math.max(0, (r.threshold || 75) - r.overall) + '% para ser Apto', 'apt')}
         </div>
         <div style={{fontSize:12.5, lineHeight:1.6, color:'#4A4A44', fontWeight:600}}>
           {habil
-            ? <>✅ <b>Tu profesora te habilitó</b> para rendir este examen: no necesitas llegar al 75%. El botón para entrar aparecerá <b>aquí mismo</b> {info.ann && info.ann.date ? <>el <b>{F.fmtFecha(info.ann.date)}</b>{horario ? <> a la hora indicada ({horario})</> : null}</> : 'el día del examen'}. Mientras tanto, repasa con calma. 💪</>
+            ? <>✅ <b>Tu teacher te habilitó</b> para rendir este examen: no necesitas llegar al 75%. El botón para entrar aparecerá <b>aquí mismo</b> {info.ann && info.ann.date ? <>el <b>{F.fmtFecha(info.ann.date)}</b>{horario ? <> a la hora indicada ({horario})</> : null}</> : 'el día del examen'}. Mientras tanto, repasa con calma. 💪</>
             : r.apt
             ? <>¡Eres Apto! 🎉 Pero ojo: tu preparación es una <b>foto viva</b> — si dejas de practicar puede <b>bajar del 75%</b> y quedarías sin rendir tu examen. Mantén tu Apto con <b>{minDia} min cada día</b>. El botón para dar tu examen aparecerá <b>aquí mismo</b> ese día.</>
             : r.blocker === 'coverage'
@@ -1020,7 +1020,7 @@ function RetPlanBlock({ student, mod, att }) {
           );
         })}
       </div>
-      {selDia === hoy && <div style={{marginTop:7, fontSize:11, fontWeight:700, color:'#8A5100'}}>↩️ Lo que no completas <b>pasa al día siguiente</b> — hoy tienes <b>{pend.length}</b> pendiente(s). 💬 Si te trabas, escríbele a tu profesora: ella ve tu avance y puede abrirte el examen.</div>}
+      {selDia === hoy && <div style={{marginTop:7, fontSize:11, fontWeight:700, color:'#8A5100'}}>↩️ Lo que no completas <b>pasa al día siguiente</b> — hoy tienes <b>{pend.length}</b> pendiente(s). 💬 Si te trabas, escríbele a tu teacher: ella ve tu avance y puede abrirte el examen.</div>}
     </div>
   );
 }
@@ -1071,8 +1071,8 @@ function ExamChecklistRow({ mod, studentId }) {
       <span className="al-name">Examen del módulo · {mod.name}
         <span style={{display:'block', fontSize:10.5, color:'#999', fontWeight:800}}>
           {info.ann && info.ann.date
-            ? <>Se abre el {F.fmtFecha(info.ann.date)}{info.ann.from ? ', ' + F.fmtHora(info.ann.from) : ''}{hab ? ' · tu profesora te habilitó' : <> · solo Aptos (75%){r.apt ? ' — mantén tu Apto practicando a diario' : ''}</>}</>
-            : hab ? 'Tu profesora te habilitó · anunciará la fecha' : 'Tu profesora anunciará la fecha · solo Aptos (75%)'}
+            ? <>Se abre el {F.fmtFecha(info.ann.date)}{info.ann.from ? ', ' + F.fmtHora(info.ann.from) : ''}{hab ? ' · tu teacher te habilitó' : <> · solo Aptos (75%){r.apt ? ' — mantén tu Apto practicando a diario' : ''}</>}</>
+            : hab ? 'Tu teacher te habilitó · anunciará la fecha' : 'Tu teacher anunciará la fecha · solo Aptos (75%)'}
         </span>
       </span>
       {hab

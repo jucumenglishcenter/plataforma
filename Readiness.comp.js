@@ -80,7 +80,7 @@ function ReadinessCard({ student, forTeacher }) {
             <div style={{fontSize:11, color:'var(--text-soft)', margin:'-2px 0 6px', lineHeight:1.45}}>
               {forTeacher
                 ? '🗣️ El Speaking no tiene material en la plataforma: se practica por tareas y su % sale de tu evaluación presencial (estrellas de Speaking).'
-                : '🗣️ Tu Speaking se practica con las tareas; la nota la pone tu profesor en clase. ¡Tú sigue practicando! 💪'}
+                : '🗣️ Tu Speaking se practica con las tareas; la nota la pone tu teacher en clase. ¡Tú sigue practicando! 💪'}
             </div>}
         </div>
       )}
@@ -95,7 +95,7 @@ function ReadinessCard({ student, forTeacher }) {
                 ? `Ya pasó el 75% (${r.overall}%), pero le falta terminar el módulo: lleva ${r.coverage || 0}% de prácticas aprobadas y se pide ${r.needCoverage || 60}%. Puedes habilitarle el examen igual si lo decides.`
                 : 'Por debajo del 75%. La plataforma lo marca como no apto, pero puedes habilitarle el examen igual si lo decides.')
           : (apt
-              ? '¡Vas listo! 🎉 Mantén tu constancia. Tu profesor habilitará tu examen cuando corresponda.'
+              ? '¡Vas listo! 🎉 Mantén tu constancia. Tu teacher habilitará tu examen cuando corresponda.'
               : r.blocker === 'coverage'
                 ? `¡Ya pasaste el 75% (${r.overall}%)! 🎉 Ahora te falta terminar el módulo: llevas ${r.coverage || 0}% de tus prácticas aprobadas y se pide ${r.needCoverage || 60}%. Completa (o mejora) las que te faltan y tu examen se abre solo. 💪`
                 : 'Aún no llegas al 75% para rendir tu examen de avance. Sube completando las prácticas del módulo, practicando un poco CADA día y entregando tus tareas. 💪')}

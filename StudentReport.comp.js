@@ -48,7 +48,7 @@ function buildDiagnosis(student, D) {
     if (typeof v === 'number' && v < 60) improvements.push({ t:`Reforzar ${c.label}`, b:`Va en ${v}%. ${compRec[c.key] || 'Practicar esta competencia con más frecuencia.'}`, prio: v < 40 ? '🔴' : '🟡' });
     else if (tr && tr.dir === 'down') improvements.push({ t:`Atención · ${c.label} bajó`, b:`Pasó de ${tr.first}% a ${tr.last}% (${tr.delta}). Conviene repasar este tema antes de seguir avanzando.`, prio:'🟡' });
   });
-  if (r.taskCompliance != null && r.taskCompliance < 60) improvements.push({ t:'Entrega de tareas', b:`Cumplió el ${r.taskCompliance}% de sus tareas. Recomendación: revisar las pendientes y avisar al profesor si algo no se entiende.`, prio:'🟡' });
+  if (r.taskCompliance != null && r.taskCompliance < 60) improvements.push({ t:'Entrega de tareas', b:`Cumplió el ${r.taskCompliance}% de sus tareas. Recomendación: revisar las pendientes y avisar al teacher si algo no se entiende.`, prio:'🟡' });
 
   // Cierre
   const closing = r.apt

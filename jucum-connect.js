@@ -388,7 +388,7 @@
     chip.id = 'jec-conn-chip';
     chip.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:999997;display:flex;align-items:center;gap:7px;background:#1F3A8A;color:#fff;padding:8px 14px;border-radius:24px;font:700 13px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,0.25);cursor:default;user-select:none;white-space:nowrap;';
     chip.innerHTML = '<span>⏱</span><span id="jec-conn-time" style="font-family:monospace;font-size:14px;">0:00</span>' +
-      (teacher ? '<span style="background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:800;">PROFESOR · libre</span>'
+      (teacher ? '<span style="background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:800;">TEACHER · libre</span>'
                : exam ? '<span style="background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:800;">EXAMEN</span>'
                : (demo ? '<span style="background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:800;">PRUEBA · no registra</span>' : '')) +
       /* 📦 25-sep: módulo del material (M1, M3 · repaso…) — así alumno y profesora ven de un
@@ -570,9 +570,9 @@
       ov.innerHTML = '<div style="background:#fff;border-radius:20px;max-width:440px;width:100%;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,0.4);">'
         + '<div style="background:#B71C1C;color:#fff;padding:18px 22px;"><div style="font-size:30px;line-height:1;">🎓</div><div style="font-weight:800;font-size:19px;margin-top:4px;">Estás por rendir tu examen</div><div style="font-size:12.5px;opacity:.9;font-weight:700;">Léelo con calma antes de comenzar</div></div>'
         + '<div style="padding:16px 22px 20px;font-size:13.5px;line-height:1.6;color:#333;">'
-        + '<div style="margin-bottom:8px;">📵 <b>No abras otras pestañas</b> ni salgas de esta ventana: <b>cada salida queda registrada</b> y tu profesor la verá.</div>'
+        + '<div style="margin-bottom:8px;">📵 <b>No abras otras pestañas</b> ni salgas de esta ventana: <b>cada salida queda registrada</b> y tu teacher la verá.</div>'
         + '<div style="margin-bottom:8px;">💾 Tus <b>respuestas escritas se guardan solas</b>: si se corta la luz o el internet, vuelve a abrir el examen desde la plataforma <b>en este mismo equipo</b> y continúas donde quedaste.</div>'
-        + '<div style="margin-bottom:8px;">1️⃣ Vale tu <b>primer intento</b>: al terminar, tu nota queda registrada y enviada a tu profesor.</div>'
+        + '<div style="margin-bottom:8px;">1️⃣ Vale tu <b>primer intento</b>: al terminar, tu nota queda registrada y enviada a tu teacher.</div>'
         + '<div style="margin-bottom:14px;">🙏 Hazlo solo y con honestidad — este examen muestra <b>tu</b> avance real.</div>'
         + (resumed ? '<div style="background:#FFF8E1;border:1.5px solid #FFD54F;border-radius:10px;padding:9px 12px;font-weight:800;color:#7A4E00;margin-bottom:12px;">🔄 Encontramos tu avance guardado: continuarás donde quedaste.</div>' : '')
         + '<button id="jec-exam-start" style="width:100%;padding:13px;border:none;border-radius:24px;background:#B71C1C;color:#fff;font-weight:800;font-size:15px;cursor:pointer;">Acepto, comenzar mi examen ✍️</button>'
@@ -611,7 +611,7 @@
       try { localStorage.removeItem(EXDRAFT_KEY); } catch (e) {}
       exqAdd(pct, minutes);
       var s = ensureExSb();
-      if (!s) { showResultCard(pct, '🎓 Examen terminado · ' + minutes + ' min' + (hasScore ? ' · ' + pct + '%' : '') + ' · ⚠ sin conexión: avísale tu resultado a tu profesor', hasScore, true); return; }
+      if (!s) { showResultCard(pct, '🎓 Examen terminado · ' + minutes + ' min' + (hasScore ? ' · ' + pct + '%' : '') + ' · ⚠ sin conexión: avísale tu resultado a tu teacher', hasScore, true); return; }
       s.from('activity_parts').upsert({
         user_id: uid, module_id: modId, activity_id: actId, part: 99,
         score: examFocusLoss, minutes: minutes, completed_at: new Date().toISOString()
@@ -623,10 +623,10 @@
           user_id: uid, module_id: modId, activity_id: actId,
           score: pct, minutes: minutes, completed_at: new Date().toISOString()
         }, { onConflict: 'user_id,module_id,activity_id' }).then(function (r2) {
-          if (r2 && r2.error) { showResultCard(pct, '🎓 Terminaste (' + (hasScore ? pct + '%' : minutes + ' min') + '). Tu nota quedó guardada en este equipo y se reenviará sola; si tu profesora no la ve, vuelve a abrir el examen aquí mismo.', hasScore, true); return; }
+          if (r2 && r2.error) { showResultCard(pct, '🎓 Terminaste (' + (hasScore ? pct + '%' : minutes + ' min') + '). Tu nota quedó guardada en este equipo y se reenviará sola; si tu teacher no la ve, vuelve a abrir el examen aquí mismo.', hasScore, true); return; }
           exqDel(uid, modId, actId);
-          showResultCard(pct, '🎓 ¡Registrado y enviado a tu profesor! · ' + minutes + ' min' + (hasScore ? ' · ' + pct + '%' : '') + (examFocusLoss > 0 ? ' · ⚠ ' + examFocusLoss + ' salida(s) registrada(s)' : ''), hasScore, true);
-        }, function () { showResultCard(pct, '🎓 Terminaste pero no se pudo registrar (¿sin internet?). Avísale a tu profesor.', hasScore, true); });
+          showResultCard(pct, '🎓 ¡Registrado y enviado a tu teacher! · ' + minutes + ' min' + (hasScore ? ' · ' + pct + '%' : '') + (examFocusLoss > 0 ? ' · ⚠ ' + examFocusLoss + ' salida(s) registrada(s)' : ''), hasScore, true);
+        }, function () { showResultCard(pct, '🎓 Terminaste pero no se pudo registrar (¿sin internet?). Avísale a tu teacher.', hasScore, true); });
       }, function () {
         s.from('progress').upsert({
           user_id: uid, module_id: modId, activity_id: actId,

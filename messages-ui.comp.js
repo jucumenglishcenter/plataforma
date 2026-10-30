@@ -110,10 +110,10 @@
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 320 }}>
         <div ref={bodyRef} style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 8, background: '#FBFAF7' }}>
-          {thread.length === 0 && <div style={{ margin: 'auto', textAlign: 'center', color: '#999', fontWeight: 700, fontSize: 13, maxWidth: 270, lineHeight: 1.5 }}>{sender === 'student' ? '✉️ Escríbele a tu profesor. Puedes adjuntar foto, video o mandar una nota de voz 🎤' : 'Escribe el primer mensaje de este chat.'}</div>}
+          {thread.length === 0 && <div style={{ margin: 'auto', textAlign: 'center', color: '#999', fontWeight: 700, fontSize: 13, maxWidth: 270, lineHeight: 1.5 }}>{sender === 'student' ? '✉️ Escríbele a tu teacher. Puedes adjuntar foto, video o mandar una nota de voz 🎤' : 'Escribe el primer mensaje de este chat.'}</div>}
           {thread.map(m => {
             const mine = isGroup ? (m.authorId === meId || (sender === 'teacher' && m.sender === 'teacher')) : m.sender === sender;
-            const who = m.sender === 'teacher' ? 'Profesor' : (m.authorName || nameOf(m.studentId));
+            const who = m.sender === 'teacher' ? 'Teacher' : (m.authorName || nameOf(m.studentId));
             return (
               <div key={m.id} style={{ maxWidth: '82%', alignSelf: mine ? 'flex-end' : 'flex-start', display: 'flex', flexDirection: 'column', gap: 3, alignItems: mine ? 'flex-end' : 'flex-start' }}>
                 {isGroup && !mine && <span style={{ fontSize: 10.5, fontWeight: 800, color: m.sender === 'teacher' ? '#1F3A8A' : '#B23A77', padding: '0 4px' }}>{m.sender === 'teacher' ? '👨‍🏫 ' : ''}{who}</span>}
@@ -294,7 +294,7 @@
                     </div>
                   </div>
                 </div>
-                <ChatThread threadKey={open} groupId={openInfo.kind === 'dm' ? ((STUDENTS.find(x => x.id === open) || {}).group || null) : null} sender="teacher" meId="teacher" meName="Profesor" isGroup={openInfo.kind === 'group'} onZoom={setZoom} />
+                <ChatThread threadKey={open} groupId={openInfo.kind === 'dm' ? ((STUDENTS.find(x => x.id === open) || {}).group || null) : null} sender="teacher" meId="teacher" meName="Teacher" isGroup={openInfo.kind === 'group'} onZoom={setZoom} />
               </>
             )}
           </section>
@@ -320,14 +320,14 @@
           {onBack && <button className="back-btn" onClick={onBack} style={{ marginBottom: 0 }}>← Mi panel</button>}
           <div style={{ flex: 1 }}>
             <h1 style={{ fontFamily: "'Fredoka',sans-serif", fontSize: 24, margin: 0 }}><span className="jwave" style={{ display: 'inline-block' }}>👨‍🏫</span> Hablemos</h1>
-            <div style={{ fontSize: 12.5, color: 'var(--text-soft)', fontWeight: 700 }}>Habla con tu profesor{threads.length > 1 ? ' y tus grupos de trabajo' : ''} · foto, video o nota de voz 🎤</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-soft)', fontWeight: 700 }}>Habla con tu teacher{threads.length > 1 ? ' y tus grupos de trabajo' : ''} · foto, video o nota de voz 🎤</div>
           </div>
         </div>
         {threads.length > 1 && (
           <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 10 }}>
             {threads.map(t => (
               <button key={t.key} onClick={() => { setOpen(t.key); force(n => n + 1); }} style={{ position: 'relative', border: '1.5px solid ' + (open === t.key ? '#1F3A8A' : 'var(--border)'), background: open === t.key ? '#1F3A8A' : '#fff', color: open === t.key ? '#fff' : 'var(--text-soft)', fontFamily: 'inherit', fontWeight: 800, fontSize: 12.5, borderRadius: 18, padding: '8px 14px', cursor: 'pointer' }}>
-                {t.kind === 'teacher' ? '👨‍🏫 Profesor' : `👥 ${t.name}`}
+                {t.kind === 'teacher' ? '👨‍🏫 Teacher' : `👥 ${t.name}`}
                 {t.unread > 0 && <span className="nav-dot">{t.unread > 9 ? '9+' : t.unread}</span>}
               </button>
             ))}

@@ -6,7 +6,7 @@ const DIAG_RECS = {
   listening: { t:'Mejora tu listening',            b:'Vuelve a escuchar cada audio 2–3 veces; si hace falta baja la velocidad. Repite los listenings de tu módulo.' },
   reading:   { t:'Refuerza tu comprensión lectora', b:'Lee con calma las stories y vuelve a responder las preguntas. Subraya las pistas del texto antes de elegir.' },
   grammar:   { t:'Trabaja tu gramática',           b:'Repasa los resúmenes de gramática y rehaz las prácticas (Fill in · Identification · Transform).' },
-  speaking:  { t:'Practica tu speaking',           b:'Lee en voz alta los diálogos y grábate. Aprovecha las evaluaciones de Speaking del profesor.' },
+  speaking:  { t:'Practica tu speaking',           b:'Lee en voz alta los diálogos y grábate. Aprovecha las evaluaciones de Speaking del teacher.' },
 };
 
 function StudentDiagnosis({ user, onBack, topTabs }) {

@@ -258,14 +258,14 @@ function ClassBoard({ roster, groupId, onSelect }) {
       const s = st(e.student.id);
       try {
         window.JUCUM_EVAL.saveEvaluation(e.student.id, {
-          teacherName:'Profesor', ratings:{ participation: s.stars },
+          teacherName:'Teacher', ratings:{ participation: s.stars },
           feedback:`🙋 Participación en clase: ${s.label}` + (e.actName ? ` · practicó ${e.actName}` : ''),
           attachments:[], kind:'clase',
         });
       } catch (err) {}
       if (s.xp > 0 && D.addBonusXP) D.addBonusXP(e.student.id, s.xp);
       if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(e.student.id, {
-        type:'teacher-feedback', title:`🙋 Tu profesor registró tu participación (+${s.xp} XP)`,
+        type:'teacher-feedback', title:`🙋 Tu teacher registró tu participación (+${s.xp} XP)`,
         body:`Participación de hoy: ${s.label}. ¡Sigue así! 💪`,
       });
     });

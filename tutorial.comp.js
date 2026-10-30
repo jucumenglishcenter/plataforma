@@ -22,7 +22,7 @@
     { target: 'practica', title: 'Tu práctica',        body: 'Aquí vive tu módulo: stories, comprensión, listening y gramática. Completa una actividad para desbloquear la siguiente.' },
     { target: 'neuro',    title: 'Neuro, tu mascota',  body: 'Neuro crece con tu constancia 🧠💛 Practica un poquito cada día para subir su energía. En "Mi práctica" te explica cómo ganar XP.' },
     { target: 'meta',     title: 'Tu meta y tu racha', body: 'Cada día que practicas mantienes tu racha 🔥 y sumas XP para la liga semanal. ¡No la rompas!' },
-    { target: 'bell',     title: 'Avisos',             body: 'La campanita te avisa de mensajes del profesor, respuestas del foro, tareas y más. Revísala al entrar.' },
+    { target: 'bell',     title: 'Avisos',             body: 'La campanita te avisa de mensajes del teacher, respuestas del foro, tareas y más. Revísala al entrar.' },
   ];
 
   async function getCampaign() {

@@ -110,7 +110,7 @@
   }
 
   function listThreadsForStudent(sid) {
-    var rows = [{ key: sid, kind: 'teacher', name: 'Profesor', unread: unreadForThread(sid, 'student', sid) }];
+    var rows = [{ key: sid, kind: 'teacher', name: 'Teacher', unread: unreadForThread(sid, 'student', sid) }];
     listGroupThreadsFor(sid).forEach(t => rows.push({ key: t.id, kind: 'group', name: t.name, memberIds: t.memberIds, unread: unreadForThread(t.id, 'student', sid) }));
     return rows;
   }
@@ -145,7 +145,7 @@
       student_id: threadKey, group_id: groupId || null, sender: sender,
       body: payload.body || '', media_url: payload.mediaUrl || null, media_kind: payload.mediaKind || null,
       author_id: payload.authorId || (sender === 'teacher' ? 'teacher' : null),
-      author_name: payload.authorName || (sender === 'teacher' ? 'Profesor' : null),
+      author_name: payload.authorName || (sender === 'teacher' ? 'Teacher' : null),
       created_at: new Date().toISOString(),
       teacher_read: sender === 'teacher', student_read: sender === 'student',
     };
@@ -162,7 +162,7 @@
     // Campanita de los destinatarios
     try {
       if (window.JUCUM_NOTIF) {
-        var title = '✉️ Nuevo mensaje' + (isGroupThread(threadKey) ? ' en ' + ((threadInfo(threadKey) || {}).name || 'tu grupo') : ' del profesor');
+        var title = '✉️ Nuevo mensaje' + (isGroupThread(threadKey) ? ' en ' + ((threadInfo(threadKey) || {}).name || 'tu grupo') : ' del teacher');
         var body = (payload.body || 'Te enviaron un adjunto').slice(0, 80);
         if (isGroupThread(threadKey)) {
           ((threadInfo(threadKey) || {}).memberIds || []).forEach(sid => {
