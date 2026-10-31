@@ -63,10 +63,22 @@ function fuClassSets(plan, next, plans) {
   return Object.values(by).sort((a, b) => fuDates(a)[0].localeCompare(fuDates(b)[0]));
 }
 function fuHome(plan, plans) {
-  const next = fuNextClass(plan), sets = fuClassSets(plan, next, plans);
-  if (!sets.length) return { next, sets, from: plan.date, to: fuAdd(next, -1) };
+  const next = fuNextClass(plan); let sets = fuClassSets(plan, next, plans), shared = null;
+  /* SET-COMPARTIDO-V1 (30-oct, revisión «¿la información es completa como antes?»): si ningún set EMPIEZA en esta clase
+   * pero uno que empezó antes sigue abierto (p. ej. «Práctica de la semana» del 16 al 23 que cubre la clase del 19),
+   * se muestra ese set recortado a los días de ESTA clase — como antes («solo lo hecho desde la clase»). */
+  if (!sets.length) {
+    const TT = window.JUCUM_TT, until = fuAdd(next, -1), by = {};
+    (plans || (TT ? TT.getPracticePlans() : [])).filter(p => p && !p._deleted && p.groupId === plan.groupId && p.assignToStudents !== false).forEach(p => {
+      const ds = fuDates(p), cut = ds.filter(d => d >= plan.date && d <= until); if (!cut.length) return;
+      const k = (p.title || '') + '|' + ds[0] + '|' + ds[ds.length - 1]; if (!by[k] || fuStamp(p) > fuStamp(by[k].orig)) by[k] = { orig: p, cut };
+    });
+    sets = Object.values(by).map(x => ({ ...x.orig, dates: x.cut, _shared: { from: fuDates(x.orig)[0], to: fuDates(x.orig).slice(-1)[0] } }));
+    if (sets.length) shared = sets[0]._shared;
+  }
+  if (!sets.length) return { next, sets, shared, from: plan.date, to: fuAdd(next, -1) };
   const all = sets.reduce((o, p) => o.concat(fuDates(p)), []).sort();
-  return { next, sets, from: all[0], to: all[all.length - 1] };
+  return { next, sets, shared, from: all[0], to: all[all.length - 1] };
 }
 /* Clases del grupo hasta hoy, una por día (si hay duplicadas gana la más nueva) */
 function fuClassList(groupId) {
@@ -117,10 +129,14 @@ function fuData(plan, SF) {
       const ev = clsEv[i]; const c = ev ? ev.cells.find(x => x.k === m.moduleId + ':' + m.activityId) : null; return c ? fuSegCell(c) : { st: 'no' }; }) };
   }).filter(r => r.cells.some(c => c.st === 'ok' || c.st === 'lo'));
   /* EN CASA: el/los set(s) de ESTA clase, con sus fechas reales — misma evaluación que el 📊 Avance */
-  const homeEv = ready ? H.sets.map(p => S.evalGroupSet((SF.plans || []).find(x => x.id === p.id) || p, SF)).filter(Boolean) : [];
+  const homeEv = ready ? H.sets.map(p => S.evalGroupSet(p._shared ? p : ((SF.plans || []).find(x => x.id === p.id) || p), SF)).filter(Boolean) : [];
   const homeRows = [];
+  /* Quizlet del set (como en FOLLOWUP-V1): ✓ si lo abrió dentro de las fechas — nube (daily_sessions) */
+  const qRows = []; if (ready) H.sets.forEach(p => (p.activities || []).forEach(m => { const f = fuActName(D.MODULE_CATALOG, m); const isQ = (f && f.a ? f.a.type : m.type) === 'quizlet' || m.activityId === 'quizlet'; if (!isQ || qRows.some(r => r.k === m.moduleId + ':quizlet:' + (m.quizKey || ''))) return;
+    qRows.push({ k: m.moduleId + ':quizlet:' + (m.quizKey || ''), label: fuLabel(m, f && f.a), type: 'quizlet', cells: students.map(s => { const ds = quizDone(s, m).filter(d => d >= H.from && d <= H.to).sort(); return ds.length ? { st: 'ok', day: ds[ds.length - 1] } : { st: 'no' }; }) }); }));
   homeEv.forEach(G => G.acts.forEach(x => { if (homeRows.some(r => r.k === x.k)) return; const f = fuActName(D.MODULE_CATALOG, x.a);
-    homeRows.push({ k: x.k, label: x.a.label || fuLabel(x.a, f && f.a), type: x.type, cells: students.map(s => { const row = G.rows.find(y => String(y.st.id) === String(s.id)); const c = row ? row.ev.cells.find(z => z.k === x.k && !z.carried) : null; return row ? fuSegCell(c) : { st: 'skip' }; }) }); }));
+    homeRows.push({ k: x.k, label: String(x.a.label || fuLabel(x.a, f && f.a)).replace(/^\s*\/\s*(\p{Extended_Pictographic}[\uFE0F\u200D\p{Extended_Pictographic}]*\s*)?/u, ''), type: x.type, cells: students.map(s => { const row = G.rows.find(y => String(y.st.id) === String(s.id)); const c = row ? row.ev.cells.find(z => z.k === x.k && !z.carried) : null; return row ? fuSegCell(c) : { st: 'skip' }; }) }); }));
+  qRows.forEach(r => homeRows.push(r));
   /* Historias y diálogos: veces trabajadas (intentos) */
   const homeM = []; H.sets.forEach(p => (p.activities || []).forEach(m => { if (m.moduleId && m.activityId) homeM.push(m); }));
   const storyM = []; [...mats, ...homeM].forEach(m => { const f = fuActName(D.MODULE_CATALOG, m); if (f && f.a.type === 'story' && !storyM.some(x => x.activityId === m.activityId)) storyM.push({ ...m, label: f.a.name }); });
@@ -136,7 +152,7 @@ function fuData(plan, SF) {
   zero.forEach(s => { alerts.push(fuFirst(s.fullName || s.username) + ' no vino a clase y no practicó en casa'); pend.push(fuFirst(s.fullName || s.username) + ': ponerse al día (faltó y no practicó)'); });
   if (closing && closing.blocks) (plan.blocks || []).forEach(b => { const v = closing.blocks[b.id]; const why = (closing.why || {})[b.id]; if (v === 3) pend.push(b.title + ' (no se hizo' + (why ? ': ' + why : '') + ')'); if (v === 2) pend.push(b.title + ' (se hizo más corto' + (why ? ': ' + why : '') + ')'); });
   const homeDone = homeRows.reduce((n, r) => n + r.cells.filter(c => c.st === 'ok' || c.st === 'lo').length, 0), homeTotal = homeRows.reduce((n, r) => n + r.cells.filter(c => c.st !== 'skip').length, 0);
-  return { plan, group, students, day, next, until, open, ready, homeFrom: H.from, homeTo: H.to, attTaken, absent, present, classRows, homeRows, sets: H.sets, stories, evals, closing, alerts, pend, homeDone, homeTotal };
+  return { plan, group, students, day, next, until, open, ready, homeFrom: H.from, homeTo: H.to, shared: H.shared, attTaken, absent, present, classRows, homeRows, sets: H.sets, stories, evals, closing, alerts, pend, homeDone, homeTotal };
 }
 function fuReport(plan, SF) {
   const F = fuData(plan, SF); if (!F || !F.ready) return '';
@@ -172,27 +188,30 @@ function fuReport(plan, SF) {
   if (F.closing && F.closing.note) L.push('', '8. NOTAS DEL TEACHER', '- ' + F.closing.note);
   return L.join('\n');
 }
-/* ── UI ── marcas = las mismas del 📊 Avance (P2) */
-const FU_CELL = { ok:{ bg:'#2EA84B', fg:'#fff', bd:'none' }, lo:{ bg:'#FBE3DC', fg:'#A3361F', bd:'1px solid #F0A898' }, other:{ bg:'#F2C14E', fg:'#6B4E00', bd:'none' }, no:{ bg:'#EFEDE6', fg:'#B8B2A2', bd:'1px dashed #DAD5C6' }, na:{ bg:'#F7F5EF', fg:'#B0A994', bd:'1px solid #EEE9DC' }, skip:{ bg:'transparent', fg:'#B8B2A2', bd:'none' } };
-function fuShort(s) { if (!s) return ''; const d = fuP(s); return FU_DN[d.getDay()] + ' ' + d.getDate(); }
-function fuCell(c, w) {
-  const v = FU_CELL[c && c.st] || FU_CELL.no;
-  const txt = !c ? '' : c.st === 'ok' ? '✓' + (c.pct != null ? ' ' + c.pct + '%' : '') : c.st === 'lo' ? c.pct + '%' : c.st === 'other' ? (c.mod ? '≠ otro módulo' : '✓ ' + fuShort(c.day)) : c.st === 'na' ? 'faltó' : c.st === 'skip' ? '—' : '';
-  const tip = !c ? '' : c.st === 'ok' ? 'hecha' + (c.day ? ' el ' + fuDay(c.day) : '') : c.st === 'lo' ? 'la hizo con ' + c.pct + '% (no aprobó)' : c.st === 'other' ? (c.mod ? 'hizo el mismo material de otro módulo' : 'la hizo otro día (' + fuDay(c.day) + '): no cuenta aquí') : c.st === 'na' ? 'no vino a clase' : c.st === 'skip' ? 'no se le pidió (ya lo tenía aprobado)' : 'pendiente';
-  return <span title={tip} style={{display:'inline-flex', alignItems:'center', justifyContent:'center', minWidth: w || 64, height:24, borderRadius:6, padding:'0 7px', background:v.bg, color:v.fg, border:v.bd, boxSizing:'border-box', fontSize:10.5, fontWeight:900, whiteSpace:'nowrap'}}>{txt}</span>;
+/* ── UI ── DISEÑO DE PUNTOS RESTAURADO (30-oct, pedido de la usuaria: «el de los puntos y la información»): mismas marcas,
+ * misma tabla y mismo orden que FOLLOWUP-V1. Solo cambian los DATOS (fechas reales del set, nube) y se agregan ‹ › y ES/EN. */
+function fuDot(c) {
+  const z = 15;
+  if (c && c.st === 'skip') return <span title="no se le pidió (ya lo tenía aprobado)" style={{fontSize:12, fontWeight:800, color:'#B0B7C3'}}>—</span>;
+  if (!c || c.st === 'na') return <span title="no vino" style={{display:'inline-block', width:z, height:z, borderRadius:'50%', background:'#ECEFF1'}}></span>;
+  const dot = c.st === 'ok' ? <span style={{display:'inline-block', width:z, height:z, borderRadius:'50%', background:'#43A047', position:'relative'}}><span style={{position:'absolute', left:5, top:2, width:4, height:7, border:'solid #fff', borderWidth:'0 2px 2px 0', transform:'rotate(45deg)'}}></span></span>
+    : c.st === 'lo' ? <span style={{display:'inline-block', width:z, height:z, borderRadius:'50%', background:'linear-gradient(90deg,#FB8C00 50%,#FFE0B2 50%)'}}></span>
+    : <span title={c.st === 'other' ? 'lo hizo fuera de las fechas (' + fuDay(c.day) + '): no cuenta aquí' : ''} style={{display:'inline-block', width:z, height:z, borderRadius:'50%', border:'2.5px solid #E53935', boxSizing:'border-box'}}></span>;
+  const showDay = c.day && (c.st === 'ok' || c.st === 'lo');
+  return <span style={{display:'inline-flex', flexDirection:'column', alignItems:'center', gap:1, fontSize:10.5, fontWeight:800, color:'#6B7280'}}>{dot}{c.pct != null && c.st !== 'other' ? c.pct : ''}{showDay ? <span style={{color:'#9AA3B2', fontWeight:700}}>{FU_DN[fuP(c.day).getDay()]}</span> : null}</span>;
 }
 const fuSrc = { display:'flex', gap:8, alignItems:'flex-start', background:'#EEF2FC', border:'1px solid #C9D4F0', borderRadius:10, padding:'8px 11px', fontSize:12, fontWeight:700, color:'#1F3A8A', lineHeight:1.45 };
 const fuChip = (bg, c) => ({ display:'inline-flex', alignItems:'center', gap:5, fontSize:11.5, fontWeight:800, background:bg, color:c, borderRadius:20, padding:'4px 10px', whiteSpace:'nowrap' });
 const fuBtn = { border:'1.5px solid #D6DEEA', background:'#fff', color:'#33415C', borderRadius:10, padding:'7px 12px', fontFamily:'inherit', fontWeight:800, fontSize:12.5, cursor:'pointer', whiteSpace:'nowrap' };
 const fuBtnP = { ...fuBtn, border:'none', background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)', color:'#fff' };
-const fuNav = { ...fuBtn, minHeight:38, padding:'7px 13px' };
+const fuNav = { ...fuBtn, minHeight:36, padding:'6px 12px' };
 function FuTable({ rows, students }) {
   if (!rows.length) return null;
   return (
     <div style={{overflowX:'auto', overflowY:'hidden'}}>
-      <table style={{borderCollapse:'collapse', width:'100%', minWidth: Math.max(320, 130 + rows.length * 96)}}>
-        <thead><tr><th style={{fontSize:10.5, fontWeight:800, color:'#8a7f6a', textAlign:'left', padding:'4px'}}>Alumno</th>{rows.map((r, i) => <th key={i} style={{fontSize:10.5, fontWeight:800, color:'#5B3FA0', padding:'4px', textAlign:'center', lineHeight:1.25, verticalAlign:'bottom'}}>{r.label}</th>)}</tr></thead>
-        <tbody>{students.map((s, si) => <tr key={s.id}><td style={{fontWeight:800, fontSize:12.5, padding:'5px 4px', borderTop:'1px solid #F2ECDD', whiteSpace:'nowrap'}}>{(s.fullName || s.username || '').split(' ').slice(0, 2).join(' ')}</td>{rows.map((r, i) => <td key={i} style={{textAlign:'center', borderTop:'1px solid #F2ECDD', padding:'4px'}}>{fuCell(r.cells[si])}</td>)}</tr>)}</tbody>
+      <table style={{borderCollapse:'collapse', width:'100%', minWidth: Math.max(320, 110 + rows.length * 90)}}>
+        <thead><tr><th style={{fontSize:10.5, fontWeight:800, color:'#8a7f6a', textAlign:'left', padding:'4px'}}>Alumno</th>{rows.map((r, i) => <th key={i} style={{fontSize:10.5, fontWeight:800, color:'#8a7f6a', padding:'4px', textAlign:'center', lineHeight:1.25, verticalAlign:'bottom'}}>{r.label}</th>)}</tr></thead>
+        <tbody>{students.map((s, si) => <tr key={s.id}><td style={{fontWeight:800, fontSize:12.5, padding:'5px 4px', borderTop:'1px solid #F2ECDD', whiteSpace:'nowrap'}}>{(s.fullName || s.username || '').split(' ').slice(0, 2).join(' ')}</td>{rows.map((r, i) => <td key={i} style={{textAlign:'center', borderTop:'1px solid #F2ECDD', padding:'4px'}}>{fuDot(r.cells[si])}</td>)}</tr>)}</tbody>
       </table>
     </div>
   );
@@ -204,7 +223,7 @@ function FuReportBox({ plan, SF }) {
   return (
     <div style={{display:'flex', flexDirection:'column', gap:8}}>
       <div style={{fontSize:12.5, color:'#7a705c', fontWeight:700, lineHeight:1.5}}><b>Para qué sirve:</b> pégalo en tu chat de Claude <b>antes de planificar la siguiente clase</b>, cuando los alumnos ya practicaron en casa. Así tu Claude sabe qué se hizo, qué faltó y cómo le fue a cada alumno.</div>
-      <pre style={{fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, background:'#0F172A', color:'#E2E8F0', borderRadius:12, padding:14, whiteSpace:'pre-wrap', lineHeight:1.55, maxHeight:480, overflow:'auto', margin:0}}>{txt}</pre>
+      <pre data-tlang-skip="1" style={{fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, background:'#0F172A', color:'#E2E8F0', borderRadius:12, padding:14, whiteSpace:'pre-wrap', lineHeight:1.55, maxHeight:480, overflow:'auto', margin:0}}>{txt}</pre>
       <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
         <button onClick={() => { try { navigator.clipboard.writeText(txt).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }); } catch (e) { window.prompt('Copia el reporte:', txt); } }} style={fuBtnP}>{copied ? '✓ Copiado' : 'Copiar reporte'}</button>
         <button onClick={() => { const b = new Blob([txt], { type:'text/plain' }); const u = URL.createObjectURL(b); const l = document.createElement('a'); l.href = u; l.download = 'Seguimiento - ' + (plan.sessionLabel || 'clase') + ' - ' + plan.date + '.txt'; l.click(); setTimeout(() => URL.revokeObjectURL(u), 2000); }} style={fuBtn}>⬇ Descargar .txt</button>
@@ -233,9 +252,9 @@ function FollowUpPanel({ plan, where, onAddPending, startOpen }) {
   if (!plan) return where === 'plan' ? null : <div className="scard" style={{fontSize:13, color:'#8a7f6a', fontWeight:700}}>Este grupo aún no tiene clases anteriores guardadas.</div>;
   if (!F) return null;
   const nm = s => fuFirst(s.fullName || s.username);
-  const head = where === 'plan' ? '🔎 Antes de planificar: seguimiento de la clase' : where === 'cal' ? '🔎 Seguimiento de esta clase' : where === 'class' ? '📊 Seguimiento por clase' : '🔎 Seguimiento por clase';
+  const head = where === 'plan' ? '🔎 Antes de planificar: desde la última clase' : where === 'cal' ? '🔎 Seguimiento de esta clase' : where === 'class' ? '📊 Práctica de la clase' : '🔎 Desde la última clase';
   const prev = idx > 0 ? list[idx - 1] : null, nxt = idx >= 0 && idx < list.length - 1 ? list[idx + 1] : null;
-  const homeTxt = F.sets.length ? fuDay(F.homeFrom) + ' → ' + fuDay(F.homeTo) : null;
+  const homeTxt = F.sets.length ? fuDay(F.homeFrom) + ' → ' + fuDay(F.homeTo) : 'sin set de práctica';
   return (
     <div className="scard" {...FU_TLROOT} style={{marginBottom:16, border:'2px solid #9FB0DA', display:'flex', flexDirection:'column', gap:10}}>
       <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
@@ -250,8 +269,8 @@ function FollowUpPanel({ plan, where, onAddPending, startOpen }) {
           <span style={{...fuNav, background:'#0D1B5A', borderColor:'#0D1B5A', color:'#fff', cursor:'default', display:'inline-flex', alignItems:'center'}}>{fuDay(cur.date)}{cur.sessionLabel ? ' · ' + cur.sessionLabel : ''}</span>
           <button type="button" disabled={!nxt} onClick={() => nxt && setCurId(nxt.id)} style={{...fuNav, opacity: nxt ? 1 : .4, cursor: nxt ? 'pointer' : 'default'}}>{nxt ? fuDay(nxt.date) : ''} ›</button>
         </div>)}
-      <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', fontSize:12.5, color:'#7a705c', fontWeight:700}}>
-        <span style={{flex:1, minWidth:220}}>🏫 Clase {fuDay(F.day)} · 🏠 {homeTxt ? 'práctica ' + homeTxt + (F.open ? ' · en curso' : ' · cerrada') : 'sin set de práctica para esta clase'}</span>
+      <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
+        <div style={{flex:1, minWidth:220, fontSize:12.5, color:'#7a705c', fontWeight:700}}>{cur.sessionLabel} · {fuDay(F.day)} + práctica en casa {homeTxt}{F.open && F.sets.length ? ' · se actualiza sola mientras los alumnos practican' : ''}</div>
         {window.SegAgo && <SegAgo F={SF} busy={seg.busy} err={seg.err} onReload={seg.reload} />}
       </div>
       <div style={{display:'flex', gap:7, flexWrap:'wrap'}}>
@@ -268,23 +287,23 @@ function FollowUpPanel({ plan, where, onAddPending, startOpen }) {
         </div>)}
       {rep && <FuReportBox plan={cur} SF={SF} />}
       {open && (
-        <div style={{display:'flex', flexDirection:'column', gap:14}}>
+        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(320px,1fr))', gap:14, alignItems:'start'}}>
           <div style={{display:'flex', flexDirection:'column', gap:9, border:'1px solid #E3DCC9', borderRadius:12, padding:12}}>
             <b style={{fontFamily:"'Fredoka',sans-serif", fontSize:15.5}}>🏫 En clase · {fuDay(F.day)}</b>
-            <div style={fuSrc}>📍 <span><b>De dónde sale:</b> la asistencia que tomaste y los materiales del plan que los alumnos hicieron <b>ese día</b> (datos de la nube). Story, Resumen y Quizlet no llevan nota: ✓ = lo hizo.</span></div>
+            <div style={fuSrc}>📍 <span><b>De dónde sale:</b> la asistencia que tomaste y los materiales del plan que los alumnos hicieron <b>ese día</b>. Las Story y el Quizlet no llevan nota: ✓ = lo hizo.</span></div>
             {F.absent.length > 0 && <div style={{fontSize:12.5, fontWeight:700, color:'#8E1B1B'}}>Faltó: {F.absent.map(nm).join(', ')}</div>}
             {!F.ready ? <div style={{fontSize:12.5, color:'#8a7f6a', fontWeight:800}}>Cargando desde la nube…</div> : F.classRows.length ? <FuTable rows={F.classRows} students={F.students} /> : <div style={{fontSize:12.5, color:'#999', fontWeight:700}}>Ningún material de la clase registró actividad ese día.</div>}
-            <div style={{display:'flex', gap:10, flexWrap:'wrap', alignItems:'center', fontSize:11, color:'#6B7280', fontWeight:800}}>{fuCell({ st:'ok' }, 30)} hecha ese día {fuCell({ st:'lo', pct:60 }, 30)} nota baja {fuCell({ st:'other', day:F.day }, 30)} la hizo otro día {fuCell({ st:'no' }, 30)} no la hizo {fuCell({ st:'na' }, 30)}</div>
             {F.closing && <div style={{fontSize:12.5, color:'#555', lineHeight:1.5}}><b>Al terminar marcaste:</b> {(cur.blocks || []).map(b => { const v = F.closing.blocks ? F.closing.blocks[b.id] : 0; return (v === 1 ? '✓ ' : v === 2 ? '✂ ' : v === 3 ? '✗ ' : '· ') + b.title; }).join(' · ')}</div>}
           </div>
           <div style={{display:'flex', flexDirection:'column', gap:9, border:'1px solid #E3DCC9', borderRadius:12, padding:12}}>
-            <b style={{fontFamily:"'Fredoka',sans-serif", fontSize:15.5}}>🏠 Práctica en casa{homeTxt ? ' · ' + homeTxt : ''}</b>
-            <div style={fuSrc}>📍 <span><b>De dónde sale:</b> el set de práctica de <b>esta</b> clase, con sus fechas reales. Es la misma tabla del 📊 Avance: solo cuenta lo hecho dentro de esas fechas. Toca un nombre para ver su seguimiento.</span></div>
-            {F.sets.length && window.PracticeSetProgress ? F.sets.map(p => <PracticeSetProgress key={p.id} plan={p} embed />) : <div style={{fontSize:12.5, color:'#999', fontWeight:700}}>No hubo set de práctica para esta clase.</div>}
+            <b style={{fontFamily:"'Fredoka',sans-serif", fontSize:15.5}}>🏠 En casa · {homeTxt}</b>
+            <div style={fuSrc}>📍 <span><b>De dónde sale:</b> el set de práctica de esta clase, con sus fechas reales. Solo cuenta lo hecho <b>dentro de esas fechas</b>; debajo de cada marca, la nota y el día.{F.shared ? <> El set empezó antes ({fuDay(F.shared.from)} → {fuDay(F.shared.to)}): aquí solo cuenta lo hecho desde esta clase.</> : null}</span></div>
+            {!F.ready ? <div style={{fontSize:12.5, color:'#8a7f6a', fontWeight:800}}>Cargando desde la nube…</div> : F.homeRows.length ? <FuTable rows={F.homeRows} students={F.students} /> : <div style={{fontSize:12.5, color:'#999', fontWeight:700}}>No hubo set de práctica para esta clase.</div>}
+            <div style={{display:'flex', gap:12, flexWrap:'wrap', fontSize:11, color:'#6B7280', fontWeight:800}}><span>{fuDot({ st:'ok' })} hecho / aprobado</span><span>{fuDot({ st:'lo' })} nota baja</span><span>{fuDot({ st:'no' })} no lo hizo</span><span>{fuDot({ st:'skip' })} ya lo tenía aprobado</span></div>
           </div>
           {window.RhythmPanel && <RhythmPanel groupId={cur.groupId} />}
           {F.stories.length > 0 && (
-            <div style={{display:'flex', flexDirection:'column', gap:8, border:'1px solid #E3DCC9', borderRadius:12, padding:12}}>
+            <div style={{display:'flex', flexDirection:'column', gap:8, border:'1px solid #E3DCC9', borderRadius:12, padding:12, gridColumn:'1 / -1'}}>
               <b style={{fontFamily:"'Fredoka',sans-serif", fontSize:15.5}}>📖 Historias y diálogos · veces trabajadas (clase + casa)</b>
               <div style={{overflowX:'auto', overflowY:'hidden'}}><table style={{borderCollapse:'collapse', width:'100%', minWidth:360}}><thead><tr><th style={{fontSize:10.5, color:'#8a7f6a', textAlign:'left', padding:4}}></th>{F.students.map(s => <th key={s.id} style={{fontSize:10.5, color:'#8a7f6a', padding:4}}>{nm(s)}</th>)}</tr></thead>
                 <tbody>{F.stories.map((r, i) => <tr key={i}><td style={{fontSize:12.5, fontWeight:800, padding:'5px 4px', borderTop:'1px solid #F2ECDD'}}>{r.label}</td>{r.counts.map((n, k) => <td key={k} style={{textAlign:'center', borderTop:'1px solid #F2ECDD', fontWeight:800, fontSize:14, color: n < 3 ? '#C0392B' : '#1F3A8A'}}>{n}</td>)}</tr>)}</tbody></table></div>
@@ -354,10 +373,11 @@ function ClassCloseModal({ plan, onClose, onSaved, onOpenRoster, onOpenEval }) {
  * El traductor del navegador cambiaba el sentido («pendiente» → «earring»). Las raíces llevan data-tlang + translate="no"
  * (el navegador ya no las toca) y aquí se traducen con un diccionario propio. Los nombres de alumnos y de materiales no se tocan. */
 const FU_EN = [
+  [/alumnos no responden/g, 'students are not responding'], [/alumno no responde/g, 'student is not responding'], [/ a los recordatorios/g, ' to reminders'], [/ya recibieron los 2 avisos automáticos: conviene hablarles en clase/g, 'they already got the 2 automatic reminders: talk to them in class'], [/último aviso /g, 'last reminder '], [/alumnos se trabaron/g, 'students got stuck'], [/ con un candado/g, ' on a lock'], [/ya tienen el botón «Abrir →»; si siguen igual, ayúdalos en clase/g, 'they already have the «Open →» button; if it continues, help them in class'], [/Ver ▾/g, 'See ▾'], [/Ocultar ▲/g, 'Hide ▲'], [/¿Cómo se lee\?/g, 'How to read it?'], [/Ocultar explicación/g, 'Hide explanation'],
   [/alumnos ya recibieron/g, 'students already got'], [/alumno ya recibió/g, 'student already got'], [/ los 2 recordatorios y /g, ' the 2 reminders and '], [/^siguen$/g, 'still'], [/^sigue$/g, 'still'], [/ sin ponerse al día\./g, ' have not caught up.'],
   [/Los avisos automáticos ya no le llegarán: conviene hablarle en clase\./g, 'Automatic reminders will no longer reach them: talk to them in class.'], [/le falta /g, 'missing '], [/ avisos, el último /g, ' reminders, last on '], [/(\d+) avisos/g, '$1 reminders'],
   [/Recordatorios automáticos/g, 'Automatic reminders'], [/^activados$/g, 'on'], [/^apagados$/g, 'off'], [/^ de $/g, ' of '], [/Sesión (\d+)/g, 'Session $1'],
-  [/Antes de planificar: seguimiento de la clase/g, 'Before planning: class follow-up'], [/Seguimiento de esta clase/g, 'Follow-up of this class'], [/Seguimiento por clase/g, 'Follow-up by class'],
+  [/Antes de planificar: seguimiento de la clase/g, 'Before planning: class follow-up'], [/Seguimiento de esta clase/g, 'Follow-up of this class'], [/Seguimiento por clase/g, 'Follow-up by class'], [/Práctica de la clase/g, 'Class practice'], [/desde la última clase/g, 'since the last class'], [/se actualiza sola mientras los alumnos practican/g, 'updates by itself while students practice'], [/práctica en casa/g, 'home practice'], [/sin set de práctica/g, 'no practice set'], [/En casa/g, 'At home'], [/el set de práctica de this clase, con sus fechas reales\. Solo cuenta lo hecho /g, 'the practice set of this class, with its real dates. Only what was done '], [/dentro de esas fechas/g, 'within those dates'], [/; debajo de cada marca, la nota y el día\./g, ' counts; under each mark, the grade and the day.'], [/Las Story y el Quizlet no llevan nota: ✓ = lo hizo\./g, 'Story and Quizlet have no grade: ✓ = done.'], [/hecho \/ aprobado/g, 'done / passed'], [/no lo hizo/g, 'not done'], [/ya lo tenía aprobado/g, 'already passed before'], [/le falta un paso before/g, 'missing an earlier step'], [/paso actual, en plazo/g, 'current step, on time'], [/resumen 1 de 2 \(le falta el otro\)/g, 'summary 1 of 2 (missing the other)'], [/Fuera del ritmo = le falta aprobar un paso /g, 'Off pace = has not passed a step '], [/al que va la clase\. Toca la línea de un tema para cerrarlo o abrirlo\./g, 'the class is on. Tap a topic line to close or open it.'],
   [/Reporte para tu Claude/g, 'Report for your Claude'], [/Ocultar reporte/g, 'Hide report'], [/Ver todo/g, 'Show all'], [/Ocultar/g, 'Hide'],
   [/sin set de práctica para esta clase/g, 'no practice set for this class'], [/No hubo set de práctica para esta clase\./g, 'There was no practice set for this class.'],
   [/Cargando la práctica desde la nube…/g, 'Loading practice from the cloud…'], [/Cargando el ritmo desde la nube…/g, 'Loading the pace from the cloud…'], [/Cargando el avance por módulo desde la nube…/g, 'Loading module progress from the cloud…'], [/Cargando el avance desde la nube…/g, 'Loading progress from the cloud…'], [/Cargando desde la nube…/g, 'Loading from the cloud…'], [/Cargando de la nube…/g, 'Loading from the cloud…'],

@@ -218,6 +218,12 @@ async function submitAssignment(assignmentId, studentId, payload) {
   if (window.JUCUM_SYNC && window.JUCUM_SYNC.uploadAttachments) {
     try { atts = await window.JUCUM_SYNC.uploadAttachments('tareas/' + studentId, atts); } catch (e) {}
   }
+  // 🎧 AUDIO-SUBIDA-V1: si un archivo NO llegó a la nube, no se entrega a medias: el alumno ve el aviso y
+  //    su grabación/archivo sigue en pantalla para volver a tocar «Entregar».
+  const lost = (atts || []).filter(a => a && a.dataUrl && !a.url);
+  if (lost.length && window.JUCUM_SYNC && window.JUCUM_SYNC.uploadAttachments) {
+    throw new Error('tu archivo «' + lost[0].name + '» no se pudo subir. Revisa tu internet y vuelve a tocar «Entregar»: tu grabación sigue aquí');
+  }
   // 2) Nunca guardar base64 pesado en localStorage. Si un adjunto no llegó a la
   //    nube y es grande, se guarda solo su metadato (pendiente).
   const lightAtts = (atts || []).map(a => {

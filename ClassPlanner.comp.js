@@ -1574,7 +1574,8 @@ function ClassMode({ plan, onBack }) {
         </div>
       )}
       <style>{`@keyframes cpPulse{0%,100%{opacity:1}50%{opacity:.25}}`}</style>
-      {cmPrev && window.FollowUpPanel && <FollowUpPanel plan={cmPrev} where="class" />}
+      {/* SEGUIMIENTO-AREAS-V1: en el Modo clase, el nuevo seguimiento (🏫 En clase + 🏠 Práctica del teacher) */}
+      {window.GroupFollowPanel ? <div className="scard" style={{marginBottom:16, border:'2px solid #9FB0DA'}}><div className="sec-title" style={{marginBottom:10}}>🔎 Seguimiento de la clase</div><GroupFollowPanel groupId={plan.groupId} areas={['c', 'p']} startArea="c" classDate={plan.date} /></div> : (cmPrev && window.FollowUpPanel && <FollowUpPanel plan={cmPrev} where="class" />)}
       {window.DocSetClassPanel && <DocSetClassPanel plan={plan} />}
       <div style={{display:'grid', gridTemplateColumns:'1.3fr 1fr', gap:16, alignItems:'start'}}>
         <div style={{display:'flex', flexDirection:'column', gap:16, minWidth:0}}>

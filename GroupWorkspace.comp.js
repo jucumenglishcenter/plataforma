@@ -212,11 +212,11 @@ function gwModel(s, sugg) {
   return { s, m, r, days, k, t, upToDate, paused, sugg: !!sugg };
 }
 
-function GwWin({ ico, title, sub, onClose, children }) {
+function GwWin({ ico, title, sub, onClose, children, wide }) {
   React.useEffect(() => { const f = (e) => { if (e.key === 'Escape') onClose(); }; document.addEventListener('keydown', f); return () => document.removeEventListener('keydown', f); }, []);
   return (
     <div className="gw-ov" onClick={onClose}>
-      <div className="gw-win" role="dialog" aria-label={title} onClick={e => e.stopPropagation()}>
+      <div className="gw-win" role="dialog" aria-label={title} onClick={e => e.stopPropagation()} style={wide ? { maxWidth: 1180, width: 'calc(100vw - 32px)' } : null}>
         <div className="gw-wh"><span className="gw-ti">{ico}</span><div className="t"><h3>{title}</h3>{sub ? <small>{sub}</small> : null}</div><button type="button" className="gw-wx" onClick={onClose} aria-label="Cerrar">✕</button></div>
         <div className="gw-wb">{children}</div>
       </div>
@@ -546,7 +546,7 @@ function GroupWorkspace({ groupId, onBack, onSelectStudent, onClassic }) {
   const lowW = (() => { const cs = (D.COMPETENCIES || []).map(c => { const v = models.map(x => (x.r.competencies || {})[c.key]).filter(n => typeof n === 'number'); return v.length ? { c, v: Math.round(v.reduce((a, b) => a + b, 0) / v.length) } : null; }).filter(Boolean); return cs.length ? cs.reduce((a, b) => b.v < a.v ? b : a) : null; })();
   const TB = [
     ['mods', '📦', 'Módulos', clsMod ? clsMod.emoji + ' ' + clsMod.name + (open.length > 1 ? ' · +' + (open.length - 1) + ' repaso' : '') : 'ninguno abierto'],
-    ['hoy', '🧠', 'Práctica de hoy', hoy + ' de ' + N + ' practicaron'],
+    ['seg', '🔎', 'Seguimiento', hoy + ' de ' + N + ' practicaron hoy'],   // SEGUIMIENTO-AREAS-V1: reemplaza «Práctica de hoy» y «Prácticas»
     ['ref', '🎯', 'Qué reforzar', lowW ? lowW.c.label.replace('Comprensión ', '') + ' · ' + lowW.v + '%' : 'aún sin datos'],
     ['err', '❌', 'Lo que más falla', neuroOn ? 'preguntas · 1.er intento' : 'materiales con nota baja'],
     ['champ', '🏆', 'Campeones', champ ? champ.student.fullName.split(' ')[0] + ' · ' + (champ.xp || 0).toLocaleString() + ' XP' : 'de la semana'],
@@ -558,7 +558,7 @@ function GroupWorkspace({ groupId, onBack, onSelectStudent, onClassic }) {
   const GMQ = window.GroupModulesQuick, TCH = window.TeacherChampions, NG = window.NeuroGroupCard, GSM = window.GroupSettingsModal;
   const WINS = {
     mods: { t: 'Módulos del grupo', s: 'los cambios se guardan al tocar', b: GMQ ? <GMQ groupId={groupId} onChanged={refresh} /> : null },
-    hoy: { t: 'Práctica de hoy', s: 'quién practicó, cómo le fue y a quién buscar', b: <GwToday group={group} models={models} onPick={pick} /> },
+    seg: { t: 'Seguimiento del grupo', s: 'práctica del teacher · repaso · en clase · tareas · se lee de la nube', wide: true, b: window.GroupFollowPanel ? <GroupFollowPanel groupId={groupId} /> : null },
     ref: { t: 'Qué reforzar en clase', s: 'por qué, a quién y con qué' + (clsMod ? ' · ' + clsMod.name : ''), b: <GwReinforce group={group} models={models} onPick={pick} /> },
     err: { t: 'Lo que más falla el grupo', s: neuroOn ? 'últimos 14 días · solo cuenta el primer intento' : 'módulos abiertos', b: neuroOn ? <NG group={group} students={members} onOpen={pick} only="gf" /> : <GwFails group={group} models={models} onPick={pick} /> },
     rachas: { t: 'Rachas del grupo', s: 'el día cuenta con ' + ((models[0] && models[0].s.streakInfo && models[0].s.streakInfo.goal) || 15) + ' min · domingo libre · 1 🛡 por semana', b: <GwStreaks group={group} models={models} onPick={pick} /> },
@@ -597,7 +597,7 @@ function GroupWorkspace({ groupId, onBack, onSelectStudent, onClassic }) {
           </div>
         </div>
       </div>
-      <div className="gw-tb">{TB.map(b => <React.Fragment key={b[0]}><button type="button" className="gw-tw" onClick={() => setWin(b[0])}><span className="gw-ti">{b[1]}</span><span><b>{b[2]}</b><small>{b[3]}</small></span>{b[4] ? <span className="gw-bd" title={b[4] + ' con racha en juego hoy'}>{b[4]}</span> : null}</button>{b[0] === 'hoy' && window.SegGroupPracBtn ? <SegGroupPracBtn groupId={groupId} onOpen={() => setWin('prac')} /> : null}</React.Fragment>)}</div>
+      <div className="gw-tb">{TB.map(b => <React.Fragment key={b[0]}><button type="button" className="gw-tw" onClick={() => setWin(b[0])}><span className="gw-ti">{b[1]}</span><span><b>{b[2]}</b><small>{b[3]}</small></span>{b[4] ? <span className="gw-bd" title={b[4] + ' con racha en juego hoy'}>{b[4]}</span> : null}</button></React.Fragment>)}</div>
       <div className="gw-sp">
         <div className="gw-cl">
           <div className="gw-clh">
@@ -621,7 +621,7 @@ function GroupWorkspace({ groupId, onBack, onSelectStudent, onClassic }) {
           onMoveGroup={cur ? () => setMoving(cur.s) : null} />
       </div>
 
-      {W && <GwWin ico={(TB.find(b => b[0] === win) || [0, '⏸'])[1]} title={W.t} sub={W.s} onClose={() => setWin(null)}>{W.b}</GwWin>}
+      {W && <GwWin wide={!!W.wide} ico={(TB.find(b => b[0] === win) || [0, '⏸'])[1]} title={W.t} sub={W.s} onClose={() => setWin(null)}>{W.b}</GwWin>}
       {showFinish && window.FinishGroupModal && React.createElement(window.FinishGroupModal, { groupId, onClose: () => setShowFinish(false), onDone: () => { setShowFinish(false); refresh(); } })}
       {closing && window.CloseProgressModal && React.createElement(window.CloseProgressModal, { student: closing, onClose: () => setClosing(null), onDone: () => { setClosing(null); refresh(); } })}
       {deleting && window.TeacherPasswordGate && React.createElement(window.TeacherPasswordGate, {

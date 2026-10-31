@@ -437,15 +437,21 @@
     const out = [];
     for (const a of (attachments || [])) {
       if (!a || !a.dataUrl) { out.push(a); continue; }
-      try {
-        const blob = await (await fetch(a.dataUrl)).blob();
-        const path = `${folder}/${Date.now()}-${a.name}`;
-        const { error } = await SB().storage.from(window.JUCUM_CONFIG.STORAGE_BUCKET).upload(path, blob, { upsert: true });
-        if (!error) {
-          const { data } = SB().storage.from(window.JUCUM_CONFIG.STORAGE_BUCKET).getPublicUrl(path);
-          out.push({ kind: a.kind, url: data.publicUrl, name: a.name, size: a.size });
-        } else { out.push(a); }
-      } catch { out.push(a); }
+      /* 🎧 AUDIO-SUBIDA-V1 (31-oct-2026): nombres como «Grabación 08:37 p. m..webm» (tildes, «:», espacios) hacían
+       * fallar la subida y la entrega quedaba SIN el audio (caso Melissa). Ahora: nombre limpio para la ruta,
+       * tipo de archivo correcto y hasta 3 intentos. El nombre original se conserva para mostrarlo. */
+      let done = null;
+      for (let k = 0; k < 3 && !done; k++) {
+        try {
+          const blob = await (await fetch(a.dataUrl)).blob();
+          const safe = String(a.name || 'archivo').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(-80) || 'archivo';
+          const path = `${folder}/${Date.now()}-${safe}`;
+          const { error } = await SB().storage.from(window.JUCUM_CONFIG.STORAGE_BUCKET).upload(path, blob, { upsert: true, contentType: blob.type || undefined });
+          if (!error) { const { data } = SB().storage.from(window.JUCUM_CONFIG.STORAGE_BUCKET).getPublicUrl(path); done = { kind: a.kind, url: data.publicUrl, name: a.name, size: a.size }; }
+          else if (k < 2) await new Promise(r => setTimeout(r, 1200 * (k + 1)));
+        } catch (e) { if (k < 2) await new Promise(r => setTimeout(r, 1200 * (k + 1))); }
+      }
+      out.push(done || a);
     }
     return out;
   }

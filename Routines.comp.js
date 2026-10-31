@@ -181,25 +181,26 @@ function RhythmPanel({ groupId }) {
     if (e && i > 0 && typeof e.score === 'number') return { k:'low', txt: Math.round(e.score) + '%' };
     return { k: x === 'wait' ? 'wait' : 'pend', txt: '' };
   };
+  /* DISEÑO DE PUNTOS RESTAURADO (30-oct, pedido de la usuaria): los mismos puntos de siempre; las tablas abiertas */
+  const dot = st => { const z = 15; if (st === 'ok') return <span style={{display:'inline-block', width:z, height:z, borderRadius:'50%', background:'#43A047'}}></span>; if (st === 'behind') return <span style={{display:'inline-block', width:z, height:z, borderRadius:'50%', border:'2.5px solid #E53935', boxSizing:'border-box'}}></span>; if (st === 'cur') return <span style={{display:'inline-block', width:z, height:z, borderRadius:'50%', border:'2.5px solid #FB8C00', background:'#FFF4E5', boxSizing:'border-box'}}></span>; if (st === 'none') return <span style={{color:'#ccc'}}>—</span>; return <span style={{display:'inline-block', width:z, height:z, borderRadius:'50%', border:'2px dashed #C9C3B3', boxSizing:'border-box'}}></span>; };
+  const halfDot = sp => <span title={'Resumen ' + sp.done + ' de ' + sp.n + ' hecho'} style={{display:'inline-flex', alignItems:'center', gap:3, fontSize:10.5, fontWeight:900, color:'#92510F'}}><span style={{display:'inline-block', width:15, height:15, borderRadius:'50%', background:'linear-gradient(90deg,#FB8C00 50%,#FFE0B2 50%)'}}></span>{sp.done}/{sp.n}</span>;
   const PILL = { ok:{ background:'#2EA84B', color:'#fff' }, low:{ background:'#FBE3DC', color:'#A3361F', border:'1px solid #F0A898' }, half:{ background:'linear-gradient(90deg,#2EA84B 50%,#EFEDE6 50%)', color:'#1D4D25', border:'1px solid #CFE7D3' }, pend:{ background:'#EFEDE6', color:'#B8B2A2', border:'1px dashed #DAD5C6' }, wait:{ background:'#F7F5EF', color:'#C2BCAC', border:'1px solid #EEE9DC' }, na:{ background:'transparent', color:'#C2BCAC' } };
   const pill = (c, w) => <span style={{display:'inline-flex', alignItems:'center', justifyContent:'center', minWidth: w || 70, height:24, borderRadius:6, padding:'0 7px', boxSizing:'border-box', fontSize:10.5, fontWeight:900, whiteSpace:'nowrap', ...(PILL[c.k] || PILL.pend)}}>{c.k === 'na' ? '—' : c.txt}</span>;
   return (
     <div {...TLR} style={box}>
       {head}
-      <div style={{fontSize:12, color:'#7a705c', fontWeight:700}}>Una línea por tema: tócala para ver a cada alumno. <b>Atrasado</b> = le falta aprobar un paso <b>anterior</b> al que va la clase. Avisos automáticos: máximo 1 por día y 2 por paso.</div>
-      {alerts.length > 0 && (
-        <div style={{display:'flex', gap:10, alignItems:'flex-start', border:'1.5px solid #F5B7B1', background:'#FDEDEC', borderRadius:12, padding:'10px 12px', color:'#7B241C', fontSize:12.5, lineHeight:1.5}}>
-          <span style={{fontSize:18}}>⚠️</span>
-          <div style={{flex:1}}><b>{alerts.length === 1 ? '1 alumno ya recibió' : alerts.length + ' alumnos ya recibieron'} los 2 recordatorios y {alerts.length === 1 ? 'sigue' : 'siguen'} sin ponerse al día.</b> Los avisos automáticos ya no le llegarán: conviene hablarle en clase.
-            <div style={{display:'flex', flexDirection:'column', gap:3, marginTop:6}}>{alerts.map(a => <span key={a.s.id + a.th.group + a.i}>· <b>{nm(a.s)}</b> — le falta {RT_STEP[a.i]} · {a.th.group.replace(/^T\d+\s*·\s*/, '')} ({a.n} avisos{a.last ? ', el último ' + rtDay(window.JUCUM_DAY ? window.JUCUM_DAY.of(a.last) : String(a.last).slice(0, 10)) : ''})</span>)}</div>
-          </div>
-        </div>)}
+      {/* AVISO-SUTIL-V1 (30-oct, pedido de la usuaria): una línea que se abre al tocarla, un alumno por renglón */}
+      {(() => { const by = {}; alerts.forEach(a => { const k = a.s.id; const x = by[k] = by[k] || { s: a.s, items: [], last: null }; const tp = a.th.group.replace(/^T\d+\s*·\s*/, ''); const g = x.items.find(z => z.tp === tp) || (x.items.push({ tp, st: [] }), x.items[x.items.length - 1]); g.st.push(RT_STEP[a.i].replace(/^P\d\s*/, '')); if (a.last && (!x.last || a.last > x.last)) x.last = a.last; });
+        const ppl = Object.values(by); if (!ppl.length) return null;
+        return <RtNotice tone="red" icon="⚠" title={(ppl.length === 1 ? '1 alumno no responde' : ppl.length + ' alumnos no responden') + ' a los recordatorios'} sub="ya recibieron los 2 avisos automáticos: conviene hablarles en clase"
+          rows={ppl.map(x => ({ who: nm(x.s), what: x.items.map(z => z.tp + ': ' + z.st.join(', ')).join(' · '), when: x.last ? 'último aviso ' + rtDay(window.JUCUM_DAY ? window.JUCUM_DAY.of(x.last) : String(x.last).slice(0, 10)) : '' }))} />; })()}
+      <RtInfo text={<>Fuera del ritmo = le falta aprobar un paso <b>anterior</b> al que va la clase. Toca la línea de un tema para cerrarlo o abrirlo. Avisos automáticos: máximo 1 por día y 2 por paso.</>} />
       {ths.map(th => {
         const k = th.mod.id + th.group, rows = students.map(s => { const st = rtStudentState(s, th, F); return { s, st, behind: st.indexOf('behind'), cur: st.includes('cur') }; });
-        const nB = rows.filter(r => r.behind >= 0).length, nC = rows.filter(r => r.behind < 0 && r.cur).length, nOk = rows.length - nB - nC, isOpen = !!openK[k];
+        const nB = rows.filter(r => r.behind >= 0).length, nC = rows.filter(r => r.behind < 0 && r.cur).length, nOk = rows.length - nB - nC, isOpen = openK[k] !== false;
         return (
           <div key={k} style={{display:'flex', flexDirection:'column', gap:6}}>
-            <button type="button" onClick={() => setOpenK(o => ({ ...o, [k]: !o[k] }))} aria-expanded={isOpen} style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', border:'1px solid #E3DCC9', borderRadius:10, padding:'9px 11px', background:'#fff', cursor:'pointer', fontFamily:'inherit', textAlign:'left', minHeight:44}}>
+            <button type="button" onClick={() => setOpenK(o => ({ ...o, [k]: o[k] === false }))} aria-expanded={isOpen} style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', border:'1px solid #E3DCC9', borderRadius:10, padding:'9px 11px', background:'#fff', cursor:'pointer', fontFamily:'inherit', textAlign:'left', minHeight:44}}>
               <span style={{fontSize:12.5, fontWeight:800, color:'#1F3A8A', flex:1, minWidth:200}}>{th.group} · la clase va en <b>{RT_STEP[th.cur]}</b> (desde {rtDay(th.since)})</span>
               <span style={{fontSize:11.5, fontWeight:800, borderRadius:8, padding:'2px 8px', background:'#E3F4E6', color:'#2E7D32'}}>{nOk} al día</span>
               {nC > 0 && <span style={{fontSize:11.5, fontWeight:800, borderRadius:8, padding:'2px 8px', background:'#FFF5E1', color:'#7A4A00'}}>{nC} en el paso actual</span>}
@@ -212,13 +213,13 @@ function RhythmPanel({ groupId }) {
                   <thead><tr><th style={{fontSize:10.5, color:'#8a7f6a', textAlign:'left', padding:4}}>Alumno</th>{RT_STEP.map((s2, i) => <th key={i} style={{fontSize:10.5, color: i === th.cur ? '#3F5BB8' : '#8a7f6a', padding:4}}>{s2}{i === th.cur ? ' ▶' : ''}</th>)}<th></th></tr></thead>
                   <tbody>{rows.map(({ s, st, behind, cur }) => { const key = s.id + th.group; const al = alertOf(s, th);
                     return <tr key={s.id}><td style={{fontWeight:800, fontSize:12.5, padding:'5px 4px', borderTop:'1px solid #F2ECDD', whiteSpace:'nowrap'}}>{nm(s)}{al && <span title={al.n + ' recordatorios recibidos sin ponerse al día'} style={{marginLeft:6, fontSize:10.5, fontWeight:900, background:'#FDEDEC', color:'#B03A2E', border:'1px solid #F5B7B1', borderRadius:6, padding:'1px 6px'}}>⚠ {al.n} avisos</span>}</td>
-                      {st.map((x, i) => <td key={i} style={{textAlign:'center', borderTop:'1px solid #F2ECDD', padding:3}}>{pill(cellOf(s, th, x, i))}</td>)}
-                      <td style={{borderTop:'1px solid #F2ECDD', textAlign:'right', whiteSpace:'nowrap'}}>{behind >= 0 ? <span style={{display:'inline-flex', alignItems:'center', gap:6}}><span style={{fontSize:11, fontWeight:900, color:'#B23A2A', background:'#FDECEA', borderRadius:7, padding:'2px 7px'}}>atrasado</span>{sent[key] ? <span style={{fontSize:11.5, fontWeight:800, color:'#2E7D32'}}>✓ enviado</span> : <button onClick={() => { if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(s.id, rtReminderText(s, th, behind)); setSent(x2 => ({ ...x2, [key]: 1 })); }} style={{border:'1.5px solid #D6DEEA', background:'#fff', borderRadius:9, padding:'5px 10px', minHeight:32, fontSize:11.5, fontWeight:800, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap'}}>🔔 Recordar</button>}</span> : <span style={{fontSize:11, color:'#8a7f6a', fontWeight:700}}>{cur ? 'en el paso actual' : 'al día'}</span>}</td></tr>; })}</tbody>
+                      {st.map((x, i) => { const sp = i === 0 && x !== 'ok' ? rtSumPart(s, th, F) : null; return <td key={i} style={{textAlign:'center', borderTop:'1px solid #F2ECDD'}}>{sp && sp.done ? halfDot(sp) : dot(x)}</td>; })}
+                      <td style={{borderTop:'1px solid #F2ECDD', textAlign:'right', whiteSpace:'nowrap'}}>{behind >= 0 ? <span style={{display:'inline-flex', alignItems:'center', gap:6}}>{sent[key] ? <span style={{fontSize:11.5, fontWeight:800, color:'#2E7D32'}}>✓ enviado</span> : <button onClick={() => { if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(s.id, rtReminderText(s, th, behind)); setSent(x2 => ({ ...x2, [key]: 1 })); }} style={{border:'1.5px solid #D6DEEA', background:'#fff', borderRadius:9, padding:'5px 10px', minHeight:32, fontSize:11.5, fontWeight:800, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap'}}>🔔 Recordar</button>}</span> : <span style={{fontSize:11, color:'#8a7f6a', fontWeight:700}}>{cur ? 'en el paso actual' : 'al día'}</span>}</td></tr>; })}</tbody>
                 </table>
               </div>)}
           </div>);
       })}
-      <div style={{display:'flex', gap:10, flexWrap:'wrap', alignItems:'center', fontSize:11, color:'#6B7280', fontWeight:800}}>{pill({ k:'ok', txt:'✓' }, 34)} aprobado {pill({ k:'low', txt:'73%' }, 34)} hecho, sin aprobar {pill({ k:'half', txt:'1 de 2' }, 44)} resumen a medias {pill({ k:'pend', txt:'' }, 34)} pendiente {pill({ k:'wait', txt:'' }, 34)} todavía no toca</div>
+      <div style={{display:'flex', gap:12, flexWrap:'wrap', fontSize:11, color:'#6B7280', fontWeight:800}}><span>{dot('ok')} aprobado</span><span>{dot('behind')} le falta un paso anterior</span><span>{dot('cur')} paso actual, en plazo</span><span>{dot('wait')} todavía no toca</span><span style={{display:'inline-flex', alignItems:'center', gap:4}}><span style={{display:'inline-block', width:15, height:15, borderRadius:'50%', background:'linear-gradient(90deg,#FB8C00 50%,#FFE0B2 50%)'}}></span> resumen 1 de 2 (le falta el otro)</span></div>
     </div>
   );
 }
@@ -240,12 +241,35 @@ function StuckAlert({ groupId }) {
   rows.forEach(x => { const k = x.user_id + '|' + x.body; if (seen[k]) return; seen[k] = 1; const s = studs.find(y => String(y.id) === String(x.user_id)); if (s) list.push({ s, body: String(x.body || '').replace(/^Quiso abrir /, 'quiso abrir '), at: x.created_at }); });
   if (!list.length) return null;
   const nm = s => (s.fullName || s.username || '').split(' ').slice(0, 2).join(' ');
+  const by = {}; list.forEach(x => { const k = x.s.id; const y = by[k] = by[k] || { s: x.s, items: [], at: x.at }; const m = /«([^»]+)»/.exec(x.body); y.items.push(m ? m[1] : x.body); if (x.at > y.at) y.at = x.at; });
+  const ppl = Object.values(by);
+  return <RtNotice tone="red" icon="🔒" title={(ppl.length === 1 ? '1 alumno se trabó' : ppl.length + ' alumnos se trabaron') + ' con un candado'} sub="ya tienen el botón «Abrir →»; si siguen igual, ayúdalos en clase"
+    rows={ppl.map(y => ({ who: nm(y.s), what: 'quiso abrir ' + y.items.join(' · '), when: rtDay(window.JUCUM_DAY ? window.JUCUM_DAY.of(y.at) : '') }))} />;
+}
+/* AVISO-SUTIL-V1 (30-oct): aviso de UNA línea («⚠ 2 alumnos no responden · Ver»); al tocarlo se abre la lista, un alumno por renglón */
+function RtNotice({ tone, icon, title, sub, rows }) {
+  const [open, setOpen] = React.useState(false);
+  const C = tone === 'red' ? { bg:'#FDEDEC', bd:'#F5B7B1', fg:'#7B241C', ac:'#B03A2E' } : { bg:'#FFF4E5', bd:'#FFCC80', fg:'#7A4A00', ac:'#9C5D00' };
   return (
-    <div style={{display:'flex', gap:10, alignItems:'flex-start', border:'1.5px solid #F5B7B1', background:'#FDEDEC', borderRadius:12, padding:'10px 12px', color:'#7B241C', fontSize:12.5, lineHeight:1.5}}>
-      <span style={{fontSize:18}}>🔒</span>
-      <div style={{flex:1}}><b>{list.length === 1 ? '1 alumno se trabó' : list.length + ' veces se trabaron alumnos'}</b> (tocaron 2 veces algo con candado · últimos 3 días). Ya tienen el botón «Abrir →» a lo que falta; si siguen igual, conviene ayudarlos en clase.
-        <div style={{display:'flex', flexDirection:'column', gap:3, marginTop:6}}>{list.slice(0, 8).map((x, i) => <span key={i}>· <b>{nm(x.s)}</b> — {x.body} <span style={{color:'#A04A40'}}>({rtDay(window.JUCUM_DAY ? window.JUCUM_DAY.of(x.at) : '')})</span></span>)}</div>
-      </div>
+    <div style={{border:'1px solid ' + C.bd, background:C.bg, borderRadius:10, color:C.fg, fontSize:12.5}}>
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} style={{display:'flex', alignItems:'center', gap:8, width:'100%', border:'none', background:'none', padding:'7px 10px', minHeight:38, cursor:'pointer', fontFamily:'inherit', color:'inherit', textAlign:'left', flexWrap:'wrap'}}>
+        <span style={{fontSize:14}}>{icon}</span>
+        <b style={{fontSize:12.5}}>{title}</b>
+        <span style={{flex:1, minWidth:120, fontSize:11.5, fontWeight:700, opacity:.85}}>{open ? sub : ''}</span>
+        <span style={{fontSize:11.5, fontWeight:900, color:C.ac, whiteSpace:'nowrap'}}>{open ? 'Ocultar ▲' : 'Ver ▾'}</span>
+      </button>
+      {open && <div style={{display:'flex', flexDirection:'column', borderTop:'1px solid ' + C.bd}}>
+        {rows.map((r, i) => <div key={i} style={{display:'grid', gridTemplateColumns:'minmax(110px,160px) minmax(0,1fr) auto', gap:10, alignItems:'baseline', padding:'6px 10px', borderTop: i ? '1px solid ' + C.bd : 'none', fontWeight:700, lineHeight:1.4}}>
+          <b>{r.who}</b><span>{r.what}</span><span style={{fontSize:11, opacity:.75, whiteSpace:'nowrap'}}>{r.when}</span></div>)}
+      </div>}
+    </div>);
+}
+function RtInfo({ text }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div style={{fontSize:12, color:'#7a705c', fontWeight:700}}>
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} style={{border:'none', background:'none', padding:0, minHeight:28, cursor:'pointer', fontFamily:'inherit', fontSize:12, fontWeight:800, color:'#5B3FA0'}}>ⓘ {open ? 'Ocultar explicación' : '¿Cómo se lee?'}</button>
+      {open && <div style={{marginTop:3, lineHeight:1.5}}>{text}</div>}
     </div>);
 }
 /* Alumno: aviso en su inicio + recordatorio automático (1/día, 2 por paso) */

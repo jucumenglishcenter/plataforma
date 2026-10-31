@@ -2415,6 +2415,17 @@ function ExplainerBody() {
  * Cada actividad muestra su ✓ del DÍA (hora Perú): el alumno VE lo que avanzó.
  * Al completar todo aparece "¡Terminaste tu práctica de hoy!" + recomendaciones
  * (nota baja por mejorar · repaso pendiente · meta diaria / refuerzo). */
+/* 🔁 REPETIR-CON-CUENTA-V1 (31-oct-2026): nota baja → «vuelve a hacerla» con la MISMA cuenta regresiva del aviso
+ * de nota en espera (JUCUM_GATE, ½ hora por ejercicio). Sin ancla en la nube: solo «vuelve a hacerla». */
+function RetryNote({ studentId, moduleId, activityId, pct }) {
+  const G = window.JUCUM_GATE; const [, tick] = React.useReducer(x => x + 1, 0);
+  React.useEffect(() => { if (G) G.load(studentId).then(tick, () => {}); }, [studentId]);
+  const left = G ? G.leftMs(moduleId, activityId) : 0;
+  React.useEffect(() => { if (left <= 0) return; const iv = setInterval(tick, 1000); return () => clearInterval(iv); }, [left > 0]);
+  if (left > 0) { const at = new Date(Date.now() + left - 5 * 3600e3); const h = at.getUTCHours(); const hh = (h % 12 || 12) + ':' + String(at.getUTCMinutes()).padStart(2, '0') + (h < 12 ? ' am' : ' pm');
+    return <span style={{color:'#92510F', fontWeight:800}}>Hecha hoy · {pct}% · 🔁 Vuelve a hacerla para subir tu nota desde las {hh} <span style={{fontVariantNumeric:'tabular-nums'}}>(en {G.fmt(left)})</span></span>; }
+  return <span style={{color:'#92510F', fontWeight:800}}>Hecha hoy · {pct}% · 🔁 ¡Ya puedes subir tu nota! Vuelve a hacerla</span>;
+}
 function TodayPracticeCard({ student }) {
   const TT = window.JUCUM_TT; if (!TT) return null;
   const D = window.JUCUM_DATA;
@@ -2505,7 +2516,7 @@ function TodayPracticeCard({ student }) {
             : st.st === 'ok'
             ? <span style={{color:'#2E7D32', fontWeight:800}}>✓ Hecha hoy{st.pct != null ? ` · ${st.pct}%` : ''} — ¡bien ahí!</span>
             : st.st === 'low'
-              ? <span style={{color:'#92510F', fontWeight:800}}>Hecha hoy · {st.pct}% — vuelve a intentarla (la nota cambia tras ½ hora)</span>
+              ? <RetryNote studentId={student.id} moduleId={it.moduleId} activityId={it.activityId} pct={st.pct} />
               : <span>{isGeneric ? 'Recomendado para ti' : (it.fromImport ? '📌 Según el plan de tu teacher' : 'Indicado por tu teacher')}{it.prio ? <b style={{color:'#AD1457'}}> · primero esto</b> : null}</span>;
           const inner = (<>
             {partHalf ? <span style={{...badgeBase, borderColor:'#F0C66B', background:'linear-gradient(90deg,#FB8C00 50%,#FFE0B2 50%)', color:'transparent'}}>·</span> : badge(st)}
