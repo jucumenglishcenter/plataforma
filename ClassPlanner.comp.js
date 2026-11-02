@@ -1465,6 +1465,33 @@ function CmNextBox({ plan }) {
   );
 }
 
+/* 🔎 SEGUIMIENTO-VENTANA-V1 (02-nov-2026, pedido de la usuaria): «🔎 Ver seguimiento» del Modo clase abre una VENTANA EMERGENTE
+ * (ya no despliega el panel en la página). Mismo contenido de siempre: 🏫 En clase + 🏠 Práctica del teacher.
+ * RITMO-EN-CLASE-V1 (02-nov, pedido de la usuaria: «vuelve a reactivar los recordatorios de los alumnos que estaban dentro del seguimiento»):
+ * debajo va otra vez el 🧭 Ritmo de gramática (RhythmPanel, sin cambios) con sus recordatorios: automáticos (activar/apagar),
+ * «⚠ no responden a los recordatorios» y 🔔 Recordar por alumno — como estaba dentro del seguimiento del Modo clase antes del 31-oct. */
+function CmFollowWin({ plan, group, onClose }) {
+  React.useEffect(() => { const f = (e) => { if (e.key === 'Escape') onClose(); }; document.addEventListener('keydown', f); return () => document.removeEventListener('keydown', f); }, []);
+  return (
+    <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(20,24,40,.42)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1200, padding:16, boxSizing:'border-box'}}>
+      <div role="dialog" aria-modal="true" aria-label="Seguimiento de la clase" onClick={e => e.stopPropagation()}
+        style={{background:'#fff', borderRadius:18, width:'calc(100vw - 32px)', maxWidth:1180, maxHeight:'100%', display:'flex', flexDirection:'column', boxShadow:'0 20px 50px rgba(0,0,0,.3)', overflow:'hidden', boxSizing:'border-box'}}>
+        <div style={{display:'flex', alignItems:'center', gap:10, padding:'13px 16px', borderBottom:'1px solid #E6E1D3'}}>
+          <span style={{fontSize:20}}>🔎</span>
+          <div style={{flex:1, minWidth:0, display:'flex', flexDirection:'column'}}>
+            <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:18, color:'#1E2433'}}>Seguimiento de la clase</b>
+            <small style={{fontSize:12, fontWeight:700, color:'#8a7f6a'}}>{group ? group.name + ' · ' : ''}se lee de la nube</small>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Cerrar" title="Cerrar (Esc)" style={{width:36, height:36, borderRadius:'50%', border:0, background:'#F3F1EC', fontSize:15, color:'#555', flex:'none', cursor:'pointer', fontFamily:'inherit'}}>✕</button>
+        </div>
+        <div style={{flex:1, minHeight:0, overflowY:'auto', overflowX:'hidden', padding:'14px 18px 18px', display:'flex', flexDirection:'column', gap:14}}>
+          <GroupFollowPanel groupId={plan.groupId} areas={['c', 'p']} startArea="c" classDate={plan.date} />
+          {window.RhythmPanel && <RhythmPanel groupId={plan.groupId} />}
+        </div>
+      </div>
+    </div>);
+}
+
 /* ════════ Modo clase · plan + materiales siempre a la vista ════════ */
 function ClassMode({ plan, onBack }) {
   const { MODULE_CATALOG, STUDENTS, GROUPS } = window.JUCUM_DATA;
@@ -1492,8 +1519,7 @@ function ClassMode({ plan, onBack }) {
   const [evalOn, setEvalOn] = React.useState(false);
   const [closeOn, setCloseOn] = React.useState(false);
   const [pzOn, setPzOn] = React.useState(false);
-  const [followOn, setFollowOn] = React.useState(() => { try { return localStorage.getItem('jucum_cm_follow_v1') === '1'; } catch (e) { return false; } });   // SEGUIMIENTO-BOTON-V1: el seguimiento se abre con su botón (cerrado por defecto)
-  const toggleFollow = () => setFollowOn(v => { const n = !v; try { window.JUCUM_STORE ? window.JUCUM_STORE.set('jucum_cm_follow_v1', n ? '1' : '0') : localStorage.setItem('jucum_cm_follow_v1', n ? '1' : '0'); } catch (e) {} return n; });
+  const [followOn, setFollowOn] = React.useState(false);   // SEGUIMIENTO-BOTON-V1: el seguimiento se abre con su botón (cerrado por defecto) · SEGUIMIENTO-VENTANA-V1 (02-nov): se abre en una ventana emergente y arranca cerrada (jucum_cm_follow_v1 era del panel desplegado)
   const [closedPlan, setClosedPlan] = React.useState(plan.closing ? plan : null);
   const focusKeys = mats.filter(m => m.moduleId && m.activityId).map(m => m.moduleId + ':' + m.activityId);
   const cmRec = (plan.source && plan.source.importId && window.JUCUM_PLANIMPORT) ? window.JUCUM_PLANIMPORT.get(plan.source.importId) : null;
@@ -1532,11 +1558,11 @@ function ClassMode({ plan, onBack }) {
             📋 {evalOn ? 'Cerrar evaluación' : 'Evaluar la clase'}
           </button>
           {window.GroupFollowPanel && (
-            <button onClick={toggleFollow} title="Mostrar u ocultar el seguimiento de la clase"
+            <button onClick={() => setFollowOn(true)} title="Abrir el seguimiento de la clase en una ventana"
               style={{marginTop:9, marginLeft:8, display:'inline-flex', alignItems:'center', gap:7, cursor:'pointer', fontFamily:'inherit', fontWeight:800, fontSize:13,
-                background: followOn ? '#fff' : 'rgba(255,255,255,0.16)', color: followOn ? '#1F3A8A' : '#fff',
-                border:'1.5px solid ' + (followOn ? '#fff' : 'rgba(255,255,255,0.35)'), borderRadius:22, padding:'8px 15px'}}>
-              🔎 {followOn ? 'Ocultar seguimiento' : 'Ver seguimiento'}
+                background:'rgba(255,255,255,0.16)', color:'#fff',
+                border:'1.5px solid rgba(255,255,255,0.35)', borderRadius:22, padding:'8px 15px'}}>
+              🔎 Ver seguimiento
             </button>)}
           {window.PzSorteo && (
             <button onClick={() => setPzOn(true)} title="Sorteo para participar: nadie repite hasta que pasaron todos"
@@ -1583,8 +1609,8 @@ function ClassMode({ plan, onBack }) {
         </div>
       )}
       <style>{`@keyframes cpPulse{0%,100%{opacity:1}50%{opacity:.25}}`}</style>
-      {/* SEGUIMIENTO-AREAS-V1: en el Modo clase, el nuevo seguimiento (🏫 En clase + 🏠 Práctica del teacher) */}
-      {window.GroupFollowPanel ? (followOn && <div className="scard" style={{marginBottom:16, border:'2px solid #9FB0DA'}}><div className="sec-title" style={{marginBottom:10}}>🔎 Seguimiento de la clase</div><GroupFollowPanel groupId={plan.groupId} areas={['c', 'p']} startArea="c" classDate={plan.date} /></div>) : (cmPrev && window.FollowUpPanel && <FollowUpPanel plan={cmPrev} where="class" />)}
+      {/* SEGUIMIENTO-AREAS-V1: en el Modo clase, el nuevo seguimiento (🏫 En clase + 🏠 Práctica del teacher) · SEGUIMIENTO-VENTANA-V1: en ventana emergente, con el 🧭 Ritmo (RITMO-EN-CLASE-V1) */}
+      {window.GroupFollowPanel ? (followOn && <CmFollowWin plan={plan} group={group} onClose={() => setFollowOn(false)} />) : (cmPrev && window.FollowUpPanel && <FollowUpPanel plan={cmPrev} where="class" />)}
       {window.DocSetClassPanel && <DocSetClassPanel plan={plan} />}
       <div style={{display:'grid', gridTemplateColumns:'1.3fr 1fr', gap:16, alignItems:'start'}}>
         <div style={{display:'flex', flexDirection:'column', gap:16, minWidth:0}}>
