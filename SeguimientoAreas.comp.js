@@ -98,7 +98,11 @@ function saSets(F, gid, t) {
   return Object.values(by).sort((a, b) => S.range(a).from.localeCompare(S.range(b).from)).slice(-5);
 }
 function saSetTitle(p) { const m = String(p.title || '').match(/Sesi[oó]n\s*\d+/i); return m ? m[0].replace('Sesion', 'Sesión') : (p.title || 'Práctica').split('·')[0].replace('📌', '').trim().slice(0, 22); }
-function SaPractice({ F, studs, t, onPop }) {
+/* 🔔 RECORDAR-EN-SEGUIMIENTO-V1 (02-nov-2026, pedido de la usuaria: «eliminaste los recordatorios de los alumnos que estaba dentro del
+ * seguimiento… lo quiero en el seguimiento que aparece en los grupos»): vuelve «🔔 Recordar a N» de «📊 Prácticas» (SEG-GRUPO-V1),
+ * ahora en la cabecera de cada set EN CURSO con alumnos que no lo terminaron. Abre SegRemindBox (texto editable, campanita solo a
+ * ellos, + lo que le falta a cada uno) · «✓ recordado hoy». Solo con onRemind: el 🔎 Seguimiento del grupo SÍ, el Modo clase NO. */
+function SaPractice({ F, studs, t, onPop, onRemind }) {
   const S = window.JUCUM_SEG; const sets = saSets(F, studs.gid, t);
   if (!sets.length) return <div className="sa-empty">No hay sets de práctica en las últimas 4 semanas.</div>;
   const items = (p, st) => { const ev = S.evalSet(p, st, F, t); const r = S.range(p), open = t <= r.to; return ev ? ev.cells.map(c => ({ c: saCode(c, open), m: c.name, d: c.d, sc: c.sc })) : []; };
@@ -110,7 +114,8 @@ function SaPractice({ F, studs, t, onPop }) {
     if (low.length) o.push(<React.Fragment key="d"><b>Debe repetir</b>: {low.join(', ')}</React.Fragment>);
     if (curOpen) o.push(<React.Fragment key="e">Set actual: {cl ? 'le falta' + (cl === 1 ? '' : 'n') + ' ' + cl : 'listo'}</React.Fragment>);
     return o.map((x, i) => <React.Fragment key={i}>{i ? ' · ' : ''}{x}</React.Fragment>); };
-  return <table className="sa-t"><thead><tr><th>Alumno</th>{sets.map(p => { const r = S.range(p); return <th key={p.id}>{saSetTitle(p)}<small>{saDay(r.from)} → {saDay(r.to)}</small></th>; })}<th className="l">Situación</th></tr></thead>
+  return <table className="sa-t"><thead><tr><th>Alumno</th>{sets.map(p => { const r = S.range(p); const G = onRemind ? S.evalGroupSet(p, F, t) : null, miss = G && G.phase === 'open' ? G.missingRows.length : 0, remToday = !!(G && G.plan.remindedAt && window.JUCUM_DAY && window.JUCUM_DAY.of(G.plan.remindedAt) === t);
+    return <th key={p.id}>{saSetTitle(p)}<small>{saDay(r.from)} → {saDay(r.to)}</small>{miss > 0 ? <button type="button" className="sa-rem" onClick={() => onRemind(G)} title={'Recordatorio por la campanita a ' + (miss === 1 ? 'el que no lo terminó' : 'los ' + miss + ' que no lo terminaron')}>🔔 Recordar a {miss}</button> : null}{remToday ? <small className="rd">✓ recordado hoy</small> : null}</th>; })}<th className="l">Situación</th></tr></thead>
     <tbody>{studs.list.map(st => <tr key={st.id}><td className="nm">{st.fullName || st.username}</td>{sets.map(p => { const it = items(p, st), r = S.range(p), open = t <= r.to; const pend = it.filter(x => x.c !== 'p'), ok = pend.filter(x => x.c === 'o').length, had = it.length - pend.length;
       return <td key={p.id}><button type="button" className="sa-cell" onClick={() => onPop({ title: (st.fullName || '') + ' · ' + saSetTitle(p), sub: 'Práctica para casa · ' + saDay(r.from, 1) + ' → ' + saDay(r.to, 1) + (open ? ' · en curso' : ''),
         sum: <>{pend.length ? ok + ' de ' + pend.length + ' pedidos hechos a tiempo' : 'Nada pedido'}{had ? ' · ' + had + ' ya lo tenía aprobado' : ''}{it.some(x => x.c === 'l') ? <div className="sa-stu"><span>Le aparece en su inicio</span><div>🔁 Vuelve a hacer «{it.find(x => x.c === 'l').m}» para subir tu nota · tu nota nueva se guarda 30 min después de tu último intento</div></div> : null}</>,
@@ -253,10 +258,11 @@ function SaReportPop({ o, area, onClose }) {
 }
 
 /* ── Panel ── areas: qué pestañas se muestran (grupo: todas · Modo clase: ['c','p']) */
-function GroupFollowPanel({ groupId, areas, startArea, classDate }) {
+function GroupFollowPanel({ groupId, areas, startArea, classDate, remind }) {
   const D = window.JUCUM_DATA, S = window.JUCUM_SEG; if (!D || !S) return null;
   const AR = areas || ['p', 'r', 'c', 't'];
   const [area, setArea] = React.useState(startArea || AR[0]); const [date, setDate] = React.useState(classDate || null); const [pop, setPop] = React.useState(null); const [task, setTask] = React.useState(null); const [rep, setRep] = React.useState(false);
+  const [remG, setRemG] = React.useState(null); const remOn = (remind != null ? !!remind : !areas) && !!window.SegRemindBox;   // RECORDAR-EN-SEGUIMIENTO-V1: sin «areas» = 🔎 Seguimiento del grupo
   const [, tick] = React.useReducer(x => x + 1, 0);
   const group = (D.GROUPS || []).find(g => g.id === groupId) || null; const t = S.today();
   const list = S.groupStudents(groupId, null); const ids = list.map(s => String(s.id)); const since = S.addD(t, -42);
@@ -273,11 +279,12 @@ function GroupFollowPanel({ groupId, areas, startArea, classDate }) {
       <div className="sa-tools">{window.SegAgo ? <SegAgo F={F} busy={seg.busy} err={seg.err} onReload={seg.reload} /> : null}<button type="button" className="sa-btn rep" onClick={() => setRep(true)} disabled={!F}>📤 Reporte para tu Claude</button></div></div>
     <div className="sa-src">{SRC[area]}</div>
     {!F ? <div className="sa-empty">{seg.err ? 'Sin conexión con la nube. ' : ''}Cargando el seguimiento desde la nube…</div> : <div className="sa-sc">
-      {area === 'p' ? <SaPractice F={F} studs={studs} t={t} onPop={setPop} /> : area === 'r' ? <SaReview F={F} studs={studs} t={t} daily={daily} goal={goal} onPop={setPop} /> : area === 'c' ? <SaClass F={F} studs={studs} t={t} daily={daily} date={date} setDate={setDate} onPop={setPop} /> : <SaTasks F={F} studs={studs} t={t} onTask={(k, st) => setTask({ k, st })} />}
+      {area === 'p' ? <SaPractice F={F} studs={studs} t={t} onPop={setPop} onRemind={remOn ? setRemG : null} /> : area === 'r' ? <SaReview F={F} studs={studs} t={t} daily={daily} goal={goal} onPop={setPop} /> : area === 'c' ? <SaClass F={F} studs={studs} t={t} daily={daily} date={date} setDate={setDate} onPop={setPop} /> : <SaTasks F={F} studs={studs} t={t} onTask={(k, st) => setTask({ k, st })} />}
     </div>}
     {pop && pop.kind === 'review' ? <SaReviewPop p={pop} thr={thr} onClose={() => setPop(null)} /> : pop ? <SaPop title={pop.title} sub={pop.sub} onClose={() => setPop(null)}>{pop.sum ? <div className="sa-sum">{pop.sum}</div> : null}<SaRows rows={pop.rows || []} grouped={pop.grouped} /></SaPop> : null}
     {task && F ? <SaTaskPop tk={task.k} st={task.st} studs={studs} F={F} onClose={() => setTask(null)} onMove={st => setTask({ k: task.k, st })} /> : null}
     {rep && F ? <SaReportPop o={{ F, studs, daily, goal, group, t, areas: AR }} area={area} onClose={() => setRep(false)} /> : null}
+    {remG && remOn ? <SaPop title={'🔔 Recordar · ' + saSetTitle(remG.plan)} sub={saDay(remG.from, 1) + ' → ' + saDay(remG.to, 1) + ' · ' + remG.full + ' de ' + remG.n + ' completos · ' + S.endsTxt(remG.to, t)} onClose={() => setRemG(null)}><div className="sa-remb"><SegRemindBox G={remG} onCancel={() => setRemG(null)} /></div></SaPop> : null}
   </div>;
 }
 
@@ -343,6 +350,8 @@ const SA_CSS = `.sa{display:flex;flex-direction:column;gap:12px;color:#1d2433;fo
 .sa-save{border:none;border-radius:12px;padding:11px;background:linear-gradient(135deg,#3F5BB8,#0D1B5A);color:#fff;font:800 13.5px Nunito,sans-serif;cursor:pointer;min-height:44px}
 .sa-rp{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 18px;font-size:12.5px;font-weight:800;color:#33415C}.sa-rp select{font:800 13px Nunito,sans-serif;padding:6px 8px;border-radius:8px;border:1.5px solid #D6DEEA;margin-left:6px;background:#fff;color:#1d2433}.sa-rc{display:flex;gap:12px;flex-wrap:wrap}.sa-rc label{display:inline-flex;gap:5px;align-items:center;cursor:pointer}
 .sa-rtxt{margin:0 18px;background:#0F172A;color:#E2E8F0;border-radius:12px;padding:12px;font:12px/1.55 ui-monospace,Menlo,monospace;white-space:pre-wrap;max-height:42vh;overflow:auto}
+.sa-rem{display:inline-flex;align-items:center;gap:4px;margin-top:6px;border:none;border-radius:9px;padding:5px 9px;min-height:30px;font:800 11.5px Nunito,sans-serif;color:#fff;background:linear-gradient(135deg,#7B5CC8,#5B3FA0);cursor:pointer;white-space:nowrap}.sa-rem:hover{filter:brightness(1.08)}
+.sa-t th small.rd{color:#2E7D32;font-weight:800;margin-top:3px}.sa-remb{padding:12px 18px 18px}
 @media (max-width:760px){.sa-vbody,.sa-vbody.both{grid-template-columns:1fr}.sa-vside{border-left:none;border-top:1px solid #F2ECDD}}`;
 
 Object.assign(window, { GroupFollowPanel });

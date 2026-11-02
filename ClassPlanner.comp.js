@@ -1467,9 +1467,8 @@ function CmNextBox({ plan }) {
 
 /* 🔎 SEGUIMIENTO-VENTANA-V1 (02-nov-2026, pedido de la usuaria): «🔎 Ver seguimiento» del Modo clase abre una VENTANA EMERGENTE
  * (ya no despliega el panel en la página). Mismo contenido de siempre: 🏫 En clase + 🏠 Práctica del teacher.
- * RITMO-EN-CLASE-V1 (02-nov, pedido de la usuaria: «vuelve a reactivar los recordatorios de los alumnos que estaban dentro del seguimiento»):
- * debajo va otra vez el 🧭 Ritmo de gramática (RhythmPanel, sin cambios) con sus recordatorios: automáticos (activar/apagar),
- * «⚠ no responden a los recordatorios» y 🔔 Recordar por alumno — como estaba dentro del seguimiento del Modo clase antes del 31-oct. */
+ * 02-nov (2.º pedido de la usuaria: «no lo quiero en modo de clase, lo quiero en el seguimiento que aparece en los grupos»):
+ * aquí NO van recordatorios (se quitó el 🧭 Ritmo); los recordatorios están en el 🔎 Seguimiento del grupo (RECORDAR-EN-SEGUIMIENTO-V1). */
 function CmFollowWin({ plan, group, onClose }) {
   React.useEffect(() => { const f = (e) => { if (e.key === 'Escape') onClose(); }; document.addEventListener('keydown', f); return () => document.removeEventListener('keydown', f); }, []);
   return (
@@ -1486,7 +1485,6 @@ function CmFollowWin({ plan, group, onClose }) {
         </div>
         <div style={{flex:1, minHeight:0, overflowY:'auto', overflowX:'hidden', padding:'14px 18px 18px', display:'flex', flexDirection:'column', gap:14}}>
           <GroupFollowPanel groupId={plan.groupId} areas={['c', 'p']} startArea="c" classDate={plan.date} />
-          {window.RhythmPanel && <RhythmPanel groupId={plan.groupId} />}
         </div>
       </div>
     </div>);
@@ -1609,7 +1607,7 @@ function ClassMode({ plan, onBack }) {
         </div>
       )}
       <style>{`@keyframes cpPulse{0%,100%{opacity:1}50%{opacity:.25}}`}</style>
-      {/* SEGUIMIENTO-AREAS-V1: en el Modo clase, el nuevo seguimiento (🏫 En clase + 🏠 Práctica del teacher) · SEGUIMIENTO-VENTANA-V1: en ventana emergente, con el 🧭 Ritmo (RITMO-EN-CLASE-V1) */}
+      {/* SEGUIMIENTO-AREAS-V1: en el Modo clase, el nuevo seguimiento (🏫 En clase + 🏠 Práctica del teacher) · SEGUIMIENTO-VENTANA-V1: en ventana emergente */}
       {window.GroupFollowPanel ? (followOn && <CmFollowWin plan={plan} group={group} onClose={() => setFollowOn(false)} />) : (cmPrev && window.FollowUpPanel && <FollowUpPanel plan={cmPrev} where="class" />)}
       {window.DocSetClassPanel && <DocSetClassPanel plan={plan} />}
       <div style={{display:'grid', gridTemplateColumns:'1.3fr 1fr', gap:16, alignItems:'start'}}>
