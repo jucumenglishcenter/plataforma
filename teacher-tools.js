@@ -199,17 +199,20 @@
     const t = nowISO();
     return (Array.isArray(a) ? a : []).map(r => (r && r.id === id) ? { ...r, _deleted: t, savedAt: t } : r);
   }
+  /* 🔒 SOLO-TEACHER-V1: ¿este equipo tiene la sesión de un alumno? */
+  function isStudentDevice() { try { const u = JSON.parse(localStorage.getItem('jucum_user') || 'null'); return !!(u && u.role === 'student'); } catch (e) { return false; } }
   async function cloudMerge(key, lsKey) {
     if (!window.JUCUM_SB) return;
+    const ro = isStudentDevice();   // SOLO-TEACHER-V1: el celular de un alumno solo LEE (nunca sube planes)
     let cloud = null;
     try {
       const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key', key).maybeSingle();
       cloud = (data && Array.isArray(data.value)) ? data.value : null;
     } catch (e) { return; }        // sin nube: JAMÁS se toca lo local
-    if (cloud == null) { const localOnly = j(lsKey, []); if (localOnly.length) cloudSetting(key, localOnly); return; }
+    if (cloud == null) { if (ro) return; const localOnly = j(lsKey, []); if (localOnly.length) cloudSetting(key, localOnly); return; }
     const merged = mergeById(j(lsKey, []), cloud);
     w(lsKey, merged);
-    if (JSON.stringify(merged) !== JSON.stringify(cloud)) cloudSetting(key, merged);   // la nube converge
+    if (!ro && JSON.stringify(merged) !== JSON.stringify(cloud)) cloudSetting(key, merged);   // la nube converge (solo desde teacher/admin)
   }
 
   /* ── Planes de práctica por FECHAS explícitas (el profe elige los días) ── */
@@ -439,11 +442,15 @@
     if (!window.JUCUM_SB) return;
     try { const { data } = await window.JUCUM_SB.getClient().from('app_settings').select('value').eq('key','daily_practice').maybeSingle(); if (data && data.value) w(DP_KEY, data.value); } catch(e){}
     // 🛡️ Estos cuatro se FUSIONAN (no se pisan): planes y plantillas nunca se pierden.
+    // 🔒 SOLO-TEACHER-V1 (02-nov-2026): en el celular de un ALUMNO no se bajan favoritos, plantillas,
+    // notas ni recordatorios del teacher (no los usa ninguna pantalla del alumno).
+    const st = isStudentDevice();
     await cloudMerge('directed_practice', DPR_KEY);
     await cloudMerge('practice_plans', PP_KEY);
-    await cloudMerge('practice_guide_favs', GFAV_KEY);
+    if (!st) await cloudMerge('practice_guide_favs', GFAV_KEY);
     await cloudMerge('class_plans', CP_KEY);
-    await cloudMerge('planner_templates', TPL_KEY);
+    if (!st) await cloudMerge('planner_templates', TPL_KEY);
+    if (st) return;
     try { const rows = await window.JUCUM_SB.all('teacher_notes'); if (Array.isArray(rows)) saveNotes(rows.map(r=>({ id:r.id, date:r.created_at, studentId:r.student_id, groupId:r.group_id, kind:r.kind, text:r.text, tag:r.tag })).sort((a,b)=>String(b.date).localeCompare(String(a.date)))); } catch(e){}
     try { const rows = await window.JUCUM_SB.all('teacher_reminders'); if (Array.isArray(rows)) w(REM_KEY, rows.map(r=>({ id:r.id, date:r.created_at, groupId:r.group_id, text:r.text, due:r.due, done:r.done }))); } catch(e){}
   }

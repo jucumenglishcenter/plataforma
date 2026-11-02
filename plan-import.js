@@ -825,6 +825,8 @@
       ...(notes.length ? ['', "TEACHER'S NOTES FOR NEXT SESSION", ...notes] : [])].join('\n');
   }
 
-  setTimeout(cloudLoad, 2500);
+  /* 🔒 SOLO-TEACHER-V1 (02-nov-2026): los planes importados (1.3 MB) son solo del teacher → el celular de un
+   * ALUMNO ya no los baja ni los sube. Teacher/admin/dev o sin sesión: como siempre. */
+  setTimeout(() => { let u = null; try { u = JSON.parse(localStorage.getItem('jucum_user') || 'null'); } catch (e) {} if (!(u && u.role === 'student')) cloudLoad(); }, 2500);
   window.JUCUM_PLANIMPORT = { version: 'PLAN-IMPORT-V2', jLines, nextClassAfter, matchJ, jRange, daysBetween, effective, groupMeta, sessionFor, guideJ, jKind, readFile, blocksFromText, build, create, save, get, list, remove, addVersion, publish, verifyCloud, effective, distribute, gapsLeft, lastClass, marksFor, report, fmtDay, peruToday, cloudLoad };
 })();

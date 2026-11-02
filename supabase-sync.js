@@ -149,10 +149,21 @@
     ? selectAll(table, '*,forum_posts!inner(group_id)', order, q => q.eq('forum_posts.group_id', g))
         .then(r => (r && r.error) ? selectAll(table, '*', order) : r)
     : selectAll(table, '*', order);
+  /* 👥 CARGA-GRUPO-V1 (02-nov-2026): en el equipo de un ALUMNO el avance (progress) se baja solo
+   * de SU grupo (Top, Liga y rachas son por grupo); sin grupo, solo el suyo. Teacher/admin/dev o
+   * sin sesión: todo, como siempre. Si el filtro falla, se pide como antes. */
+  const PROG_ORDER = ['user_id', 'module_id', 'activity_id'];
+  const progScope = (sess, g) => (sess && sess.role === 'student' && sess.studentId) ? { me: sess.studentId, g: g !== undefined ? g : (sess.groupId || null) } : null;
+  const progRows = (sc) => {
+    if (!sc) return selectAll('progress', PROG_COLS, PROG_ORDER);
+    const p = sc.g ? selectAll('progress', PROG_COLS + ',users!inner()', PROG_ORDER, q => q.eq('users.group_id', sc.g))
+                   : selectAll('progress', PROG_COLS, PROG_ORDER, q => q.eq('user_id', sc.me));
+    return p.then(r => (r && r.error) ? selectAll('progress', PROG_COLS, PROG_ORDER) : r);
+  };
   const Q = {
     groups:      () => SB().from('groups').select('*'),
     users:       () => SB().from('users').select('*'),
-    progress:    () => selectAll('progress', PROG_COLS, ['user_id', 'module_id', 'activity_id']),
+    progress:    (sc = progScope(sessionUser())) => progRows(sc),
     evals:       () => SB().from('evaluations').select('*'),
     posts:       (g = forumGroupOf(sessionUser())) => selectAll('forum_posts', '*', ['id'], g ? (q => q.eq('group_id', g)) : null),
     replies:     (g = forumGroupOf(sessionUser())) => forumRows('forum_replies', ['id'], g),
@@ -209,14 +220,15 @@
     // ⚡ Todas las lecturas salen A LA VEZ (o ya venían en camino desde prefetch);
     // abajo se aplican en el MISMO orden de siempre.
     const nIds = notifIdsFor(sessionUser());
-    const pProg = take('progress', Q.progress);
-    const pNotif = nIds.length ? take('notifs:' + nIds.join(','), () => qNotifs(nIds)) : null;
-    const pEvals = take('evals', Q.evals);
     // FORO-LIMITE-V1: grupo ACTUAL del alumno (lista de la nube); si cambió desde la precarga, se pide de nuevo.
     const fSess = sessionUser();
     const fRow = fSess && fSess.role === 'student' ? users.find(u => u.id === fSess.studentId) : null;
     const fGroup = fRow ? (fRow.group_id || null) : forumGroupOf(fSess);
     const fTake = (name, make) => { if (fGroup === forumGroupOf(fSess)) return take(name, make); delete PF[name]; return settle(make(fGroup)); };
+    // CARGA-GRUPO-V1: el avance también va con el grupo ACTUAL (misma regla que el foro)
+    const pProg = fTake('progress', (g) => Q.progress(progScope(fSess, g)));
+    const pNotif = nIds.length ? take('notifs:' + nIds.join(','), () => qNotifs(nIds)) : null;
+    const pEvals = take('evals', Q.evals);
     const pForum = Promise.all([fTake('posts', Q.posts), fTake('replies', Q.replies), fTake('likes', Q.likes), take('mutes', Q.mutes)]);
     const pFlags = take('flags', Q.flags);
     const pTasks = pullTasks();
@@ -586,7 +598,9 @@
     if (Date.now() - lastProgAt < 45000) return false;
     try {
       const sb = SB();
-      const { data: prog, error } = await selectAll('progress', PROG_COLS, ['user_id', 'module_id', 'activity_id']);
+      const rs = sessionUser();   // CARGA-GRUPO-V1: alumno = solo el avance de su grupo (lista actual)
+      const rme = rs && rs.role === 'student' ? ((window.JUCUM_DATA && window.JUCUM_DATA.STUDENTS) || []).find(s => s.id === rs.studentId) : null;
+      const { data: prog, error } = await progRows(progScope(rs, rme ? (rme.group || null) : undefined));
       if (error) return false;
       const today = dayStr(Date.now());   // día en hora Perú
       const cloud = {};
@@ -738,7 +752,12 @@
     if (!D) return;
     const DAY = 86400000;
     const prog = read(KEYS.progress);
-    D.STUDENTS.forEach(s => {
+    /* 👥 CARGA-GRUPO-V1: en el equipo de un alumno solo están los datos de SU grupo → solo se calculan
+     * (y solo se acredita XP de racha a) los de su grupo; los demás quedan como estaban. */
+    const cs = sessionUser();
+    const cme = cs && cs.role === 'student' ? D.STUDENTS.find(x => x.id === cs.studentId) : null;
+    const list = (cs && cs.role === 'student') ? (cme ? D.STUDENTS.filter(x => x.id === cme.id || (cme.group && x.group === cme.group)) : []) : D.STUDENTS;
+    list.forEach(s => {
       const p = prog[s.id] || { completed: {} };
       const completed = p.completed || {};
       const entries = Object.values(completed);

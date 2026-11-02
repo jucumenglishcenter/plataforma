@@ -2674,13 +2674,29 @@ window.JUCUM_DATA.nextActiveIds = nextActiveIds;
  * cualquier select en 1000 filas; la ventana de 6–13 semanas ya roza ese tope
  * y sin paginar se perderían los días/semanas MÁS RECIENTES (racha y bono
  * semanal caídos aunque el alumno sí practicó). */
+function jecScopeIds() {   // CARGA-GRUPO-V1
+  try {
+    const u = JSON.parse(localStorage.getItem('jucum_user') || 'null');
+    if (!u || u.role !== 'student' || !u.studentId) return null;
+    const me = STUDENTS.find(s => s.id === u.studentId);
+    if (!me) return null;
+    const ids = me.group ? STUDENTS.filter(s => s.group === me.group).map(s => s.id) : [];
+    if (ids.indexOf(me.id) < 0) ids.push(me.id);
+    return ids;
+  } catch (e) { return null; }
+}
 function jecPagedDaily(cols, applyFilter, done) {
   var sb = window.JUCUM_SB.getClient();
   var PAGE = 1000, all = [];
+  /* 👥 CARGA-GRUPO-V1 (02-nov-2026): en el equipo de un ALUMNO solo se bajan los minutos/días
+   * de SU grupo (Top, Liga y rachas son por grupo); sin grupo, solo los suyos. Teacher/admin/dev,
+   * sin sesión o sin la lista de alumnos todavía: todos, como siempre. */
+  var sc = jecScopeIds();
   (function page(from) {
     var q = sb.from('daily_sessions').select(cols)
       .order('user_id').order('day').order('module_id').order('activity_id');
     q = applyFilter(q).range(from, from + PAGE - 1);
+    if (sc) q = q.in('user_id', sc);
     q.then(function (r) {
       if (r && r.error) { done(all, false); return; }   // DATOS-LISTOS-V1: página fallida = descarga incompleta
       var rows = (r && r.data) || [];
