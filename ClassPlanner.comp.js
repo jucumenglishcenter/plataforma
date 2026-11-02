@@ -1492,6 +1492,8 @@ function ClassMode({ plan, onBack }) {
   const [evalOn, setEvalOn] = React.useState(false);
   const [closeOn, setCloseOn] = React.useState(false);
   const [pzOn, setPzOn] = React.useState(false);
+  const [followOn, setFollowOn] = React.useState(() => { try { return localStorage.getItem('jucum_cm_follow_v1') === '1'; } catch (e) { return false; } });   // SEGUIMIENTO-BOTON-V1: el seguimiento se abre con su botón (cerrado por defecto)
+  const toggleFollow = () => setFollowOn(v => { const n = !v; try { window.JUCUM_STORE ? window.JUCUM_STORE.set('jucum_cm_follow_v1', n ? '1' : '0') : localStorage.setItem('jucum_cm_follow_v1', n ? '1' : '0'); } catch (e) {} return n; });
   const [closedPlan, setClosedPlan] = React.useState(plan.closing ? plan : null);
   const focusKeys = mats.filter(m => m.moduleId && m.activityId).map(m => m.moduleId + ':' + m.activityId);
   const cmRec = (plan.source && plan.source.importId && window.JUCUM_PLANIMPORT) ? window.JUCUM_PLANIMPORT.get(plan.source.importId) : null;
@@ -1529,6 +1531,13 @@ function ClassMode({ plan, onBack }) {
               border:'1.5px solid ' + (evalOn ? '#fff' : 'rgba(255,255,255,0.35)'), borderRadius:22, padding:'8px 15px'}}>
             📋 {evalOn ? 'Cerrar evaluación' : 'Evaluar la clase'}
           </button>
+          {window.GroupFollowPanel && (
+            <button onClick={toggleFollow} title="Mostrar u ocultar el seguimiento de la clase"
+              style={{marginTop:9, marginLeft:8, display:'inline-flex', alignItems:'center', gap:7, cursor:'pointer', fontFamily:'inherit', fontWeight:800, fontSize:13,
+                background: followOn ? '#fff' : 'rgba(255,255,255,0.16)', color: followOn ? '#1F3A8A' : '#fff',
+                border:'1.5px solid ' + (followOn ? '#fff' : 'rgba(255,255,255,0.35)'), borderRadius:22, padding:'8px 15px'}}>
+              🔎 {followOn ? 'Ocultar seguimiento' : 'Ver seguimiento'}
+            </button>)}
           {window.PzSorteo && (
             <button onClick={() => setPzOn(true)} title="Sorteo para participar: nadie repite hasta que pasaron todos"
               style={{marginTop:9, marginLeft:8, display:'inline-flex', alignItems:'center', gap:7, cursor:'pointer', fontFamily:'inherit', fontWeight:800, fontSize:13,
@@ -1575,7 +1584,7 @@ function ClassMode({ plan, onBack }) {
       )}
       <style>{`@keyframes cpPulse{0%,100%{opacity:1}50%{opacity:.25}}`}</style>
       {/* SEGUIMIENTO-AREAS-V1: en el Modo clase, el nuevo seguimiento (🏫 En clase + 🏠 Práctica del teacher) */}
-      {window.GroupFollowPanel ? <div className="scard" style={{marginBottom:16, border:'2px solid #9FB0DA'}}><div className="sec-title" style={{marginBottom:10}}>🔎 Seguimiento de la clase</div><GroupFollowPanel groupId={plan.groupId} areas={['c', 'p']} startArea="c" classDate={plan.date} /></div> : (cmPrev && window.FollowUpPanel && <FollowUpPanel plan={cmPrev} where="class" />)}
+      {window.GroupFollowPanel ? (followOn && <div className="scard" style={{marginBottom:16, border:'2px solid #9FB0DA'}}><div className="sec-title" style={{marginBottom:10}}>🔎 Seguimiento de la clase</div><GroupFollowPanel groupId={plan.groupId} areas={['c', 'p']} startArea="c" classDate={plan.date} /></div>) : (cmPrev && window.FollowUpPanel && <FollowUpPanel plan={cmPrev} where="class" />)}
       {window.DocSetClassPanel && <DocSetClassPanel plan={plan} />}
       <div style={{display:'grid', gridTemplateColumns:'1.3fr 1fr', gap:16, alignItems:'start'}}>
         <div style={{display:'flex', flexDirection:'column', gap:16, minWidth:0}}>

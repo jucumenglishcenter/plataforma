@@ -160,8 +160,9 @@ function NewPostBox({ user, groupId, onPost, muted }) {
     <div className="forum-new">
       {reflect && <BadWordsNotice onOk={() => setReflect(false)} />}
       {err && <div className="err" style={{marginBottom:10}}>⚠ {err}</div>}
-      <input className="input-text" placeholder="Título de tu pregunta" value={title} onChange={e => setTitle(e.target.value)} />
-      <textarea className="eval-textarea" placeholder="Escribe tu mensaje aquí…" rows={4} value={body} onChange={e => setBody(e.target.value)} />
+      {/* FORO-LIMITE-V1: título ≤ 120 · mensaje ≤ 2000 caracteres */}
+      <input className="input-text" placeholder="Título de tu pregunta" maxLength={120} value={title} onChange={e => setTitle(e.target.value)} />
+      <textarea className="eval-textarea" placeholder="Escribe tu mensaje aquí…" rows={4} maxLength={2000} value={body} onChange={e => setBody(e.target.value)} />
       <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
         <FAttach pending={media} setPending={setMedia} />
         <div className="forum-new-actions" style={{marginLeft:'auto'}}>
@@ -277,7 +278,7 @@ function PostCard({ post, user, groupId, onChange }) {
           {showReply && (
             <div className="freply-new">
               {replyReflect && <BadWordsNotice onOk={() => setReplyReflect(false)} />}
-              <textarea className="eval-textarea" rows={2} placeholder="Escribe tu respuesta…" value={replyBody} onChange={e => setReplyBody(e.target.value)} />
+              <textarea className="eval-textarea" rows={2} placeholder="Escribe tu respuesta…" maxLength={2000} value={replyBody} onChange={e => setReplyBody(e.target.value)} />
               <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
                 <FAttach pending={replyMedia} setPending={setReplyMedia} />
                 <div className="forum-new-actions" style={{marginLeft:'auto'}}>
@@ -344,7 +345,7 @@ function ReplyRow({ reply, post, user, groupId, onChange, isTeacher, kidsOf, dep
           {showR && (
             <div className="freply-new" style={{marginTop:6}}>
               {reflect && <BadWordsNotice onOk={() => setReflect(false)} />}
-              <textarea className="eval-textarea" rows={2} placeholder="Escribe tu respuesta…" value={body} onChange={e => setBody(e.target.value)} />
+              <textarea className="eval-textarea" rows={2} placeholder="Escribe tu respuesta…" maxLength={2000} value={body} onChange={e => setBody(e.target.value)} />
               <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
                 <FAttach pending={media} setPending={setMedia} />
                 <div className="forum-new-actions" style={{marginLeft:'auto'}}>

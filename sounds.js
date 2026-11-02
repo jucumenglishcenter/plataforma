@@ -7,16 +7,21 @@
  */
 (function () {
   let ctx = null;
+  /* 🔇 SONIDO-GESTO-V1 (02-nov-2026): el audio se crea recién después del PRIMER toque o
+   * tecla. Antes se creaba al llegar un aviso con la página recién abierta y el navegador
+   * lo bloqueaba (avisos «The AudioContext was not allowed to start» en la consola). */
+  let gesto = false;
+  const activado = () => gesto || !!(navigator.userActivation && navigator.userActivation.hasBeenActive);
   function ac() {
     try {
-      if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (!ctx) { if (!activado()) return null; ctx = new (window.AudioContext || window.webkitAudioContext)(); }
       if (ctx.state === 'suspended') ctx.resume();
       return ctx;
     } catch (e) { return null; }
   }
 
   // Desbloquear en el primer gesto del usuario
-  const unlock = () => { ac(); window.removeEventListener('pointerdown', unlock); window.removeEventListener('keydown', unlock); };
+  const unlock = () => { gesto = true; ac(); window.removeEventListener('pointerdown', unlock); window.removeEventListener('keydown', unlock); };
   window.addEventListener('pointerdown', unlock, { once: true });
   window.addEventListener('keydown', unlock, { once: true });
 

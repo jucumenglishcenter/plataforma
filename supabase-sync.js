@@ -131,14 +131,32 @@
     } catch (e) {}
     return nByUser;
   }
+  /* 🧯 FORO-LIMITE-V1 (02-nov-2026): el foro completo llegó a 47 MB (21 mensajes de relleno
+   * del 30-oct) y cada apertura lo bajaba entero → la base se saturaba (503 · 500 · «CORS»).
+   * Ahora el ALUMNO baja solo el foro de SU grupo (mensajes + respuestas + reacciones);
+   * teacher/admin/dev o sin sesión: todos los grupos, como siempre. Si el filtro falla se
+   * pide como antes. Y nada más largo que el límite entra al caché (se recorta). */
+  const forumGroupOf = (sess) => (sess && sess.role === 'student' && sess.groupId) ? sess.groupId : null;
+  const F_MAX_T = 120, F_MAX_B = 2000, F_NOTE = '… ✂ (recortado: era demasiado largo)';
+  const fClip = (s, max, note) => {
+    if (typeof s !== 'string' || s.length <= max) return s;
+    let n = Math.max(0, max - note.length);
+    const c = s.charCodeAt(n - 1);
+    if (c >= 0xD800 && c <= 0xDBFF) n--;   // no partir un emoji a la mitad
+    return s.slice(0, n) + note;
+  };
+  const forumRows = (table, order, g) => g
+    ? selectAll(table, '*,forum_posts!inner(group_id)', order, q => q.eq('forum_posts.group_id', g))
+        .then(r => (r && r.error) ? selectAll(table, '*', order) : r)
+    : selectAll(table, '*', order);
   const Q = {
     groups:      () => SB().from('groups').select('*'),
     users:       () => SB().from('users').select('*'),
     progress:    () => selectAll('progress', PROG_COLS, ['user_id', 'module_id', 'activity_id']),
     evals:       () => SB().from('evaluations').select('*'),
-    posts:       () => selectAll('forum_posts', '*', ['id']),
-    replies:     () => selectAll('forum_replies', '*', ['id']),
-    likes:       () => selectAll('forum_likes', '*', ['post_id', 'user_id']),
+    posts:       (g = forumGroupOf(sessionUser())) => selectAll('forum_posts', '*', ['id'], g ? (q => q.eq('group_id', g)) : null),
+    replies:     (g = forumGroupOf(sessionUser())) => forumRows('forum_replies', ['id'], g),
+    likes:       (g = forumGroupOf(sessionUser())) => forumRows('forum_likes', ['post_id', 'user_id'], g),
     mutes:       () => SB().from('forum_mutes').select('*'),
     flags:       () => SB().from('forum_flags').select('*').order('created_at', { ascending: false }).limit(300),
     assignments: () => selectAll('assignments', '*', ['id']),
@@ -194,7 +212,12 @@
     const pProg = take('progress', Q.progress);
     const pNotif = nIds.length ? take('notifs:' + nIds.join(','), () => qNotifs(nIds)) : null;
     const pEvals = take('evals', Q.evals);
-    const pForum = Promise.all([take('posts', Q.posts), take('replies', Q.replies), take('likes', Q.likes), take('mutes', Q.mutes)]);
+    // FORO-LIMITE-V1: grupo ACTUAL del alumno (lista de la nube); si cambió desde la precarga, se pide de nuevo.
+    const fSess = sessionUser();
+    const fRow = fSess && fSess.role === 'student' ? users.find(u => u.id === fSess.studentId) : null;
+    const fGroup = fRow ? (fRow.group_id || null) : forumGroupOf(fSess);
+    const fTake = (name, make) => { if (fGroup === forumGroupOf(fSess)) return take(name, make); delete PF[name]; return settle(make(fGroup)); };
+    const pForum = Promise.all([fTake('posts', Q.posts), fTake('replies', Q.replies), fTake('likes', Q.likes), take('mutes', Q.mutes)]);
     const pFlags = take('flags', Q.flags);
     const pTasks = pullTasks();
     const pExams = Promise.all([take('exams', Q.exams), take('windows', Q.windows)]);
@@ -269,14 +292,14 @@
       forum[p.group_id].posts.push({
         id:p.id, date:p.created_at, pinned:p.pinned,
         authorId:p.author_id, authorName:p.author_name, authorRole:p.author_role,
-        title:p.title, body:p.body, mediaUrl:p.media_url || null, mediaKind:p.media_kind || null, replies:[],
+        title:fClip(p.title, F_MAX_T, '…'), body:fClip(p.body, F_MAX_B, F_NOTE), mediaUrl:p.media_url || null, mediaKind:p.media_kind || null, replies:[],
       });
     });
     const postIndex = {};
     Object.values(forum).forEach(g => g.posts.forEach(p => postIndex[p.id] = p));
     (replies || []).forEach(r => {
       const p = postIndex[r.post_id];
-      if (p) p.replies.push({ id:r.id, date:r.created_at, authorId:r.author_id, authorName:r.author_name, authorRole:r.author_role, body:r.body, parentId:r.parent_id || null, mediaUrl:r.media_url || null, mediaKind:r.media_kind || null });
+      if (p) p.replies.push({ id:r.id, date:r.created_at, authorId:r.author_id, authorName:r.author_name, authorRole:r.author_role, body:fClip(r.body, F_MAX_B, F_NOTE), parentId:r.parent_id || null, mediaUrl:r.media_url || null, mediaKind:r.media_kind || null });
     });
     Object.values(forum).forEach(g => g.posts.sort((a,b)=>b.date.localeCompare(a.date)));
     if (!poErr && !reErr) write(KEYS.forum, forum);

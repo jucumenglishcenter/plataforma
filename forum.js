@@ -11,6 +11,32 @@ const LIKES_KEY  = 'jucum_likes_v1';
 const FSEEN_KEY  = 'jucum_forum_seen_v1';
 const FLAGS_KEY  = 'jucum_forum_flags_v1';
 
+/* 🧯 FORO-LIMITE-V1 (02-nov-2026): el 30-oct 21 mensajes de relleno (hasta 9 MB cada uno)
+ * hicieron que el foro pesara 47 MB y tumbaron la plataforma. Límite al publicar
+ * (título 120 · mensaje 2000) y, si llega algo más largo, se RECORTA al mostrarlo. */
+const FORUM_MAX_TITLE = 120, FORUM_MAX_BODY = 2000;
+const FORUM_CUT_NOTE = '… ✂ (recortado: era demasiado largo)';
+function forumClip(s, max, note) {
+  if (typeof s !== 'string' || s.length <= max) return s;
+  const tail = note || '';
+  let n = Math.max(0, max - tail.length);
+  const c = s.charCodeAt(n - 1);
+  if (c >= 0xD800 && c <= 0xDBFF) n--;   // no partir un emoji a la mitad
+  return s.slice(0, n) + tail;
+}
+function forumClipPost(p) {
+  if (!p) return p;
+  const title = forumClip(p.title, FORUM_MAX_TITLE, '…');
+  const body = forumClip(p.body, FORUM_MAX_BODY, FORUM_CUT_NOTE);
+  let cut = title !== p.title || body !== p.body;
+  const replies = Array.isArray(p.replies) ? p.replies.map(r => {
+    const b = r ? forumClip(r.body, FORUM_MAX_BODY, FORUM_CUT_NOTE) : r;
+    if (!r || b === r.body) return r;
+    cut = true; return { ...r, body: b };
+  }) : p.replies;
+  return cut ? { ...p, title, body, replies } : p;
+}
+
 /* ── "Visto" del foro por usuario+grupo (para el punto rojo del botón Foro) ── */
 function getForumSeen() {
   try { return JSON.parse(localStorage.getItem(FSEEN_KEY) || '{}'); } catch { return {}; }
@@ -138,7 +164,9 @@ function postLikes(postId) {
 
 function getGroupForum(groupId) {
   const data = loadForum();
-  return data[groupId] || { posts: [] };
+  const g = data[groupId] || { posts: [] };
+  // FORO-LIMITE-V1: nada gigante llega a la pantalla (tampoco de una copia vieja del equipo)
+  return { ...g, posts: (g.posts || []).map(forumClipPost) };
 }
 function createPost(groupId, post) {
   const data = loadForum();
@@ -150,6 +178,9 @@ function createPost(groupId, post) {
     replies: [],
     ...post,
   };
+  // FORO-LIMITE-V1: nunca se guarda ni se sube más que el límite
+  newPost.title = forumClip(newPost.title, FORUM_MAX_TITLE);
+  newPost.body = forumClip(newPost.body, FORUM_MAX_BODY);
   data[groupId].posts.unshift(newPost);
   saveForum(data);
   if (window.JUCUM_SYNC) window.JUCUM_SYNC.pushPost(groupId, newPost);
@@ -165,6 +196,7 @@ function addReply(groupId, postId, reply) {
     date: new Date().toISOString(),
     ...reply,
   };
+  newReply.body = forumClip(newReply.body, FORUM_MAX_BODY);   // FORO-LIMITE-V1
   p.replies.push(newReply);
   saveForum(data);
   if (window.JUCUM_SYNC) window.JUCUM_SYNC.pushReply(postId, newReply);
@@ -343,4 +375,5 @@ window.JUCUM_FORUM = {
   isMuted, setMute, getMutes, toggleLike, postLikes, getReactions, toggleReaction,
   markForumSeen, forumUnreadCount, findPostById,
   MUTE_REASONS, getMuteInfo, containsBadLanguage, registerBadAttempt, getFlags, deleteStudentFlags,
+  MAX_TITLE: FORUM_MAX_TITLE, MAX_BODY: FORUM_MAX_BODY,   // FORO-LIMITE-V1
 };
