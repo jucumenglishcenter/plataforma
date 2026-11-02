@@ -197,8 +197,8 @@
       var pd = (days[x.k] || []).slice(); if (e && e.day && pd.indexOf(e.day) < 0) pd.push(e.day); pd.sort();
       var sc = e ? pct(e.score) : null;
       var passed = !!e && (NOGRADE[x.type] || sc == null || sc >= thr);
-      /* «solo para quien aún no lo aprobó»: si ya lo tenía aprobado antes del set, ni lo vio → no se le pide */
-      if (a.onlyPending && !x.carried && passed && e.day && e.day < r.from && !pd.some(function (d) { return d >= r.from; })) return;
+      /* 👥 A-TODOS-V1 (02-nov-2026, pedido de la usuaria «elijo pedírselo a todos igual»): «solo para quien aún no lo aprobó»
+       * (onlyPending) YA NO exime a nadie: cada actividad del set se le pide a TODOS; lo aprobado antes del set = «la hizo otro día». */
       var c = { k: x.k, a: a, type: x.type, name: actName(a, st.level), carried: x.carried, sc: NOGRADE[x.type] ? null : sc, min: MIN_OF[x.type] || 10, s: 'pend', d: null };
       var inWin = pd.filter(function (d) { return d >= r.from && d <= r.to; });
       if (e && inWin.length) { c.s = passed ? 'ok' : 'low'; c.d = inWin[inWin.length - 1]; }

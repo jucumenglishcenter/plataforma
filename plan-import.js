@@ -809,7 +809,7 @@
       sts.forEach(s => {
         const prog = D.getStudentProgress(s.id); const en = prog.completed && prog.completed[p.moduleId + ':' + p.activityId];
         const passedBefore = en && en.date && peruDayOf(en.date) < e.date && (['story', 'summary', 'quizlet'].includes(p.type) || D.entryPassed(en, s.level, s.group));
-        if (p.onlyPending && passedBefore) return;
+        /* 👥 A-TODOS-V1 (02-nov): se le pide a todos igual (onlyPending ya no exime) */
         t++; const done = en && en.date && peruDayOf(en.date) >= e.date;
         if (done) ok++; else pend.push((s.fullName || s.username || '').split(' ')[0]);
       });

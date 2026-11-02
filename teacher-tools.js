@@ -66,7 +66,7 @@
       plans.forEach(p => (p.activities || []).forEach(a => {
         const k = `${a.moduleId}:${a.activityId}:${a.label}`;
         if (seen.has(k)) return; seen.add(k);
-        if (a.onlyPending && passedBefore(a)) return;
+        /* 👥 A-TODOS-V1 (02-nov): ya NO se oculta lo aprobado antes (onlyPending): el set se le pide a todos igual */
         items.push(a);
       }));
       /* SEGUIMIENTO-V1 (28-oct): «➡ Pasar lo pendiente al próximo set» → lo que le faltó del set anterior, SOLO a este alumno */
