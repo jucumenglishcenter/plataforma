@@ -29,7 +29,7 @@
     }).filter(function (r) { return typeof r.score === 'number'; });
     if (!rows.length) return { exam: exam, score: null, passed: false };
     var ret = F.getRet ? F.getRet(student.group, mod.id) : null;
-    var desde = F.desdePara ? F.desdePara(exam, student.group, student.id) : (F.examDesde ? F.examDesde(exam) : null);
+    var desde = F.examDesde ? F.examDesde(exam) : null;
     var of = F.notaOficialPartes ? F.notaOficialPartes(rows, ret, desde) : (F.notaOficial ? F.notaOficial(rows, ret, desde) : null);
     if (!of) return { exam: exam, score: null, passed: false };
     var sc = of.score;
@@ -53,7 +53,6 @@
   /* [{ mod, index, earned, score, date, via:'exam'|'acts' }] para todo el nivel */
   function list(student) {
     if (!enabledFor(student)) return [];
-    if (student.closedGroup && student.closedGroup !== student.group) student = Object.assign({}, student, { group: student.closedGroup });  // PAUSA-GRUPO-V1: notas con su grupo real
     var mods = (D().MODULE_CATALOG || {})[student.level] || [];
     return mods.map(function (m, i) {
       var ex = examScore(student, m);
@@ -90,7 +89,7 @@
     markSeen(student.id, badge.mod.id);
     try {
       var N = window.JUCUM_NOTIF; if (!N) return;
-      var all = list(student); var total = Math.max(all.length, (D().getLevelOutline ? D().getLevelOutline(student.level).length : 0));   // 5 módulos del nivel aunque falten en el catálogo
+      var all = list(student); var total = all.length;
       var n = all.filter(function (b) { return b.earned && b.index <= badge.index; }).length;
       var lv = ((D().LEVELS || {})[student.level] || {}).code || '';
       var c = cheer(n, total, badge.mod.name, lv);

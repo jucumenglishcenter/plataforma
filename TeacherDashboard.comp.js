@@ -29,14 +29,6 @@ function TeacherDashboard({ onLogout, user }) {
     return () => { alive = false; clearInterval(iv); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
   }, []);
   const teacherName = (user && user.name && user.name !== 'Profesor' && user.name !== 'Profesor JUCUM') ? user.name : 'Joe Miller';
-  // 🔒 Control de pagos: quién está en pausa por pago (sin nube = nadie)
-  React.useEffect(() => {
-    const P = window.JUCUM_PAY; if (!P || !P.gateLoad) return;
-    let alive = true;
-    const go = () => P.gateLoad().then(() => { if (alive) setLiveTick(t => t + 1); }).catch(() => {});
-    go(); const iv = setInterval(() => { if (document.visibilityState === 'visible') go(); }, 5 * 60000);
-    return () => { alive = false; clearInterval(iv); };
-  }, []);
   React.useEffect(() => { window.JUCUM_TEACHER_NAME = teacherName; }, [teacherName]);
 
   // Reset palette — 26-sep-2026: SOLO fuera de grupo/alumno. Los efectos del padre corren
@@ -57,10 +49,10 @@ function TeacherDashboard({ onLogout, user }) {
       <header className="app-header">
         <div className="app-logo">
           <img src={window.JUCUM_LOGO || 'logo-jucum.png'} alt="JUCUM EC" />
-          <div className="pgtitle">Panel del Teacher</div>
+          <div className="pgtitle">Panel del Profesor</div>
         </div>
         <div className="app-right">
-          <span className="role-pill t">👨‍🏫 Teacher</span>
+          <span className="role-pill t">👨‍🏫 Profesor</span>
           <a className={`nav-link ${['groups','group','student'].includes(view.kind)?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'groups'});}}>👥 Mis grupos</a>
           <a className={`nav-link ${view.kind==='planner'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'planner'});}}>🗓️ Planificar</a>
           <a className={`nav-link ${(view.kind==='assess'||view.kind==='evaluate'||view.kind==='exams')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'assess'});}}>📊 Evaluación</a>
@@ -78,8 +70,6 @@ function TeacherDashboard({ onLogout, user }) {
 
       {view.kind === 'leads' && window.GradLeads ? (
         <GradLeads onBack={() => setView({kind:'groups'})} />
-      ) : view.kind === 'closed' && window.ClosedAllView ? (
-        <ClosedAllView onBack={() => setView({kind:'groups'})} onOpen={(id) => setView({kind:'student', id})} />
       ) : view.kind === 'assess' ? (
         <TeacherAssessment onBack={() => setView({kind:'groups'})} initialTab={view.tab} />
       ) : view.kind === 'messages' ? (
@@ -125,9 +115,8 @@ function TeacherDashboard({ onLogout, user }) {
           {view.kind === 'group' && <><span>›</span><a onClick={() => setView({kind:'group', id:view.id})}>{GROUPS.find(g => g.id === view.id)?.name}</a></>}
           {view.kind === 'student' && (() => {
             const stu = STUDENTS.find(s => s.id === view.id);
-            const g = stu && (GROUPS.find(gr => gr.id === (stu.closedGroup || stu.group)) || GROUPS.find(gr => gr.id === stu.group));  // PAUSA-SIN-GRUPO-V1: en espera no tiene grupo
-            if (!stu) return null;
-            return <><span>›</span>{g ? <a onClick={() => setView({kind:'group', id:g.id})}>{g.name}</a> : <a>⏸ En espera</a>}<span>›</span><a>{stu.fullName}</a></>;
+            const g = GROUPS.find(gr => gr.id === stu.group);
+            return <><span>›</span><a onClick={() => setView({kind:'group', id:g.id})}>{g.name}</a><span>›</span><a>{stu.fullName}</a></>;
           })()}
         </div>
 
@@ -137,7 +126,6 @@ function TeacherDashboard({ onLogout, user }) {
             teacherName={teacherName}
             onSelectGroup={(id) => setView({kind:'group', id})}
             onLeads={() => setView({kind:'leads'})}
-            onClosed={() => setView({kind:'closed'})}
           />
         )}
         {view.kind === 'group' && (
@@ -151,7 +139,7 @@ function TeacherDashboard({ onLogout, user }) {
           <StudentDetail
             studentId={view.id}
             onContact={(sid) => setView({kind:'messages', open: sid})}
-            onBack={() => { const stu = STUDENTS.find(s => s.id === view.id); const gid = stu && [stu.closedGroup, stu.group].find(x => x && GROUPS.some(g => g.id === x)); setView(gid ? {kind:'group', id:gid} : {kind:'groups'}); }}
+            onBack={() => { const stu = STUDENTS.find(s => s.id === view.id); setView({kind:'group', id:stu.group}); }}
           />
         )}
       </main>
@@ -265,7 +253,7 @@ function PrepNotas() {
   );
 }
 
-function GroupsView({ stats, onSelectGroup, onLeads, onClosed, teacherName }) {
+function GroupsView({ stats, onSelectGroup, onLeads, teacherName }) {
   const { GROUPS, STUDENTS, LEVELS, getStudentMastery } = window.JUCUM_DATA;
   // 🎓 Filtro Activos · Finalizados · Todos (se recuerda en este equipo — clave chiquita)
   const GR = window.JUCUM_GRAD;
@@ -302,13 +290,10 @@ function GroupsView({ stats, onSelectGroup, onLeads, onClosed, teacherName }) {
         <div className="kpi"><div className="kpi-ico">🎯</div><div className="kpi-num">{actGroups.length}</div><div className="kpi-lbl">Grupos activos</div></div>
       </div>
 
-      {/* 📊 SEGUIMIENTO-V1 · SEG-GRUPO-V1 (28-oct): los avisos de prácticas ya NO van en Inicio (pedido de la usuaria) → botón «📊 Prácticas» dentro de cada grupo */}
-
       <div className="sec-head" style={{marginTop:18,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
         <div className="sec-title">Mis grupos</div>
         <span className="sec-meta">Click para ver los alumnos</span>
         <span style={{flex:1}}></span>
-        {GR && (() => { const nC = STUDENTS.filter(s => s.closedAt).length; return nC > 0 && onClosed ? <button type="button" onClick={onClosed} style={{display:'inline-flex',alignItems:'center',gap:6,border:'1.5px solid #C9D2E0',background:'#ECEFF4',color:'#4A5468',borderRadius:10,fontFamily:'inherit',fontWeight:800,fontSize:12.5,padding:'7px 12px',cursor:'pointer'}}>⏸ Avance cerrado <span style={{background:'#4A5468',color:'#fff',borderRadius:9,fontSize:10,padding:'1px 6px'}}>{nC}</span></button> : null; })()}
         {GR && <button type="button" onClick={onLeads} style={{display:'inline-flex',alignItems:'center',gap:6,border:'1.5px solid #A5D6A7',background:'#E8F5E9',color:'#1B5E20',borderRadius:10,fontFamily:'inherit',fontWeight:800,fontSize:12.5,padding:'7px 12px',cursor:'pointer'}}>🙋 Interesados en continuar{leadCount ? <span style={{background:'#1E8E4E',color:'#fff',borderRadius:9,fontSize:10,padding:'1px 6px'}}>{leadCount}</span> : null}</button>}
         {GR && <div style={{display:'flex',background:'#ECEFF4',borderRadius:10,padding:3,gap:2}}>{segBtn('act','Activos',actGroups.length)}{segBtn('fin','Finalizados',finGroups.length)}{segBtn('all','Todos')}</div>}
       </div>
@@ -348,25 +333,6 @@ function GroupsView({ stats, onSelectGroup, onLeads, onClosed, teacherName }) {
               </div>
               <div className="gcard-name">{g.name}</div>
               <div className="gcard-sched">⏰ {g.schedule}</div>
-              {(() => {
-                /* ⭕ ▶ En clase ahora (módulo de clase del grupo) */
-                const D1 = window.JUCUM_DATA; if (!D1.getClassModuleId) return null;
-                const cid = D1.getClassModuleId(g.id); const cm = cid && (D1.MODULE_CATALOG[g.level] || []).find(m => m.id === cid);
-                if (!cm) return null;
-                const nAct = ((D1.getGroupSettings(g.id) || {}).activeModuleIds || []).length;
-                let od = ''; try { const d = D1.getModuleOpenedAt && D1.getModuleOpenedAt(g.id, cid); od = d ? new Date(d + 'T12:00:00Z').toLocaleDateString('es-PE', { day:'numeric', month:'short', timeZone:'UTC' }) : ''; } catch (e) {}
-                return (
-                  <div style={{display:'flex',alignItems:'center',gap:8,marginTop:7,padding:'7px 10px',borderRadius:10,background:'#EEF4FF',border:'1px solid #C5D6F2'}}>
-                    <span style={{fontSize:18}}>{cm.emoji}</span>
-                    <span style={{display:'flex',flexDirection:'column',minWidth:0}}>
-                      <span style={{fontSize:10,fontWeight:800,letterSpacing:'.08em',textTransform:'uppercase',color:'#1F3A8A'}}>▶ En clase ahora</span>
-                      <b style={{fontSize:12.5,color:'#0D1B5A',lineHeight:1.2}}>{cm.name}</b>
-                      {od && <span style={{fontSize:10.5,fontWeight:700,color:'#5A6B86'}}>desde {od}</span>}
-                    </span>
-                    {nAct > 1 && <span style={{marginLeft:'auto',fontSize:10.5,fontWeight:800,color:'#2E7D32',background:'#E8F5E9',borderRadius:9,padding:'1px 7px',whiteSpace:'nowrap'}}>+{nAct - 1} abierto{nAct > 2 ? 's' : ''}</span>}
-                  </div>
-                );
-              })()}
               <div className="gcard-stats">
                 <div><b style={{color:level.dark}}>{groupAvg}%</b> dominio</div>
                 <div><b style={{color:'#2E7D32'}}>{activeNow}</b> practicando</div>
@@ -450,146 +416,53 @@ function TeacherChampions({ groupId, levelColor }) {
   );
 }
 
-/* Panel SIEMPRE visible para los módulos del grupo · MODS-PANEL-V2 (06-oct-2026)
- * Cada módulo tiene UN control de 3 estados: Cerrado · Repaso · ▶ En clase (A1/A2).
- * “En clase” es ÚNICO (= último de activeModuleIds = “Aquí vas” del alumno); elegir otro
- * pasa el anterior a Repaso. “Dejar solo …” cierra todos los repasos de un toque.
- * Siempre parte de getGroupSettings() FRESCO (antes usaba un estado congelado y pisaba lo
- * guardado desde ⚙️ Configurar grupo), el orden de las tarjetas NO salta al tocar, y se
- * comprueba en la nube que quedó guardado (aviso + Reintentar si no). Pre-A1: Cerrado · Abierto. */
-function GroupModulesQuick({ groupId, onChanged }) {
-  const D0 = window.JUCUM_DATA;
-  const { MODULE_CATALOG, getGroupSettings, setGroupSettings, GROUPS } = D0;
+/* Panel SIEMPRE visible para prender/apagar módulos del grupo sin entrar a un modal */
+function GroupModulesQuick({ groupId }) {
+  const { MODULE_CATALOG, getGroupSettings, setGroupSettings, GROUPS } = window.JUCUM_DATA;
   const group = GROUPS.find(g => g.id === groupId);
   const modules = MODULE_CATALOG[group.level] || [];
-  const noNum = group.level === 'a1' || group.level === 'a2';
   const [s, setS] = React.useState(() => getGroupSettings(groupId));
-  const [save, setSave] = React.useState('');   // '' · saving · ok · fail
-  const [note, setNote] = React.useState('');
-  const vRef = React.useRef(0);
-  const ids = s.activeModuleIds || [];
-  const clsId = ids.length ? ids[ids.length - 1] : null;
-  /* orden fijo mientras se usa el panel (el de clase arriba solo al abrir la pantalla) */
-  /* MODS-ORDEN-V1 (09-oct): siempre en orden del nivel (1.º, 2.º, 3.º…) — más cómodo para el teacher; el de clase se distingue por su borde azul */
-  const [order] = React.useState(() => modules.map(m => m.id));
-  const shownMods = [...order.map(id => modules.find(m => m.id === id)).filter(Boolean), ...modules.filter(m => !order.includes(m.id))];
-  const verify = (want) => {
-    const sb = window.JUCUM_SB && window.JUCUM_SB.getClient && window.JUCUM_SB.getClient();
-    if (!sb) { setSave(''); return; }
-    const v = ++vRef.current; setSave('saving');
-    setTimeout(async () => {
-      try {
-        const { data, error } = await sb.from('groups').select('active_module_ids').eq('id', groupId).maybeSingle();
-        if (v !== vRef.current) return;
-        const got = (data && data.active_module_ids) || [];
-        setSave(!error && JSON.stringify(got) === JSON.stringify(want) ? 'ok' : 'fail');
-      } catch (e) { if (v === vRef.current) setSave('fail'); }
-    }, 1600);
+  const toggle = (id) => {
+    const set = new Set(s.activeModuleIds || []);
+    if (set.has(id)) set.delete(id); else set.add(id);
+    const ids = modules.filter(x => set.has(x.id)).map(x => x.id);
+    const next = { ...s, activeModuleIds: ids, activeModuleId: ids[0] || null };
+    setS(next); setGroupSettings(groupId, next);
   };
-  const apply = (next, msg) => {
-    const cur = getGroupSettings(groupId);
-    const out = { ...cur, activeModuleIds: next, activeModuleId: next[0] || null };
-    setGroupSettings(groupId, out); setS(out); setNote(msg || '');
-    if (onChanged) onChanged();
-    verify(next);
-  };
-  const retry = () => {
-    const cur = getGroupSettings(groupId);
-    if (window.JUCUM_SYNC && window.JUCUM_SYNC.pushSettings) window.JUCUM_SYNC.pushSettings(groupId, cur);
-    verify(cur.activeModuleIds || []);
-  };
-  const nameOf = (id) => { const m = modules.find(x => x.id === id); return m ? m.name : 'el módulo'; };
-  const setState = (id, st) => {
-    const cur = getGroupSettings(groupId).activeModuleIds || [];
-    const has = cur.includes(id); const rest = cur.filter(x => x !== id);
-    const curCls = cur.length ? cur[cur.length - 1] : null;
-    if (st === 'off') { if (!has) return; apply(rest, id === curCls && rest.length ? '▶ Ahora «' + nameOf(rest[rest.length - 1]) + '» es el de clase.' : ''); return; }
-    if (!noNum) {   // Pre-A1: abierto/cerrado, el de clase es el más avanzado (orden de catálogo)
-      if (has) return; const set = new Set([...cur, id]);
-      apply(D0.nextActiveIds ? D0.nextActiveIds(group.level, cur, modules, set) : modules.filter(x => set.has(x.id)).map(x => x.id)); return;
-    }
-    if (st === 'cls') { if (id === curCls) return; apply([...rest, id], curCls ? '«' + nameOf(curCls) + '» quedó abierto para repasar.' : ''); return; }
-    if (st === 'rev') {
-      if (has && id !== curCls) return;
-      if (!rest.length) { if (has) { setNote('Es el único abierto: sigue siendo el de clase. Para cambiarlo, marca otro como ▶ En clase.'); return; } apply([id], 'Era el único abierto, así que quedó como ▶ En clase.'); return; }
-      apply([id, ...rest], has ? '▶ Ahora «' + nameOf(rest[rest.length - 1]) + '» es el de clase.' : '');
-    }
-  };
-  const onlyClass = () => { if (clsId) apply([clsId], 'Listo: solo «' + nameOf(clsId) + '» queda abierto.'); };
-  const openedTxt = (id) => { try { const d = D0.getModuleOpenedAt && D0.getModuleOpenedAt(groupId, id); return d ? new Date(d + 'T12:00:00Z').toLocaleDateString('es-PE', { day:'numeric', month:'short', timeZone:'UTC' }) : ''; } catch (e) { return ''; } };
-  const clsMod = clsId && modules.find(m => m.id === clsId);
-  const revCount = Math.max(0, ids.length - 1);
-  const segBtn = (active, kind) => ({ flex:1, minWidth:0, border:'none', borderRadius:7, padding:'7px 4px', fontSize:11.5, fontWeight:800, fontFamily:'inherit', cursor:'pointer', lineHeight:1.15,
-    background: active ? (kind === 'cls' ? '#1F3A8A' : kind === 'rev' ? '#2EA84B' : '#fff') : 'transparent',
-    color: active ? (kind === 'off' ? '#4A4A44' : '#fff') : '#6B6B63', boxShadow: active && kind === 'off' ? '0 1px 3px rgba(0,0,0,.15)' : 'none' });
-  const saveChip = save === 'saving' ? <span style={{fontSize:11.5,fontWeight:800,color:'#6B6B63'}}>Guardando…</span>
-    : save === 'ok' ? <span style={{fontSize:11.5,fontWeight:800,color:'#2E7D32'}}>✓ Guardado en la nube</span>
-    : save === 'fail' ? <span style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:11.5,fontWeight:800,color:'#C62828'}}>No se guardó en la nube<button type="button" onClick={retry} style={{fontSize:11,fontWeight:800,border:'1.5px solid #EF9A9A',background:'#fff',color:'#C62828',borderRadius:8,padding:'2px 8px',cursor:'pointer',fontFamily:'inherit'}}>Reintentar</button></span>
-    : <span className="sec-meta">{ids.length} abierto{ids.length === 1 ? '' : 's'}</span>;
+  const activeCount = (s.activeModuleIds || []).length;
+
   return (
     <div className="scard" style={{marginBottom:16}}>
       <div className="sec-head">
         <div className="sec-title">📦 Módulos del grupo</div>
-        {saveChip}
+        <span className="sec-meta">{activeCount} activo{activeCount===1?'':'s'} · prende/apaga al instante</span>
       </div>
-      {modules.length === 0 ? <div className="settings-hint">Este nivel no tiene módulos cargados.</div> : (<>
-        <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',background:ids.length ? '#F4F8FF' : '#FFEBEE',border:'1.5px solid ' + (ids.length ? '#C5D6F2' : '#EF9A9A'),borderRadius:10,padding:'10px 12px',marginBottom:12}}>
-          {clsMod ? (<>
-            <span style={{fontSize:12.5,fontWeight:700,color:'#4A5468'}}>Tus alumnos ven:</span>
-            <span style={{display:'inline-flex',alignItems:'center',gap:6,background:'#1F3A8A',color:'#fff',borderRadius:20,padding:'3px 11px 3px 4px',fontSize:12.5,fontWeight:800}}><span style={{background:'#fff',borderRadius:'50%',width:22,height:22,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:12}}>{clsMod.emoji}</span>{clsMod.name} · Aquí vas</span>
-            {revCount > 0 && <span style={{fontSize:12.5,fontWeight:800,color:'#2E7D32'}}>+ {revCount} para repasar</span>}
-            <span style={{flex:1}}></span>
-            {revCount > 0 && <button type="button" onClick={onlyClass} style={{fontSize:12,fontWeight:800,color:'#1F3A8A',border:'1.5px solid #1F3A8A',background:'#fff',borderRadius:9,padding:'6px 12px',cursor:'pointer',fontFamily:'inherit'}}>Dejar solo este abierto</button>}
-          </>) : <span style={{fontSize:12.5,fontWeight:800,color:'#C62828'}}>Ningún módulo abierto: tus alumnos no verán actividades. {noNum ? 'Marca uno como ▶ En clase.' : 'Abre uno.'}</span>}
-        </div>
-        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(250px,1fr))', gap:10}}>
-          {shownMods.map(m => {
-            const on = ids.includes(m.id);
-            const cur = on && m.id === clsId;
-            const st = cur ? 'cls' : on ? 'rev' : 'off';
-            const od = cur ? openedTxt(m.id) : '';
-            const onlyOne = cur && ids.length === 1;
+      {modules.length === 0 ? <div className="settings-hint">Este nivel no tiene módulos cargados.</div> : (
+        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))', gap:10}}>
+          {modules.map(m => {
+            const on = (s.activeModuleIds || []).includes(m.id);
             return (
-              <div key={m.id} style={{display:'flex',flexDirection:'column',gap:10,padding:'12px 13px',border:cur ? '2px solid #1F3A8A' : '1.5px solid ' + (on ? '#A5D6A7' : '#E6E3DA'),borderRadius:10,background:cur ? '#F4F8FF' : on ? '#F0FAF1' : '#fff'}}>
-                <div style={{display:'flex',alignItems:'center',gap:10}}>
-                  <span style={{fontSize:20}}>{m.emoji}</span>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontFamily:"'Fredoka',sans-serif",fontWeight:600,fontSize:13,color:'var(--text)'}}>{m.name}</div>
-                    <div style={{fontSize:11,fontWeight:700,marginTop:1,color:cur ? '#1F3A8A' : on ? '#2E7D32' : 'var(--text-soft)'}}>{cur ? ('Aquí vas' + (od ? ' · abierto el ' + od : '')) : on ? 'Abierto para repasar' : 'Cerrado · no lo ven'} · {m.activities.length} act.</div>
-                  </div>
+              <div key={m.id} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 14px',border:'1.5px solid '+(on?'#A5D6A7':'#E6E3DA'),borderRadius:10,background:on?'#F0FAF1':'#fff'}}>
+                <span style={{fontSize:20}}>{m.emoji}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontFamily:"'Fredoka',sans-serif",fontWeight:600,fontSize:13,color:'var(--text)'}}>{m.name}</div>
+                  <div style={{fontSize:11,color:on?'#2E7D32':'var(--text-soft)',fontWeight:700,marginTop:1}}>{on ? '🟢 Activo' : '⚪ Apagado'} · {m.activities.length} act.</div>
                 </div>
-                <div role="radiogroup" aria-label={'Estado de ' + m.name} style={{display:'flex',gap:3,background:'#F1EFE8',borderRadius:9,padding:3}}>
-                  <button type="button" role="radio" aria-checked={st === 'off'} onClick={() => setState(m.id, 'off')} style={segBtn(st === 'off', 'off')}>Cerrado</button>
-                  {noNum ? (<>
-                    <button type="button" role="radio" aria-checked={st === 'rev'} onClick={() => setState(m.id, 'rev')} title={onlyOne ? 'Es el único abierto: marca otro como En clase para pasarlo a repaso' : 'Abierto para practicar, sin ser el tema de la clase'} style={{...segBtn(st === 'rev', 'rev'), opacity: onlyOne ? .45 : 1}}>Repaso</button>
-                    <button type="button" role="radio" aria-checked={st === 'cls'} onClick={() => setState(m.id, 'cls')} title="El tema de la clase: tus alumnos lo ven como “Aquí vas”" style={segBtn(st === 'cls', 'cls')}>▶ En clase</button>
-                  </>) : <button type="button" role="radio" aria-checked={on} onClick={() => setState(m.id, 'on')} style={segBtn(on, 'rev')}>Abierto</button>}
-                </div>
+                <button type="button" onClick={()=>toggle(m.id)} aria-label={on?'Apagar':'Prender'}
+                        style={{width:48,height:27,borderRadius:14,border:'none',cursor:'pointer',background:on?'#2EA84B':'#CFCFC8',position:'relative',transition:'background .15s',flexShrink:0,padding:0}}>
+                  <span style={{position:'absolute',top:3,left:on?24:3,width:21,height:21,borderRadius:'50%',background:'#fff',transition:'left .15s',boxShadow:'0 1px 3px rgba(0,0,0,0.3)'}}></span>
+                </button>
               </div>
             );
           })}
         </div>
-        {note && <div className="settings-hint" style={{marginTop:10,fontWeight:700,color:'#1F3A8A'}}>{note}</div>}
-        <div className="settings-hint" style={{marginTop:8}}>{noNum ? <><b>▶ En clase</b> = el tema de hoy, solo uno (tus alumnos lo ven como “Aquí vas”). <b>Repaso</b> = abierto para practicar. <b>Cerrado</b> = no lo ven.</> : <>El módulo abierto más avanzado es el que tus alumnos ven como “Aquí vas”.</>}</div>
-      </>)}
+      )}
+      {activeCount === 0 && <div className="settings-hint" style={{marginTop:8,color:'#C62828',fontWeight:700}}>⚠ Sin módulos activos, los alumnos no verán actividades.</div>}
     </div>
   );
 }
 
-/* 👥 GROUP-WS-V1 (16-oct-2026): la página del grupo es GroupWorkspace (GroupWorkspace.comp.js, una pantalla:
- * botones con ventanas + lista y ficha rápida).
- * SIN-VISTA-ANTERIOR-V1 (27-oct-2026, pedido de la usuaria: “generaba confusiones”): ya NO se ofrece la vista
- * anterior (se quitó ⋯ → “Vista anterior” y el aviso). Quien la tenía guardada en jucum_group_view_v1 entra
- * igual a la vista nueva y la preferencia se borra. GroupDetailClassic queda SOLO como respaldo si
- * GroupWorkspace no llegara a cargar. */
-function GroupDetail(props) {
-  React.useEffect(() => { try { localStorage.removeItem('jucum_group_view_v1'); } catch (e) {} }, []);
-  const GW = window.GroupWorkspace;
-  if (GW) return <GW {...props} />;
-  return <GroupDetailClassic {...props} />;
-}
-
-function GroupDetailClassic({ groupId, onBack, onSelectStudent }) {
+function GroupDetail({ groupId, onBack, onSelectStudent }) {
   const { GROUPS, STUDENTS, LEVELS, getStudentMastery, getStudentReadiness } = window.JUCUM_DATA;
   const group = GROUPS.find(g => g.id === groupId);
   const level = LEVELS[group.level];
@@ -604,7 +477,6 @@ function GroupDetailClassic({ groupId, onBack, onSelectStudent }) {
   const [showReport, setShowReport] = React.useState(false);
   const [showFinish, setShowFinish] = React.useState(false);
   const [, setGrdTick] = React.useState(0);
-  const [modTick, setModTick] = React.useState(0);   // ⚙️ al cerrar Configurar grupo, el panel de módulos se relee
   const grdFinished = !!(window.JUCUM_GRAD && window.JUCUM_GRAD.isFinished(group));
   React.useEffect(() => { document.body.setAttribute('data-level', group.level); return () => document.body.removeAttribute('data-level'); }, [group.level]);
 
@@ -638,13 +510,6 @@ function GroupDetailClassic({ groupId, onBack, onSelectStudent }) {
         <div className="welcome-text">
           <div className="eyebrow">{level.emoji} {level.code} · {group.schedule}</div>
           <h1>{group.name}</h1>
-          {(() => {
-            const D1 = window.JUCUM_DATA; const cid = D1.getClassModuleId && D1.getClassModuleId(groupId);
-            const cm = cid && (D1.MODULE_CATALOG[group.level] || []).find(m => m.id === cid);
-            if (!cm) return null;
-            let od = ''; try { const d = D1.getModuleOpenedAt && D1.getModuleOpenedAt(groupId, cid); od = d ? new Date(d + 'T12:00:00Z').toLocaleDateString('es-PE', { day:'numeric', month:'short', timeZone:'UTC' }) : ''; } catch (e) {}
-            return <span style={{display:'inline-flex',alignItems:'center',gap:6,background:'#1F3A8A',color:'#fff',borderRadius:20,padding:'4px 12px 4px 5px',fontSize:12.5,fontWeight:800,maxWidth:'100%',margin:'4px 0'}}><span style={{background:'#fff',borderRadius:'50%',width:24,height:24,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:13,flex:'none'}}>{cm.emoji}</span>En clase ahora · {cm.name}{od ? <span style={{fontWeight:700,opacity:.8,fontSize:11}}> · desde {od}</span> : null}</span>;
-          })()}
           <p>{members.length} alumnos · dominio del grupo <b>{groupAvg}%</b> · 🎓 <b>{aptCount}</b> apto{aptCount===1?'':'s'} para examen · iniciado el {group.startDate}</p>
         </div>
         <button className="btn-settings" onClick={() => setShowSettings(true)}>⚙️ Configurar grupo</button>
@@ -654,8 +519,7 @@ function GroupDetailClassic({ groupId, onBack, onSelectStudent }) {
       </div>
       {showFinish && <FinishGroupModal groupId={groupId} onClose={() => setShowFinish(false)} onDone={() => { setShowFinish(false); setGrdTick(t => t + 1); }} />}
 
-      <GroupModulesQuick key={'gmq' + modTick} groupId={groupId} onChanged={() => setGrdTick(t => t + 1)} />
-      {/* 🧠 NT-V1 · práctica con Neuro de todo el grupo (niveles con sesión mixta) */ window.NeuroGroupCard && window.JUCUM_MIX && window.JUCUM_MIX.enabledFor({ level: group.level }) && <NeuroGroupCard group={group} students={members} onOpen={onSelectStudent} />}
+      <GroupModulesQuick groupId={groupId} />
 
       <TeacherChampions groupId={groupId} levelColor={level.dark} />
 
@@ -678,7 +542,7 @@ function GroupDetailClassic({ groupId, onBack, onSelectStudent }) {
           </select>
         </div>
       </div>
-      <div className="tt-count">{shown.length} de {members.length} alumno{members.length===1?'':'s'}{q ? ` · filtrando «${q}»` : ''}{closedMembers.length > 0 && <> · <a href="#closed-list" onClick={(e) => { e.preventDefault(); const el = document.getElementById('closed-list'); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 80, behavior: 'smooth' }); }} style={{color:'#4A5468',fontWeight:800}}>⏸ {closedMembers.length} con avance cerrado ↓</a></>}</div>
+      <div className="tt-count">{shown.length} de {members.length} alumno{members.length===1?'':'s'}{q ? ` · filtrando «${q}»` : ''}</div>
 
       {sugg.length > 0 && window.CloseProgressModal && (
         <div style={{display:'flex',gap:10,alignItems:'center',background:'#FFF3E0',border:'1.5px solid #FFCC80',borderRadius:12,padding:'10px 12px',fontSize:13,color:'#6B3A00',flexWrap:'wrap',margin:'8px 0'}}>
@@ -705,18 +569,18 @@ function GroupDetailClassic({ groupId, onBack, onSelectStudent }) {
           <div className="col-status">Última práctica</div>
           <div></div>
         </div>
-        {shown.map((s, i) => <StudentRow key={s.id} stu={s} rank={i+1} level={level} onClick={() => onSelectStudent(s.id)} onDelete={() => setDeleting(s)} onCloseProgress={window.CloseProgressModal ? () => setClosing(s) : null} />)}
+        {shown.map((s, i) => <StudentRow key={s.id} stu={s} rank={i+1} level={level} onClick={() => onSelectStudent(s.id)} onDelete={() => setDeleting(s)} onCloseProgress={(group.level === 'a1' || group.level === 'a2') && window.CloseProgressModal ? () => setClosing(s) : null} />)}
         {shown.length === 0 && <div style={{padding:'26px',textAlign:'center',color:'#999',fontWeight:700}}>Sin resultados para «{q}»</div>}
       </div>
 
-      <div id="closed-list">{window.ClosedStudentsList && <ClosedStudentsList list={closedMembers} onChanged={() => setGrdTick(t => t + 1)} onOpen={onSelectStudent} />}</div>
+      {window.ClosedStudentsList && <ClosedStudentsList list={closedMembers} onChanged={() => setGrdTick(t => t + 1)} onOpen={onSelectStudent} />}
       {closing && <CloseProgressModal student={closing} onClose={() => setClosing(null)} onDone={() => { setClosing(null); setGrdTick(t => t + 1); }} />}
 
       {deleting && window.TeacherPasswordGate && (
         <TeacherPasswordGate
           danger
           title="🗑️ Eliminar alumno"
-          message={`Vas a eliminar a ${deleting.fullName} (@${deleting.username}). Esto borra PARA SIEMPRE su cuenta y acceso, todo su progreso, XP y racha, sus tareas y notas, y su historial de práctica. Esta acción NO se puede deshacer. Ingresa tu contraseña de teacher para confirmar.`}
+          message={`Vas a eliminar a ${deleting.fullName} (@${deleting.username}). Esto borra PARA SIEMPRE su cuenta y acceso, todo su progreso, XP y racha, sus tareas y notas, y su historial de práctica. Esta acción NO se puede deshacer. Ingresa tu contraseña de profesor para confirmar.`}
           confirmLabel="🗑️ Eliminar definitivamente"
           onConfirm={() => {
             const { STUDENTS, saveStudents } = window.JUCUM_DATA;
@@ -729,7 +593,7 @@ function GroupDetailClassic({ groupId, onBack, onSelectStudent }) {
         />
       )}
 
-      {showSettings && <GroupSettingsModal groupId={groupId} level={level} onClose={() => { setShowSettings(false); setModTick(x => x + 1); }} />}
+      {showSettings && <GroupSettingsModal groupId={groupId} level={level} onClose={() => setShowSettings(false)} />}
     </>
   );
 }
@@ -741,14 +605,14 @@ function GroupSettingsModal({ groupId, level, onClose }) {
   const modules = MODULE_CATALOG[group.level] || [];
   const [s, setS] = React.useState(() => getGroupSettings(groupId));
   const { updateGroup, passThreshold, getPassThresholds, setPassThreshold, setGroupThreshold, getGroupThreshold } = window.JUCUM_DATA;
-  const [info, setInfo] = React.useState({ name: group.rawName || group.name, schedule: group.schedule, startDate: group.startDate });
+  const [info, setInfo] = React.useState({ name: group.name, schedule: group.schedule, startDate: group.startDate });
   const levelBase = getPassThresholds()[group.level];                 // estándar del nivel
   const [ownThr, setOwnThr] = React.useState(() => getGroupThreshold(groupId) != null);  // ¿override propio?
   const [thr, setThr] = React.useState(() => { const g = getGroupThreshold(groupId); return g != null ? g : levelBase; });
   const save = () => {
     setGroupSettings(groupId, s);
     if (setGroupThreshold) setGroupThreshold(groupId, ownThr ? thr : null);  // null = vuelve a heredar
-    if (updateGroup && (info.name !== (group.rawName || group.name) || info.schedule !== group.schedule || info.startDate !== group.startDate)) {
+    if (updateGroup && (info.name !== group.name || info.schedule !== group.schedule || info.startDate !== group.startDate)) {
       updateGroup(groupId, { name: info.name, schedule: info.schedule, startDate: info.startDate });
     }
     onClose();
@@ -782,7 +646,7 @@ function GroupSettingsModal({ groupId, level, onClose }) {
                 const toggle = () => {
                   const set = new Set(s.activeModuleIds || []);
                   if (on) set.delete(m.id); else set.add(m.id);
-                  const ids = window.JUCUM_DATA.nextActiveIds ? window.JUCUM_DATA.nextActiveIds(group.level, s.activeModuleIds, modules, set) : modules.filter(x => set.has(x.id)).map(x => x.id);
+                  const ids = modules.filter(x => set.has(x.id)).map(x => x.id);
                   setS({...s, activeModuleIds: ids, activeModuleId: ids[0] || null});
                 };
                 return (
@@ -951,7 +815,6 @@ function StudentRow({ stu, rank, level, onClick, onDelete, onCloseProgress }) {
         <div>
           <div className="st-name">{stu.starred && '⭐ '}{stu.fullName}</div>
           <div className="st-user">@{stu.username}</div>
-          {window.JUCUM_PAY && window.JUCUM_PAY.gateStatus && window.JUCUM_PAY.gateStatus(stu).k === 'cl' && <div style={{fontSize:10.5, fontWeight:800, color:'#4A5468', background:'#ECEFF1', borderRadius:8, padding:'2px 7px', marginTop:3, display:'inline-block'}}>🔒 En pausa por pago</div>}
         </div>
       </div>
       <div className="col-mod">{stu.completedModules}</div>
@@ -977,56 +840,6 @@ function StudentRow({ stu, rank, level, onClick, onDelete, onCloseProgress }) {
 
 /* ─── Student detail view ──────────────────────────────────────────── */
 
-/* 🔐 MOD-ACCESO-V1 (09-oct-2026) · Qué módulos ve ESTE alumno (A1/A2 cíclicos):
- * conseguidos (insignia) + ▶ En clase + los que el profesor le abre aquí (users.extra_modules · script 34). */
-function StudentModuleAccess({ stu, onChanged }) {
-  const [busy, setBusy] = React.useState('');
-  const [msg, setMsg] = React.useState('');
-  const D = window.JUCUM_DATA;
-  if (!stu || !(stu.level === 'a1' || stu.level === 'a2') || !D.getStudentModuleIds) return null;
-  const mods = D.MODULE_CATALOG[stu.level] || [];
-  const gid = stu.group || stu.closedGroup;
-  const gs = D.getGroupSettings(gid) || {};
-  const gIds = gs.activeModuleIds || [];
-  const cls = D.getClassModuleId ? D.getClassModuleId(gid) : null;
-  let earned = []; try { earned = window.JUCUM_BADGES ? window.JUCUM_BADGES.earnedIds(stu) : []; } catch (e) {}
-  const extra = Array.isArray(stu.extraModules) ? stu.extraModules : [];
-  const allowed = D.getStudentModuleIds(stu);
-  const toggle = async (id) => {
-    const next = extra.indexOf(id) >= 0 ? extra.filter(x => x !== id) : extra.concat(id);
-    setBusy(id); setMsg('');
-    try {
-      const sb = window.JUCUM_SB && window.JUCUM_SB.getClient && window.JUCUM_SB.getClient();
-      if (sb) {
-        const r = await sb.from('users').update({ extra_modules: next }).eq('id', stu.id);
-        if (r.error) { setMsg(/extra_modules|column|schema/i.test(String(r.error.message || '')) ? 'Falta ejecutar el script 34 en Supabase.' : 'No se pudo guardar: ' + r.error.message); setBusy(''); return; }
-      }
-      stu.extraModules = next;
-    } catch (e) { setMsg('No se pudo guardar: ' + e.message); setBusy(''); return; }
-    setBusy(''); if (onChanged) onChanged();
-  };
-  return (
-    <div className="scard" style={{margin:'12px 0', display:'flex', flexDirection:'column', gap:8}}>
-      <div style={{fontWeight:800, fontSize:14, color:'#33415C'}}>🔐 Módulos que ve este alumno</div>
-      <div style={{fontSize:12.5, color:'#6B7486', fontWeight:600}}>Ve solo los que ya consiguió (insignia) y el que su grupo cursa ahora. Si necesita otro, ábreselo aquí.</div>
-      {mods.map(m => {
-        const isCls = m.id === cls, isEarn = earned.indexOf(m.id) >= 0, isExtra = extra.indexOf(m.id) >= 0, sees = allowed.indexOf(m.id) >= 0;
-        const grpClosed = isEarn && gIds.indexOf(m.id) < 0;
-        const chip = isExtra ? ['🔓 Abierto por ti', '#E3F2FD', '#1565C0'] : isCls ? ['▶ En clase', '#E8F0FF', '#1F3A8A'] : isEarn ? (grpClosed ? ['🏅 Conseguido · cerrado en el grupo', '#F4F6F9', '#6B7486'] : ['🏅 Conseguido', '#FFF6D6', '#8A6400']) : ['🔒 No lo ve', '#F4F6F9', '#6B7486'];
-        return (
-          <div key={m.id} style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', padding:'8px 10px', borderRadius:10, background: sees ? '#FAFBFD' : '#fff', border:'1px solid #EEF1F5'}}>
-            <span style={{fontSize:18}}>{m.emoji || '📦'}</span>
-            <span style={{flex:1, minWidth:160, fontWeight:800, fontSize:13, color:'#33415C'}}>{m.name}</span>
-            <span style={{fontSize:11.5, fontWeight:800, padding:'3px 9px', borderRadius:20, background:chip[1], color:chip[2]}}>{chip[0]}</span>
-            {(isExtra || !sees) && <button type="button" className="btn-soft" disabled={!!busy} onClick={() => toggle(m.id)} style={{minHeight:36}}>{busy === m.id ? 'Guardando…' : isExtra ? 'Quitar acceso' : '🔓 Abrirle este módulo'}</button>}
-          </div>
-        );
-      })}
-      {msg && <div style={{fontSize:12.5, fontWeight:800, color:'#B3261E'}}>{msg}</div>}
-    </div>
-  );
-}
-
 function StudentDetail({ studentId, onBack, onContact }) {
   const { STUDENTS, GROUPS, LEVELS, ACHIEVEMENT_DEFS, ACTIVITY_LOG, getStudentMastery } = window.JUCUM_DATA;
   const stu = STUDENTS.find(s => s.id === studentId);
@@ -1041,15 +854,10 @@ function StudentDetail({ studentId, onBack, onContact }) {
     setResetting(false);
     alert(`✅ Contraseña de ${stu.fullName} reseteada a "1234".\n\n⚠ IMPORTANTE: pídele que al ingresar la cambie por una que pueda recordar, y que la anote en un lugar seguro para no volver a tener problemas.`);
   };
-  // PAUSA-SIN-GRUPO-V1: un alumno en espera (avance cerrado) no tiene grupo → se usa el grupo del que salió
-  const group = GROUPS.find(g => g.id === (stu.closedGroup || stu.group)) || GROUPS.find(g => g.id === stu.group) || { id: null, name: '⏸ En espera (sin grupo)', schedule: '', level: stu.level };
+  const group = GROUPS.find(g => g.id === stu.group);
   const level = LEVELS[stu.level];
   const myLog = window.JUCUM_DATA.getStudentLog ? window.JUCUM_DATA.getStudentLog(stu.id) : ACTIVITY_LOG.filter(a => a.studentId === stu.id);
   React.useEffect(() => { document.body.setAttribute('data-level', stu.level); return () => document.body.removeAttribute('data-level'); }, [stu.level]);
-  // 🔒 En pausa por pago: avance oculto; el profesor tiene UNA vista (la da administración si hace falta otra)
-  const [payUnlocked, setPayUnlocked] = React.useState(false);
-  const payPaused = !!(window.JUCUM_PAY && window.JUCUM_PAY.gateStatus && window.JUCUM_PAY.gateStatus(stu).k === 'cl');
-  if (payPaused && !payUnlocked && window.TeacherPayLock) return <TeacherPayLock student={stu} onBack={onBack} onUnlock={() => setPayUnlocked(true)} />;
 
   if (showReport) return <StudentReport student={stu} onBack={() => setShowReport(false)} forTeacher />;
 
@@ -1070,13 +878,12 @@ function StudentDetail({ studentId, onBack, onContact }) {
           <button className="btn-soft" onClick={() => setShowReport(true)}>📄 Reporte de avance</button>
           <button className="btn-soft" onClick={() => onContact && onContact(stu.id)}>💬 Contactar</button>
           <button className="btn-soft" onClick={() => setResetting(true)}>🔑 Resetear contraseña</button>
-          {/* PAUSA-PREA1-V1: ⏸ en todos los niveles */ window.CloseProgressModal && !stu.closedAt && <button className="btn-soft" onClick={() => setClosingMe(true)}>⏸ Cerrar avance</button>}
+          {(stu.level === 'a1' || stu.level === 'a2') && window.CloseProgressModal && !stu.closedAt && <button className="btn-soft" onClick={() => setClosingMe(true)}>⏸ Cerrar avance</button>}
           {stu.closedAt && window.JUCUM_GRAD && <button className="btn-soft" onClick={async () => { if (!window.confirm('¿Reabrir el avance de ' + stu.fullName + '?')) return; const r = await window.JUCUM_GRAD.reopenStudent(stu.id); if (!r.ok) alert(r.error || 'No se pudo reabrir.'); setMeTick(t => t + 1); }}>↩ Reabrir avance</button>}
         </div>
       </div>
       {stu.closedAt && <div style={{background:'#ECEFF4',borderRadius:12,padding:'10px 14px',fontSize:13,color:'#4A5468',fontWeight:700,margin:'10px 0'}}>⏸ Avance cerrado el {window.JUCUM_GRAD ? window.JUCUM_GRAD.fmtDate(stu.closedAt) : stu.closedAt}{stu.closedReason ? ' · ' + stu.closedReason : ''}. Al entrar ve “Mi recorrido”.</div>}
       {window.BadgeShelf && <div className="scard" style={{margin:'12px 0'}}><BadgeShelf student={stu} title="🏅 Insignias de módulo" /></div>}
-      <StudentModuleAccess stu={stu} onChanged={() => setMeTick(t => t + 1)} />
       {closingMe && <CloseProgressModal student={stu} onClose={() => setClosingMe(false)} onDone={() => { setClosingMe(false); setMeTick(t => t + 1); }} />}
 
       <div className="kpi-grid">
@@ -1091,9 +898,6 @@ function StudentDetail({ studentId, onBack, onContact }) {
       </div>
 
       <ModuleTracker stu={stu} group={group} />
-      {/* 📅 SEGUIMIENTO-V1 (28-oct): el MISMO calendario que ve el alumno en «Mi seguimiento» (cálculo único, nube) */}
-      {window.MiSeguimiento && <div className="scard" style={{marginTop:16}}><MiSeguimiento student={stu} teacher /></div>}
-      {/* 🧠 NT-V1 · práctica con Neuro del alumno */ window.NeuroStudentCard && window.JUCUM_MIX && window.JUCUM_MIX.enabledFor(stu) && <NeuroStudentCard student={stu} />}
 
       <div style={{marginTop:18}}><ReadinessCard student={stu} forTeacher /></div>
 
@@ -1104,7 +908,7 @@ function StudentDetail({ studentId, onBack, onContact }) {
 
         <div className="scard">
           <div className="sec-head">
-            <div className="sec-title">Diagnóstico del teacher</div>
+            <div className="sec-title">Diagnóstico del profesor</div>
             <span className="sec-meta">Auto-generado</span>
           </div>
           <DiagnoseStudent stu={stu} />
@@ -1137,7 +941,7 @@ function StudentDetail({ studentId, onBack, onContact }) {
       {resetting && Gate && (
         <Gate
           title="Confirmar reset de contraseña"
-          message={`Vas a resetear la contraseña de ${stu.fullName} a "1234". Ingresa tu contraseña de teacher para confirmar.`}
+          message={`Vas a resetear la contraseña de ${stu.fullName} a "1234". Ingresa tu contraseña de profesor para confirmar.`}
           confirmLabel="🔑 Resetear a 1234"
           onConfirm={doReset}
           onClose={() => setResetting(false)}
@@ -1575,4 +1379,4 @@ function TeacherForumNav({ onOpen }) {
   );
 }
 
-Object.assign(window, { TeacherDashboard, TeacherForumNav, GroupsView, GroupDetail, GroupDetailClassic, GroupModulesQuick, TeacherChampions, GroupSettingsModal, StudentDetail, DiagnoseStudent, ActivityByDay, PracticeChart, BreakdownRow, DetailModal, StudentRow });
+Object.assign(window, { TeacherDashboard, TeacherForumNav, GroupsView, GroupDetail, GroupSettingsModal, StudentDetail, DiagnoseStudent, ActivityByDay, PracticeChart, BreakdownRow, DetailModal, StudentRow });

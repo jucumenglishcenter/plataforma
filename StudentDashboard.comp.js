@@ -19,8 +19,8 @@ function VocabReminder({ student, settings, onGo }) {
   if (hidden) return null;
   // módulo activo → su actividad de vocabulario (quizlet)
   const mods = D.MODULE_CATALOG[student.level] || [];
-  const activeIds = D.getStudentModuleIds ? D.getStudentModuleIds(student) : ((settings && (settings.activeModuleIds || (settings.activeModuleId ? [settings.activeModuleId] : []))) || []);   // MOD-ACCESO-V1
-  const mod = mods.find(m => activeIds.includes(m.id)) || ((D.isCyclicLevel && D.isCyclicLevel(student.level)) ? null : mods[0]);
+  const activeIds = (settings && (settings.activeModuleIds || (settings.activeModuleId ? [settings.activeModuleId] : []))) || [];
+  const mod = mods.find(m => activeIds.includes(m.id)) || mods[0];
   const vocab = mod && (mod.activities || []).find(a => a.type === 'quizlet');
   if (!mod || !vocab) return null;
   const dismiss = () => { try { localStorage.setItem(dismissKey, '1'); } catch {} setHidden(true); };
@@ -75,7 +75,7 @@ function HowToTopModal({ student, onClose }) {
           {step('📚','Haz tus prácticas', 'Cada actividad nueva te da XP. Las historias suman por el tiempo que las lees.')}
           {step('✅','Aprueba (no corras)', 'Con menos del '+thr+'% solo ganas puntos de participación. Apruébala y te llevas TODOS tus XP.')}
           {step('🔁','Vuelve cada semana', '¡NUEVO! Cada semana puedes volver a practicar tus materiales y ganar XP extra (una vez por material por semana).')}
-          {step('🔥','Mantén tu racha', 'Cada día que llegas a tu meta suma a tu racha y te da XP (+10, +20 y hasta +30 por día). El domingo es libre y tienes 1 escudo 🛡 por semana.')}
+          {step('🔥','Mantén tu racha', 'Practica todos los días: cada día seguido te da +30 XP.')}
           <div style={{fontSize:11, fontWeight:800, letterSpacing:'.06em', textTransform:'uppercase', color:'#8B5CF6', marginTop:6}}>Los dos tableros</div>
           {step('🏅','Top del grupo', 'Se ordena por tu constancia y dominio (cuánto practicas y apruebas). Practica seguido y aprueba para subir.')}
           {step('🏆','Liga semanal', 'El Top 3 de XP de la semana se corona cada lunes. ¡El campeón #1 elige el fondo de todo el grupo!')}
@@ -309,8 +309,9 @@ function StudentDashboard({ user, onLogout }) {
   const settings = getGroupSettings(student.group);
   const progress = getStudentProgress(student.id);
   const allModules = MODULE_CATALOG[student.level] || [];
-  const activeIds = window.JUCUM_DATA.getStudentModuleIds ? window.JUCUM_DATA.getStudentModuleIds(student)   // MOD-ACCESO-V1
-    : ((settings.activeModuleIds && settings.activeModuleIds.length) ? settings.activeModuleIds : (settings.activeModuleId ? [settings.activeModuleId] : []));
+  const activeIds = (settings.activeModuleIds && settings.activeModuleIds.length)
+    ? settings.activeModuleIds
+    : (settings.activeModuleId ? [settings.activeModuleId] : []);
   const activeModules = allModules.filter(m => activeIds.includes(m.id));
   const activeModule = activeModules[0] || allModules[0];
   const [view, setViewRaw] = React.useState(() => (window.JUCUM_NAV ? window.JUCUM_NAV.load('student', 'dashboard') : 'dashboard'));
@@ -340,7 +341,7 @@ function StudentDashboard({ user, onLogout }) {
   // 🏅 Insignias ganadas aún no celebradas en este equipo (A1/A2) — se muestran una tras otra
   const [badgeCeleb, setBadgeCeleb] = React.useState(() => { try { return !!(window.JUCUM_BADGES && window.JUCUM_BADGES.enabledFor(student) && window.JUCUM_BADGES.pending(student).length); } catch (e) { return false; } });
   React.useEffect(() => {
-    try { if (window.JUCUM_SURVEY) { let later = ''; try { later = (JSON.parse(localStorage.getItem('jucum_survey_later_v1') || '{}') || {})[student.id] || ''; } catch (e) {} setSurveyDue(later !== (window.JUCUM_DAY ? window.JUCUM_DAY.today() : '-') && window.JUCUM_SURVEY.isSurveyDue(student)); } } catch {}
+    try { if (window.JUCUM_SURVEY) setSurveyDue(window.JUCUM_SURVEY.isSurveyDue(student)); } catch {}
   }, [student && student.id]);
   const [alertKind, setAlertKind] = React.useState(null);
   const cloudReady = useCloudDaysReady();
@@ -406,12 +407,10 @@ function StudentDashboard({ user, onLogout }) {
     const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
     const onPageShow = () => refresh(); // volver con "atrás" (bfcache) desde un material en la misma pestaña
     const iv = setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 20000);
-    const onStreak = () => { if (alive) setPTick(t => t + 1); };   // RACHA-REAL-V1: llegaron los días/minutos de la nube → repintar ya
     window.addEventListener('focus', refresh);
     window.addEventListener('pageshow', onPageShow);
-    window.addEventListener('jucum-streak-change', onStreak);
     document.addEventListener('visibilitychange', onVis);
-    return () => { alive = false; clearInterval(iv); window.removeEventListener('focus', refresh); window.removeEventListener('pageshow', onPageShow); window.removeEventListener('jucum-streak-change', onStreak); document.removeEventListener('visibilitychange', onVis); };
+    return () => { alive = false; clearInterval(iv); window.removeEventListener('focus', refresh); window.removeEventListener('pageshow', onPageShow); document.removeEventListener('visibilitychange', onVis); };
   }, []);
   const forumUnread = window.JUCUM_FORUM ? window.JUCUM_FORUM.forumUnreadCount(student.id, student.group) : 0;
   const msgUnread = window.JUCUM_MSG ? window.JUCUM_MSG.unreadForStudent(student.id) : 0;
@@ -421,22 +420,7 @@ function StudentDashboard({ user, onLogout }) {
     setView('forum');
   };
   const P = window.JUCUM_PAY;
-  // 🚦 Control de pagos: se lee de la NUBE al entrar y cada 5 min (sin nube = todo normal)
-  const [, setGateTick] = React.useState(0);
-  React.useEffect(() => {
-    if (!P || !P.gateLoad) return;
-    let alive = true;
-    const go = () => P.gateLoad().then(() => { if (alive) setGateTick(t => t + 1); }).catch(() => {});
-    go();
-    const iv = setInterval(() => { if (document.visibilityState === 'visible') go(); }, 5 * 60000);
-    return () => { alive = false; clearInterval(iv); };
-  }, [student.id]);
   const acct = P ? P.getAccountStatus(student) : { state:'al_dia', blocked:false, daysLeft:null, payDay:5 };
-  const payNoticeKey = `jucum_paynotice_${student.id}`;
-  const [payNoticeSeen, setPayNoticeSeen] = React.useState(() => { try { return localStorage.getItem(payNoticeKey) || ''; } catch { return ''; } });
-  const payNoticeToday = new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
-  const showPayNotice = acct.state === 'aviso' && payNoticeSeen !== payNoticeToday;
-  const closePayNotice = () => { try { localStorage.setItem(payNoticeKey, payNoticeToday); } catch {} setPayNoticeSeen(payNoticeToday); };
   const [celebrate, setCelebrate] = React.useState(() => P ? P.pendingConfirmCelebration(student.id) : null);
   const closeCelebrate = () => { if (celebrate && P) P.markCelebrationSeen(celebrate.id); setCelebrate(null); };
 
@@ -448,7 +432,7 @@ function StudentDashboard({ user, onLogout }) {
     if (!D.isNewWeekFor(student.id)) return;
     const p = new Date(Date.now() - 5 * 3600000);              // lunes (hora Perú)
     const wd = (p.getUTCDay() + 6) % 7; p.setUTCDate(p.getUTCDate() - wd);
-    const wk = p.toISOString().slice(0, 10); /* día-ok */
+    const wk = p.toISOString().slice(0, 10);
     const seenKey = `jucum_weeknotif_${student.id}`;
     let last = null; try { last = localStorage.getItem(seenKey); } catch {}
     if (last === wk) return;
@@ -489,19 +473,15 @@ function StudentDashboard({ user, onLogout }) {
       });
       localStorage.setItem(todayKey, '1');
     }
-    // 🔥 RACHA-AMABLE-V1: aviso a las 19:00 si el día AÚN NO cuenta (no llega a la meta) y no es domingo libre
-    const si = student.streakInfo;
-    const atRisk = si ? (si.streak > 0 && !si.todayCounts && !si.isSunday) : (!window.JUCUM_STREAK && student.streak > 0 && todayMin === 0);
-    if (atRisk && peruHour() >= 19) {
+    // Streak warning — practiced yesterday but not today, after 6pm
+    if (student.streak > 0 && todayMin === 0 && peruHour() >= 18) {
       const streakKey = `jucum_streak_warn_${student.id}_${peruDayKey()}`;
       if (!localStorage.getItem(streakKey)) {
         window.JUCUM_NOTIF.pushNotif(student.id, {
           type: 'streak',
           link: 'practica',
           title: '🔥 Tu racha está en peligro',
-          body: si
-            ? `Llevas ${si.streak} día${si.streak === 1 ? '' : 's'}. Te faltan ${Math.ceil(si.left)} min de tu meta (${si.goal} min) para que hoy cuente. ${si.shieldLeft ? 'Si hoy no llegas, tu escudo 🛡 de la semana cubre el día.' : 'Ya usaste tu escudo 🛡 esta semana: hoy sí cuenta.'} Tienes hasta las 11:59 pm.`
-            : `Lleva ${student.streak} día${student.streak === 1 ? '' : 's'} seguidos. Practica antes de medianoche para no perderla.`,
+          body: `Lleva ${student.streak} día${student.streak === 1 ? '' : 's'} seguidos. Practica antes de medianoche para no perderla.`,
         });
         localStorage.setItem(streakKey, '1');
       }
@@ -511,27 +491,20 @@ function StudentDashboard({ user, onLogout }) {
   // 🔥 Bono de racha al cumplir la meta diaria + 📉 aviso honesto de XP por inactividad
   React.useEffect(() => {
     if (!window.JUCUM_NOTIF) return;
-    /* XP-EXPLICA-V1 (23-oct): espera los días REALES de la nube. Antes corría al montar, con la
-     * racha calculada sin __JEC_DAYS (caso Valentino: “Racha de 3 días · +90 XP” con racha real 6). */
-    if (cloudReady !== 'ready') return;
     const D = window.JUCUM_DATA;
     const today = peruDayKey();
     const tMin = progress.todayMinutes || 0;
     const goal = settings.dailyTargetMin || 15;
-    const si = student.streakInfo, STK = window.JUCUM_STREAK;
-    if (si ? si.todayCounts : tMin >= goal) {
+    if (tMin >= goal) {
       const k = `jucum_goalbonus_${student.id}_${today}`;
       if (!localStorage.getItem(k)) {
         const streakNow = Math.max(1, (student.streak || 0));
-        /* RACHA-AMABLE-V1: XP por día cumplido (+10/+20/+30) que se queda aunque la racha se corte */
-        const gained = si && STK ? STK.perDay(streakNow) : Math.min(streakNow, 14) * 30;
-        const tomorrow = si && STK ? STK.perDay(streakNow + 1) : Math.min(streakNow + 1, 14) * 30;
+        const gained = Math.min(streakNow, 14) * 30;
+        const tomorrow = Math.min(streakNow + 1, 14) * 30;
         window.JUCUM_NOTIF.pushNotif(student.id, {
           type: 'streak', link: 'practica',
           title: `🔥 ¡Meta cumplida! Racha de ${streakNow} día${streakNow === 1 ? '' : 's'}`,
-          body: si
-            ? `Hoy cuenta para tu racha: +${gained} XP que ya son tuyos (no se pierden). ${tomorrow > gained ? 'Vuelve mañana y gana +' + tomorrow + ' XP' : 'Vuelve mañana: sigues ganando +' + tomorrow + ' XP por día'} — mientras más larga tu racha, más XP.`
-            : tomorrow > gained
+          body: tomorrow > gained
             ? `Tu racha te da +${gained} XP. Vuelve mañana y sube a +${tomorrow} XP — mientras más larga tu racha, más XP. ¿Quieres más hoy? Los refuerzos ✨ también suman.`
             : `Tu racha te da +${gained} XP (¡tope alcanzado!). No la sueltes — y los refuerzos ✨ siguen sumando XP extra.`,
         });
@@ -551,7 +524,7 @@ function StudentDashboard({ user, onLogout }) {
         localStorage.setItem(k2, '1');
       }
     }
-  }, [student.id, progress.todayMinutes, settings.dailyTargetMin, cloudReady]);
+  }, [student.id, progress.todayMinutes, settings.dailyTargetMin]);
 
   // ⏳ Nota en espera: trae las anclas vivas para avisar al tocar un material
   React.useEffect(() => {
@@ -569,7 +542,7 @@ function StudentDashboard({ user, onLogout }) {
     if (localStorage.getItem(key)) return;
     let kind = null;
     if (student.lastActiveDays >= 3) kind = 'inactive';
-    else if ((student.streakInfo ? (student.streakInfo.streak > 0 && !student.streakInfo.todayCounts && !student.streakInfo.isSunday) : (student.streak >= 1 && (progress.todayMinutes || 0) === 0)) && peruHour() >= 19) kind = 'streak'; // RACHA-AMABLE-V1
+    else if (student.streak >= 1 && (progress.todayMinutes || 0) === 0 && peruHour() >= 18) kind = 'streak';
     if (!kind) return;
     setAlertKind(kind);
     localStorage.setItem(key, '1');
@@ -593,15 +566,13 @@ function StudentDashboard({ user, onLogout }) {
   return (
     <>
       {showOnb && <Onboarding studentId={user.studentId} onClose={() => setShowOnb(false)} />}
-      {/* VENTANAS-UNA-A-LA-VEZ-V1 (30-oct): la encuesta va AL FINAL de la fila (antes salía junto a las demás ventanas) */}
+      {!showOnb && surveyDue && <SurveyModal student={student} onDone={() => setSurveyDue(false)} />}
       {!showOnb && celebrate && <PayCelebration payment={celebrate} onClose={closeCelebrate} />}
       {!showOnb && !celebrate && alertKind && <StudentAlertModal kind={alertKind} student={student} onClose={() => setAlertKind(null)} />}
       {!showOnb && !celebrate && !alertKind && dropExp && <DropExplainModal exp={dropExp} student={student} onClose={() => { try { window.JUCUM_DATA.ackDropExplanation(student); } catch {} setDropExp(null); }} onGo={() => { setDropExp(null); setView('dashboard'); }} />}
       {!showOnb && !celebrate && !alertKind && !dropExp && taskDue && <TaskDueCartel assignment={taskDue} onGo={() => { setTaskDue(null); setView('tasks'); }} onClose={() => setTaskDue(null)} />}
       {!showOnb && !celebrate && !alertKind && !dropExp && !taskDue && muteModal && <ForumMuteModal info={muteModal} onClose={() => setMuteModal(null)} />}
       {!showOnb && !celebrate && !alertKind && !dropExp && !taskDue && !muteModal && badgeCeleb && window.BadgeCelebration && <BadgeCelebration student={student} onDone={() => setBadgeCeleb(false)} />}
-      {!showOnb && !celebrate && !alertKind && !dropExp && !taskDue && !muteModal && !badgeCeleb && !showPayNotice && surveyDue && <SurveyModal student={student} onDone={() => setSurveyDue(false)} />}
-      {showPayNotice && window.PayNoticeModal && <PayNoticeModal status={acct} student={student} onClose={closePayNotice} onGo={() => { closePayNotice(); setView('payments'); }} />}
       <header className="app-header st-hdr">
         <button type="button" className={`st-burger ${sideOpen ? 'on' : ''}`} data-tut="nav" onClick={toggleSide} aria-label={sideOpen ? 'Ocultar menú' : 'Mostrar menú'} title={sideOpen ? 'Ocultar menú' : 'Mostrar menú'}>
           <span className="st-burger-ico">{sideOpen && !narrow ? '«' : '☰'}</span>
@@ -613,7 +584,7 @@ function StudentDashboard({ user, onLogout }) {
         </div>
         <div className="app-right st-hdr-right">
           <span data-tut="bell" style={{display:'inline-flex'}}><NotifBell userId={student.id} onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); else if (n.link === 'tasks') setView('tasks'); else if (n.link === 'exam') setView('exam'); else if (n.link === 'messages') setView('mensajes'); else if (n.link === 'practica' || n.type === 'daily-reminder' || n.type === 'streak' || n.type === 'achievement') setView('practica'); }} /></span>
-          <StudentUserMenu student={student} level={level} group={group} view={view} setView={setView} onLogout={onLogout} payAlert={!!(acct.blocked || acct.state==='por_vencer' || acct.state==='aviso')} />
+          <StudentUserMenu student={student} level={level} group={group} view={view} setView={setView} onLogout={onLogout} payAlert={!!(acct.blocked || acct.state==='por_vencer')} />
         </div>
       </header>
 
@@ -624,8 +595,6 @@ function StudentDashboard({ user, onLogout }) {
         <div className="st-grp">Aprender</div>
         <button type="button" className={`st-it ${view==='practica'?'on':''}`} onClick={() => setView('practica')}><span className="st-ico">📚</span>Mi práctica</button>
         <button type="button" className={`st-it ${view==='tasks'?'on':''}`} onClick={() => setView('tasks')}><span className="st-ico">📝</span>Tareas</button>
-        {/* 📅 SEGUIMIENTO-V1 (28-oct): lo que me dejaron y si lo cumplí (calendario del mes) */}
-        {window.StudentSeguimiento && <button type="button" className={`st-it ${view==='seguimiento'?'on':''}`} onClick={() => setView('seguimiento')}><span className="st-ico">📅</span>Mi seguimiento</button>}
         <button type="button" className={`st-it ${view==='exam'?'on':''}`} onClick={() => setView('exam')}><span className="st-ico">🎓</span>Examen</button>
         <div className="st-grp">Comunidad</div>
         <button type="button" className={`st-it ${view==='mensajes'?'on':''}`} onClick={() => setView('mensajes')}><span className="st-ico jwave">👨‍🏫</span>Hablemos{msgUnread > 0 && <span className="nav-dot">{msgUnread > 9 ? '9+' : msgUnread}</span>}</button>
@@ -636,22 +605,18 @@ function StudentDashboard({ user, onLogout }) {
 
       {window.StudentTutorial && <StudentTutorial student={student} onGoHome={() => setView('dashboard')} />}
 
-      {(acct.state === 'por_vencer' || acct.state === 'aviso') && view !== 'payments' && <PayReminderBar status={acct} onGo={() => setView('payments')} />}
+      {acct.state === 'por_vencer' && view !== 'payments' && <PayReminderBar status={acct} onGo={() => setView('payments')} />}
 
-      {acct.blocked && !['payments','profile','avance','report','diagnosis','boletin'].includes(view) ? (
-        <PayBlockGate status={acct} student={student} setView={setView} onGo={() => setView('payments')} />
+      {acct.blocked && view !== 'payments' ? (
+        <PayBlockGate status={acct} onGo={() => setView('payments')} />
       ) : view === 'payments' ? (
         <StudentPayments user={user} onBack={() => setView('dashboard')} />
       ) : view === 'profile' ? (
         <StudentProfile user={user} onBack={() => setView('dashboard')} />
       ) : view === 'tasks' ? (
         <StudentAssignments user={user} onBack={() => setView('dashboard')} />
-      ) : view === 'seguimiento' && window.StudentSeguimiento ? (
-        <StudentSeguimiento student={student} onBack={() => setView('dashboard')} />
       ) : view === 'exam' ? (
-        /* 🪐 MIS-PLANETAS-V1 (30-oct): la sección Examen = «Mis planetas» (solo los exámenes del nivel) */
-        window.MisPlanetas ? <MisPlanetas student={student} onBack={() => setView('dashboard')} onPractice={() => setView('practica')} onTasks={() => setView('tasks')} />
-          : <StudentExams user={user} onBack={() => setView('dashboard')} />
+        <StudentExams user={user} onBack={() => setView('dashboard')} />
       ) : (view === 'avance' || view === 'report' || view === 'diagnosis') ? (
         <StudentAvance user={user} student={student} onBack={() => setView('dashboard')} />
       ) : view === 'boletin' && window.StudentBoletin ? (
@@ -669,24 +634,19 @@ function StudentDashboard({ user, onLogout }) {
         <StudentPractice student={student} settings={settings} onBack={() => setView('dashboard')} />
       ) : (
       <main>
-        {/* 🚨 SEGUIMIENTO-V1 · 2B: alerta roja fija desde las 7 pm de la víspera del cierre hasta que termine el set */}
-        {window.SegAlarmCard && <SegAlarmCard student={student} onGo={() => setView('practica')} />}
         <div className="welcome" data-level={student.level} style={{background:'linear-gradient(135deg,'+level.color+','+level.dark+')'}}>
           <div className="welcome-text">
             <div className="eyebrow" style={{color:'#fff', opacity:1, textShadow:'0 1px 3px rgba(0,0,0,.4)'}}>{level.emoji} {level.code} · {group.name}</div>
             <h1>¡Hola, {student.fullName.split(' ')[0]}!</h1>
-            <p>{student.streak == null && window.JUCUM_STREAK ? 'Cargando tu racha… 🔥' : student.streak > 0
+            <p>{student.streak > 0
               ? <>Racha de <b>{student.streak} {student.streak === 1 ? 'día' : 'días'}</b> 🔥 ¡No la rompas hoy!</>
               : 'Hoy es buen día para retomar la práctica 🌱'}</p>
           </div>
           <div className="welcome-streak">
-            <div className="streak-num">{student.streak == null ? '…' : student.streak}</div>
+            <div className="streak-num">{student.streak}</div>
             <div className="streak-lbl">días<br/>seguidos</div>
           </div>
         </div>
-
-        {/* — 🏫 Actividad de clase abierta por el profe (DOCSETS-V1) — */}
-        {window.DocSetLiveBanner && <DocSetLiveBanner student={student} />}
 
         {/* — 🔇 Aviso de restricción del foro (mientras dure) — */}
         <ForumMuteBanner student={student} />
@@ -696,8 +656,6 @@ function StudentDashboard({ user, onLogout }) {
 
         {/* — 🎓 Cuenta regresiva del examen anunciado — */}
         <ExamCountdownCard student={student} onGo={() => setView('practica')} />
-        {/* 🧠 NEURO-FIX-V1: errores de Neuro que esperan o ya volvieron (solo Pre-A1 con Neuro) */}
-        {window.NeuroBoxHomeCard && <NeuroBoxHomeCard student={student} onGo={() => setView('practica')} />}
 
         {/* — Neuro + (Racha fusionada con Meta de hoy) — */}
         <div className="two-col" style={{gridTemplateColumns:'1.4fr 1fr', marginTop:18}}>
@@ -808,15 +766,13 @@ function ModuleProgress({ mod, progress, pct, doneCount, studentId, freeUnlock, 
               const teacherOpen = freeUnlock || unlockMode === 'free' ||
                 (unlockMode === 'custom' && enabledSet.has(`${mod.id}:${a.id}`));
               const alwaysOpen = a.open === true; // marcado en el catálogo ("open": true)
-              // 🔒 CANDADO-NOTA-V1: la anterior debe estar APROBADA (no solo hecha)
-              const lk = stu ? D.getActivityLock(stu, mod, a, progress) : { locked: false };
-              const locked = !done && lk.locked && (lk.sum && lk.prev === lk.sum ? !freeUnlock : (!teacherOpen && !alwaysOpen));
+              const locked = !done && !prevDone && !teacherOpen && !alwaysOpen;
               // PASO 5 · ★ estructura latente: aprobó la previa pero el Transform madura con reposo
               const lg = D.latentGate(mod, a, i, progress, lvl);
               const latentLocked = !done && !teacherOpen && lg.latent && !lg.ready && prevDone;
               // PASO 2 · hecho pero bajo el umbral → "a mejorar" (redo), no cuenta como ✓
               const status = done ? (passed ? 'done' : 'redo') : latentLocked ? 'latent' : locked ? 'locked' : 'open';
-              return { a, i, done, passed, status, latent: latentLocked ? lg : null, lockMsg: locked ? lk.msg : null };
+              return { a, i, done, passed, status, latent: latentLocked ? lg : null };
             });
             // group consecutive items that share a.group into expandable topics
             const segments = [];
@@ -974,10 +930,10 @@ function ChecklistRow({ it, mod, studentId }) {
   }
   return (
     <a href={status!=='locked' ? (href || undefined) : undefined}
-       className={`al-item ${status}`} title={it.lockMsg || undefined}>
+       className={`al-item ${status}`}>
       <span className="al-num">{status==='done' ? '✓' : status==='locked' ? '🔒' : i+1}</span>
       <span className="al-ico">{typeIcon(a.type)}</span>
-      <span className="al-name">{a.name}{status==='locked' && it.lockMsg ? <span style={{display:'block', fontSize:11.5, fontWeight:700, color:'#8A7F6A', marginTop:1}}>🔒 {it.lockMsg}</span> : null}</span>
+      <span className="al-name">{a.name}</span>
       <PhaseTags a={a} />
       {done && <span className="al-score">{done.score}{typeof done.score === 'number' && done.score <= 10 ? '' : '%'}</span>}
       {status==='open' && <span className="al-arr">→</span>}
@@ -1044,13 +1000,12 @@ function DirectedPracticeCard({ dp, student }) {
           const done = !!(prog.completed && prog.completed[`${it.moduleId}:${it.activityId}`]);
           const href = a ? linkFor(a, mod, student.id) : null;
           const Tag = href ? 'a' : 'div';
-          const lkd = isLockHref(href);
           return (
-            <Tag key={idx} href={href||undefined} className={`al-item ${done?'done':lkd?'locked':'open'}`}>
-              <span className="al-num">{done?'✓':lkd?'🔒':idx+1}</span>
+            <Tag key={idx} href={href||undefined} className={`al-item ${done?'done':'open'}`}>
+              <span className="al-num">{done?'✓':idx+1}</span>
               <span className="al-ico">{typeIcon(it.type)}</span>
-              <span className="al-name">{it.label || (a&&a.name) || 'Actividad'}{lkd ? <span style={{display:'block', fontSize:11.5, fontWeight:700, color:'#8A7F6A', marginTop:1}}>🔒 {lockMsgOf(href)}</span> : null}</span>
-              {!done && href && !lkd && <span className="al-arr">→</span>}
+              <span className="al-name">{it.label || (a&&a.name) || 'Actividad'}</span>
+              {!done && href && <span className="al-arr">→</span>}
             </Tag>
           );
         })}
@@ -1096,7 +1051,7 @@ function PreexamChecklistRow({ it, mod, studentId }) {
   const pre = (F && stu) ? F.getPre(stu.group, mod.id) : null;
   const href = linkFor(a, mod, studentId);
   const sub = pre && pre.open
-    ? 'No es una nota · abierto por tu teacher' + (pre.toDate ? ' hasta el ' + new Date(pre.toDate + 'T12:00:00Z').toLocaleDateString('es-PE', { weekday:'short', day:'numeric', month:'short' }) + (pre.to ? ', ' + F.fmtHora(pre.to) : '') : '')
+    ? 'No es una nota · abierto por tu profesora' + (pre.toDate ? ' hasta el ' + new Date(pre.toDate + 'T12:00:00Z').toLocaleDateString('es-PE', { weekday:'short', day:'numeric', month:'short' }) + (pre.to ? ', ' + F.fmtHora(pre.to) : '') : '')
     : 'No es una nota · diagnóstico para reconocer qué dominas';
   return (
     <>
@@ -1113,7 +1068,7 @@ function PreexamChecklistRow({ it, mod, studentId }) {
           <div className="modal settings-modal" style={{maxWidth:500}} onClick={e => e.stopPropagation()}>
             <div className="modal-head"><div className="modal-title">🧭 ¿Por qué doy este pre-examen?</div><button className="modal-close" onClick={() => setWhy(false)}>✕</button></div>
             <div className="modal-body" style={{fontSize:13, lineHeight:1.6}}>
-              <p style={{margin:'0 0 10px'}}>Este pre-examen <b>no es una nota</b> y no decide si apruebas. Tu teacher lo abre para tu grupo como preparación. Es tu <b>brújula</b>: 🧭</p>
+              <p style={{margin:'0 0 10px'}}>Este pre-examen <b>no es una nota</b> y no decide si apruebas. Tu profesora lo abre para tu grupo como preparación. Es tu <b>brújula</b>: 🧭</p>
               {[['1', 'Descubres cuánto entiendes de verdad.', 'No lo que crees que sabes — lo que realmente dominas del tema.'], ['2', 'Reconoces las áreas que aún no dominas.', 'Cada pregunta que falles te señala exactamente qué practicar antes del examen real.'], ['3', 'Repasas y recuerdas todo lo visto en clase.', 'Responderlo ya es una forma de práctica que refuerza tu memoria.']].map(s => (
                 <div key={s[0]} style={{display:'flex', gap:10, marginBottom:11}}>
                   <span style={{width:24, height:24, borderRadius:'50%', background:'#FFF3E0', border:'1.5px solid #FFB74D', color:'#8A5100', fontWeight:800, fontSize:11, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>{s[0]}</span>
@@ -1141,49 +1096,21 @@ function modTagFor(moduleId, student) {
     if (!n) return null;
     const gs = D.getGroupSettings(student.group) || {};
     const act = (gs.activeModuleIds && gs.activeModuleIds.length) ? gs.activeModuleIds : (gs.activeModuleId ? [gs.activeModuleId] : []);
-    /* ⭕ 29-sep-2026 · A1/A2 no tienen orden de módulos: el chip dice el TEMA (emoji + 1.ª parte del nombre), nunca “M#”. Pre-A1 sigue con número. */
-    let label = 'M' + n;
-    if (student.level === 'a1' || student.level === 'a2') {
-      const m = (D.MODULE_CATALOG[student.level] || []).find(x => x.id === moduleId);
-      if (m) label = ((m.emoji ? m.emoji + ' ' : '') + String(m.name || '').split(/,|&| - /)[0].trim()).trim() || label;
-    }
-    return { n, label, review: act.length > 0 && !act.includes(moduleId) };
+    return { n, review: act.length > 0 && !act.includes(moduleId) };
   } catch (e) { return null; }
 }
 function ModChip({ student, moduleId, onlyReview }) {
   const t = modTagFor(moduleId, student);
   if (!t || (onlyReview && !t.review)) return null;
   return t.review
-    ? <span style={{display:'inline-flex', alignItems:'center', gap:3, fontSize:10.5, fontWeight:800, color:'#6B4200', background:'#FFE9B8', border:'1px solid #EFC46A', borderRadius:9, padding:'1px 7px', marginLeft:6, verticalAlign:'middle', whiteSpace:'nowrap'}}>{t.label} · repaso</span>
-    : <span style={{display:'inline-flex', alignItems:'center', fontSize:10.5, fontWeight:800, color:'#1B3B6F', background:'#E4EDFB', border:'1px solid #C5D6F2', borderRadius:9, padding:'1px 7px', marginLeft:6, verticalAlign:'middle', whiteSpace:'nowrap'}}>{t.label}</span>;
+    ? <span style={{display:'inline-flex', alignItems:'center', gap:3, fontSize:10.5, fontWeight:800, color:'#6B4200', background:'#FFE9B8', border:'1px solid #EFC46A', borderRadius:9, padding:'1px 7px', marginLeft:6, verticalAlign:'middle', whiteSpace:'nowrap'}}>M{t.n} · repaso</span>
+    : <span style={{display:'inline-flex', alignItems:'center', fontSize:10.5, fontWeight:800, color:'#1B3B6F', background:'#E4EDFB', border:'1px solid #C5D6F2', borderRadius:9, padding:'1px 7px', marginLeft:6, verticalAlign:'middle', whiteSpace:'nowrap'}}>M{t.n}</span>;
 }
-function linkFor(a, mod, studentId, _dep) {
+function linkFor(a, mod, studentId) {
   // a.url = la URL real del material en GitHub Pages (se configura por actividad
   // al importar el catálogo). Sin url, el material aún NO está disponible: no
   // generamos enlace para no mandar al alumno a una página inexistente (404).
   if (!a.url) return null;
-  // 🔒 CANDADO-NOTA-V1: TODOS los accesos respetan el candado secuencial por nota.
-  // Bloqueada → enlace '#jlock:<mensaje>' (no navega; muestra el aviso). Abierta
-  // con previa → jucum_prev para que el material lo re-verifique (enlaces guardados).
-  let lockQ = '';
-  try {
-    const D = window.JUCUM_DATA;
-    const stu0 = (D.STUDENTS || []).find(s => s.id === studentId);
-    const lk = (stu0 && D.getActivityLock) ? D.getActivityLock(stu0, mod, a) : null;
-    /* 🔓 CANDADO-CON-SALIDA-V1 (30-oct-2026): el candado lleva el enlace de lo que falta (siguiendo la cadena
-     * si eso también está cerrado) → botón «Abrir … →» en la tarjeta y en el aviso. Caso Levi: el resumen que
-     * faltaba no estaba en su lista y no tenía cómo llegar. */
-    if (lk && lk.locked) {
-      let go = '';
-      try {
-        const tg = lk.prev && lk.prev.url ? lk.prev : null; const dep = _dep || 0;
-        if (tg && dep < 6) { const ph = linkFor(tg, mod, studentId, dep + 1); const g2 = isLockHref(ph) ? lockGoOf(ph) : (ph ? { url: ph, name: tg.name || '' } : null); if (g2 && g2.url) go = '#jgo:' + encodeURIComponent(g2.url) + '#jgn:' + encodeURIComponent(g2.name || ''); }
-      } catch (e) {}
-      return '#jlock:' + encodeURIComponent(lk.msg || 'Primero completa la actividad anterior') + go + '#jan:' + encodeURIComponent((a.name || '') + (a.type === 'grammar' && a.group && /^T\d+/.test(a.group) && !/\bT\d+\b/.test(a.name || '') ? ' ' + a.group.match(/^T\d+/)[0] : ''));
-    }
-    if (lk && lk.sum) lockQ += `&jucum_sum=${encodeURIComponent(lk.sum.id)}&jucum_sumname=${encodeURIComponent(lk.sum.name || '')}`;
-    if (lk && lk.prev) lockQ += `&jucum_prev=${encodeURIComponent(lk.prev.id)}&jucum_prevname=${encodeURIComponent(lk.prev.name || '')}&jucum_prevlow=${lk.low ? 1 : 0}&jucum_pass=${lk.need}`;
-  } catch (e) {}
   const base = a.url;
   // Adjunta la identidad para que jucum-connect.js registre el progreso
   const sep = base.includes('?') ? '&' : '?';
@@ -1194,56 +1121,9 @@ function linkFor(a, mod, studentId, _dep) {
     const gs = stu && window.JUCUM_DATA.getGroupSettings(stu.group);
     if (gs && gs.unlockMode === 'free') free = '&jucum_free=1';
     const t = modTagFor(mod.id, stu);
-    if (t) free += '&jucum_mtag=' + encodeURIComponent(t.label + (t.review ? ' · repaso' : ''));
+    if (t) free += '&jucum_mtag=' + encodeURIComponent('M' + t.n + (t.review ? ' · repaso' : ''));
   } catch (e) {}
-  return `${base}${sep}jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent(mod.id)}&jucum_act=${encodeURIComponent(a.id)}&jucum_kind=${encodeURIComponent(a.type||'')}${free}${lockQ}`;
-}
-function isLockHref(h) { return typeof h === 'string' && h.indexOf('#jlock:') === 0; }
-function lockParts(h) { const o = { msg: 'Primero completa la actividad anterior' }; try { const ps = String(h || '').slice(7).split('#j'); o.msg = decodeURIComponent(ps[0]); ps.slice(1).forEach(p => { const k = p.slice(0, 2), v = decodeURIComponent(p.slice(3)); if (k === 'go') o.url = v; else if (k === 'gn') o.name = v; else if (k === 'an') o.an = v; }); } catch (e) {} return o; }
-function lockMsgOf(h) { return lockParts(h).msg; }
-function lockGoOf(h) { const p = lockParts(h); return p.url ? { url: p.url, name: p.name || '' } : null; }
-/* P6b · TRABADO-AVISO-V1 (30-oct): si el alumno toca 2 veces el MISMO candado en el día, se le avisa al teacher
- * (notificación con título fijo, marcada como leída para no encender la campanita del alumno). */
-function lockStuck(h) {
-  try {
-    const u = JSON.parse(localStorage.getItem('jucum_user') || 'null'); const sid = u && u.studentId; if (!sid || !window.JUCUM_NOTIF) return;
-    const p = lockParts(h); const an = p.an || p.msg; const day = window.JUCUM_DAY ? window.JUCUM_DAY.today() : '';
-    const k = 'jucum_stuck_v1'; let m = {}; try { m = JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch (e) {}
-    if (m.d !== day || m.u !== sid) m = { d: day, u: sid, n: {}, sent: {} };
-    m.n[an] = (m.n[an] || 0) + 1;
-    if (m.n[an] >= 2 && !m.sent[an]) { m.sent[an] = 1; window.JUCUM_NOTIF.pushNotif(sid, { type: 'stuck', title: '🔒 Le avisamos a tu teacher', body: 'Quiso abrir «' + an + '» y está cerrado: ' + p.msg + '.', link: 'practice', read: true }); }
-    localStorage.setItem(k, JSON.stringify(m));
-  } catch (e) {}
-}
-function showLockToast(msg, go) {
-  try {
-    const old = document.getElementById('jec-lock-toast'); if (old) old.remove();
-    const t = document.createElement('div'); t.id = 'jec-lock-toast';
-    t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:100000;background:#1B3B6F;color:#fff;font:700 14px/1.4 Nunito,system-ui,sans-serif;padding:12px 18px;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:min(92vw,440px);text-align:center;';
-    t.textContent = '🔒 ' + msg;
-    if (go && go.url) {
-      const b = document.createElement('button'); b.type = 'button';
-      b.style.cssText = 'display:block;margin:9px auto 0;border:none;background:#fff;color:#1B3B6F;font:800 13.5px Nunito,system-ui,sans-serif;border-radius:10px;padding:8px 14px;cursor:pointer;min-height:40px;';
-      b.textContent = 'Abrir ' + (go.name ? '«' + go.name + '»' : 'lo que falta') + ' →';
-      b.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); try { t.remove(); } catch (e) {} openMat(go.url); };
-      t.appendChild(b);
-    }
-    document.body.appendChild(t);
-    setTimeout(() => { try { t.remove(); } catch (e) {} }, go && go.url ? 8000 : 4200);
-  } catch (e) {}
-}
-if (!window.__JEC_LOCK_CLICK) {
-  window.__JEC_LOCK_CLICK = true;
-  document.addEventListener('click', e => {
-    const gb = e.target && e.target.closest ? e.target.closest('[data-jgo]') : null;
-    if (gb) { e.preventDefault(); e.stopPropagation(); openMat(gb.getAttribute('data-jgo')); return; }
-    const el = e.target && e.target.closest ? e.target.closest('a[href^="#jlock:"]') : null;
-    if (!el) return;
-    e.preventDefault(); e.stopPropagation();
-    const h = el.getAttribute('href');
-    lockStuck(h);
-    showLockToast(lockMsgOf(h), lockGoOf(h));
-  }, true);
+  return `${base}${sep}jucum_uid=${encodeURIComponent(studentId)}&jucum_mod=${encodeURIComponent(mod.id)}&jucum_act=${encodeURIComponent(a.id)}&jucum_kind=${encodeURIComponent(a.type||'')}${free}`;
 }
 
 /* Abrir un material desde el panel. Pasa por el aviso de "nota en espera"
@@ -1252,7 +1132,6 @@ if (!window.__JEC_LOCK_CLICK) {
  * guardián cargado, navega igual: nunca bloquea. */
 function openMat(href) {
   if (!href) return;
-  if (isLockHref(href)) { lockStuck(href); return showLockToast(lockMsgOf(href), lockGoOf(href)); }
   if (window.JUCUM_GATE) return window.JUCUM_GATE.go(href);
   window.location.href = href;
 }
@@ -1540,29 +1419,22 @@ const LG_AVA = {1:{a:58,e:30,b:60,bg:'linear-gradient(#F4B400,#D49A00)',ab:'#C99
 const lgIni = (s) => (s.fullName || '?').split(' ').map(w => w[0]).slice(0,2).join('');
 
 /* Fusión Racha (protagonista) + Meta de hoy (secundaria) */
-function DayCard({ student, streak: streakRaw, todayMin, target }) {
+function DayCard({ student, streak, todayMin, target }) {
   const D = window.JUCUM_DATA;
-  const stLoad = streakRaw == null && !!window.JUCUM_STREAK;   // RACHA-REAL-V1: sin días de la nube = «cargando», nunca un 0 falso
-  const streak = streakRaw || 0;
   const best = (student && D.getBestStreak) ? D.getBestStreak(student) : 0;
   const toBeat = best > streak ? best - streak : 0;
   const flame = streak>=7?'🔥🔥🔥':streak>=3?'🔥🔥':streak>0?'🔥':'❄️';
   const met = todayMin>=target;
   const pct = Math.min(100, Math.round(todayMin/Math.max(1,target)*100));
   const tip = streak>=7?'¡Imparable! Sigue así.':streak>=3?'¡Vas muy bien! No la rompas hoy.':streak>0?'Construye tu hábito día a día.':'Practica hoy para empezar tu racha.';
-  const si = student && student.streakInfo;   // RACHA-AMABLE-V1
   return (
     <div className="scard" style={{borderTop:'4px solid #F4B400', display:'flex', flexDirection:'column'}}>
       <div style={{textAlign:'center', fontSize:10.5, fontWeight:800, letterSpacing:'.08em', textTransform:'uppercase', color:'#C28A00'}}>🔥 Tu constancia</div>
-      <div style={{fontSize:30, textAlign:'center', lineHeight:1, marginTop:4}}>{stLoad ? '🔥' : flame}</div>
-      <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize:52, color:'#E58A00', textAlign:'center', lineHeight:.95}}>{stLoad ? '…' : streak}</div>
-      <div style={{textAlign:'center', fontWeight:800, color:'#B26A00', fontSize:13, marginTop:2}}>{stLoad ? 'días seguidos' : streak===1?'día seguido':'días seguidos'}</div>
-      <div style={{textAlign:'center', fontSize:12, fontWeight:700, color:'var(--text-soft,#6B6B6B)', marginTop:8}}>{stLoad ? 'Cargando tu racha…' : tip}</div>
-      {si && <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'center',marginTop:9}}>
-        <span style={{fontSize:11.5,fontWeight:800,borderRadius:12,padding:'4px 10px',background:si.shieldLeft?'#E3EEFB':'#F1F3F8',color:si.shieldLeft?'#0D47A1':'#6B6B6B'}}>🛡 {si.shieldLeft ? 'Escudo disponible' : 'Escudo usado esta semana'}</span>
-        {si.isSunday && <span style={{fontSize:11.5,fontWeight:800,borderRadius:12,padding:'4px 10px',background:'#E8F5E9',color:'#1B5E20'}}>😴 Hoy es domingo libre</span>}
-      </div>}
-      {best>0 && !stLoad && <div style={{display:'flex',alignItems:'center',gap:9,background:'#FFF8EC',border:'1px solid #F3DFB6',borderRadius:11,padding:'8px 11px',marginTop:12}}>
+      <div style={{fontSize:30, textAlign:'center', lineHeight:1, marginTop:4}}>{flame}</div>
+      <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize:52, color:'#E58A00', textAlign:'center', lineHeight:.95}}>{streak}</div>
+      <div style={{textAlign:'center', fontWeight:800, color:'#B26A00', fontSize:13, marginTop:2}}>{streak===1?'día seguido':'días seguidos'}</div>
+      <div style={{textAlign:'center', fontSize:12, fontWeight:700, color:'var(--text-soft,#6B6B6B)', marginTop:8}}>{tip}</div>
+      {best>0 && <div style={{display:'flex',alignItems:'center',gap:9,background:'#FFF8EC',border:'1px solid #F3DFB6',borderRadius:11,padding:'8px 11px',marginTop:12}}>
         <span style={{fontSize:19}}>🏆</span>
         <div style={{flex:1,textAlign:'left'}}><div style={{fontSize:12,fontWeight:800,color:'#9c5d00'}}>Tu récord: {best} {best===1?'día':'días'}</div>
         <div style={{fontSize:11,color:'#B26A00',fontWeight:700}}>{toBeat>0?`Te faltan ${toBeat} para superarlo · ¡tú puedes!`:'¡Estás en tu mejor racha! 🎉'}</div></div>
@@ -1572,7 +1444,7 @@ function DayCard({ student, streak: streakRaw, todayMin, target }) {
           <span style={{color:'#1B5E20'}}>🎯 Meta de hoy</span><span style={{color:'#1B5E20'}}>{todayMin} / {target} min</span>
         </div>
         <div style={{height:11,background:'#E9EFE9',borderRadius:7,overflow:'hidden'}}><span style={{display:'block',height:'100%',width:pct+'%',background:'linear-gradient(90deg,#43C463,#2EA84B)',borderRadius:7}}></span></div>
-        <div style={{fontSize:11,fontWeight:700,color:'var(--text-soft,#6B6B6B)',marginTop:5}}>{met?<>🎉 <b>¡Meta cumplida!</b> {si ? 'Hoy cuenta para tu racha.' : 'Sigue si quieres más XP.'}</>:<>Te faltan <b>{target-todayMin} min</b> para tu meta{si && !si.isSunday ? ' y para que hoy cuente en tu racha' : ''}.</>}</div>
+        <div style={{fontSize:11,fontWeight:700,color:'var(--text-soft,#6B6B6B)',marginTop:5}}>{met?<>🎉 <b>¡Meta cumplida!</b> Sigue si quieres más XP.</>:<>Te faltan <b>{target-todayMin} min</b> para tu meta.</>}</div>
       </div>
     </div>
   );
@@ -1790,11 +1662,7 @@ function ModuleRoute({ student, selectedId, onSelect }) {
   route.forEach((x, i) => { if (!x.placeholder && x.active) lastCur = i; });
   if (lastCur < 0) route.forEach((x, i) => { if (x.state === 'cur') lastCur = i; });
   if (lastCur < 0) lastCur = 0;
-  /* ⭕ 29-sep-2026 · “Aquí vas” = el módulo de clase del grupo (último prendido o 📌 fijado por el profesor) */
-  try { const cls = window.JUCUM_DATA.getClassModuleId && window.JUCUM_DATA.getClassModuleId(student.group); const ci = route.findIndex(x => !x.placeholder && x.active && x.mod.id === cls); if (ci >= 0) lastCur = ci; } catch (e) {}
   const useEmoji = student.level === 'a1' || student.level === 'a2';
-  /* ⭕ 29-sep-2026 · A1/A2 = RUEDA del nivel (Espejo v2, opción B elegida por la usuaria): se entra por cualquier módulo, sin inicio ni final → prohibido volver a M1/M2/“Módulo N de M” o candados de orden aquí. */
-  if (useEmoji) return <ModuleWheel student={student} route={route} lastCur={lastCur} selectedId={selectedId} onSelect={onSelect} />;
   const BDG = window.JUCUM_BADGES;
   const badges = (BDG && BDG.enabledFor(student)) ? BDG.list(student) : [];
   const hasBadge = (id) => badges.some(b => b.mod.id === id && b.earned);
@@ -1826,79 +1694,6 @@ function ModuleRoute({ student, selectedId, onSelect }) {
             </button>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-/* ⭕ Rueda del nivel (A1/A2): cada módulo es un tramo del anillo; se completa el nivel al cerrar el círculo */
-function ModuleWheel({ student, route, lastCur, selectedId, onSelect }) {
-  const BDG = window.JUCUM_BADGES;
-  const badges = (BDG && BDG.enabledFor(student)) ? BDG.list(student) : [];
-  const badgeOf = (id) => badges.find(b => b.mod.id === id && b.earned);
-  const lv = (window.JUCUM_DATA.LEVELS[student.level] || {}).code || String(student.level || '').toUpperCase();
-  const items = route.map((x, i) => {
-    const bd = badgeOf(x.mod.id);
-    const pct = x.total ? Math.round(((x.doneCount || 0) / x.total) * 100) : 0;
-    const kind = bd ? 'gold' : x.state === 'done' ? 'done' : x.placeholder ? 'soon' : x.state === 'lock' ? 'lock' : 'open';
-    return { x, i, bd, pct, kind, isCur: i === lastCur && x.state !== 'lock' };
-  });
-  /* El módulo que se cursa AHORA va siempre arriba (12 en punto) y primero en la lista; el resto sigue el giro del círculo. */
-  const st0 = items.findIndex(it => it.isCur);
-  if (st0 > 0) items.push(...items.splice(0, st0));
-  const n = items.length || 1, seg = 360 / n, gap = n > 1 ? 2 : 0;
-  const stops = [];
-  items.forEach((it, i) => {
-    const a0 = i * seg, a1 = a0 + seg - gap;
-    if (it.kind === 'gold') stops.push(`#E0AE1E ${a0}deg ${a1}deg`);
-    else if (it.kind === 'done') stops.push(`#2EA84B ${a0}deg ${a1}deg`);
-    else if (it.kind === 'open') { const m = a0 + (a1 - a0) * it.pct / 100; stops.push(`#2EA84B ${a0}deg ${m}deg`, `#D6E4FA ${m}deg ${a1}deg`); }
-    else stops.push(`#E6EBF2 ${a0}deg ${a1}deg`);
-    if (gap) stops.push(`#fff ${a1}deg ${a0 + seg}deg`);
-  });
-  const got = items.filter(it => it.kind === 'gold' || it.kind === 'done').length;
-  const W = 200, R = 74, ND = n > 6 ? 40 : 48;
-  const faceBg = (it) => it.kind === 'gold' ? 'radial-gradient(circle at 35% 30%,#FFF0B8,#E0AE1E 60%,#B8860B)' : it.kind === 'done' ? '#E8F5E9' : (it.kind === 'lock' || it.kind === 'soon') ? '#F4F6F9' : '#fff';
-  const faceBd = (it) => it.isCur ? '3px solid #1F3A8A' : it.kind === 'gold' ? '3px solid #A67C00' : it.kind === 'done' ? '3px solid #2EA84B' : (it.kind === 'lock' || it.kind === 'soon') ? '3px dashed #C3CCDA' : '3px solid #C5D6F2';
-  const status = (it) => it.kind === 'gold' ? <span style={{color:'#9A7400'}}>🏅 Conseguido{it.bd.score != null ? ' · ' + it.bd.score : ''}</span>
-    : it.kind === 'done' ? <span style={{color:'#1E7B3A'}}>✓ Completado</span>
-    : it.kind === 'soon' ? <span style={{color:'#8A94A6'}}>Próximamente</span>
-    : it.kind === 'lock' ? <span style={{color:'#8A94A6'}}>Por conseguir</span>
-    : <span style={{color:'#1E9E45'}}>{it.isCur ? 'Aquí vas · ' : ''}{it.pct}%</span>;
-  return (
-    <div style={{background:'#fff', border:'1px solid var(--border)', borderRadius:16, padding:'14px 14px 16px', marginTop:4, display:'flex', flexDirection:'column', gap:10}}>
-      <div style={{fontSize:11, fontWeight:800, letterSpacing:'.06em', textTransform:'uppercase', color:'var(--text-mute,#A8A8A8)'}}>⭕ Tu nivel {lv} · cierra el círculo · toca un módulo para ver su contenido</div>
-      <div style={{display:'flex', gap:22, alignItems:'center', flexWrap:'wrap'}}>
-        <div style={{position:'relative', width:W, height:W, flex:'none', margin:'0 auto'}}>
-          <div style={{position:'absolute', inset:26, borderRadius:'50%', background:`conic-gradient(${stops.join(',')})`, WebkitMask:'radial-gradient(circle,transparent 58%,#000 59%)', mask:'radial-gradient(circle,transparent 58%,#000 59%)'}}></div>
-          <div style={{position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', textAlign:'center', pointerEvents:'none'}}>
-            <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:28, color:'#0D1B5A', lineHeight:1}}>{got}/{items.length}</b>
-            <span style={{fontSize:11, fontWeight:800, color:'#6B7486'}}>módulos</span>
-          </div>
-          {items.map((it, i) => {
-            const a = (i * seg + seg / 2) * Math.PI / 180;
-            const sel = it.x.mod.id === selectedId;
-            return (
-              <button key={it.x.mod.id} type="button" onClick={() => onSelect(it.x.mod.id)} title={it.x.mod.name} style={{position:'absolute', left:W / 2 + R * Math.sin(a) - ND / 2, top:W / 2 - R * Math.cos(a) - ND / 2, width:ND, height:ND, borderRadius:'50%', background:faceBg(it), border:faceBd(it), boxShadow: it.isCur ? '0 0 0 4px #F9DDB8' : 'none', outline: sel ? '3px solid #64B5F6' : 'none', outlineOffset:3, display:'flex', alignItems:'center', justifyContent:'center', fontSize: ND > 44 ? 20 : 17, cursor:'pointer', padding:0, fontFamily:'inherit'}}>
-                <span style={{filter:(it.kind === 'lock' || it.kind === 'soon') ? 'grayscale(1)' : 'none', opacity:(it.kind === 'lock' || it.kind === 'soon') ? .55 : 1}}>{it.x.mod.emoji || '📦'}</span>
-                {it.x.hasReview && <span title="Tienes un repaso pendiente aquí" style={{position:'absolute', top:-6, right:-6, width:17, height:17, borderRadius:'50%', background:'#5B3FA0', color:'#fff', fontSize:9, display:'flex', alignItems:'center', justifyContent:'center', border:'2px solid #fff'}}>🔁</span>}
-              </button>
-            );
-          })}
-        </div>
-        <div style={{flex:1, minWidth:230, display:'flex', flexDirection:'column', gap:6}}>
-          {items.map(it => {
-            const sel = it.x.mod.id === selectedId;
-            const dot = it.kind === 'gold' ? '#E0AE1E' : (it.kind === 'done' || it.kind === 'open') ? '#2EA84B' : '#D3DAE5';
-            return (
-              <button key={it.x.mod.id} type="button" onClick={() => onSelect(it.x.mod.id)} style={{display:'flex', alignItems:'center', gap:10, padding:'9px 12px', minHeight:44, borderRadius:12, border:`1.5px solid ${sel ? '#64B5F6' : '#EEF1F5'}`, background:sel ? '#F2F8FF' : '#FAFBFD', cursor:'pointer', fontFamily:'inherit', textAlign:'left', fontSize:13, fontWeight:800, color:'#33415C'}}>
-                <span style={{width:12, height:12, borderRadius:'50%', background:dot, flex:'none'}}></span>
-                <span style={{flex:1, minWidth:0}}>{it.x.mod.emoji || '📦'} {it.x.mod.name}</span>
-                <span style={{fontSize:12, fontWeight:800, whiteSpace:'nowrap', flex:'none'}}>{status(it)}</span>
-              </button>
-            );
-          })}
-        </div>
       </div>
     </div>
   );
@@ -2004,55 +1799,20 @@ function PracHead({ emoji, title, color, tint, line }) {
 }
 
 /* ════════ Vista "Mi práctica" — ruta + temas + repaso + por mejorar ════════ */
-function NeuroCoach({ student, defaultOpen, startTopic }) {
-  const [open, setOpen] = React.useState(!!defaultOpen || startTopic != null);
-  const [topic, setTopic] = React.useState(startTopic != null ? startTopic : null);
-  /* 🎯 El mínimo para aprobar NO es 75% en todos los niveles (Pre-A1 75 · A1 78 ·
-   * A2 85; manda la nube). Decirle 75% al alumno hacía que un 80% en A2 se sintiera un error de
+function NeuroCoach({ student }) {
+  const [open, setOpen] = React.useState(false);
+  const [topic, setTopic] = React.useState(null);
+  /* 🎯 El mínimo para aprobar NO es 75% en todos los niveles (Pre-A1 73 · A1 78 ·
+   * A2 85). Decirle 75% al alumno hacía que un 80% en A2 se sintiera un error de
    * la plataforma: «la hice y no me sale terminada». (22-ago-2026) */
   const thrN = (() => { try { return window.JUCUM_DATA.passThreshold(student.level, student.group); } catch (e) { return 75; } })();
-  /* ⚡ XP-EXPLICA-V1 (23-oct-2026) · “Practico 40 min y mi XP no sube” (caso Valentino). La usuaria
-   * decidió NO cambiar el XP: solo explicarlo. Lo que el alumno YA cobró esta semana sale de las
-   * mismas reglas de data.js (activityEarnedXP = 1 vez por material · weeklyReEarnXP = 1 vez por
-   * material por SEMANA vía __JEC_WEEKS). Solo lee. El chip ⚡ de NeuroHoy abre este tema (startTopic 0). */
-  const mixOn = !!(window.JUCUM_MIX && window.JUCUM_MIX.enabledFor && window.JUCUM_MIX.enabledFor(student));
-  const xpWeek = (() => {
-    try {
-      const D = window.JUCUM_DATA, dayOf = (ms) => new Date(ms - PERU_MS).toISOString().slice(0, 10);
-      const t0 = Date.parse(peruDayKey() + 'T12:00:00Z'), wd = (new Date(t0).getUTCDay() + 6) % 7;
-      const wk = ((window.__JEC_WEEKS || {})[student.id] || {})[dayOf(t0 - wd * 864e5)] || {};
-      const done = (D.getStudentProgress(student.id) || {}).completed || {}, names = [];
-      Object.keys(wk).forEach(key => {
-        const e = done[key]; if (!e) return;
-        const [mId, aId] = key.split(':'); let a = null;
-        Object.keys(D.MODULE_CATALOG || {}).forEach(l => (D.MODULE_CATALOG[l] || []).forEach(m => { if (!a && m.id === mId) a = (m.activities || []).find(x => x.id === aId) || null; }));
-        if (!a || a.type === 'story' || a.type === 'dialog') return;
-        if (a.type !== 'summary' && a.type !== 'quizlet' && !D.entryPassed(e, student.level, student.group)) return;
-        const u = String(a.url || ''), t = String(a.name || '').match(/\bT\d+[a-z]?\b/i);
-        const k = /identify\.html/i.test(u) ? 'Identify' : /transform\.html/i.test(u) ? 'Transform' : /fill\.html/i.test(u) ? 'Fill in' : '';
-        const n = (t && k) ? t[0] + ' · ' + k : ({ reading: 'Lectura', listening: 'Listening', quizlet: 'Quizlet', summary: 'Resumen' })[a.type] || String(a.name || '').split('·')[0].trim().slice(0, 24);
-        if (n && !names.includes(n)) names.push(n);
-      });
-      if (!names.length) return null;
-      const nx = new Date(t0 + (7 - wd) * 864e5), s = names.length > 3 ? names.slice(0, 2) : names, list = [];
-      s.forEach((x, i) => { if (i) list.push(i === s.length - 1 && names.length <= 3 ? ' y ' : ', '); list.push(<b key={i}>{x}</b>); });
-      if (names.length > 3) list.push(' y ' + (names.length - 2) + ' más');
-      return { list, one: names.length === 1, next: nx.getUTCDate() + ' ' + ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'][nx.getUTCMonth()] };
-    } catch (e) { return null; }
-  })();
   const QA = [
-    { q:'⚡ ¿Cómo subo mi XP?', a:<span>
-      {xpWeek && <span style={{display:'block', background:'#FFF8E1', border:'1.5px dashed #E9C45A', borderRadius:10, padding:'8px 11px', marginBottom:8, color:'#5A3E00'}}>📌 Esta semana ya ganaste el XP de {xpWeek.list}. {xpWeek.one ? 'Repetirla' : 'Repetirlas'} entrena tu memoria, y {xpWeek.one ? 'vuelve' : 'vuelven'} a darte XP desde el <b>lunes {xpWeek.next}</b>.</span>}
-      <span style={{display:'block'}}>✅ Cada práctica <b>nueva</b> te da XP <b>una vez</b>: si la apruebas (≥{thrN}%), mientras mejor tu nota, más XP (si no, +5). Las <b>stories</b> dan XP por tiempo de lectura (10 min +5 · 20 min +10 · 30 min +15).</span>
-      <span style={{display:'block', marginTop:6}}>🔁 <b>Repetir</b> una práctica te da la mitad de su XP <b>una vez por semana</b>. Si la repites otra vez esa semana, solo suma si mejoras tu nota.</span>
-      {mixOn && <span style={{display:'block', marginTop:6}}>🧠 En las <b>rondas con Neuro</b> cada respuesta te da XP <b>mientras esa práctica no esté terminada</b>: <b>+2</b> si aciertas y <b>+1</b> por intentarlo (también en tu caja de errores). El repaso del resumen y el vocabulario dan <b>+1</b> por acierto. Cuando la práctica llega al 100 % recibes además su XP de siempre. Tope: 80 XP por día en las rondas.</span>}
-      <span style={{display:'block', marginTop:6}}>🔥 Tu <b>racha</b>: cada día que llegas a tu <b>meta de minutos</b> te da XP — <b>+10</b> los días 1 y 2, <b>+20</b> del 3 al 6 y <b>+30</b> desde el 7.º — y ese XP <b>ya no se pierde</b>. El domingo es libre y tienes <b>1 escudo 🛡 por semana</b> que cubre un día sin práctica. También suman tus medallas 🏅, tus tareas y tu participación en clase. ¡Mientras más constante, más XP! 💪</span>
-    </span> },
+    { q:'⚡ ¿Cómo subo mi XP?', a:<span>Cada práctica que <b>apruebas (≥{thrN}%)</b> te da XP. Las <b>stories</b> dan XP por tiempo de lectura (10 min +5 · 20 min +10 · 30 min +15). Tu <b>racha</b> también suma: <b>+30 XP por cada día seguido</b> (hasta 14). ¡Mientras más constante, más XP! 💪</span> },
     { q:'📚 ¿Cómo funcionan las prácticas?', a:<span>Se abren <b>en orden</b>: completa una para desbloquear la siguiente. Lee o escucha <b>sin traducir</b>, responde, y si fallas traduce <b>solo esa parte</b>. Vuelve al día siguiente para afianzar lo aprendido ✨</span> },
-    { q:'🔁 ¿Por qué me vuelve a salir algo que ya hice?', a:<span>¡No es un error! Es el <b>repaso espaciado</b>: tu cerebro guarda mejor lo que repasa después de unos días de descanso. Cuando veas 🔁 en un módulo, esa práctica <b>toca repasarla</b> — hacerla de nuevo te da XP (una vez por semana) y fija lo aprendido para siempre 🧠</span> },
+    { q:'🔁 ¿Por qué me vuelve a salir algo que ya hice?', a:<span>¡No es un error! Es el <b>repaso espaciado</b>: tu cerebro guarda mejor lo que repasa después de unos días de descanso. Cuando veas 🔁 en un módulo, esa práctica <b>toca repasarla</b> — hacerla de nuevo te da XP y fija lo aprendido para siempre 🧠</span> },
     { q:'📊 ¿Qué significan los porcentajes?', a:<span>Cada material muestra <b>tu mejor nota</b> en él. En tu nivel necesitas <b>≥{thrN}%</b> para aprobarlo y desbloquear lo siguiente (si sacas menos queda con ↻, o sea «puedes mejorarla»). Y el % del <b>módulo</b> en tu ruta es cuánto llevas completado de él. Si repites y subes tu nota, ¡el porcentaje sube contigo!</span> },
     { q:'⏳ Repetí la práctica y mi nota no cambió', a:<span>Es a propósito: en el <b>mismo ejercicio</b> tu nota nueva se guarda <b>media hora después</b> del intento anterior, para que muestre lo que aprendiste y no lo que acabas de memorizar. ¡Tu práctica, tu tiempo, tu racha y tu XP <b>sí</b> se registran al toque! Al abrir el material te sale una <b>cuenta regresiva</b>: cuando llegue a cero, repite y tu nota sube. Mientras tanto, avanza con otra actividad 😉</span> },
-    { q:'🏁 Ya terminé todo, ¿y ahora?', a:<span>¡Bravo! Pero ojo: terminar todo en un día <b>no termina tu camino</b> 😉 Cada día tendrás tu <b>práctica diaria</b> y <b>refuerzos ✨</b> (repasar lo aprobado): dan <b>XP extra</b> (una vez por semana cada material) y mantienen tu racha viva. El que practica a diario le gana al que hace todo de golpe 🔥</span> },
+    { q:'🏁 Ya terminé todo, ¿y ahora?', a:<span>¡Bravo! Pero ojo: terminar todo en un día <b>no termina tu camino</b> 😉 Cada día tendrás tu <b>práctica diaria</b> y <b>refuerzos ✨</b> (repasar lo aprobado): dan <b>XP extra</b> y mantienen tu racha viva. El que practica a diario le gana al que hace todo de golpe 🔥</span> },
     { q:'💛 ¿Cómo hago que Neuro se sienta mejor?', a:<span>¡Fácil! Practica <b>un poquito cada día</b>. Mi energía sube con tu constancia y subo de etapa (¡hasta <b>imparable</b> 🚀!). Si dejas de practicar pierdo energía y tú pierdes XP… ¡no me dejes solito! 🧠</span> },
   ];
   return (
@@ -2099,7 +1859,7 @@ function StudentPractice({ student, settings, onBack }) {
   const sel = route.find(x => x.mod.id === selectedId) || route.find(x => x.state === 'cur') || route[0];
   const due = getDueReviews(student) || [];
   const improve = D.getActivitiesToImprove(student) || [];
-  const showReview = !(window.JUCUM_MIX && window.JUCUM_MIX.enabledFor && window.JUCUM_MIX.enabledFor(student)) && (due.length > 0 || !!(D.getLastReviewResult && D.getLastReviewResult(student)));
+  const showReview = due.length > 0 || !!(D.getLastReviewResult && D.getLastReviewResult(student));
   const targetMin = settings.dailyTargetMin || 15;
   const todayMin = progress.todayMinutes || 0;
   const metaMet = todayMin >= targetMin;
@@ -2114,14 +1874,29 @@ function StudentPractice({ student, settings, onBack }) {
 
   const selMod = sel ? sel.mod : null;
 
-  const routeBlock = (<>
+  return (
+    <main>
+      <div style={{display:'flex', alignItems:'center', gap:14, marginBottom:4}}>
+        <button className="back-btn" onClick={onBack} style={{marginBottom:0}}>← Mi panel</button>
+        <div style={{flex:1}}>
+          <h1 style={{fontFamily:"'Fredoka',sans-serif", fontSize:24, margin:0}}>Mi práctica</h1>
+          <div style={{fontSize:12.5, color:'var(--text-soft)', fontWeight:700}}>Sigue tu ruta de módulos</div>
+        </div>
+        <MiniRing done={todayMin} target={targetMin} />
+      </div>
+
+      <MetaSmartMessage metaMet={metaMet} hasPending={hasPending} minsLeft={Math.max(0, targetMin - todayMin)} onReview={pastReview ? () => goReviewModule(pastReview.moduleId) : null} />
+
+      <NeuroCoach student={student} />
+
       {/* ── 1) Tu ruta de módulos ── */}
       <div style={{marginTop:16}}>
         <ModuleRoute student={student} selectedId={selectedId} onSelect={setSelectedId} />
       </div>
 
-  </>);
-  const extrasBlock = (<>
+      {/* ── 2) Tu práctica de hoy ── */}
+      <PracHead emoji="🎯" title="Tu práctica de hoy" color="#1B3B6F" tint="#E4EDFB" line="#D2E0F5" />
+      <div style={{marginTop:10}}><TodayPracticeCard student={student} /></div>
       {(() => {
         const F2 = window.JUCUM_EXAMFLOW;
         const solos = (F2 && F2.standaloneExams ? F2.standaloneExams(student.level) : []);
@@ -2132,8 +1907,6 @@ function StudentPractice({ student, settings, onBack }) {
         return dps.length ? <div style={{marginTop:14, display:'flex', flexDirection:'column', gap:12}}>{dps.map(dp => <DirectedPracticeCard key={dp.id} dp={dp} student={student} />)}</div> : null;
       })()}
 
-  </>);
-  const restBlock = (<>
       {/* ── 3) Tu repaso de hoy ── */}
       {showReview && (
         <>
@@ -2158,9 +1931,7 @@ function StudentPractice({ student, settings, onBack }) {
               <span style={{fontSize:24}}>🔒</span>
               <div style={{fontSize:13.5, fontWeight:700}}>{sel.placeholder
                 ? <>El módulo <b>{selMod.name}</b> aún no está disponible — llegará más adelante en tu ruta.</>
-                : (student.level === 'a1' || student.level === 'a2')
-                  ? <>El módulo <b>{selMod.name}</b> se abre cuando lo curses en clase con tu grupo. Mientras tanto, sigue con tu módulo actual.</>
-                  : <>El módulo <b>{selMod.name}</b> se abrirá cuando tu teacher lo active. Mientras tanto, sigue con tu módulo actual.</>}</div>
+                : <>El módulo <b>{selMod.name}</b> se abrirá cuando tu profesor lo active. Mientras tanto, sigue con tu módulo actual.</>}</div>
             </div>
           ) : (
             <div className="scard">
@@ -2177,42 +1948,6 @@ function StudentPractice({ student, settings, onBack }) {
 
       {/* ── 5) Refuerzo opcional — realzado si falta meta y no hay pendientes ── */}
       <RefuerzoSection student={student} highlight={!metaMet && !hasPending} />
-  </>);
-  /* 🧠 NEURO-HOY-V1 (14-oct-2026) · Pre-A1: Mi práctica = 🎯 Hoy (Conexiones de Neuro: lo del profe + caja de errores
-   * + ⭐ repasos de la semana) y 🧭 Explorar (ruta, repaso y actividades de siempre). Otros niveles: sin cambios. */
-  if (window.NeuroPractice && window.JUCUM_MIX && window.JUCUM_MIX.enabledFor(student)) {
-    return <NeuroPractice student={student} settings={settings} onBack={onBack}
-      helpers={{ linkFor, openMat, isLockHref, lockMsgOf, showLockToast, quizletGames }}
-      coach={<NeuroCoach student={student} defaultOpen />}
-      extras={<>{window.StudentRhythmNotice && <StudentRhythmNotice student={student} />}{extrasBlock}</>}
-      explore={<>{routeBlock}{restBlock}</>} />;
-  }
-
-  return (
-    <main>
-      <div style={{display:'flex', alignItems:'center', gap:14, marginBottom:4}}>
-        <button className="back-btn" onClick={onBack} style={{marginBottom:0}}>← Mi panel</button>
-        <div style={{flex:1}}>
-          <h1 style={{fontFamily:"'Fredoka',sans-serif", fontSize:24, margin:0}}>Mi práctica</h1>
-          <div style={{fontSize:12.5, color:'var(--text-soft)', fontWeight:700}}>Sigue tu ruta de módulos</div>
-        </div>
-        <MiniRing done={todayMin} target={targetMin} />
-      </div>
-
-      <MetaSmartMessage metaMet={metaMet} hasPending={hasPending} minsLeft={Math.max(0, targetMin - todayMin)} onReview={pastReview ? () => goReviewModule(pastReview.moduleId) : null} />
-
-      <NeuroCoach student={student} />
-
-      {routeBlock}
-
-      {/* ── 2) Tu práctica de hoy ── */}
-      <PracHead emoji="🎯" title="Tu práctica de hoy" color="#1B3B6F" tint="#E4EDFB" line="#D2E0F5" />
-      {window.StudentRhythmNotice && <StudentRhythmNotice student={student} />}
-      {window.DocSetLiveBanner && <div style={{marginTop:10}}><DocSetLiveBanner student={student} /></div>}
-      <div style={{marginTop:10}}><TodayPracticeCard student={student} /></div>
-      {extrasBlock}
-
-      {restBlock}
     </main>
   );
 }
@@ -2323,7 +2058,7 @@ function StudentAlertModal({ kind, student, onClose }) {
     : {
         ico: '🔥',
         title: `Tu racha de ${student.streak} día${student.streak === 1 ? '' : 's'} está en peligro`,
-        body: (student.streakInfo ? `Te faltan ${Math.ceil(student.streakInfo.left)} min de tu meta para que hoy cuente${student.streakInfo.shieldLeft ? ' (si no llegas, tu escudo 🛡 de la semana cubre hoy)' : ''}. ` : '') + 'Pasar al siguiente nivel depende de TU práctica constante, no de la suerte. Cada día que practicas te acerca a tu examen; cada día que lo dejas, retrocedes. Si quieres seguir avanzando con nosotros, no sueltes justo hoy: dedícale unos minutos y mantén el fuego encendido. 🔥',
+        body: 'Pasar al siguiente nivel depende de TU práctica constante, no de la suerte. Cada día que practicas te acerca a tu examen; cada día que lo dejas, retrocedes. Si quieres seguir avanzando con nosotros, no sueltes justo hoy: dedícale unos minutos y mantén el fuego encendido. 🔥',
         cta: '✅ No romper mi racha',
       };
   return (
@@ -2419,17 +2154,6 @@ function ExplainerBody() {
  * Cada actividad muestra su ✓ del DÍA (hora Perú): el alumno VE lo que avanzó.
  * Al completar todo aparece "¡Terminaste tu práctica de hoy!" + recomendaciones
  * (nota baja por mejorar · repaso pendiente · meta diaria / refuerzo). */
-/* 🔁 REPETIR-CON-CUENTA-V1 (31-oct-2026): nota baja → «vuelve a hacerla» con la MISMA cuenta regresiva del aviso
- * de nota en espera (JUCUM_GATE, ½ hora por ejercicio). Sin ancla en la nube: solo «vuelve a hacerla». */
-function RetryNote({ studentId, moduleId, activityId, pct }) {
-  const G = window.JUCUM_GATE; const [, tick] = React.useReducer(x => x + 1, 0);
-  React.useEffect(() => { if (G) G.load(studentId).then(tick, () => {}); }, [studentId]);
-  const left = G ? G.leftMs(moduleId, activityId) : 0;
-  React.useEffect(() => { if (left <= 0) return; const iv = setInterval(tick, 1000); return () => clearInterval(iv); }, [left > 0]);
-  if (left > 0) { const at = new Date(Date.now() + left - 5 * 3600e3); const h = at.getUTCHours(); const hh = (h % 12 || 12) + ':' + String(at.getUTCMinutes()).padStart(2, '0') + (h < 12 ? ' am' : ' pm');
-    return <span style={{color:'#92510F', fontWeight:800}}>Hecha hoy · {pct}% · 🔁 Vuelve a hacerla para subir tu nota desde las {hh} <span style={{fontVariantNumeric:'tabular-nums'}}>(en {G.fmt(left)})</span></span>; }
-  return <span style={{color:'#92510F', fontWeight:800}}>Hecha hoy · {pct}% · 🔁 ¡Ya puedes subir tu nota! Vuelve a hacerla</span>;
-}
 function TodayPracticeCard({ student }) {
   const TT = window.JUCUM_TT; if (!TT) return null;
   const D = window.JUCUM_DATA;
@@ -2475,7 +2199,6 @@ function TodayPracticeCard({ student }) {
     const links = (g.steps || []).map(s => {
       const mod = mods.find(m => m.id === s.moduleId);
       const a = mod && (mod.activities || []).find(x => x.id === s.activityId);
-      if (mod && a && a.type === 'quizlet') { const gs = quizletGames(a); const q = gs.find(x => x.key === s.quizKey) || gs[0]; return s.quizUrl || (q && q.url) || null; }
       return (mod && a) ? linkFor(a, mod, student.id) : null;
     });
     window.JUCUM_GUIDE.openOverlay(g, { links, studentName: (student.fullName || '').split(' ')[0] });
@@ -2485,7 +2208,7 @@ function TodayPracticeCard({ student }) {
       <div style={{padding:'12px 15px', display:'flex', alignItems:'center', gap:11, background: allDone ? '#E9F7EA' : '#EAF3FE', borderBottom:'1px solid ' + (allDone ? '#BFE3C3' : '#C5DEF7')}}>
         <span style={{fontSize:20}}>{allDone ? '🎉' : '🗓️'}</span>
         <div style={{flex:1, fontSize:12.8, fontWeight:700, color: allDone ? '#1B5E20' : '#1B3B6F', lineHeight:1.4}}>
-          {allDone ? '¡Terminaste tu práctica de hoy!' : (isGeneric ? 'Tu plan recomendado para hoy' : 'Lo que tu teacher te dejó para hoy')}
+          {allDone ? '¡Terminaste tu práctica de hoy!' : (isGeneric ? 'Tu plan recomendado para hoy' : 'Lo que tu profesor te dejó para hoy')}
         </div>
         {ableN > 0 && <span style={{fontSize:11.5, fontWeight:800, color: allDone ? '#fff' : '#1B5E20', background: allDone ? '#2EA84B' : '#DDF0DE', borderRadius:14, padding:'4px 10px', whiteSpace:'nowrap'}}>{doneN}/{ableN} ✓</span>}
         <span style={{fontSize:11, fontWeight:700, color: allDone ? '#4C7A50' : '#5B7BA8', whiteSpace:'nowrap', textTransform:'capitalize'}}>{dayName}</span>
@@ -2506,31 +2229,20 @@ function TodayPracticeCard({ student }) {
           const mod = mods.find(m => m.id === it.moduleId);
           const a = mod && (mod.activities || []).find(x => x.id === it.activityId);
           const href = (mod && a) ? linkFor(a, mod, student.id) : null;
-          /* 📄 Plan del teacher: Quizlet abre el juego exacto que pidió (vocabulario/traducir/ordenar) */
-          const qGame = (mod && a && a.type === 'quizlet') ? (() => { const gs = quizletGames(a); const g = gs.find(x => x.key === it.quizKey) || gs[0]; return g ? { ...g, url: it.quizUrl || g.url } : (it.quizUrl ? { key: it.quizKey, url: it.quizUrl } : null); })() : null;
-          /* 📘 RESUMEN-2-DE-2 (30-oct): parte de un tema con 2 resúmenes que aún falta y la otra ya está hecha → ámbar */
-          const partHalf = !!it.sumPart && st.st === 'todo' && !prog.completed[`${it.moduleId}:${it.activityId}`] && items.some((x, j) => j !== i && x.sumPart && x.sumGroup === it.sumGroup && x.moduleId === it.moduleId && prog.completed[`${x.moduleId}:${x.activityId}`]);
-          const tint = st.st === 'ok' ? {background:'#F2FAF3', borderColor:'#BFE3C3'} : (st.st === 'low' || partHalf) ? {background:'#FFFBF0', borderColor:'#F0DDB0'} : null;
-          const lkd = isLockHref(href) && st.st !== 'ok' && st.st !== 'low';
-          const lgo = lkd ? lockGoOf(href) : null;
-          const sub = lkd
-            ? <span style={{color:'#8A7F6A', fontWeight:800, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>🔒 {lockMsgOf(href)}{lgo && <span role="button" data-jgo={lgo.url} style={{display:'inline-flex', alignItems:'center', minHeight:34, background:'#1B3B6F', color:'#fff', borderRadius:9, padding:'5px 11px', fontSize:12, fontWeight:800, cursor:'pointer', whiteSpace:'nowrap'}}>Abrir →</span>}</span>
-            : partHalf
-            ? <span style={{color:'#92510F', fontWeight:800}}>Te falta esta parte del resumen · 8 min</span>
-            : st.st === 'ok'
+          const tint = st.st === 'ok' ? {background:'#F2FAF3', borderColor:'#BFE3C3'} : st.st === 'low' ? {background:'#FFFBF0', borderColor:'#F0DDB0'} : null;
+          const sub = st.st === 'ok'
             ? <span style={{color:'#2E7D32', fontWeight:800}}>✓ Hecha hoy{st.pct != null ? ` · ${st.pct}%` : ''} — ¡bien ahí!</span>
             : st.st === 'low'
-              ? <RetryNote studentId={student.id} moduleId={it.moduleId} activityId={it.activityId} pct={st.pct} />
-              : <span>{isGeneric ? 'Recomendado para ti' : (it.fromImport ? '📌 Según el plan de tu teacher' : 'Indicado por tu teacher')}{it.prio ? <b style={{color:'#AD1457'}}> · primero esto</b> : null}</span>;
+              ? <span style={{color:'#92510F', fontWeight:800}}>Hecha hoy · {st.pct}% — vuelve a intentarla (la nota cambia tras ½ hora)</span>
+              : <span>{isGeneric ? 'Recomendado para ti' : 'Indicado por tu profesor'}</span>;
           const inner = (<>
-            {partHalf ? <span style={{...badgeBase, borderColor:'#F0C66B', background:'linear-gradient(90deg,#FB8C00 50%,#FFE0B2 50%)', color:'transparent'}}>·</span> : badge(st)}
+            {badge(st)}
             <span className="next-ico">{typeIcon(it.type)}</span>
-            <div className="next-info"><b>{it.label}<ModChip student={student} moduleId={it.moduleId} onlyReview /></b>{it.note ? <span style={{display:'block', fontSize:12, color:'#555', fontWeight:600, lineHeight:1.4, margin:'2px 0'}}>{it.note}</span> : null}{sub}</div>
-            {(href || qGame) && !lkd && <span className="next-arr">→</span>}
+            <div className="next-info"><b>{it.label}<ModChip student={student} moduleId={it.moduleId} onlyReview /></b>{sub}</div>
+            {href && <span className="next-arr">→</span>}
           </>);
-          if (qGame) return <a key={i} className="next-card" href={qGame.url} target="_blank" rel="noopener" style={tint} onClick={() => { try { D.markActivityComplete(student.id, mod.id, a.id, null, 0, { quizlet: qGame.key }); } catch (e) {} }}>{inner}</a>;
           return href
-            ? <a key={i} className="next-card" href={href} style={lkd ? {opacity:.75} : tint}>{inner}</a>
+            ? <a key={i} className="next-card" href={href} style={tint}>{inner}</a>
             : <div key={i} className="next-card" style={{cursor:'default', ...(tint || {})}}>{inner}</div>;
         })}
       </div>
@@ -2571,7 +2283,7 @@ function StudentNoGroup({ onLogout, student }) {
           </div>
           <p style={{marginTop:12, color:'var(--text-soft)', maxWidth:460, margin:'12px auto 0', lineHeight:1.6}}>
             Tu cuenta está activa, pero todavía <b>no estás asignado/a a ningún grupo</b>.
-            Pídele a tu teacher que te agregue a tu grupo para ver tus módulos y
+            Pídele a tu profesor que te agregue a tu grupo para ver tus módulos y
             empezar a practicar. 🌱
           </p>
         </div>
