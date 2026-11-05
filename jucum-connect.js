@@ -333,17 +333,35 @@
     function peruDay() { return new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10); }
     var dayStart = peruDay();
     var activeDaySec = 0;
-    function pushDaily() {
+    /* MINUTOS-SUMAN-V1 (04-nov): los minutos de HOY de este material se SUMAN a los que la nube ya tenía (otra
+     * visita u otro equipo) y la fila nunca baja. Antes cada visita escribía solo SUS minutos: volver a abrir el
+     * material un rato borraba lo de antes y el día podía no llegar a la meta de la racha. */
+    var dayBase = null;   // minutos de hoy de este material que ya estaban en la nube ANTES de esta visita
+    function dayRow(d, v) { return { user_id: uid, day: d, module_id: modId, activity_id: actId, kind: KIND || '', minutes: v, updated_at: new Date().toISOString() }; }
+    function readDay(d, cb) {
+      sb.from('daily_sessions').select('minutes').eq('user_id', uid).eq('day', d).eq('module_id', modId).eq('activity_id', actId).maybeSingle()
+        .then(function (r) { cb(r && !r.error ? ((r.data && r.data.minutes) || 0) : null); }, function () { cb(null); });
+    }
+    function pushDaily(leaving) {
       if (demo || !ensureSb()) return;
       var d = peruDay();
-      if (d !== dayStart) { activeDaySec = 0; dayStart = d; return; }
+      if (d !== dayStart) { activeDaySec = 0; dayStart = d; dayBase = null; return; }
       var mins = Math.round(activeDaySec / 60);
       if (mins < 1) return;
-      sb.from('daily_sessions').upsert({
-        user_id: uid, day: d, module_id: modId, activity_id: actId,
-        kind: KIND || '', minutes: mins, updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id,day,module_id,activity_id' }).then(function () {}, function () {});
+      if (leaving) {   // al cerrar no hay tiempo de preguntar: base ya conocida + envío que sobrevive al cierre
+        if (dayBase == null) return;
+        try { fetch(SUPABASE_URL + '/rest/v1/daily_sessions?on_conflict=user_id,day,module_id,activity_id', { method: 'POST', keepalive: true, mode: 'cors',
+          headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify(dayRow(d, dayBase + mins)) }).catch(function () {}); } catch (e) {}
+        return;
+      }
+      readDay(d, function (cur) {
+        if (cur == null) return;                 // sin saber lo que ya había hoy no se escribe (se reintenta en 2 min)
+        if (dayBase == null) dayBase = cur;      // lo de visitas anteriores
+        sb.from('daily_sessions').upsert(dayRow(d, Math.max(cur, dayBase + mins)), { onConflict: 'user_id,day,module_id,activity_id' }).then(function () {}, function () {});
+      });
     }
+    if (!demo) setTimeout(function () { if (dayBase == null && ensureSb()) readDay(dayStart, function (cur) { if (cur != null && dayBase == null) dayBase = cur; }); }, 1500);
 
     // ── 🟢 Presencia EN VIVO (tablero "Clase en vivo" del profesor) ──
     // UNA fila por alumno en live_presence (script 26): dónde está, desde
@@ -1011,7 +1029,7 @@
       // previa del día (caso fabricio, 01-ago). El estado anterior envejece solo.
       if (!done && activeSec >= 45) pushLive('left', null, true);
       if (teacher) { logClass(); return; }
-      pushDaily(); // los minutos del día SIEMPRE se salvan
+      pushDaily(true); // los minutos del día SIEMPRE se salvan (MINUTOS-SUMAN-V1: se suman, envío que sobrevive al cierre)
       if (IS_STORY) { if (!demo && activeSec >= 60) pushProgress(100, Math.max(1, Math.min(READING_CAP_MIN, (storyBaseMin || 0) + Math.round(activeSec / 60)))); return; }
       // Salida temprana: ya NO se registra 0% (no pisa notas previas ni bloquea el
       // reintento con "Repetir"). El tiempo quedó en daily_sessions; la nota solo

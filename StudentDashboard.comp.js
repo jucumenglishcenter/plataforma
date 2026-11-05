@@ -406,10 +406,12 @@ function StudentDashboard({ user, onLogout }) {
     const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
     const onPageShow = () => refresh(); // volver con "atrás" (bfcache) desde un material en la misma pestaña
     const iv = setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 20000);
+    const onStreak = () => { if (alive) setPTick(t => t + 1); };   // RACHA-REAL-V1: llegaron los días/minutos de la nube → repintar ya
     window.addEventListener('focus', refresh);
     window.addEventListener('pageshow', onPageShow);
+    window.addEventListener('jucum-streak-change', onStreak);
     document.addEventListener('visibilitychange', onVis);
-    return () => { alive = false; clearInterval(iv); window.removeEventListener('focus', refresh); window.removeEventListener('pageshow', onPageShow); document.removeEventListener('visibilitychange', onVis); };
+    return () => { alive = false; clearInterval(iv); window.removeEventListener('focus', refresh); window.removeEventListener('pageshow', onPageShow); window.removeEventListener('jucum-streak-change', onStreak); document.removeEventListener('visibilitychange', onVis); };
   }, []);
   const forumUnread = window.JUCUM_FORUM ? window.JUCUM_FORUM.forumUnreadCount(student.id, student.group) : 0;
   const msgUnread = window.JUCUM_MSG ? window.JUCUM_MSG.unreadForStudent(student.id) : 0;
@@ -673,12 +675,12 @@ function StudentDashboard({ user, onLogout }) {
           <div className="welcome-text">
             <div className="eyebrow" style={{color:'#fff', opacity:1, textShadow:'0 1px 3px rgba(0,0,0,.4)'}}>{level.emoji} {level.code} · {group.name}</div>
             <h1>¡Hola, {student.fullName.split(' ')[0]}!</h1>
-            <p>{student.streak > 0
+            <p>{student.streak == null && window.JUCUM_STREAK ? 'Cargando tu racha… 🔥' : student.streak > 0
               ? <>Racha de <b>{student.streak} {student.streak === 1 ? 'día' : 'días'}</b> 🔥 ¡No la rompas hoy!</>
               : 'Hoy es buen día para retomar la práctica 🌱'}</p>
           </div>
           <div className="welcome-streak">
-            <div className="streak-num">{student.streak}</div>
+            <div className="streak-num">{student.streak == null ? '…' : student.streak}</div>
             <div className="streak-lbl">días<br/>seguidos</div>
           </div>
         </div>
@@ -1538,8 +1540,10 @@ const LG_AVA = {1:{a:58,e:30,b:60,bg:'linear-gradient(#F4B400,#D49A00)',ab:'#C99
 const lgIni = (s) => (s.fullName || '?').split(' ').map(w => w[0]).slice(0,2).join('');
 
 /* Fusión Racha (protagonista) + Meta de hoy (secundaria) */
-function DayCard({ student, streak, todayMin, target }) {
+function DayCard({ student, streak: streakRaw, todayMin, target }) {
   const D = window.JUCUM_DATA;
+  const stLoad = streakRaw == null && !!window.JUCUM_STREAK;   // RACHA-REAL-V1: sin días de la nube = «cargando», nunca un 0 falso
+  const streak = streakRaw || 0;
   const best = (student && D.getBestStreak) ? D.getBestStreak(student) : 0;
   const toBeat = best > streak ? best - streak : 0;
   const flame = streak>=7?'🔥🔥🔥':streak>=3?'🔥🔥':streak>0?'🔥':'❄️';
@@ -1550,15 +1554,15 @@ function DayCard({ student, streak, todayMin, target }) {
   return (
     <div className="scard" style={{borderTop:'4px solid #F4B400', display:'flex', flexDirection:'column'}}>
       <div style={{textAlign:'center', fontSize:10.5, fontWeight:800, letterSpacing:'.08em', textTransform:'uppercase', color:'#C28A00'}}>🔥 Tu constancia</div>
-      <div style={{fontSize:30, textAlign:'center', lineHeight:1, marginTop:4}}>{flame}</div>
-      <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize:52, color:'#E58A00', textAlign:'center', lineHeight:.95}}>{streak}</div>
-      <div style={{textAlign:'center', fontWeight:800, color:'#B26A00', fontSize:13, marginTop:2}}>{streak===1?'día seguido':'días seguidos'}</div>
-      <div style={{textAlign:'center', fontSize:12, fontWeight:700, color:'var(--text-soft,#6B6B6B)', marginTop:8}}>{tip}</div>
+      <div style={{fontSize:30, textAlign:'center', lineHeight:1, marginTop:4}}>{stLoad ? '🔥' : flame}</div>
+      <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize:52, color:'#E58A00', textAlign:'center', lineHeight:.95}}>{stLoad ? '…' : streak}</div>
+      <div style={{textAlign:'center', fontWeight:800, color:'#B26A00', fontSize:13, marginTop:2}}>{stLoad ? 'días seguidos' : streak===1?'día seguido':'días seguidos'}</div>
+      <div style={{textAlign:'center', fontSize:12, fontWeight:700, color:'var(--text-soft,#6B6B6B)', marginTop:8}}>{stLoad ? 'Cargando tu racha…' : tip}</div>
       {si && <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'center',marginTop:9}}>
         <span style={{fontSize:11.5,fontWeight:800,borderRadius:12,padding:'4px 10px',background:si.shieldLeft?'#E3EEFB':'#F1F3F8',color:si.shieldLeft?'#0D47A1':'#6B6B6B'}}>🛡 {si.shieldLeft ? 'Escudo disponible' : 'Escudo usado esta semana'}</span>
         {si.isSunday && <span style={{fontSize:11.5,fontWeight:800,borderRadius:12,padding:'4px 10px',background:'#E8F5E9',color:'#1B5E20'}}>😴 Hoy es domingo libre</span>}
       </div>}
-      {best>0 && <div style={{display:'flex',alignItems:'center',gap:9,background:'#FFF8EC',border:'1px solid #F3DFB6',borderRadius:11,padding:'8px 11px',marginTop:12}}>
+      {best>0 && !stLoad && <div style={{display:'flex',alignItems:'center',gap:9,background:'#FFF8EC',border:'1px solid #F3DFB6',borderRadius:11,padding:'8px 11px',marginTop:12}}>
         <span style={{fontSize:19}}>🏆</span>
         <div style={{flex:1,textAlign:'left'}}><div style={{fontSize:12,fontWeight:800,color:'#9c5d00'}}>Tu récord: {best} {best===1?'día':'días'}</div>
         <div style={{fontSize:11,color:'#B26A00',fontWeight:700}}>{toBeat>0?`Te faltan ${toBeat} para superarlo · ¡tú puedes!`:'¡Estás en tu mejor racha! 🎉'}</div></div>

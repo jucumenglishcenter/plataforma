@@ -2378,14 +2378,24 @@ function getBestStreak(student) {
  * Al cambiar, cada alumno conserva su XP de racha viejo en 'stkb:<alumno>' = min(racha vieja al 27-oct, 14) × 30.
  * Motor puro: rachas.js (window.JUCUM_STREAK). Minutos por día: window.__JEC_DAYMIN (daily_sessions, 120 días). */
 const STREAK_CUTOVER = '2026-10-28';
+/* RACHA-DEVUELTA-V1 (04-nov, pedido de la usuaria): del 28-oct al 4-nov la racha se mostró mal (número viejo, 0 falso,
+ * Neuro «¡encendida hoy!») → esos días cuenta CUALQUIER práctica además de la meta (sin práctica: domingo libre + escudo).
+ * Desde el 5-nov rige la meta del grupo. Nadie baja. El XP de racha de esos días se acredita igual (stk: desde el 28-oct). */
+const STREAK_GRACE_TO = '2026-11-04';
 function computeStreakInfo(student, todayMin) {
   const ST = window.JUCUM_STREAK, M = window.__JEC_DAYMIN;
   if (!ST || !M || !student) return null;
   const src = M[student.id] || {}, mins = {}; Object.keys(src).forEach(d => { mins[d] = src[d]; });
   const today = ST.peruToday();
   if (todayMin > 0 || today in mins) mins[today] = Math.max(mins[today] || 0, todayMin || 0);
-  const goal = (getGroupSettings(student.group) || {}).dailyTargetMin || 15;
-  return ST.compute(mins, goal, today, STREAK_CUTOVER);   // RACHA-PREVIA-V1: antes del cambio cuenta cualquier práctica
+  const set = getGroupSettings(student.group) || {}, cur = set.dailyTargetMin || 15;
+  /* RACHA-DEVUELTA-V1 · aclaración de la usuaria (04-nov): los GRUPOS FINALIZADOS no reciben la racha devuelta (solo grupos activos de Pre-A1, A1 y A2). */
+  const grp = ((window.JUCUM_DATA && window.JUCUM_DATA.GROUPS) || []).find(g => g.id === student.group);
+  const graceTo = grp && grp.finishedAt ? null : STREAK_GRACE_TO;
+  /* RACHA-BLINDADA-V1: meta POR DÍA con el historial del grupo (script 36) → cambiar la meta no re-juzga días pasados. Sin historial = la meta actual. */
+  const hist = Array.isArray(set.dailyTargetHist) ? set.dailyTargetHist : (grp && grp._settings && Array.isArray(grp._settings.dailyTargetHist) ? grp._settings.dailyTargetHist : null);
+  const goal = hist && hist.length && ST.goalFor ? (d => ST.goalFor(hist, cur, d)) : cur;
+  return ST.compute(mins, goal, today, STREAK_CUTOVER, graceTo);   // RACHA-PREVIA-V1 + RACHA-DEVUELTA-V1
 }
 function getStreakXPTotal(studentId) {
   if (!_stkAgg) {
@@ -2530,7 +2540,7 @@ window.JUCUM_DATA = { getDailyConstancy, getModuleOpenedAt, LEVELS, GROUPS, STUD
   getReviews, recordReviewAttempt, getDueReviews, getLastReviewResult, markReviewResultSeen, getRetention, reviewTrend, loadReviewsFromCloud, getDropExplanation, ackDropExplanation,
   /* PASO 4 · ruta de módulos + récord de racha */
   getModuleRoute, getFocusModuleId, getBestStreak,
-  computeStreakInfo, awardStreakXP, getStreakXPTotal, STREAK_CUTOVER,   // 🔥 RACHA-AMABLE-V1
+  computeStreakInfo, awardStreakXP, getStreakXPTotal, STREAK_CUTOVER, STREAK_GRACE_TO,   // 🔥 RACHA-AMABLE-V1 · RACHA-DEVUELTA-V1
   /* PASO 5 · refuerzo opcional + estructuras latentes ★ */
   getRefuerzo, latentGate,
   /* Neuro/XP honestos: días reales sin practicar + pérdida por inactividad */
@@ -2707,24 +2717,34 @@ function jecPagedDaily(cols, applyFilter, done) {
   })(0);
 }
 (function jecDailyLoader() {
+  /* RACHA-REAL-V1 (04-nov): una descarga incompleta NUNCA reemplaza ni crea los minutos de hoy (se reintenta
+   * a los 20 s) y al volver a la plataforma (focus / pestaña visible, ≥20 s entre lecturas) se releen, para que
+   * la meta y la racha se muevan apenas el alumno vuelve de un material. */
+  var lastAt = 0, retryT = null;
   function load() {
     try {
       if (!window.JUCUM_SB || !window.JUCUM_SB.getClient) return;
+      lastAt = Date.now();
       var day = peruDayStr();
       jecPagedDaily('user_id,minutes', function (q) { return q.eq('day', day); }, function (rows, ok) {
-        if (!ok && window.__JEC_DAILY) return;   // incompleta: se conserva lo anterior
+        if (!ok) { clearTimeout(retryT); retryT = setTimeout(load, 20000); return; }
         var map = {};
         rows.forEach(function (x) {
           map[x.user_id] = map[x.user_id] || { day: day, minutes: 0 };
           map[x.user_id].minutes += (x.minutes || 0);
         });
         window.__JEC_DAILY = map;
-        if (ok) { window.__JEC_OK = window.__JEC_OK || {}; window.__JEC_OK.daily = Date.now(); }
+        window.__JEC_OK = window.__JEC_OK || {}; window.__JEC_OK.daily = Date.now();
+        try { if (window.JUCUM_SYNC && window.JUCUM_SYNC.computeStats) window.JUCUM_SYNC.computeStats(); } catch (e) {}
+        try { window.dispatchEvent(new Event('jucum-streak-change')); } catch (e) {}
       });
     } catch (e) {}
   }
+  function back() { if (document.visibilityState === 'visible' && Date.now() - lastAt > 20000) load(); }
   setTimeout(load, 2500);
   setInterval(load, 3 * 60 * 1000);
+  window.addEventListener('focus', back);
+  document.addEventListener('visibilitychange', back);
 })();
 
 /* ── Bono semanal re-ganable: qué material practicó cada alumno y en qué SEMANA ──
@@ -2766,9 +2786,18 @@ function jecPagedDaily(cols, applyFilter, done) {
       /* 🔥 Racha multi-equipo: días REALES con práctica según daily_sessions (una fila
        * por alumno/día/material, nunca se sobreescribe — a diferencia de entry.date).
        * Ventana de 90 días para rachas largas. computeStats une estos días con lo local. */
+      loadDays();
+    } catch (e) {}
+  }
+  /* RACHA-REAL-V1 (04-nov): el historial de la racha solo se usa COMPLETO. Antes, si fallaba una página en la
+   * primera descarga, la lista incompleta pasaba como buena y la racha salía en 0 hasta 5 min después. */
+  var daysRetryT = null;
+  function loadDays() {
+    try {
+      if (!window.JUCUM_SB || !window.JUCUM_SB.getClient) return;
       var sinceDays = new Date(Date.now() - 5 * 3600000 - 120 * 86400000).toISOString().slice(0, 10); // día-ok
       jecPagedDaily('user_id,day,minutes', function (q) { return q.gte('day', sinceDays); }, function (rows2, ok) {
-        if (!ok && window.__JEC_DAYS) return;   // incompleta: se conserva lo anterior
+        if (!ok) { clearTimeout(daysRetryT); daysRetryT = setTimeout(loadDays, 20000); return; }
         var dmap = {}, mmap = {};
         rows2.forEach(function (x) {
           if (!x.day) return;
@@ -2779,9 +2808,10 @@ function jecPagedDaily(cols, applyFilter, done) {
           mmap[x.user_id][x.day] = (mmap[x.user_id][x.day] || 0) + (Number(x.minutes) || 0);
         });
         window.__JEC_DAYS = dmap; window.__JEC_DAYMIN = mmap;
-        if (ok) { window.__JEC_OK = window.__JEC_OK || {}; window.__JEC_OK.days = Date.now(); }
-        // Recalcula rachas ya con los días de la nube (la UI refresca sola cada 20 s).
+        window.__JEC_OK = window.__JEC_OK || {}; window.__JEC_OK.days = Date.now();
+        // Recalcula rachas ya con los días de la nube y avisa a la pantalla para que se repinte al instante.
         try { if (window.JUCUM_SYNC && window.JUCUM_SYNC.computeStats) window.JUCUM_SYNC.computeStats(); } catch (e) {}
+        try { window.dispatchEvent(new Event('jucum-streak-change')); } catch (e) {}
       });
     } catch (e) {}
   }

@@ -601,14 +601,24 @@
   }
 
   /* ── MINUTOS (meta del día + racha) ─────────────────────────────────────── */
+  /* NEURO-MIN-MODULO-V1 (04-nov): cada módulo guarda SUS segundos del día (antes iba el total del equipo en la
+   * fila de CADA módulo → con 2 módulos el día se contaba doble) y la fila de la nube nunca baja (si otro
+   * equipo ya tenía más, se queda el mayor). */
+  var nmCloud = {};   // 'alumno|día|módulo' → minutos que la nube ya tenía (se pregunta una vez por sesión)
   function addSeconds(uid, sec, moduleId) {
     if (!(sec > 0)) return;
     var u = getU(uid), d = peruDay(), before = u.sec[d] || 0;
-    u.sec = {}; u.sec[d] = before + sec; putU(uid, u);
+    var sm = (u.secm && u.secm[d]) || {}, mk = moduleId || '', bm = sm[mk] || 0;
+    sm[mk] = bm + sec;
+    u.sec = {}; u.sec[d] = before + sec; u.secm = {}; u.secm[d] = sm; putU(uid, u);
     var addMin = Math.floor((before + sec) / 60) - Math.floor(before / 60);
     try { if (addMin > 0 && window.JUCUM_DATA && window.JUCUM_DATA.addPracticeMinutes) window.JUCUM_DATA.addPracticeMinutes(uid, addMin); } catch (e) {}
     var c = AD.client(); if (!c || isPreview(uid) || !moduleId) return;
-    try { c.from('daily_sessions').upsert({ user_id: uid, day: d, module_id: moduleId, activity_id: 'mixed', kind: 'mixed', minutes: Math.max(1, Math.round((before + sec) / 60)), updated_at: new Date().toISOString() }, { onConflict: 'user_id,day,module_id,activity_id' }).then(function () {}, function () {}); } catch (e) {}
+    var mine = Math.max(1, Math.round((bm + sec) / 60)), k = uid + '|' + d + '|' + moduleId;
+    function put(v) { try { c.from('daily_sessions').upsert({ user_id: uid, day: d, module_id: moduleId, activity_id: 'mixed', kind: 'mixed', minutes: v, updated_at: new Date().toISOString() }, { onConflict: 'user_id,day,module_id,activity_id' }).then(function () {}, function () {}); } catch (e) {} }
+    if (nmCloud[k] != null) { put(Math.max(nmCloud[k], mine)); return; }
+    try { c.from('daily_sessions').select('minutes').eq('user_id', uid).eq('day', d).eq('module_id', moduleId).eq('activity_id', 'mixed').maybeSingle()
+      .then(function (r) { if (!r || r.error) return; if (nmCloud[k] == null) nmCloud[k] = (r.data && r.data.minutes) || 0; put(Math.max(nmCloud[k], mine)); }, function () {}); } catch (e) {}
   }
 
   /* ── materiales de HOY del alumno (solo los que el lector soporta) ──────── */

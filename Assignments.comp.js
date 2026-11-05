@@ -193,6 +193,15 @@ function StructuredEditor({ value, onChange }) {
   const e0 = emptyStructured(), v0 = value || {};
   const s = { ...e0, ...v0, resource: { ...e0.resource, ...(v0.resource || {}) }, steps: Array.isArray(v0.steps) ? v0.steps : e0.steps, focus: Array.isArray(v0.focus) ? v0.focus : e0.focus, materials: Array.isArray(v0.materials) ? v0.materials : e0.materials };   // TASK-EDIT-V1: tolera bloques incompletos
   const set = (patch) => onChange({ ...s, ...patch });
+  /* TAREAS-MATERIAL-ESPACIOS-V1 (03-nov) · «Material de apoyo»: se muestra el texto tal cual se escribe (antes se recortaba en cada tecla y no dejaba poner espacios ni pasar de línea). Si la lista cambia desde fuera, manda la lista. */
+  const [matTxt, setMatTxt] = tUseState(null);
+  const matParse = t => String(t || '').split('\n').map(x => x.trim()).filter(Boolean);
+  const matJoin = (s.materials || []).map(m => typeof m === 'string' ? m : m.name).join('\n');
+  const matShown = matTxt != null && matParse(matTxt).join('\n') === matJoin ? matTxt : matJoin;
+  /* TAREAS-FOCO-COMAS-V1 (03-nov) · «Foco» (subtemas separados por coma): mismo arreglo — se muestra lo escrito tal cual; antes se comía la coma y los espacios. */
+  const [focTxt, setFocTxt] = tUseState({});
+  const focParse = t => String(t || '').split(',').map(x => x.trim()).filter(Boolean);
+  const focShown = (i, f) => { const j = (f.items || []).join(', '), raw = focTxt[i]; return raw != null && focParse(raw).join(', ') === j ? raw : j; };
   const setStep = (i, k, v) => set({ steps: s.steps.map((x, j) => j === i ? { ...x, [k]: v } : x) });
   const setFocus = (i, k, v) => set({ focus: s.focus.map((x, j) => j === i ? { ...x, [k]: (k === 'items' ? v.split(',').map(t => t.trim()).filter(Boolean) : v) } : x) });
   return (
@@ -207,7 +216,7 @@ function StructuredEditor({ value, onChange }) {
         {s.focus.map((f, i) => (
           <div key={i} style={{display:'flex', gap:7, marginBottom:6, alignItems:'center'}}>
             <input className="input-text" style={{flex:'0 0 38%'}} value={f.label} onChange={e => setFocus(i, 'label', e.target.value)} placeholder="Tema (ej: Present Progressive)" />
-            <input className="input-text" style={{flex:1}} value={(f.items || []).join(', ')} onChange={e => setFocus(i, 'items', e.target.value)} placeholder="positive, negative, questions" />
+            <input className="input-text" style={{flex:1}} value={focShown(i, f)} onChange={e => { const v = e.target.value; setFocTxt(m => ({ ...m, [i]: v })); setFocus(i, 'items', v); }} placeholder="positive, negative, questions" />
             <button type="button" onClick={() => set({ focus: s.focus.filter((_, j) => j !== i) })} style={{...sqBtn, color:'#C0392B'}}>×</button>
           </div>
         ))}
@@ -230,7 +239,7 @@ function StructuredEditor({ value, onChange }) {
       </div>
       <div>
         <div className="settings-label">📎 Material de apoyo (un nombre por línea)</div>
-        <textarea className="eval-textarea" rows={2} value={(s.materials || []).map(m => typeof m === 'string' ? m : m.name).join('\n')} onChange={e => set({ materials: e.target.value.split('\n').map(t => t.trim()).filter(Boolean) })} placeholder="Sentence Patterns – Comparison Chart.pdf" />
+        <textarea className="eval-textarea" rows={2} value={matShown} onChange={e => { setMatTxt(e.target.value); set({ materials: matParse(e.target.value) }); }} placeholder="Sentence Patterns – Comparison Chart.pdf" />
       </div>
     </div>
   );

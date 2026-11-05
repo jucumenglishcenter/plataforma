@@ -57,6 +57,13 @@ const NH_CSS2 = `.nh .nb-bub{position:relative;flex-shrink:0;align-self:center;m
 .nbh .tx{flex:1;min-width:0;font-weight:900;font-size:14.5px;line-height:1.3}.nbh .tx small{display:block;font-weight:700;font-size:12.5px;color:#6F6A7E}
 .nbh .ar{font-size:22px;color:#8A6CD0;font-weight:900}`;
 (function injectNhCSS2() { if (typeof document === 'undefined' || document.getElementById('nh-css2')) return; const st = document.createElement('style'); st.id = 'nh-css2'; st.textContent = NH_CSS2; document.head.appendChild(st); })();
+/* RACHA-NEURO-V1 (04-nov, opción 2 elegida por la usuaria en «Espejo - Racha arreglada»): marcas dibujadas de la racha. */
+const NH_CSS3 = `.nh .mf.half{background:linear-gradient(45deg,#FF7A2F 0 45%,#E6DED2 45%)}.nh .mf.half::after{background:#F3EEE6}.nh .wkh em.go{color:#2E7D32}
+.nh .wkd .c.rk-shield{background:#E3EEFB}.nh .nh-shd{width:14px;height:16px;background:#3B7DD8;border-radius:3px 3px 8px 8px}
+.nh .wkd .c.rk-free{background:#EEF4EE}.nh .nh-zz{font-family:'Fredoka',sans-serif;font-weight:600;font-size:15px;color:#6E8B6E;line-height:1}
+.nh .wkd .c.rk-broke{background:#FDECEC}.nh .nh-x{width:14px;height:14px;position:relative}.nh .nh-x::before,.nh .nh-x::after{content:'';position:absolute;left:6px;top:0;width:2.5px;height:14px;background:#D9534F;border-radius:2px;transform:rotate(45deg)}.nh .nh-x::after{transform:rotate(-45deg)}
+.nh .wkd .hoy.ring .c{border:0;background:conic-gradient(#FF8A1F var(--p),#FFE7C7 0);position:relative}.nh .wkd .hoy.ring .c::before{content:'';position:absolute;inset:4px;border-radius:50%;background:#fff}.nh .wkd .hoy.ring .c>*{position:relative}`;
+(function injectNhCSS3() { if (typeof document === 'undefined' || document.getElementById('nh-css3')) return; const st = document.createElement('style'); st.id = 'nh-css3'; st.textContent = NH_CSS3; document.head.appendChild(st); })();
 const NH_BOXMS = 2 * 3600e3;
 function nhClock(ms) { const s = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); }
 function NhClock({ to, onDone }) { // reloj en vivo (se actualiza solo, sin redibujar toda la pantalla)
@@ -334,10 +341,18 @@ function NeuroPractice({ student, settings, onBack, helpers, extras, explore, co
   const target = (settings && settings.dailyTargetMin) || 15;
   const todayMin = prog.todayMinutes || 0;
   const lit = todayMin > 0 || connN > 0;
-  const streak = student.streak || 0;
+  const streak = student.streak || 0, stLoad = student.streak == null && !!window.JUCUM_STREAK;   // RACHA-REAL-V1
   const active = (() => { const s = new Set(); try { if (D.getExtraActiveDays) D.getExtraActiveDays(uid).forEach(d => s.add(d)); } catch (e) {}
     Object.values(prog.completed || {}).forEach(e => { if (e && e.date) s.add(nhPeruDay(Date.parse(e.date))); }); return s; })();
   const week = Array.from({ length: 7 }).map((_, i) => { const t = Date.now() - (6 - i) * 86400e3, k = nhPeruDay(t), wd = (new Date(k + 'T12:00:00Z').getUTCDay() + 6) % 7; return { k, lab: NH_DAYN[wd], on: active.has(k) }; });
+  /* RACHA-NEURO-V1 (04-nov): la llama de la racha y los 7 puntitos siguen la MISMA regla de la racha (streakInfo: meta del
+   * grupo · escudo · domingo libre). Hoy la llama se llena con los minutos (a medias) y se prende entera al llegar a la meta. */
+  const si = student.streakInfo || null, sdays = {};
+  if (si) si.days.forEach(x => { sdays[x.d] = x.st; });
+  const tMin = si ? (si.todayMin || 0) : 0, tCounts = !!(si && si.todayCounts), tPct = si ? Math.min(100, Math.round(tMin / Math.max(1, si.goal) * 100)) : 0;
+  const hFlame = !si ? (lit ? '' : ' off') : tCounts ? '' : (tMin > 0 ? ' half' : ' off');
+  const hNote = !si ? (lit ? '¡encendida hoy!' : 'enciéndela hoy') : tCounts ? '¡Hoy cuenta!' : tMin > 0 ? `Llevas ${Math.floor(tMin)} de ${si.goal} min · ${Math.max(1, Math.ceil(si.left))} más y hoy cuenta` : si.isSunday ? 'Hoy es domingo libre' : 'enciéndela hoy';
+  const rkMark = k => k === 'on' ? <span className="mf"></span> : k === 'shield' ? <span className="nh-shd"></span> : k === 'free' ? <span className="nh-zz">z</span> : k === 'broke' ? <span className="nh-x"></span> : <span className="mf off"></span>;
   const left = Math.max(0, target - todayMin);
   const say = allConn ? '¡Cerebro conectado! 💛 Hoy cumpliste todo lo del profe'
     : todayMin >= target ? '¡Meta cumplida! 🎉 Lo que sigas practicando hoy fortalece tu memoria 🧠'
@@ -455,10 +470,17 @@ function NeuroPractice({ student, settings, onBack, helpers, extras, explore, co
         <NhFlame mins={todayMin} goal={target} lit={lit} />
       </div>
       <div className="wk">
-        <div className="wkh"><span className={'mf' + (lit ? '' : ' off')}></span>Racha de {streak} {streak === 1 ? 'día' : 'días'}<em>{lit ? '¡encendida hoy!' : 'enciéndela hoy'}</em></div>
-        <div className="wkd">{week.map((d, i) => i < 6
-          ? <div key={i}><span className="c"><span className={'mf' + (d.on ? '' : ' off')}></span></span>{d.lab}</div>
-          : <div key={i} className={'hoy' + (lit ? ' lit' : '')}><span className="c"><span className={'mf' + (lit ? '' : ' off')}></span></span>Hoy</div>)}</div>
+        <div className="wkh"><span className={'mf' + (stLoad ? ' off' : hFlame)}></span>{stLoad ? 'Cargando tu racha…' : <>Racha de {streak} {streak === 1 ? 'día' : 'días'}<em className={tCounts ? 'go' : ''}>{hNote}</em></>}</div>
+        <div className="wkd">{week.map((d, i) => {
+          if (stLoad) return <div key={i} className={i < 6 ? '' : 'hoy'}><span className="c"><span className="mf off"></span></span>{i < 6 ? d.lab : 'Hoy'}</div>;
+          if (!si) return i < 6
+            ? <div key={i}><span className="c"><span className={'mf' + (d.on ? '' : ' off')}></span></span>{d.lab}</div>
+            : <div key={i} className={'hoy' + (lit ? ' lit' : '')}><span className="c"><span className={'mf' + (lit ? '' : ' off')}></span></span>Hoy</div>;
+          if (i < 6) { const k = sdays[d.k] || 'off'; return <div key={i}><span className={'c rk-' + k}>{rkMark(k)}</span>{d.lab}</div>; }
+          if (tCounts) return <div key={i} className="hoy lit"><span className="c"><span className="mf"></span></span>Hoy</div>;
+          if (tMin > 0) return <div key={i} className="hoy ring" style={{ '--p': tPct + '%' }}><span className="c"><span className="mf half"></span></span>Hoy</div>;
+          if (si.isSunday) return <div key={i} className="hoy"><span className="c rk-free">{rkMark('free')}</span>Hoy</div>;
+          return <div key={i} className="hoy"><span className="c"><span className="mf off"></span></span>Hoy</div>; })}</div>
       </div>
     </div>
   );

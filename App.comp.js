@@ -19,6 +19,7 @@ function applyRoster(groups, users) {
     _settings: {
       activeModuleId: g.active_module_id, deadline: g.deadline,
       dailyTargetMin: g.daily_target_min ?? 15, isPaused: g.is_paused,
+      dailyTargetHist: Array.isArray(g.daily_target_hist) ? g.daily_target_hist : null,   // RACHA-BLINDADA-V1 (script 36)
       unlockMode: g.unlock_mode || 'sequential',
       unlockedActivities: g.unlocked_activities || [],
       activeModuleIds: g.active_module_ids || (g.active_module_id ? [g.active_module_id] : []),

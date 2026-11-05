@@ -239,7 +239,7 @@ function MascotCard({ student }) {
               {s.minsLeft === 0 ? '✓ Cumpliste tu práctica de hoy' : `Practica ${s.minsLeft} min hoy para cumplir tu meta`}
             </li>
             <li className={s.streak > 0 ? 'ok' : ''}>
-              {s.streak > 0 ? `✓ Mantienes una racha de ${s.streak} día${s.streak === 1 ? '' : 's'}` : 'Empieza una racha practicando hoy'}
+              {/* RACHA-REAL-V1 */}{student.streak == null && window.JUCUM_STREAK ? 'Cargando tu racha…' : s.streak > 0 ? `✓ Mantienes una racha de ${s.streak} día${s.streak === 1 ? '' : 's'}` : 'Empieza una racha practicando hoy'}
             </li>
             <li className={s.inactive <= 1 ? 'ok' : ''}>
               {s.inactive <= 1 ? '✓ Estás al día con tu práctica' : `Llevas ${s.inactive} días sin practicar — ¡retoma!`}

@@ -240,6 +240,7 @@
     groups.forEach(g => settings[g.id] = {
       activeModuleId: g.active_module_id, deadline: g.deadline,
       dailyTargetMin: g.daily_target_min ?? 15, isPaused: g.is_paused,
+      dailyTargetHist: Array.isArray(g.daily_target_hist) ? g.daily_target_hist : null,   // RACHA-BLINDADA-V1 (script 36: historial de la meta)
       unlockMode: g.unlock_mode || 'sequential',
       unlockedActivities: g.unlocked_activities || [],
       activeModuleIds: g.active_module_ids || (g.active_module_id ? [g.active_module_id] : []),
@@ -802,11 +803,15 @@
       while (days.has(dayStr(cur))) { streak++; cur -= DAY; }
       /* 🔥 RACHA-AMABLE-V1 (27-oct): con los minutos por día de la nube manda la racha nueva
        * (meta del grupo · domingo libre · 1 escudo por semana) y se acredita su XP ganado. */
+      /* RACHA-REAL-V1 (04-nov): con el motor nuevo NUNCA se muestra la racha vieja (cualquier práctica) mientras
+       * bajan los días de la nube: se conserva lo último bueno de esta sesión y, si no hay, streak = null («cargando…»). */
+      const prevInfo = s.streakInfo || null;
       s.streakInfo = null;
       try {
         let tm = 0; try { tm = (D.getStudentProgress(s.id) || {}).todayMinutes || 0; } catch (e) {}
         const info = D.computeStreakInfo ? D.computeStreakInfo(s, tm) : null;
         if (info) { streak = info.streak; s.streakInfo = info; if (D.awardStreakXP) D.awardStreakXP(s, info); }
+        else if (window.JUCUM_STREAK && D.computeStreakInfo) { s.streakInfo = prevInfo; streak = prevInfo ? prevInfo.streak : null; }
       } catch (e) {}
 
       // completed modules of the student's CURRENT level
