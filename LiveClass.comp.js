@@ -258,14 +258,14 @@ function ClassBoard({ roster, groupId, onSelect }) {
       const s = st(e.student.id);
       try {
         window.JUCUM_EVAL.saveEvaluation(e.student.id, {
-          teacherName:'Profesor', ratings:{ participation: s.stars },
+          teacherName:'Teacher', ratings:{ participation: s.stars },
           feedback:`🙋 Participación en clase: ${s.label}` + (e.actName ? ` · practicó ${e.actName}` : ''),
           attachments:[], kind:'clase',
         });
       } catch (err) {}
       if (s.xp > 0 && D.addBonusXP) D.addBonusXP(e.student.id, s.xp);
       if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(e.student.id, {
-        type:'teacher-feedback', title:`🙋 Tu profesor registró tu participación (+${s.xp} XP)`,
+        type:'teacher-feedback', title:`🙋 Tu teacher registró tu participación (+${s.xp} XP)`,
         body:`Participación de hoy: ${s.label}. ¡Sigue así! 💪`,
       });
     });
@@ -339,6 +339,9 @@ function LiveClassroom({ groupId, embedded, lockGroup, focusKeys, planId }) {
   const GROUPS = D.GROUPS || [];
   const [gid, setGid] = React.useState(groupId || (GROUPS[0] && GROUPS[0].id) || '');
   const [rows, setRows] = React.useState(null);
+  /* P1 · VIVO-NUBE-V1 (30-oct): «practicó hoy» también mira daily_sessions de la NUBE (JUCUM_SEG), no solo la copia del equipo */
+  const lcS = window.JUCUM_SEG;
+  const lcSeg = window.useSegFacts && lcS ? window.useSegFacts({ ids: (D.STUDENTS || []).filter(s => s.group === gid).map(s => s.id), groups: [], since: lcS.addD(lcS.today(), -45) }) : { F: null };
   const [meta, setMeta] = React.useState({ degraded:false, at:0 });
   const [big, setBig] = React.useState(false);
   const [showEmpty, setShowEmpty] = React.useState(false);
@@ -380,7 +383,8 @@ function LiveClassroom({ groupId, embedded, lockGroup, focusKeys, planId }) {
   const activeIds = (settings.activeModuleIds && settings.activeModuleIds.length)
     ? settings.activeModuleIds : (settings.activeModuleId ? [settings.activeModuleId] : []);
   const mods = (D.MODULE_CATALOG[group.level] || []).filter(m => activeIds.includes(m.id));
-  const members = (D.STUDENTS || []).filter(s => s.group === group.id && !s.closedAt);
+  /* AVANCE-ACTIVOS-V1 */ const lcOut = (s) => { const st = String(s.status || '').toLowerCase(); if (['retirado','retirada','retired','inactivo','inactiva','inactive','baja','withdrawn'].includes(st)) return true; if (s.closedAt) return true; try { const G = window.JUCUM_GRAD; if (G && G.isGraduated && G.isGraduated(s.id)) return true; } catch (e) {} return false; };
+  const members = (D.STUDENTS || []).filter(s => s.group === group.id && !lcOut(s));
   const k = big ? 1.35 : 1;
   const now = Date.now();
 
@@ -402,6 +406,7 @@ function LiveClassroom({ groupId, embedded, lockGroup, focusKeys, planId }) {
   const todayPeru = new Date(now - 5 * 3600000).toISOString().slice(0, 10);
   const practicedToday = (sid) => {
     try {
+      if (lcSeg.F && ((lcSeg.F.dayAct || {})[String(sid)] || {})[todayPeru]) return true;
       const c = (D.getStudentProgress(sid) || {}).completed || {};
       return Object.values(c).some(e => {
         const t = Date.parse((e && e.date) || '');

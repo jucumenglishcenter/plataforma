@@ -61,7 +61,7 @@ function StudentProfile({ user, onBack }) {
       <div style={{marginTop:18}}><GradesRecord student={student} /></div>
 
       <div className="scard" style={{marginTop:18}}>
-        <div className="sec-head"><div className="sec-title">📊 Evaluaciones del profesor</div></div>
+        <div className="sec-head"><div className="sec-title">📊 Evaluaciones del teacher</div></div>
         <StudentEvaluations studentId={student.id} isStudent={true} />
       </div>
 

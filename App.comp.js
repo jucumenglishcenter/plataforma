@@ -10,7 +10,7 @@
 function applyRoster(groups, users) {
   window.JUCUM_DATA.GROUPS.length = 0;
   groups.forEach(g => window.JUCUM_DATA.GROUPS.push({
-    id: g.id, level: g.level, name: g.name, schedule: g.schedule,
+    id: g.id, level: g.level, name: (window.JUCUM_GROUP_NAME ? window.JUCUM_GROUP_NAME(g.name, g.schedule) : g.name), rawName: g.name, schedule: g.schedule,   // GROUP-HOUR-V1
     startDate: g.start_date,
     // 🎓 script 28 · grupo finalizado (sin columnas → undefined → activo)
     finishedAt: g.finished_at || null, finishedLabel: g.finished_label || '', finishedMsg: g.finished_msg || '',
@@ -19,6 +19,7 @@ function applyRoster(groups, users) {
     _settings: {
       activeModuleId: g.active_module_id, deadline: g.deadline,
       dailyTargetMin: g.daily_target_min ?? 15, isPaused: g.is_paused,
+      dailyTargetHist: Array.isArray(g.daily_target_hist) ? g.daily_target_hist : null,   // RACHA-BLINDADA-V1 (script 36)
       unlockMode: g.unlock_mode || 'sequential',
       unlockedActivities: g.unlocked_activities || [],
       activeModuleIds: g.active_module_ids || (g.active_module_id ? [g.active_module_id] : []),
@@ -35,7 +36,8 @@ function applyRoster(groups, users) {
     lastActiveDays: 0, totalMinutes: 0, achievements: [],
     lastSeenAt: u.last_seen_at || null,   // 📶 último ingreso real (script 22)
     // ⏸ avance cerrado (script 29) — sin columnas → null → activo
-    closedAt: u.closed_at || null, closedModule: u.closed_module || '', closedMsg: u.closed_msg || '', closedReason: u.closed_reason || '',
+    extraModules: Array.isArray(u.extra_modules) ? u.extra_modules : [],   // 🔐 MOD-ACCESO-V1 (script 34)
+    closedGroup: u.closed_group || '', closedAt: u.closed_at || null, closedModule: u.closed_module || '', closedMsg: u.closed_msg || '', closedReason: u.closed_reason || '',
   }));
   window.JUCUM_DATA.STUDENTS.length = 0;
   students.forEach(s => window.JUCUM_DATA.STUDENTS.push(s));
@@ -49,6 +51,7 @@ function App() {
   const DEMO = !!(window.JUCUM_DEMO && window.JUCUM_DEMO.isDemo());
   const [ready, setReady] = React.useState(!window.JUCUM_SB || DEMO); // local/demo = ready immediately
   const [bootErr, setBootErr] = React.useState('');
+  const [rosterReady, setRosterReady] = React.useState(false); // ⚡ lista de alumnos lista → el login ya puede mostrarse
   const [staleMsg, setStaleMsg] = React.useState(false); // sesión de una cuenta que ya no existe
   // Modo mantenimiento (lo activa el dev). Se consulta a la nube y se sondea.
   const [maint, setMaint] = React.useState(() => (window.JUCUM_DATA.getMaintenance ? window.JUCUM_DATA.getMaintenance() : { active:false }));
@@ -86,14 +89,18 @@ function App() {
     (async () => {
       try {
         const sb = window.JUCUM_SB.getClient();
-        const [{ data: groups, error: gE }, { data: users, error: uE }] = await Promise.all([
+        // ⚡ CARGA-RAPIDA-V1 (13-oct-2026): grupos + usuarios ya vienen en camino desde
+        // fast-loader (JUCUM_SYNC.prefetch), en paralelo con la preparación del código.
+        const SY = window.JUCUM_SYNC;
+        const [{ data: groups, error: gE }, { data: users, error: uE }] = await (SY && SY.roster ? SY.roster() : Promise.all([
           sb.from('groups').select('*'),
           sb.from('users').select('*'),
-        ]);
+        ]));
         if (gE) throw gE; if (uE) throw uE;
 
         // Roster (grupos + alumnos) → window.JUCUM_DATA
         applyRoster(groups, users);
+        try { (window.__JUCUM_BOOT = window.__JUCUM_BOOT || {}).roster = Math.round(performance.now()); } catch (e) {}
         /* 🔐 25-sep-2026 · Sesión de una cuenta BORRADA (p. ej. al pasar a un alumno de
          * Pre-A1 a A1 se le creó una cuenta nueva): el equipo seguía con el id viejo y el
          * panel mostraba al PRIMER alumno de la lista (caso Yoel → “perfil de Dylan”).
@@ -106,6 +113,8 @@ function App() {
             setUser(null); setStaleMsg(true);
           }
         } catch (e) {}
+
+        setRosterReady(true);
 
         // Hydrate localStorage cache from cloud (settings, progress, notifs, evals, forum)
         if (window.JUCUM_SYNC) {
@@ -173,6 +182,7 @@ function App() {
         }
 
         setReady(true);
+        try { const BT = window.__JUCUM_BOOT || (window.__JUCUM_BOOT = {}); BT.ready = Math.round(performance.now()); console.info('⚡ arranque (ms desde que abrió la página):', JSON.stringify(BT)); } catch (e) {}
       } catch (e) {
         setBootErr('No se pudieron cargar los datos: ' + e.message);
         setReady(true);
@@ -228,7 +238,11 @@ function App() {
     return () => { alive = false; clearInterval(iv); document.removeEventListener('visibilitychange', onVis); window.removeEventListener('focus', refresh); };
   }, [ready]);
 
-  const onLogin = (u) => { setUser(u); localStorage.setItem('jucum_user', JSON.stringify(u)); };
+  const onLogin = (u) => {
+    setUser(u); localStorage.setItem('jucum_user', JSON.stringify(u));
+    // ⚡ Al arrancar sin sesión no se pidieron notificaciones: se traen ahora (solo las suyas).
+    try { if (window.JUCUM_SYNC && window.JUCUM_SYNC.pullNotifs) window.JUCUM_SYNC.pullNotifs(u); } catch (e) {}
+  };
   const onLogout = () => {
     if (window.JUCUM_NAV) window.JUCUM_NAV.clearAll();
     setUser(null);
@@ -236,7 +250,8 @@ function App() {
     document.body.removeAttribute('data-level');
   };
 
-  if (!ready) {
+  // ⚡ Sin sesión, el formulario de ingreso NO espera a que bajen todos los datos.
+  if (!ready && !(rosterReady && !user)) {
     return (
       <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:14,fontFamily:'Nunito,sans-serif',color:'#777'}}>
         <img src={window.JUCUM_LOGO || 'logo-jucum.png'} alt="JUCUM EC" style={{height:80}} />
@@ -246,6 +261,17 @@ function App() {
   }
   if (bootErr) {
     return <div style={{padding:40,fontFamily:'Nunito,sans-serif',color:'#C62828',textAlign:'center'}}>⚠ {bootErr}<br/><button onClick={()=>location.reload()} style={{marginTop:14,padding:'10px 20px',borderRadius:20,border:'none',background:'#1F3A8A',color:'#fff',fontWeight:800,cursor:'pointer'}}>Reintentar</button></div>;
+  }
+
+  /* 👁 29-sep-2026 · Vista “Ver como alumno” (iframe del visor del profesor): se enruta
+   * EXACTAMENTE como si ese alumno hubiera entrado (egresado/cerrado → su pantalla de cierre). */
+  const pvE = window.JUCUM_PV_EMBED;
+  if (pvE && user && user.role !== 'student') {
+    const pu = pvE.user();
+    if (!pu) return <div style={{padding:40,fontFamily:'Nunito,sans-serif',color:'#777',textAlign:'center',fontWeight:700}}>Cargando la pantalla del alumno…</div>;
+    const pvExit = () => pvE.exit();
+    if (window.JUCUM_GRAD && window.StudentGraduated && (window.JUCUM_GRAD.isGraduated(pu.studentId) || (window.JUCUM_GRAD.isClosed && window.JUCUM_GRAD.isClosed(pu.studentId)))) return <StudentGraduated user={pu} onLogout={pvExit} />;
+    return <StudentDashboard user={pu} onLogout={pvExit} />;
   }
 
   if (!user) {
