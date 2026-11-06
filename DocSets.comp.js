@@ -216,11 +216,13 @@ function DocSetBoard({ a, ds, onView }) {
 function DocSetStudentView({ a, ds, rows, who, order, onClose, onChanged }) {
   const X = DSX(), N = window.JUCUM_NOTIF; const by = dsRowsBy(rows); let roster = dsRosterFor(a, rows).filter(s => by[s.id]);
   if (order && order.length) roster = roster.slice().sort((p, q) => { const i = order.indexOf(p.id), j = order.indexOf(q.id); return (i < 0 ? 1e9 : i) - (j < 0 ? 1e9 : j); });
-  const [sid, setSid] = dsUS(who); const [cmt, setCmt] = dsUS(''); const [busy, setBusy] = dsUS(false);
+  const [sid, setSid] = dsUS(who); const [cmt, setCmt] = dsUS(''); const [busy, setBusy] = dsUS(false); const [cmEd, setCmEd] = dsUS({}); const [cmSv, setCmSv] = dsUS({}); const [cmBusy, setCmBusy] = dsUS('');
   const idx = roster.findIndex(s => s.id === sid), s = roster[idx]; if (!s || !ds || !ds.items) return null;
   const row = by[s.id], an = X.upgrade(ds, X.unpack(row.text) || { ans: [], res: [], tr: [] }).ans, res = an.res || [], live = ds.mode === 'class' && X.liveState(ds) === 'open';
   const g = X.score(ds, res), nr = X.nRev(res), ntr = (an.tr || []).filter(Boolean).length;
   const decide = async (i, ok) => { setBusy(true); await X.setItemResult(a, ds, s.id, row, i, ok ? 'ok' : 'bad'); if (N) N.pushNotif(s.id, { type: 'assignment', title: '✅ Tu profe revisó tu respuesta', body: `“${a.title}”, ejercicio ${i + 1}: ${ok ? 'está bien' : 'mira la respuesta correcta'}.`, link: 'tasks' }); setBusy(false); onChanged(); };
+  /* 💬 DOCSETS-COMENTARIO-V1 (06-nov · pedido del teacher): una línea de comentario por ejercicio, debajo de la respuesta del alumno. Lo ve el alumno en su entrega + campanita. */
+  const saveCm = async (i, txt) => { const k = s.id + ':' + i, t = String(txt || '').trim(); setCmBusy(k); const r = await X.setItemComment(a, ds, s.id, row, i, t); setCmBusy(''); if (!r) { alert('No se pudo guardar el comentario (sin conexión). Inténtalo de nuevo.'); return; } setCmSv(o => ({ ...o, [k]: t })); setCmEd(o => { const z = { ...o }; delete z[k]; return z; }); if (N && t) N.pushNotif(s.id, { type: 'assignment', title: '💬 Tu profe comentó tu respuesta', body: `“${a.title}”, ejercicio ${i + 1}: ${t}`, link: 'tasks' }); onChanged(); };
   const darBuena = async (i) => {
     const txt = (an.ans || [])[i]; if (!txt) return; setBusy(true);
     const upd = await X.patch(a, d => { d.items[i].also = (d.items[i].also || []).concat([txt]); });
@@ -254,6 +256,12 @@ function DocSetStudentView({ a, ds, rows, who, order, onClose, onChanged }) {
                   : <button className="att-btn" disabled={busy} style={{ borderColor: '#81C784', color: '#2E7D32' }} onClick={() => decide(i, true)}>✔ Está bien</button>}
                 {v === 'rev' && <button className="att-btn" disabled={busy} style={{ borderColor: '#EF9A9A', color: '#C62828' }} onClick={() => decide(i, false)}>✘ Corregir</button>}
               </div>}
+              {row.status !== 'draft' && (() => { const k = s.id + ':' + i, sv = cmSv[k] != null ? cmSv[k] : String((an.cm || [])[i] || ''), val = cmEd[k] != null ? cmEd[k] : sv, dirty = val.trim() !== sv; return (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8 }}>
+                  <span style={{ fontSize: 14 }}>💬</span>
+                  <input className="input-text" style={{ flex: 1, minWidth: 0, padding: '6px 9px', fontSize: 13 }} value={val} placeholder={'Comentario sobre esta respuesta (lo ve ' + dsFirst(s) + ')…'} onChange={e => { const v2 = e.target.value; setCmEd(o => ({ ...o, [k]: v2 })); }} onKeyDown={e => { if (e.key === 'Enter' && dirty && cmBusy !== k) saveCm(i, val); }} />
+                  {dirty ? <button className="att-btn" disabled={cmBusy === k} onClick={() => saveCm(i, val)}>{cmBusy === k ? 'Guardando…' : 'Guardar'}</button> : sv ? <span style={{ fontSize: 11.5, fontWeight: 800, color: '#2E7D32', whiteSpace: 'nowrap' }}>✓ Guardado</span> : null}
+                </div>); })()}
             </div>); })}
           <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
             <input className="input-text" style={{ flex: 1, minWidth: 200 }} value={cmt} onChange={e => setCmt(e.target.value)} placeholder={`Comentario para ${dsFirst(s)} (le llega a la campanita)…`} />
@@ -400,6 +408,7 @@ function DocSetPlayer({ a: a0, student, onClose }) {
       else if (row !== undefined && nL > nC) X.saveDraft(a.id, student.id, st);
       setSync(false); });
     return () => { stop = true; clearTimeout(tmo); }; }, []);
+  dsUE(() => { if (!final0) return; let stop = false; X.fetchMine(a.id, student.id).then(row => { const z = !stop && row && X.unpack(row.text); if (z && z.cm) setSt(p => ({ ...p, cm: z.cm })); }); return () => { stop = true; }; }, []); /* DOCSETS-COMENTARIO-V1: trae los comentarios del teacher aunque la entrega ya esté en este equipo */
   const done = !!st.done; const cls = ds.mode === 'class'; const left = cls && ds.live && ds.live.endAt ? new Date(ds.live.endAt).getTime() - now : 0;
   dsUE(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
   dsUE(() => { if (!cls || done) return; let stop = false; const poll = async () => { const L = await X.fetchGroupTasks(a.groupId); const r = L && L.find(x => x.id === a.id); if (!stop && r) setA(p => ({ ...p, description: r.description })); };
@@ -429,7 +438,7 @@ function DocSetPlayer({ a: a0, student, onClose }) {
         <div style={{ fontSize: 13, fontWeight: 700, color: '#555', lineHeight: 1.5 }}>{nr ? <span style={{ display: 'inline-block', background: '#E3F2FD', color: '#0D47A1', borderRadius: 9, padding: '4px 9px' }}>📝 Nota provisional · {nr} respuesta{nr > 1 ? 's' : ''} la revisa tu profe a mano (no es un error)</span> : '✔ Nota registrada al instante'}<br />{cls ? 'Cuenta como participación de clase.' : 'Cuenta como tarea cumplida.'}</div>
         <div style={{ textAlign: 'left', margin: '12px 0', display: 'flex', flexDirection: 'column', gap: 6 }}>{ds.items.map((x, k) => { const v = (st.res || [])[k]; return (
           <div key={k} style={{ fontSize: 13, fontWeight: 700, background: '#F6F8FC', borderRadius: 9, padding: '7px 9px', lineHeight: 1.45 }}>{v === 'bad' ? '❌' : !v ? '⬜' : v === 'rev' ? '📝' : '✅'} {(st.ans || [])[k] || <i style={{ color: '#9A9484' }}>en blanco</i>}
-            {(v === 'bad' || !v) && x.key ? <div style={{ color: '#2E7D32' }}>→ {(st.nr || [])[k] || x.key}</div> : null}{v === 'rev' ? <div style={{ color: '#0D47A1' }}>La revisa tu profe · no es un error</div> : null}</div>); })}</div>
+            {(v === 'bad' || !v) && x.key ? <div style={{ color: '#2E7D32' }}>→ {(st.nr || [])[k] || x.key}</div> : null}{v === 'rev' ? <div style={{ color: '#0D47A1' }}>La revisa tu profe · no es un error</div> : null}{(st.cm || [])[k] ? <div style={{ color: '#4A148C', background: '#F3E5F5', borderRadius: 7, padding: '5px 8px', marginTop: 4 }}>💬 Tu profe: {st.cm[k]}</div> : null}</div>); })}</div>
         <button className="btn-save" style={{ width: '100%' }} onClick={onClose}>Volver</button>
       </div></div></div>);
   return (

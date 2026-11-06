@@ -469,11 +469,20 @@
   }
   /* El teacher cambia la nota de un ejercicio (✔ Está bien / ✘ Corregir / Dar por buena) */
   async function setItemResult(a, set, sid, row, i, r) {
-    const ans = unpack(row && row.text) || { ans: [], res: [] }; ans.res = ans.res || []; ans.res[i] = r; ans.tch = Object.assign({}, ans.tch || {}, { [i]: r }); ans.grade = score(set, ans.res);
+    const ans = unpack(row && row.text) || { ans: [], res: [] }; try { const fr = await fetchMine(a.id, sid), z = fr && unpack(fr.text); if (z && z.cm) ans.cm = z.cm; } catch (e) {} /* DOCSETS-COMENTARIO-V1: no pisar los comentarios del teacher con una fila vieja */ ans.res = ans.res || []; ans.res[i] = r; ans.tch = Object.assign({}, ans.tch || {}, { [i]: r }); ans.grade = score(set, ans.res);
     const text = packAns(ans), g = ans.grade, fb = nRev(ans.res) ? 'Nota provisional: aún hay respuestas por revisar.' : 'Tu profe revisó tus respuestas.';
     const c = SB(); if (c) { try { await c.from('submissions').upsert({ id: (row && row.id) || ('sub-ds-' + Date.now()), assignment_id: a.id, student_id: sid, submitted_at: (row && row.submitted_at) || new Date().toISOString(), text, attachments: [], status: 'graded', grade: g, feedback: fb, graded_at: new Date().toISOString() }, { onConflict: 'assignment_id,student_id' }); } catch (e) {} }
     try { const k = 'jucum_submissions_v1'; const subs = JSON.parse(localStorage.getItem(k) || '{}'); subs[a.id] = subs[a.id] || {}; subs[a.id][sid] = Object.assign({}, subs[a.id][sid] || { id: row && row.id, submittedAt: row && row.submitted_at, attachments: [] }, { text, status: 'graded', grade: g, feedback: fb, gradedAt: new Date().toISOString() }); localStorage.setItem(k, JSON.stringify(subs)); } catch (e) {}
     return ans;
+  }
+  /* 💬 DOCSETS-COMENTARIO-V1 (06-nov) · comentario del teacher en UN ejercicio (ans.cm[i]). No cambia nota ni estado: solo el texto de la entrega. */
+  async function setItemComment(a, set, sid, row, i, txt) {
+    let base = row; try { const fr = await fetchMine(a.id, sid); if (fr) base = fr; } catch (e) {}
+    const ans = unpack(base && base.text) || { ans: [], res: [] }; ans.cm = (ans.cm || []).slice(); ans.cm[i] = String(txt || '').trim();
+    const text = packAns(ans), c = SB(); let ok = false;
+    if (c && base && base.id) { try { const r = await c.from('submissions').update({ text }).eq('id', base.id); ok = !r.error; } catch (e) {} }
+    try { const k = 'jucum_submissions_v1'; const subs = JSON.parse(localStorage.getItem(k) || '{}'); const cur = (subs[a.id] || {})[sid]; if (cur) { subs[a.id][sid] = Object.assign({}, cur, { text }); localStorage.setItem(k, JSON.stringify(subs)); } } catch (e) {}
+    return ok ? ans : null;
   }
   /* Al cerrar la de clase: lo que quedó a medias se califica con lo respondido (lo demás = en blanco) */
   async function closeDrafts(a, set) {
@@ -517,5 +526,5 @@
     return out;
   }
 
-  window.JUCUM_DOCSETS = { setLabel, sent: SENT, detect, merge, propose, meta, isDocset, isClass, describe, liveState, grade, score, nRev, warnings, norm, packAns, unpack, fetchSubs, fetchMine, fetchGroupTasks, saveDraft, finalize, setItemResult, closeDrafts, patch, notifyGroup, trUrl, cueEs, combineAlts, multiSentence, upgrade, persistUpgrade, classDays, classForDay, seq, reorder };
+  window.JUCUM_DOCSETS = { setItemComment, setLabel, sent: SENT, detect, merge, propose, meta, isDocset, isClass, describe, liveState, grade, score, nRev, warnings, norm, packAns, unpack, fetchSubs, fetchMine, fetchGroupTasks, saveDraft, finalize, setItemResult, closeDrafts, patch, notifyGroup, trUrl, cueEs, combineAlts, multiSentence, upgrade, persistUpgrade, classDays, classForDay, seq, reorder };
 })();
