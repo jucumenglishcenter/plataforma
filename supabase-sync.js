@@ -307,6 +307,7 @@
         authorId:p.author_id, authorName:p.author_name, authorRole:p.author_role,
         title:fClip(p.title, F_MAX_T, '…'), body:fClip(p.body, F_MAX_B, F_NOTE), mediaUrl:p.media_url || null, mediaKind:p.media_kind || null, replies:[],
         kind:p.kind || null, annUntil:p.ann_until || null, annHome:!!p.ann_home, annBatch:p.ann_batch || null,   // FORO-AVISOS-V1 (script 40)
+        poll:(() => { try { const x = typeof p.poll === 'string' ? JSON.parse(p.poll) : p.poll; return x && Array.isArray(x.opts) ? x : null; } catch (e) { return null; } })(),   // FORO-ENCUESTAS-V1
       });
     });
     const postIndex = {};
@@ -431,7 +432,7 @@
     };
     if (!post.kind) { safe(SB().from('forum_posts').insert(row)); return; }
     // FORO-AVISOS-V1: con las columnas del script 40; si aún no existen, se guarda como publicación normal
-    SB().from('forum_posts').insert(Object.assign({}, row, { kind: post.kind, ann_until: post.annUntil || null, ann_home: !!post.annHome, ann_batch: post.annBatch || null }))
+    SB().from('forum_posts').insert(Object.assign({}, row, { kind: post.kind, ann_until: post.annUntil || null, ann_home: !!post.annHome, ann_batch: post.annBatch || null, poll: post.poll || null }))
       .then(({ error }) => { if (error) { console.warn('sync aviso:', error.message, '— ¿corriste el script 40?'); safe(SB().from('forum_posts').insert(row)); } })
       .catch(() => safe(SB().from('forum_posts').insert(row)));
   }

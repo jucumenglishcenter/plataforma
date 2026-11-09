@@ -676,6 +676,8 @@ function StudentDashboard({ user, onLogout }) {
         {/* 💬 CHAT-MEJORAS-V1: «¡Tu teacher te respondió!» arriba de Inicio hasta que abre el chat */}
         {/* 📢 FORO-AVISOS-V1: aviso del teacher hasta «✓ Entendido» */}
         {window.StudentAnnCard && <StudentAnnCard student={student} onOpen={openForum} />}
+        {/* 📊 FORO-ENCUESTAS-V1: encuesta del teacher hasta que vote */}
+        {window.StudentPollCard && <StudentPollCard student={student} onOpen={openForum} />}
         {window.StudentReplyCard && <StudentReplyCard student={student} onOpen={() => setView('mensajes')} />}
         {/* 🚨 SEGUIMIENTO-V1 · 2B: alerta roja fija desde las 7 pm de la víspera del cierre hasta que termine el set */}
         {window.SegAlarmCard && <SegAlarmCard student={student} onGo={() => setView('practica')} />}

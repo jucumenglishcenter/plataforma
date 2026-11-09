@@ -415,6 +415,50 @@ function studentAnns(student) {
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
 
+/* ── 📊 FORO-ENCUESTAS-V1 (09-nov-2026, pedido de la usuaria) ─────────────────────────────
+ * Encuesta = publicación con kind:'encuesta' y poll = {opts, multi, show:'after'|'author', closes, home}.
+ * Votos: tabla forum_votes (script 40), uno por alumno y encuesta (choices = índices). Copia local chica. */
+const VOTES_KEY = 'jucum_forum_votes_v1';
+function _vLoad() { try { return JSON.parse(localStorage.getItem(VOTES_KEY) || '{}') || {}; } catch (e) { return {}; } }
+function _vSave(m) { try { if (window.JUCUM_STORE && window.JUCUM_STORE.setJSON) window.JUCUM_STORE.setJSON(VOTES_KEY, m); else localStorage.setItem(VOTES_KEY, JSON.stringify(m)); } catch (e) {} }
+function isPoll(p) { return !!(p && p.kind === 'encuesta' && p.poll && Array.isArray(p.poll.opts)); }
+function pollOpen(p) { return isPoll(p) && (!p.poll.closes || p.poll.closes >= _annDay(0)); }
+function getVotes(postId) { return _vLoad()[postId] || {}; }
+async function loadVotes(postIds) {
+  const c = _annSB(); if (!c || !postIds || !postIds.length) return false;
+  try {
+    const r = await c.from('forum_votes').select('post_id,user_id,choices').in('post_id', postIds);
+    if (r.error) throw r.error;
+    const m = _vLoad(); postIds.forEach(id => { m[id] = {}; });
+    (r.data || []).forEach(x => { let ch = x.choices; try { if (typeof ch === 'string') ch = JSON.parse(ch); } catch (e) { ch = []; } if (Array.isArray(ch) && ch.length) (m[x.post_id] = m[x.post_id] || {})[x.user_id] = ch; });
+    _vSave(m); return true;
+  } catch (e) { console.warn('JUCUM_FORUM encuestas:', e.message, '— ¿corriste el script 40?'); return false; }
+}
+function vote(postId, userId, choices) {
+  if (!postId || !userId) return;
+  const m = _vLoad(); m[postId] = m[postId] || {};
+  const ch = (choices || []).filter(n => typeof n === 'number');
+  if (ch.length) m[postId][userId] = ch; else delete m[postId][userId];
+  _vSave(m);
+  const c = _annSB(); if (!c) return;
+  const q = ch.length
+    ? c.from('forum_votes').upsert({ post_id: postId, user_id: userId, choices: ch, voted_at: new Date().toISOString() }, { onConflict: 'post_id,user_id' })
+    : c.from('forum_votes').delete().eq('post_id', postId).eq('user_id', userId);
+  q.then(r => { if (r && r.error) console.warn('JUCUM_FORUM voto:', r.error.message); }).catch(() => {});
+}
+function endPoll(groupId, postId) {
+  const data = loadForum();
+  const p = (data[groupId]?.posts || []).find(x => x.id === postId); if (!isPoll(p)) return;
+  p.poll = Object.assign({}, p.poll, { closes: _annDay(-1) }); saveForum(data);
+  if (window.JUCUM_SYNC && window.JUCUM_SYNC.pushPostFields) window.JUCUM_SYNC.pushPostFields(postId, { poll: p.poll });
+}
+function studentPolls(student) {
+  if (!student || !student.group) return [];
+  const m = _vLoad();
+  return (getGroupForum(student.group).posts || []).filter(p => pollOpen(p) && p.poll.home && p.authorRole === 'teacher' && !((m[p.id] || {})[student.id] || []).length)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+}
+
 window.JUCUM_FORUM = {
   getGroupForum, createPost, addReply, togglePin, deletePost, deleteReply,
   isMuted, setMute, getMutes, toggleLike, postLikes, getReactions, toggleReaction,
@@ -422,4 +466,5 @@ window.JUCUM_FORUM = {
   MUTE_REASONS, getMuteInfo, containsBadLanguage, registerBadAttempt, getFlags, deleteStudentFlags,
   MAX_TITLE: FORUM_MAX_TITLE, MAX_BODY: FORUM_MAX_BODY,   // FORO-LIMITE-V1
   isAnnActive, annReads, loadAnnReads, markAnnRead, endAnn, studentAnns, annDay: _annDay,   // FORO-AVISOS-V1
+  isPoll, pollOpen, getVotes, loadVotes, vote, endPoll, studentPolls,   // FORO-ENCUESTAS-V1
 };

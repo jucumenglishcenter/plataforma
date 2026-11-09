@@ -92,6 +92,14 @@ function Forum({ user, groupOverride }) {
     if (isTeacher) { let alive = true; F.loadAnnReads(ids).then(ok => { if (ok && alive) refresh(); }); return () => { alive = false; }; }
     ids.forEach(id => F.markAnnRead(id, user.studentId));
   }, [selectedGroup]);
+  // 📊 FORO-ENCUESTAS-V1: votos de las encuestas del grupo (al entrar y cada 30 s con la pestaña visible)
+  fUseEffect(() => {
+    if (!selectedGroup || !F.isPoll) return;
+    let alive = true;
+    const go = () => { const ids = (F.getGroupForum(selectedGroup).posts || []).filter(F.isPoll).map(p => p.id); if (ids.length && document.visibilityState === 'visible') F.loadVotes(ids).then(ok => { if (ok && alive) refresh(); }); };
+    go(); const iv = setInterval(go, 30000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [selectedGroup]);
 
   if (!group) return <main><div className="empty-state">No tienes grupo asignado.</div></main>;
 
@@ -179,16 +187,25 @@ function NewPostBox({ user, groupId, onPost, muted }) {
   const [gsel, setGsel] = fUseState(() => new Set([groupId]));
   fUseEffect(() => { setGsel(new Set([groupId])); }, [groupId]);
   const isAnn = isT && kind === 'aviso';
+  // 📊 FORO-ENCUESTAS-V1: teacher y alumnos crean encuestas (el alumno, solo en su grupo y sin Inicio)
+  const isPollK = kind === 'encuesta';
+  const [opts, setOpts] = fUseState(['', '']);
+  const [pMulti, setPMulti] = fUseState(false);
+  const [pShow, setPShow] = fUseState('after');
+  const setOpt = (i, v) => setOpts(a => a.map((x, j) => j === i ? v : x));
   const toggleG = (id) => setGsel(prev => { const n = new Set(prev); if (n.has(id)) { if (n.size > 1) n.delete(id); } else n.add(id); return n; });
 
   if (muted) return <MutedBanner info={muted} />;
 
   const submit = () => {
-    if (!title.trim()) { setErr(isAnn ? 'Pon un título al aviso.' : 'Pon un título a tu pregunta.'); return; }
-    if (!body.trim() && !media) { setErr('Escribe el cuerpo de tu mensaje.'); return; }
-    if (isAnn && useUntil && !until) { setErr('Elige hasta qué día se queda arriba (o desmarca la fecha).'); return; }
+    if (!title.trim()) { setErr(isAnn ? 'Pon un título al aviso.' : isPollK ? 'Escribe la pregunta de la encuesta.' : 'Pon un título a tu pregunta.'); return; }
+    const cleanOpts = opts.map(o => o.trim()).filter(Boolean).slice(0, 6);
+    if (isPollK && cleanOpts.length < 2) { setErr('La encuesta necesita al menos 2 opciones.'); return; }
+    if (isPollK && new Set(cleanOpts.map(o => o.toLowerCase())).size !== cleanOpts.length) { setErr('Hay dos opciones iguales.'); return; }
+    if (!body.trim() && !media && !isPollK) { setErr('Escribe el cuerpo de tu mensaje.'); return; }
+    if ((isAnn || isPollK) && useUntil && !until) { setErr(isPollK ? 'Elige el día en que cierra (o desmarca la fecha).' : 'Elige hasta qué día se queda arriba (o desmarca la fecha).'); return; }
     const F = window.JUCUM_FORUM;
-    if (user.role !== 'teacher' && F.containsBadLanguage && F.containsBadLanguage(title + ' ' + body)) {
+    if (user.role !== 'teacher' && F.containsBadLanguage && F.containsBadLanguage(title + ' ' + body + ' ' + (isPollK ? cleanOpts.join(' ') : ''))) {
       const s = window.JUCUM_DATA.STUDENTS.find(s => s.id === user.studentId);
       if (s) F.registerBadAttempt({ id: s.id, name: s.fullName }, groupId, (title.trim() + ' — ' + body.trim()));
       setErr(''); setReflect(true); return;
@@ -207,31 +224,69 @@ function NewPostBox({ user, groupId, onPost, muted }) {
       [...gsel].forEach((gid, i) => window.JUCUM_FORUM.createPost(gid, Object.assign({}, base, {
         id: 'p-' + stamp + (gsel.size > 1 ? '-' + i : ''), kind: 'aviso', annUntil: useUntil ? until : null, annHome: !!home, annBatch: gsel.size > 1 ? batch : null,
       })));
+    } else if (isPollK) {
+      const gids = isT ? [...gsel] : [groupId];
+      const batch = 'pb-' + Date.now(), stamp = Date.now();
+      const poll = { opts: cleanOpts, multi: !!pMulti, show: pShow === 'author' ? 'author' : 'after', closes: useUntil ? until : null, home: !!(isT && home) };
+      gids.forEach((gid, i) => window.JUCUM_FORUM.createPost(gid, Object.assign({}, base, {
+        id: 'p-' + stamp + (gids.length > 1 ? '-' + i : ''), kind: 'encuesta', poll, annBatch: gids.length > 1 ? batch : null,
+      })));
     } else window.JUCUM_FORUM.createPost(groupId, base);
-    setTitle(''); setBody(''); setErr(''); setMedia(null); setOpen(false); setKind('post'); setGsel(new Set([groupId]));
+    setTitle(''); setBody(''); setErr(''); setMedia(null); setOpen(false); setKind('post'); setGsel(new Set([groupId])); setOpts(['', '']); setPMulti(false); setPShow('after');
     onPost();
   };
 
   if (!open) {
     return (
       <button className="forum-new-trigger" onClick={() => setOpen(true)}>
-        ✍️ Publicar una pregunta o comentario — puedes adjuntar 📷 foto o 🎥 video
+        ✍️ Publicar una pregunta, comentario o 📊 encuesta — puedes adjuntar 📷 foto o 🎥 video
       </button>
     );
   }
   return (
     <div className="forum-new">
-      {isT && (
+      {(
         <div className="fkind">
           <button type="button" className={kind === 'post' ? 'on' : ''} onClick={() => setKind('post')} style={kind === 'post' ? { borderColor: '#1F3A8A', background: '#EAF1FF', color: '#1F3A8A' } : undefined}>✍️ Pregunta o comentario</button>
-          <button type="button" className={kind === 'aviso' ? 'on' : ''} onClick={() => setKind('aviso')}>📢 Aviso</button>
+          <button type="button" className={kind === 'encuesta' ? 'on' : ''} onClick={() => { setKind('encuesta'); setUseUntil(true); }} style={kind === 'encuesta' ? { borderColor: '#7B5CC8', background: '#F1ECFB', color: '#5B3FA0' } : undefined}>📊 Encuesta</button>
+          {isT && <button type="button" className={kind === 'aviso' ? 'on' : ''} onClick={() => setKind('aviso')}>📢 Aviso</button>}
         </div>
       )}
       {reflect && <BadWordsNotice onOk={() => setReflect(false)} />}
       {err && <div className="err" style={{marginBottom:10}}>⚠ {err}</div>}
       {/* FORO-LIMITE-V1: título ≤ 120 · mensaje ≤ 2000 caracteres */}
-      <input className="input-text" placeholder={isAnn ? 'Título del aviso (ej. Examen del Módulo 5 · viernes 14)' : 'Título de tu pregunta'} maxLength={120} value={title} onChange={e => setTitle(e.target.value)} />
-      <textarea className="eval-textarea" placeholder="Escribe tu mensaje aquí…" rows={4} maxLength={2000} value={body} onChange={e => setBody(e.target.value)} />
+      <input className="input-text" placeholder={isAnn ? 'Título del aviso (ej. Examen del Módulo 5 · viernes 14)' : isPollK ? 'Pregunta de la encuesta (ej. ¿Qué día prefieren el repaso?)' : 'Título de tu pregunta'} maxLength={120} value={title} onChange={e => setTitle(e.target.value)} />
+      <textarea className="eval-textarea" placeholder={isPollK ? 'Explicación (opcional)' : 'Escribe tu mensaje aquí…'} rows={isPollK ? 2 : 4} maxLength={2000} value={body} onChange={e => setBody(e.target.value)} />
+      {isPollK && (() => {
+        const { GROUPS, LEVELS } = window.JUCUM_DATA;
+        const fin = (gid) => !!(window.JUCUM_GRAD && window.JUCUM_GRAD.isFinished && window.JUCUM_GRAD.isFinished(gid));
+        const list = isT ? GROUPS.filter(g => g.id === groupId || !fin(g.id)) : [];
+        return (
+          <div className="fann-opt" style={{borderColor:'#C9BCE8', background:'#FBF9FF'}}>
+            <span>Opciones (de 2 a 6):</span>
+            {opts.map((o, i) => (
+              <div key={i} style={{display:'flex', gap:6, alignItems:'center'}}>
+                <input className="input-text" style={{margin:0, flex:1, minWidth:0}} placeholder={'Opción ' + (i + 1)} maxLength={80} value={o} onChange={e => setOpt(i, e.target.value)} />
+                {opts.length > 2 && <button type="button" title="Quitar" onClick={() => setOpts(a => a.filter((_, j) => j !== i))} style={{border:'none', background:'#F1EEE6', width:26, height:26, borderRadius:'50%', cursor:'pointer', fontSize:11, flexShrink:0}}>✕</button>}
+              </div>
+            ))}
+            {opts.length < 6 && <button type="button" onClick={() => setOpts(a => a.concat(''))} style={{alignSelf:'flex-start', border:'none', background:'none', color:'#5B3FA0', fontFamily:'inherit', fontWeight:900, fontSize:12.5, cursor:'pointer', padding:0}}>＋ Agregar opción</button>}
+            <label><input type="checkbox" checked={pMulti} onChange={e => setPMulti(e.target.checked)} style={{accentColor:'#7B5CC8'}} /> Pueden marcar varias respuestas</label>
+            <label><input type="radio" name="fpshow" checked={pShow === 'after'} onChange={() => setPShow('after')} style={{accentColor:'#7B5CC8'}} /> Todos ven los resultados después de votar</label>
+            <label><input type="radio" name="fpshow" checked={pShow === 'author'} onChange={() => setPShow('author')} style={{accentColor:'#7B5CC8'}} /> {isT ? 'Solo yo veo los resultados' : 'Solo yo (y el teacher) vemos los resultados'}</label>
+            <label><input type="checkbox" checked={useUntil} onChange={e => setUseUntil(e.target.checked)} style={{accentColor:'#7B5CC8'}} /> Cierra después del {useUntil && <input type="date" value={until} min={window.JUCUM_FORUM.annDay(0)} onChange={e => setUntil(e.target.value)} />}{!useUntil && <span style={{fontWeight:700, color:'#8a7f6a'}}>(abierta hasta que la cierres)</span>}</label>
+            {isT && <label><input type="checkbox" checked={home} onChange={e => setHome(e.target.checked)} style={{accentColor:'#7B5CC8'}} /> Mostrarla también en el Inicio de cada alumno (hasta que vote)</label>}
+            {list.length > 1 && (
+              <div style={{display:'flex', flexDirection:'column', gap:5}}>
+                <span>Publicarla en {gsel.size === 1 ? 'este grupo' : gsel.size + ' grupos'} · toca para agregar otros (cada grupo vota aparte):</span>
+                <div className="fann-gr">
+                  {list.map(g => <button type="button" key={g.id} className={gsel.has(g.id) ? 'on' : ''} onClick={() => toggleG(g.id)} style={gsel.has(g.id) ? {background:'#7B5CC8', borderColor:'#7B5CC8'} : undefined}>{(LEVELS[g.level] || {}).emoji} {g.name}</button>)}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
       {isAnn && (() => {
         const { GROUPS, LEVELS } = window.JUCUM_DATA;
         const fin = (gid) => !!(window.JUCUM_GRAD && window.JUCUM_GRAD.isFinished && window.JUCUM_GRAD.isFinished(gid));
@@ -255,7 +310,7 @@ function NewPostBox({ user, groupId, onPost, muted }) {
         <FAttach pending={media} setPending={setMedia} />
         <div className="forum-new-actions" style={{marginLeft:'auto'}}>
           <button className="btn-cancel" onClick={() => { setOpen(false); setErr(''); setMedia(null); setKind('post'); }}>Cancelar</button>
-          <button className="btn-save" onClick={submit}>{isAnn ? (gsel.size > 1 ? '📢 Publicar en ' + gsel.size + ' grupos' : '📢 Publicar aviso') : 'Publicar'}</button>
+          <button className="btn-save" onClick={submit}>{isAnn ? (gsel.size > 1 ? '📢 Publicar en ' + gsel.size + ' grupos' : '📢 Publicar aviso') : isPollK ? (isT && gsel.size > 1 ? '📊 Publicar en ' + gsel.size + ' grupos' : '📊 Publicar encuesta') : 'Publicar'}</button>
         </div>
       </div>
     </div>
@@ -327,10 +382,11 @@ function PostCard({ post, user, groupId, onChange }) {
             {isTeacherPost && <span className="fpost-role">TEACHER</span>}
             {isAuthorMuted && !isTeacherPost && <span className="fpost-muted">🔇 silenciado</span>}
           </div>
-          <div className="fpost-date">{dateStr}{post.pinned && !annActive && <span className="pin-tag"> · 📌 Fijada</span>}{isAnnPost && <> · <span className="fann-tag">📢 Aviso{annActive ? (post.annUntil ? ' · hasta el ' + fDayLbl(post.annUntil) : '') : ' · terminó'}</span></>}</div>
+          <div className="fpost-date">{dateStr}{post.pinned && !annActive && <span className="pin-tag"> · 📌 Fijada</span>}{isAnnPost && <> · <span className="fann-tag">📢 Aviso{annActive ? (post.annUntil ? ' · hasta el ' + fDayLbl(post.annUntil) : '') : ' · terminó'}</span></>}{F.isPoll && F.isPoll(post) && <> · <span className="fann-tag" style={{background:'#EEE7FB', color:'#5B3FA0'}}>📊 Encuesta{F.pollOpen(post) ? (post.poll.closes ? ' · cierra el ' + fDayLbl(post.poll.closes) : '') : ' · cerrada'}</span></>}</div>
         </div>
         {isTeacher && (
           <div className="fpost-tools">
+            {F.isPoll && F.pollOpen && F.pollOpen(post) && <button className="ftool" onClick={() => { if (confirm('¿Cerrar esta encuesta? Ya no se podrá votar; los resultados quedan.')) { F.endPoll(groupId, post.id); onChange(); } }} title="Cerrar encuesta">🔒</button>}
             {annActive && <button className="ftool" onClick={() => { if (confirm('¿Terminar este aviso? Deja de estar arriba y sale del Inicio de los alumnos. La publicación no se borra.')) { F.endAnn(groupId, post.id); onChange(); } }} title="Terminar aviso">⏹</button>}
             <button className="ftool" onClick={onPin} title={post.pinned ? 'Desfijar' : 'Fijar'}>{post.pinned ? '📌' : '📍'}</button>
             {!isTeacherPost && (isAuthorMuted
@@ -345,6 +401,7 @@ function PostCard({ post, user, groupId, onChange }) {
       <div className="fpost-body">{post.body}</div>
       {post.mediaUrl && <FMedia url={post.mediaUrl} kind={post.mediaKind} />}
       {isTeacher && annActive && <AnnReadBar post={post} groupId={groupId} />}
+      {F.isPoll && F.isPoll(post) && <PollBlock post={post} user={user} groupId={groupId} onChange={onChange} />}
 
       <div className="fpost-actions" style={{flexWrap:'wrap', alignItems:'center'}}>
         {(() => { const groups = {}; reacts.forEach(r => { groups[r.e] = (groups[r.e] || 0) + 1; }); return Object.entries(groups).map(([e, n]) => (
@@ -493,6 +550,108 @@ function AnnReadBar({ post, groupId }) {
       {miss.length > 0 && <button onClick={() => setShowW(s => !s)}>{showW ? 'Ocultar' : 'Ver quiénes faltan'}</button>}
       {miss.length > 0 && <button className="go" disabled={sent} onClick={remind}>{sent ? '✓ Recordatorio enviado' : '🔔 Recordar a ' + miss.length}</button>}
       {showW && miss.length > 0 && <span style={{flexBasis:'100%', fontWeight:700, color:'#5A3A30'}}>Faltan: {miss.map(s => s.fullName).join(', ')}</span>}
+    </div>
+  );
+}
+
+/* 📊 FORO-ENCUESTAS-V1 · la encuesta dentro de la publicación (votar, resultados, quién votó, recordar) */
+function PollBlock({ post, user, groupId, onChange }) {
+  const F = window.JUCUM_FORUM;
+  const isT = user.role === 'teacher';
+  const me = isT ? 'teacher' : user.studentId;
+  const pl = post.poll || { opts: [] };
+  const open = F.pollOpen(post);
+  const votes = F.getVotes(post.id);
+  const mine = votes[me] || [];
+  const [sel, setSel] = fUseState(null);
+  const [showW, setShowW] = fUseState(false);
+  const [sent, setSent] = fUseState(false);
+  const isAuthor = post.authorId === me;
+  const { STUDENTS } = window.JUCUM_DATA;
+  const voters = Object.keys(votes).filter(u => u !== 'teacher' && (votes[u] || []).length);
+  const counts = pl.opts.map((_, i) => voters.filter(u => votes[u].indexOf(i) >= 0).length);
+  const total = voters.length;
+  const canSee = isT || isAuthor || (pl.show !== 'author' && (mine.length > 0 || !open));
+  const muted = !isT && F.isMuted && F.isMuted(me);
+  const canVote = open && !isT && !muted;
+  const cur = sel || mine;
+  const pick = (i) => {
+    if (!canVote) return;
+    if (pl.multi) { const s = new Set(cur); s.has(i) ? s.delete(i) : s.add(i); setSel([...s].sort((a, b) => a - b)); return; }
+    F.vote(post.id, me, mine[0] === i ? [] : [i]); onChange();
+  };
+  const saveMulti = () => { F.vote(post.id, me, sel || []); setSel(null); onChange(); };
+  const roster = fRoster(groupId);
+  const miss = roster.filter(s => !(votes[s.id] || []).length);
+  const nm = (u) => { const s = STUDENTS.find(x => x.id === u); return s ? fShortName(s.fullName) : '—'; };
+  const remind = () => {
+    if (!window.JUCUM_NOTIF || !miss.length) return;
+    miss.forEach(s => window.JUCUM_NOTIF.pushNotif(s.id, { type: 'forum', title: '📊 Tu teacher espera tu voto', body: post.title || '', link: 'forum' }));
+    setSent(true);
+  };
+  return (
+    <div style={{display:'flex', flexDirection:'column', gap:6, margin:'8px 0 4px'}}>
+      {pl.multi && open && !isT && <span style={{fontSize:11.5, fontWeight:800, color:'#7B5CC8'}}>Puedes marcar varias</span>}
+      {pl.opts.map((o, i) => {
+        const n = counts[i], pc = total ? Math.round(n * 100 / total) : 0, on = cur.indexOf(i) >= 0;
+        return (
+          <button key={i} type="button" onClick={() => pick(i)} disabled={!canVote} style={{position:'relative', overflow:'hidden', border:'1.5px solid ' + (on ? '#7B5CC8' : '#DCD3F0'), background:'#fff', borderRadius:11, padding:'9px 12px', textAlign:'left', fontFamily:'inherit', fontSize:13, fontWeight:800, color:'#2A2A2A', cursor: canVote ? 'pointer' : 'default', display:'flex', alignItems:'center', gap:8}}>
+            {canSee && <span style={{position:'absolute', top:0, bottom:0, left:0, width: pc + '%', background:'#EEE7FB', transition:'width .4s'}}></span>}
+            {!isT && <span style={{position:'relative', width:18, height:18, borderRadius: pl.multi ? 5 : '50%', border:'2px solid ' + (on ? '#7B5CC8' : '#C9BCE8'), background: on ? '#7B5CC8' : '#fff', color:'#fff', fontSize:11, display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>{on ? '✓' : ''}</span>}
+            <span style={{position:'relative', flex:1, minWidth:0}}>{o}</span>
+            {canSee && <span style={{position:'relative', fontWeight:900, color:'#5B3FA0', whiteSpace:'nowrap'}}>{pc}% · {n}</span>}
+          </button>
+        );
+      })}
+      {sel && <button type="button" onClick={saveMulti} style={{alignSelf:'flex-start', border:'none', background:'linear-gradient(135deg,#7B5CC8,#5B3FA0)', color:'#fff', borderRadius:10, padding:'7px 14px', fontFamily:'inherit', fontWeight:900, fontSize:12.5, cursor:'pointer'}}>✓ Guardar mi voto</button>}
+      <div className="fann-rd" style={{marginTop:2}}>
+        {isT ? (
+          <>
+            🗳 {total} de {roster.length} votaron{pl.show === 'author' && ' · 🔒 solo tú ves los resultados'}
+            <button onClick={() => setShowW(s => !s)}>{showW ? 'Ocultar' : '👁 Ver quién votó qué'}</button>
+            {open && miss.length > 0 && <button className="go" style={{background:'#7B5CC8', borderColor:'#7B5CC8'}} disabled={sent} onClick={remind}>{sent ? '✓ Recordatorio enviado' : '🔔 Recordar a ' + miss.length}</button>}
+          </>
+        ) : !open ? <span>🔒 Encuesta cerrada · {total} voto{total === 1 ? '' : 's'}</span>
+          : muted ? <span>🔇 Tu participación está pausada: puedes leer, pero no votar.</span>
+          : mine.length ? <span>✅ Votaste. Puedes cambiar tu voto{pl.closes ? ' hasta el ' + fDayLbl(pl.closes) : ''}.{!canSee && ' Los resultados los ve quien la creó.'}</span>
+          : <span>👆 Toca {pl.multi ? 'tus opciones' : 'una opción'} para votar. {pl.show === 'author' ? 'Los resultados los ve quien la creó.' : 'Verás los resultados después.'}</span>}
+      </div>
+      {isT && showW && (
+        <div style={{background:'#F7F4EC', borderRadius:10, padding:'8px 10px', fontSize:12, display:'flex', flexDirection:'column', gap:4}}>
+          {pl.opts.map((o, i) => <div key={i}><b>{o}:</b> {voters.filter(u => votes[u].indexOf(i) >= 0).map(nm).join(', ') || '—'}</div>)}
+          {miss.length > 0 && <div style={{color:'#7A2A1E'}}><b>Faltan:</b> {miss.map(s => fShortName(s.fullName)).join(', ')}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* 📊 FORO-ENCUESTAS-V1 · alumno: encuesta del teacher en Inicio hasta que vote */
+function StudentPollCard({ student, onOpen }) {
+  const F = window.JUCUM_FORUM;
+  const [, setT] = fUseState(0);
+  fUseEffect(() => {
+    if (!F || !F.studentPolls || !student || !student.group) return;
+    const ids = (F.getGroupForum(student.group).posts || []).filter(p => F.isPoll(p) && F.pollOpen(p)).map(p => p.id);
+    let alive = true;
+    if (ids.length) F.loadVotes(ids).then(ok => { if (ok && alive) setT(t => t + 1); });
+    return () => { alive = false; };
+  }, [student && student.id]);
+  if (!F || !F.studentPolls) return null;
+  const list = F.studentPolls(student);
+  if (!list.length) return null;
+  const p = list[0];
+  return (
+    <div style={{background:'#fff', border:'2px solid #7B5CC8', borderRadius:18, padding:'14px 16px', marginBottom:14, display:'flex', flexDirection:'column', gap:6, boxShadow:'0 8px 20px rgba(91,63,160,.16)'}}>
+      <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
+        <span style={{fontSize:11.5, fontWeight:900, color:'#5B3FA0', textTransform:'uppercase', letterSpacing:'.06em'}}>📊 Encuesta de tu teacher</span>
+        {list.length > 1 && <span style={{fontSize:11, fontWeight:800, color:'#8a7f6a'}}>1 de {list.length}</span>}
+        {p.poll.closes && <span style={{fontSize:11, fontWeight:800, color:'#8a7f6a', marginLeft:'auto'}}>cierra el {fDayLbl(p.poll.closes)}</span>}
+      </div>
+      <div style={{fontSize:16, fontWeight:900, color:'#2A2A2A', lineHeight:1.3}}>{p.title}</div>
+      {p.body && <div style={{fontSize:13, lineHeight:1.5, whiteSpace:'pre-wrap', wordBreak:'break-word'}}>{String(p.body).slice(0, 300)}</div>}
+      <PollBlock post={p} user={{ role: 'student', studentId: student.id }} groupId={student.group} onChange={() => setT(t => t + 1)} />
+      {onOpen && <button type="button" onClick={onOpen} style={{alignSelf:'flex-start', border:'1.5px solid #DCD3F0', background:'#fff', color:'#5B3FA0', borderRadius:10, padding:'6px 12px', fontFamily:'inherit', fontWeight:800, fontSize:12.5, cursor:'pointer'}}>Ver en el foro</button>}
     </div>
   );
 }
@@ -673,4 +832,4 @@ function relativeTime(iso) {
   return new Date(iso).toLocaleDateString('es-PE', { day:'numeric', month:'long' });
 }
 
-Object.assign(window, { Forum, NewPostBox, PostCard, ReplyRow, MutedList, MutedBanner, BadWordsNotice, MuteModal, FlagsList, AnnReadBar, StudentAnnCard });
+Object.assign(window, { Forum, NewPostBox, PostCard, ReplyRow, MutedList, MutedBanner, BadWordsNotice, MuteModal, FlagsList, AnnReadBar, StudentAnnCard, PollBlock, StudentPollCard });
