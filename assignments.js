@@ -101,7 +101,7 @@ async function retryPending() {
       if (window.JUCUM_SYNC && window.JUCUM_SYNC.deleteAssignmentDb) window.JUCUM_SYNC.deleteAssignmentDb(id);
     }
   } catch (e) {}
-  for (const a of loadAssignments().filter(x => x && x.pendingSync)) {
+  for (const a of loadAssignments().filter(x => x && x.pendingSync && !taskTombs()[x.id])) {   // TAREA-LAPIDA-NUBE-V1: lo borrado no se resube
     const r = await pushTaskSafe(a);
     if (r.ok) { markSynced(a.id); notifyRecipients(a, !!a.editedAt); }
   }
@@ -199,6 +199,7 @@ async function updateAssignment(id, data, opts) {
 
 function deleteAssignment(id) {
   addTaskTomb(id);                                    // lápida: que la nube no la resucite
+  if (window.JUCUM_SYNC && window.JUCUM_SYNC.tombTaskCloud) window.JUCUM_SYNC.tombTaskCloud([id]);   // 🪦 TAREA-LAPIDA-NUBE-V1: también en la nube (ningún otro equipo la resube)
   saveAssignments(loadAssignments().filter(a => a.id !== id));
   const subs = loadSubmissions(); delete subs[id]; saveSubmissions(subs);  if (window.JUCUM_SYNC && window.JUCUM_SYNC.deleteAssignmentDb) window.JUCUM_SYNC.deleteAssignmentDb(id);
 }

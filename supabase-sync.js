@@ -471,7 +471,7 @@
   window.JUCUM_SYNC = {
     hydrate, prefetch, roster, pullNotifs, pushSettings, pushProgress, pushNotif, markNotifRead, markAllNotifRead,
     pushEvaluation, pushPost, pushPostFields, pushReply, pushPin, deletePostDb, deleteReplyDb, pushLike, pushMute, pushFlag, deleteFlagsDb,
-    pushModule, deleteModuleDb, fetchModules, fetchActivityParts, fetchModuleProgress, fetchModuleParts, computeStats,    pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb, uploadAttachments, refreshTasks, refreshProgress,
+    pushModule, deleteModuleDb, fetchModules, fetchActivityParts, fetchModuleProgress, fetchModuleParts, computeStats,    pushAssignment, deleteAssignmentDb, tombTaskCloud, pushSubmission, gradeSubmissionDb, uploadAttachments, refreshTasks, refreshProgress,
     pushExam, deleteExamDb, pushWindow, deleteWindowDb,
     pushAttendance, pushSurvey,
   };
@@ -524,16 +524,47 @@
     status: s.status, grade: s.grade, feedback: s.feedback, gradedAt: s.graded_at,
   });
   const _okSynced = (id) => { try { if (window.JUCUM_TASKS && window.JUCUM_TASKS.markSynced) window.JUCUM_TASKS.markSynced(id); } catch (e) {} };
+  /* 🪦 TAREA-LAPIDA-NUBE-V1 (09-nov-2026): la lápida de un borrado vivía SOLO en el equipo que borró. Otro equipo con una
+   * copia «pendiente» (su subida nunca se confirmó) la volvía a subir y la tarea REAPARECÍA (caso A1 L-J 4:30 pm, 9-nov:
+   * 10 tareas del 5-nov ya borradas volvieron a las 12:59 pm, con sus entregas viejas). Ahora las lápidas también viven en
+   * la nube (app_settings 'task_tombs' = {id: ms}, se juntan por UNIÓN y se purgan a los 60 días): ningún equipo resube
+   * una tarea borrada, y el equipo del teacher vuelve a borrar la que un equipo viejo haya resucitado. Sin SQL. */
+  const CLOUD_TOMBS = 'task_tombs';
+  const _isStudentDev = () => { const s = sessionUser(); return !!(s && s.role === 'student'); };
+  async function cloudTaskTombs() {
+    try {
+      if (!SB()) return null;
+      const r = await settle(SB().from('app_settings').select('value').eq('key', CLOUD_TOMBS).maybeSingle());
+      if (r.error) return null;
+      const v = r.data && r.data.value; return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
+    } catch (e) { return null; }
+  }
+  let _tombQ = Promise.resolve(true);
+  function tombTaskCloud(list) {   // list = ids o [id, ms] · en fila: cada escritura parte de lo último de la nube
+    _tombQ = _tombQ.then(async () => {
+      if (_isStudentDev() || !SB()) return false;
+      const ct = await cloudTaskTombs(); if (ct === null) return false;
+      const now = Date.now(); let add = false;
+      [].concat(list || []).forEach(x => { const id = Array.isArray(x) ? x[0] : x, t = Array.isArray(x) ? x[1] : now; if (id && !ct[id]) { ct[id] = t || now; add = true; } });
+      if (!add) return true;
+      Object.keys(ct).forEach(id => { if (now - (ct[id] || 0) > 60 * 86400000) delete ct[id]; });
+      const r = await settle(SB().from('app_settings').upsert({ key: CLOUD_TOMBS, value: ct }, { onConflict: 'key' }));
+      return !r.error;
+    }).catch(() => false);
+    return _tombQ;
+  }
   const _okSubSynced = (aid, sid) => { try { if (window.JUCUM_TASKS && window.JUCUM_TASKS.markSubSynced) window.JUCUM_TASKS.markSubSynced(aid, sid); } catch (e) {} };
 
   async function pullTasks() {
     const tomb = _tombs();
     let enNube = null, bien = true;
     try {
-      const [ra, rs] = await Promise.all([
+      const [ra, rs, ct] = await Promise.all([
         take('assignments', Q.assignments),
         take('submissions', Q.submissions),
+        cloudTaskTombs(),   // 🪦 TAREA-LAPIDA-NUBE-V1
       ]);
+      if (ct) Object.keys(ct).forEach(id => { if (!tomb[id]) tomb[id] = ct[id]; });
       // ── Tareas ──
       if (ra.error || !ra.data) {
         bien = false;
@@ -586,13 +617,15 @@
       }
       // Lápidas: reintenta el borrado si la nube todavía tiene la tarea; purga
       // las de más de 60 días.
-      const ahora = Date.now(), quedan = {};
+      const ahora = Date.now(), quedan = {}, studentDev = _isStudentDev();
       Object.keys(tomb).forEach(id => {
         if (ahora - (tomb[id] || 0) > 60 * 86400000) return;
         quedan[id] = tomb[id];
-        if (enNube && enNube[id]) deleteAssignmentDb(id);
+        if (enNube && enNube[id] && !studentDev) deleteAssignmentDb(id);   // TAREA-LAPIDA-NUBE-V1: solo el equipo del teacher borra en la nube
       });
       try { localStorage.setItem(TOMB_KEY, JSON.stringify(quedan)); } catch (e) {}
+      /* TAREA-LAPIDA-NUBE-V1: lo borrado en ESTE equipo que la nube aún no tiene como lápida se suma (unión) */
+      if (ct && !studentDev) { const falta = Object.keys(quedan).filter(id => !ct[id]).map(id => [id, quedan[id]]); if (falta.length) tombTaskCloud(falta); }
       return bien;
     } catch (e) { console.warn('pullTasks:', e && e.message); return false; }
   }

@@ -709,8 +709,8 @@ function TeacherAssignments({ onBack, embedded, groupId: gidProp, onGroupChange,
       {docSets && window.DocSetReview && <DocSetReview doc={docSets.doc} groupId={docSets.groupId} fileName={docSets.fileName} onClose={() => setDocSets(null)} onDone={() => { setDocSets(null); refresh(); }} />}
       {prefill && <AssignmentForm prefill={prefill} onClose={() => setPrefill(null)} onSaved={() => { setPrefill(null); refresh(); }} />}
       {editing && <AssignmentForm initial={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />}
-      {dupping && <DuplicateTaskModal task={dupping} onClose={() => setDupping(null)} onDone={() => { setDupping(null); refresh(); }} onEditCopy={pf => { setDupping(null); setPrefill(pf); }} />}
-      {bulkDup && <DuplicateTaskModal task={bulkDup.tasks[0]} tasks={bulkDup.tasks} move={bulkDup.move} onClose={() => setBulkDup(null)} onDone={() => { setBulkDup(null); setSel([]); refresh(); }} onEditCopy={pf => { setBulkDup(null); setPrefill(pf); }} />}
+      {dupping && <DuplicateTaskModal task={dupping} onClose={() => setDupping(null)} onDone={(r) => { setDupping(null); refresh(); if (r && r.groups && r.groups.length === 1 && r.groups[0] !== gid) setGid(r.groups[0]); }} onEditCopy={pf => { setDupping(null); setPrefill(pf); }} />}
+      {bulkDup && <DuplicateTaskModal task={bulkDup.tasks[0]} tasks={bulkDup.tasks} move={bulkDup.move} onClose={() => setBulkDup(null)} onDone={(r) => { setBulkDup(null); setSel([]); refresh(); /* DUP-DESTINO-V1: con un solo grupo destino, Tareas pasa a ese grupo y se ve la copia */ if (r && r.groups && r.groups.length === 1 && r.groups[0] !== gid) setGid(r.groups[0]); }} onEditCopy={pf => { setBulkDup(null); setPrefill(pf); }} />}
       {dating && <TaskDateModal tasks={dating} onClose={() => setDating(null)} onDone={() => { setDating(null); setSel([]); refresh(); }} />}
     </Wrap>
   );
@@ -774,7 +774,7 @@ function DuplicateTaskModal({ task, tasks, move, onClose, onDone, onEditCopy }) 
       }
     }
     setBusy(false);
-    if (!fail.length) { onDone(); return; }
+    if (!fail.length) { onDone({ groups: picked.slice(), due: dueIso || (many.length === 1 ? null : (many[0].dueAt && new Date(many[0].dueAt) > new Date() ? many[0].dueAt : null)) }); return; }   // DUP-DESTINO-V1: el calendario salta a la copia
     setResult({ ok, fail });
   };
   const editFirst = () => {
@@ -828,6 +828,7 @@ function DuplicateTaskModal({ task, tasks, move, onClose, onDone, onEditCopy }) 
                   {due && <button type="button" className="preset" onClick={() => setDue('')}>Sin fecha</button>}
                 </div>
                 <div className="settings-hint">Se aplica a todas las copias. Si cada grupo cierra distinto, duplica en uno y usa “Revisar antes”, o edita cada copia después.</div>
+                {!due && !move && <div className="settings-hint" style={{color:'#B26A00', fontWeight:800}}>⚠ Sin fecha de cierre, la copia no aparece en el calendario (solo en 📋 Tareas).</div>}
               </div>
 
               {move && <div style={{background:'#EEF2FC', borderRadius:10, padding:'9px 12px', marginBottom:10, fontSize:12.5, fontWeight:700, color:'#1F3A8A', lineHeight:1.5}}>➜ Se <b>mueve</b> si nadie la ha entregado. Si ya tiene entregas, se crea una copia en el otro grupo y la original se queda aquí con sus notas.</div>}

@@ -226,6 +226,9 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
   const dsDays = (window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.classDays && groupId) ? window.JUCUM_DOCSETS.classDays(groupId) : {};   /* DOCSETS-FIX-V2: sets 🏫 de clase por día */
 
   const sel = day(selDate); const selLog = logFor(selDate); const selTasks = tasksFor(selDate);
+  /* DUP-DESTINO-V1 (09-nov): después de duplicar, el calendario pasa al grupo y al día de la copia (antes se quedaba en el
+   * grupo original y la copia «no aparecía donde la dupliqué») */
+  const cpJumpTo = (gid, d) => { if (gid) setGroupId(gid); if (d) { setSelDate(d); const x = parseYMD(d); setCursor({ y: x.getFullYear(), m: x.getMonth() }); } };
   /* SEGUIMIENTO-V1 · E: el día siguiente al cierre de un set aparece su balance final */
   const SG = window.JUCUM_SEG;
   const selClosing = (SG && window.SegCloseCard) ? TT.getPracticePlans().filter(p => p.groupId === groupId && SG.assigned(p) && SG.range(p).to === SG.addD(selDate, -1)) : [];
@@ -305,6 +308,7 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
               sub={`Tarea · cierra ${hh}${t.gradable ? ' · calificable' : ''}`}
               openLabel="📥 Ver entregas"
               onDup={window.DuplicateTaskModal ? () => setDupTask(t) : null}
+              onDelete={window.JUCUM_TASKS ? () => { window.JUCUM_TASKS.deleteAssignment(t.id); onChange(); } : null}   /* TAREA-BORRAR-CAL-V1 (09-nov): 🗑 Eliminar también desde el calendario (⋯ Más, con confirmación) */
               onOpen={() => onOpenTasks && onOpenTasks(t.id)} />
           );
         })}
@@ -349,8 +353,10 @@ function CalendarHub({ groupId: groupIdProp, setGroupId: setGroupIdProp, cursor,
         )}
       </div>
       {summaryDate && <ClassSummaryModal date={summaryDate} groupId={groupId} onClose={() => setSummaryDate(null)} onDuplicate={(p) => { setSummaryDate(null); setDupPlan(p); }} />}
-      {dupPlan && <DuplicateClassModal plan={dupPlan} onClose={() => setDupPlan(null)} onDone={() => { setDupPlan(null); onChange(); }} />}
-      {dupTask && window.DuplicateTaskModal && <DuplicateTaskModal task={dupTask} onClose={() => setDupTask(null)} onDone={() => { setDupTask(null); onChange(); }} onEditCopy={pf => { setDupTask(null); setDupTaskEdit(pf); }} />}
+      {dupPlan && <DuplicateClassModal plan={dupPlan} onClose={() => setDupPlan(null)} onDone={(gid, d) => { setDupPlan(null); onChange(); if (gid) cpJumpTo(gid, d); }} />}
+      {dupTask && window.DuplicateTaskModal && <DuplicateTaskModal task={dupTask} onClose={() => setDupTask(null)} onDone={(r) => { setDupTask(null); onChange();
+        /* DUP-DESTINO-V1: con UN grupo destino, el calendario muestra la copia (grupo + día de cierre) */
+        if (r && r.groups && r.groups.length === 1) { const d = r.due ? localDay(r.due) : null; cpJumpTo(r.groups[0], d); if (!d) alert('⧉ Tarea duplicada. La copia no tiene fecha de cierre, así que no sale en el calendario: la ves en 📋 Tareas de ese grupo.'); } }} onEditCopy={pf => { setDupTask(null); setDupTaskEdit(pf); }} />}
       {dupTaskEdit && window.AssignmentForm && <AssignmentForm prefill={dupTaskEdit} onClose={() => setDupTaskEdit(null)} onSaved={() => { setDupTaskEdit(null); onChange(); }} />}
       {trackSet && <PracticeSetProgress plan={trackSet} onClose={() => setTrackSet(null)} onChanged={onChange} />}
       {followPlan && window.FollowUpModal && <FollowUpModal plan={followPlan} onClose={() => setFollowPlan(null)} />}
@@ -497,11 +503,15 @@ function DuplicateClassModal({ plan, onClose, onDone }) {
   const dup = () => {
     const g = (GROUPS || []).find(x => x.id === gid);
     const lvl = (g && g.level) || plan.level;
-    const copy = { ...plan, id: undefined, nextBox: undefined, groupId: gid, level: lvl, date,
+    /* DUP-DESTINO-V1 (09-nov): la copia es un plan PROPIO del grupo destino. Antes se llevaba el «📄 del plan del teacher» del
+     * original (source) → al tocar Abrir volvía a la subida del grupo ORIGINAL; y si el original ya tenía cierre (closing),
+     * la copia salía «✅ cerrada» con la asistencia del otro grupo. */
+    const copy = { ...plan, id: undefined, nextBox: undefined, source: undefined, closing: undefined, groupId: gid, level: lvl, date,
       blocks: (plan.blocks || []).map(b => ({ ...b, id: 'b_' + Math.random().toString(36).slice(2,7) })) };
+    delete copy.source; delete copy.closing;
     TT.upsertClassPlan(copy);
-    alert('⧉ Clase duplicada al grupo seleccionado el ' + date + '. Ábrela en su calendario para ajustar lo que quieras (no se tocó el original).');
-    onDone();
+    alert('⧉ Clase duplicada en ' + ((g && g.name) || 'el grupo elegido') + ' el ' + date + '. Ahora ves el calendario de ese grupo (no se tocó el original).');
+    onDone(gid, date);
   };
   return (
     <div onClick={onClose} style={{position:'fixed', inset:0, zIndex:1001, background:'rgba(15,23,42,0.55)', backdropFilter:'blur(3px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
@@ -541,7 +551,7 @@ function DayRow({ icon, tint, border, title, sub, chip, onOpen, openLabel, onDel
     document.addEventListener('mousedown', h); document.addEventListener('touchstart', h);
     return () => { document.removeEventListener('mousedown', h); document.removeEventListener('touchstart', h); };
   }, [more]);
-  const del = onDelete ? () => { if (window.confirm('¿Eliminar «' + title + '»?\n\nSe quita del calendario' + (icon === '📝' ? ' y de la práctica de los alumnos.' : '.'))) onDelete(); } : null;
+  const del = onDelete ? () => { if (window.confirm('¿Eliminar «' + title + '»?\n\nSe quita del calendario' + (icon === '📝' ? ' y de la práctica de los alumnos.' : icon === '📋' ? ' y de las tareas de los alumnos, con sus entregas.' : '.'))) onDelete(); } : null;
   const extra = [onFollow && ['🔎 Seguimiento', onFollow], onReport && ['📤 Reporte', onReport], onPrint && ['🖨️ Imprimir / PDF', onPrint], onDup && ['⧉ Duplicar a otro grupo', onDup]].filter(Boolean);
   const item = { display:'block', width:'100%', textAlign:'left', border:0, background:'none', padding:'9px 11px', borderRadius:8, fontFamily:'inherit', fontWeight:800, fontSize:13, color:'#2b2b2b', cursor:'pointer', whiteSpace:'nowrap' };
   return (
