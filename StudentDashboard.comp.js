@@ -616,7 +616,7 @@ function StudentDashboard({ user, onLogout }) {
           <div className="pgtitle">Mi panel de aprendizaje</div>
         </div>
         <div className="app-right st-hdr-right">
-          <span data-tut="bell" style={{display:'inline-flex'}}><NotifBell userId={student.id} onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); else if (n.link === 'tasks') setView('tasks'); else if (n.link === 'exam') setView('exam'); else if (n.link === 'messages') setView('mensajes'); else if (n.link === 'practica' || n.type === 'daily-reminder' || n.type === 'streak' || n.type === 'achievement') setView('practica'); }} /></span>
+          <span data-tut="bell" style={{display:'inline-flex'}}><NotifBell userId={student.id} live onNotifClick={(n) => { if (n.link === 'forum') setView('forum'); else if (n.link === 'tasks') setView('tasks'); else if (n.link === 'exam') setView('exam'); else if (n.link === 'messages') setView('mensajes'); else if (n.link === 'practica' || n.type === 'daily-reminder' || n.type === 'streak' || n.type === 'achievement') setView('practica'); }} /></span>
           <StudentUserMenu student={student} level={level} group={group} view={view} setView={setView} onLogout={onLogout} payAlert={!!(acct.blocked || acct.state==='por_vencer' || acct.state==='aviso')} />
         </div>
       </header>
@@ -675,6 +675,8 @@ function StudentDashboard({ user, onLogout }) {
       <main>
         {/* 🚨 SEGUIMIENTO-V1 · 2B: alerta roja fija desde las 7 pm de la víspera del cierre hasta que termine el set */}
         {window.SegAlarmCard && <SegAlarmCard student={student} onGo={() => setView('practica')} />}
+        {/* ⏳ RACHA-TIEMPO-V1: minutos que faltan para la racha de hoy + reloj del día */}
+        <StreakNowCard student={student} todayMin={todayMin} target={targetMin} onGo={() => setView('practica')} />
         <div className="welcome" data-level={student.level} style={{background:'linear-gradient(135deg,'+level.color+','+level.dark+')'}}>
           <div className="welcome-text">
             <div className="eyebrow" style={{color:'#fff', opacity:1, textShadow:'0 1px 3px rgba(0,0,0,.4)'}}>{level.emoji} {level.code} · {group.name}</div>
@@ -1542,6 +1544,61 @@ const LG_SCENE_META = [['theme-gold','🏆','Oro'],['theme-mountains','🏔️',
 const LG_EMOJIS = [['🦁','León'],['🦊','Zorro'],['🐯','Tigre'],['🐼','Panda'],['🦄','Unicornio'],['🐲','Dragón'],['🦅','Águila'],['🦉','Búho'],['🐙','Pulpo'],['🦖','Dino'],['🐧','Pingüino'],['🐺','Lobo'],['🦋','Mariposa'],['🐬','Delfín'],['🦈','Tiburón'],['🐝','Abeja'],['🚀','Cohete'],['⚡','Rayo'],['🔥','Fuego'],['🌟','Estrella'],['👑','Corona'],['💎','Diamante'],['🎯','Diana'],['🏆','Trofeo']];
 const LG_AVA = {1:{a:58,e:30,b:60,bg:'linear-gradient(#F4B400,#D49A00)',ab:'#C99700',ring:'0 0 0 4px rgba(244,180,0,.35),0 4px 14px rgba(0,0,0,.3)'},2:{a:46,e:23,b:46,bg:'linear-gradient(#B8BCC4,#8E939C)',ab:'#8E939C',ring:'0 3px 10px rgba(0,0,0,.25)'},3:{a:44,e:22,b:34,bg:'linear-gradient(#D98C4A,#B06A2C)',ab:'#B06A2C',ring:'0 3px 10px rgba(0,0,0,.25)'}};
 const lgIni = (s) => (s.fullName || '?').split(' ').map(w => w[0]).slice(0,2).join('');
+
+/* ⏳ RACHA-TIEMPO-V1 (09-nov-2026, opción A elegida por la usuaria): tarjeta arriba de Inicio con los MINUTOS que faltan
+ * para que hoy cuente en la racha (anillo) y cuánto queda del día (hasta 11:59 pm Perú). Solo con datos reales de la nube
+ * (streakInfo); no sale el domingo libre ni si el día ya contaba al entrar. Al llegar a la meta se pone verde y se oculta a los 8 s. */
+function StreakNowCard({ student, todayMin, target, onGo }) {
+  const [, setTk] = React.useState(0);
+  const [doneAt, setDoneAt] = React.useState(null);
+  const pendSeen = React.useRef(false);
+  const si = student && student.streakInfo;
+  const goal = (si && si.goal) || target || 15;
+  const done = Math.max(todayMin || 0, (si && si.todayMin) || 0);
+  const met = !!si && (!!si.todayCounts || done >= goal);
+  React.useEffect(() => { const iv = setInterval(() => setTk(t => t + 1), 30000); return () => clearInterval(iv); }, []);
+  React.useEffect(() => {
+    if (!si) return;
+    if (!met) { pendSeen.current = true; return; }
+    if (pendSeen.current && !doneAt) { setDoneAt(Date.now()); const to = setTimeout(() => setTk(t => t + 1), 8200); return () => clearTimeout(to); }
+  }, [met, !!si]);
+  if (!si) return null;
+  if (met && !(doneAt && Date.now() - doneAt < 8000)) return null;
+  if (!met && si.isSunday) return null;
+  const p = new Date(Date.now() - 5 * 3600e3);
+  const secLeft = Math.max(0, 86400 - (p.getUTCHours() * 3600 + p.getUTCMinutes() * 60 + p.getUTCSeconds()));
+  const hL = Math.floor(secLeft / 3600), mL = Math.floor((secLeft % 3600) / 60);
+  const left = Math.max(1, Math.ceil(goal - done));
+  const pct = Math.min(100, Math.round(done / Math.max(1, goal) * 100));
+  const n = si.streak || 0, late = p.getUTCHours() >= 19, urgent = secLeft < 3600;
+  if (met) return (
+    <div style={{display:'flex', alignItems:'center', gap:14, borderRadius:18, padding:'14px 16px', margin:'0 0 16px', background:'linear-gradient(135deg,#43C463,#1B8A3A)', color:'#fff', boxShadow:'0 10px 26px rgba(46,168,75,.35)'}}>
+      <div style={{fontSize:34}}>✅</div>
+      <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize:19, lineHeight:1.2}}>¡Listo! Hoy ya cuenta para tu racha 🔥</div>
+    </div>
+  );
+  const title = n > 0
+    ? (late && !si.shieldLeft ? `🔥 ¡Tu racha de ${n} día${n === 1 ? '' : 's'} se apaga hoy!` : `🔥 Tu racha de ${n} día${n === 1 ? '' : 's'}: te faltan ${left} min hoy`)
+    : '🔥 Empieza tu racha hoy';
+  return (
+    <div className={urgent ? 'stk-now urgent' : 'stk-now'} style={{display:'flex', alignItems:'center', gap:14, borderRadius:18, padding:16, margin:'0 0 16px', background:'linear-gradient(135deg,#FF6A00,#E11930)', color:'#fff', boxShadow:'0 10px 26px rgba(225,25,48,.35)', flexWrap:'wrap'}}>
+      <div style={{width:92, height:92, borderRadius:'50%', background:`conic-gradient(#fff ${pct * 3.6}deg, rgba(255,255,255,.28) 0)`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>
+        <div style={{width:74, height:74, borderRadius:'50%', background:'#EF3B24', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', lineHeight:1}}>
+          <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize:30}}>{left}</b>
+          <small style={{fontSize:10, fontWeight:900, textTransform:'uppercase', letterSpacing:'.05em', marginTop:2}}>min faltan</small>
+        </div>
+      </div>
+      <div style={{flex:'1 1 220px', minWidth:0}}>
+        <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize:19, lineHeight:1.2}}>{title}</div>
+        <div style={{fontSize:13, fontWeight:800, marginTop:5, lineHeight:1.45}}>Llevas {Math.floor(done)} de {goal} min. Tu racha solo suma si llegas a <b>{goal} min</b> en el día.{n > 0 && si.shieldLeft ? ' Si hoy no llegas, tu escudo 🛡 de la semana cubre el día.' : ''}</div>
+        <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginTop:10}}>
+          <span style={{display:'inline-flex', alignItems:'center', gap:6, fontSize:12, fontWeight:900, background:'rgba(0,0,0,.22)', borderRadius:10, padding:'5px 9px', whiteSpace:'nowrap'}}>⏳ El día termina en {hL > 0 ? hL + ' h ' : ''}{mL} min</span>
+          <button type="button" onClick={onGo} style={{border:'none', borderRadius:24, padding:'10px 18px', minHeight:44, fontFamily:'inherit', fontWeight:900, fontSize:14, background:'#fff', color:'#B71C1C', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0}}>▶ Practicar {left} min</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* Fusión Racha (protagonista) + Meta de hoy (secundaria) */
 function DayCard({ student, streak: streakRaw, todayMin, target }) {

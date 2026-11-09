@@ -37,7 +37,22 @@ function setNotifSeenAt(uid, iso) {
 }
 function isNotifPending(n, seen) { return !n.read && !(seen && String(n.date || '') <= seen); }
 
-function NotifBell({ userId, onNotifClick }) {
+/* CAMPANA-VIVA-V1 · título con tinta más oscura donde el color del tipo no se lee sobre su fondo */
+const NOTIF_LIVE_INK = { 'streak':'#B23C00', 'daily-reminder':'#A33A00', 'achievement':'#7A5300', 'module-activated':'#1B6B32', 'forum-like':'#A31515' };
+
+/* CAMPANA-VIVA-V1 · botón de cada aviso según a dónde lleva (el clic es en toda la tarjeta, como antes) */
+function notifCta(n) {
+  const l = n.link, t = n.type;
+  if (l === 'practica' || t === 'streak' || t === 'daily-reminder') return '▶ Practicar ahora';
+  if (l === 'tasks' || t === 'assignment') return '📝 Abrir';
+  if (l === 'forum' || t === 'forum-reply' || t === 'forum-like') return '💬 Ver en el foro';
+  if (l === 'exam') return '🎓 Ver mi examen';
+  if (l === 'messages') return '👨‍🏫 Leer mensaje';
+  if (l === 'payments' || t === 'payment') return '💳 Ver mis pagos';
+  return null;
+}
+
+function NotifBell({ userId, onNotifClick, live }) {
   const [open, setOpen] = nUseState(false);
   const [tick, setTick] = nUseState(0);
   const [fresh, setFresh] = nUseState(null);   // ids que eran nuevas al abrir (se resaltan mientras está abierto)
@@ -83,10 +98,17 @@ function NotifBell({ userId, onNotifClick }) {
 
   return (
     <div className="bell-wrap" ref={ref}>
-      <button className="bell-btn" onClick={openPanel} title="Notificaciones">
-        🔔
-        {unread > 0 && <span className="bell-badge">{unread > 9 ? '9+' : unread}</span>}
-      </button>
+      {/* 🔔 CAMPANA-VIVA-V1 (09-nov-2026, opción C elegida): en el alumno, con avisos sin leer la campana se pone roja, se mueve y dice cuántos hay */}
+      {live && unread > 0 ? (
+        <button className="bell-btn bell-live" onClick={openPanel} title="Tienes avisos sin leer">
+          <span className="bell-shk">🔔</span>{unread > 9 ? '9+' : unread} aviso{unread === 1 ? '' : 's'}
+        </button>
+      ) : (
+        <button className="bell-btn" onClick={openPanel} title="Notificaciones">
+          🔔
+          {unread > 0 && <span className="bell-badge">{unread > 9 ? '9+' : unread}</span>}
+        </button>
+      )}
 
       {open && (
         <div className="notif-panel">
@@ -104,12 +126,14 @@ function NotifBell({ userId, onNotifClick }) {
               notifs.map(n => {
                 const meta = NOTIF_ICONS[n.type] || NOTIF_ICONS.achievement;
                 const isNew = !!(fresh && fresh.has(n.id));
+                const cta = live ? notifCta(n) : null;
                 return (
-                  <button key={n.id} className={`notif-row ${isNew ? '' : 'read'}`} onClick={() => handleClick(n)}>
-                    <div className="notif-ico" style={{background:meta.bg,color:meta.color}}>{meta.icon}</div>
+                  <button key={n.id} className={`notif-row ${isNew ? '' : 'read'}`} onClick={() => handleClick(n)} style={live && isNew ? {background:meta.bg} : undefined}>
+                    <div className="notif-ico" style={{background: live && isNew ? '#fff' : meta.bg, color:meta.color, width: live ? 40 : undefined, height: live ? 40 : undefined, borderRadius: live ? 12 : undefined}}>{meta.icon}</div>
                     <div className="notif-body">
-                      <div className="notif-title">{n.title}</div>
-                      <div className="notif-text">{n.body}</div>
+                      <div className="notif-title" style={live ? {color:(NOTIF_LIVE_INK[n.type] || meta.color), fontSize:13.5} : undefined}>{n.title}</div>
+                      <div className="notif-text" style={live ? {color:'#4A4A44', fontWeight:700} : undefined}>{n.body}</div>
+                      {cta && <span style={{display:'inline-flex', alignItems:'center', marginTop:8, borderRadius:16, padding:'7px 13px', minHeight:34, fontSize:12.5, fontWeight:900, color:'#fff', background:(NOTIF_LIVE_INK[n.type] || meta.color)}}>{cta}</span>}
                       <div className="notif-time">{relativeNotifTime(n.date)}</div>
                     </div>
                     {isNew && <div className="notif-dot"></div>}
