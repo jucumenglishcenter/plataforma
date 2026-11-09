@@ -1,11 +1,14 @@
-# Entrega comentarios-ejercicio-2026-11-06 (v=20261106a) · DOCSETS-COMENTARIO-V1
+# Entrega inicio-apto-2026-11-09 (v=20261109a) · INICIO-APTO-V1
 
-Subir los 4 archivos a la RAÍZ del repo `plataforma` (reemplazar). Sin SQL.
+Subir los 3 archivos a la RAÍZ del repo `plataforma` (reemplazar), en un solo commit. Sin SQL.
+Base: el repo de hoy (@28f842be8396), que se verificó archivo por archivo y es igual a la plataforma de este proyecto.
 
 ## Lo que cambia (y nada más)
-1. **Teacher · 👁 ver la entrega de un alumno (Tareas del documento):** debajo de la respuesta de cada ejercicio hay una línea «💬 Comentario sobre esta respuesta». Se guarda con **Guardar** o Enter. Después de guardar dice «✓ Guardado». No cambia la nota ni el estado del ejercicio. Solo aparece cuando el alumno ya entregó.
-2. **Alumno:** recibe una campanita «💬 Tu profe comentó tu respuesta» (ejercicio N + el comentario). Al abrir la tarea entregada ve «💬 Tu profe: …» debajo de ese ejercicio.
-3. `docsets.js`: función nueva `setItemComment` (guarda `cm[i]` dentro de la entrega). `setItemResult` (✔ Está bien / ✘ Corregir / Dar por buena) ahora conserva los comentarios ya guardados.
+1. **Alumno · Inicio · tarjeta roja «🎓 Tu examen se acerca»:** el porcentaje y el «✓ Apto / Falta X %» ahora salen del **mismo cálculo que Mi práctica** (solo el módulo de ese examen). Antes mezclaba todos los módulos abiertos y podía decir «Apto 77 %» mientras Mi práctica decía «62 %, falta 13 %».
+2. En esa misma tarjeta, la etiqueta dice **«📚 Te falta terminar el módulo»** cuando eso es lo que falta, y **«✅ Habilitada por tu teacher»** si la teacher le abrió el examen. Es lo mismo que ya muestra Mi práctica.
+3. El consejo «Completa tus N actividades pendientes» cuenta solo las del módulo del examen.
+
+No cambia quién puede dar el examen, ni la nota mínima, ni ninguna otra pantalla.
 
 ## Archivos
-- DocSets.comp.js · docsets.js · index.html (solo cambian los ?v= de estos 2 + config.js) · app-build.js (regenerado)
+- StudentDashboard.comp.js · index.html (solo cambian los ?v= de este archivo + config.js) · app-build.js (regenerado)
