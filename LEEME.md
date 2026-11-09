@@ -1,27 +1,23 @@
-# Entrega apto-2026-11-09 (v=20261109f) · APTO-MEDIA-V1 · APTO-BONUS-REPASOS-V1 · REPASO-NOTA-BAJA-V1 · APTO-70-PREA1-V1 · CAMPANA-VIVA-V1 · RACHA-TIEMPO-V1
+# Entrega chat-mejoras-2026-11-09 (v=20261109g) · CHAT-MEJORAS-V1
 
-Subir los 24 archivos a la RAÍZ del repo `plataforma` (reemplazar), en un solo commit. Sin SQL.
-Revisado línea por línea contra el repo (09-nov 06:18 UTC): solo cambian las líneas de los puntos 2 a 5. El punto 1 (Inicio) ya está en el repo (v=20261109a) y por eso no se repite aquí.
-Reemplaza a la entrega `inicio-apto-2026-11-09`, que ya no existe: lo de esa entrega viene incluido aquí.
-Base: el repo de hoy (@28f842be8396). Se verificó archivo por archivo que era igual a esta plataforma.
+## Orden
+1. **Primero** ejecutar `EJECUTAR-PRIMERO-script39-reacciones-chat.sql` en Supabase → SQL Editor → New query → pegar → Run. Este script agrega la columna `reactions` a la tabla `messages` y no toca ningún mensaje.
+2. Después, subir los 6 archivos a la RAÍZ del repo `plataforma` (reemplazar), en un solo commit:
+   messages.js · messages-ui.comp.js · StudentDashboard.comp.js · TeacherDashboard.comp.js · index.html · app-build.js
+
+Base: el repo de hoy (@596b9f157b10). Antes de editar comprobé por huella que los 100 archivos eran iguales al espejo: la entrega `apto-2026-11-09` ya está subida.
 
 ## Lo que cambia (y nada más)
-1. **Inicio · «🎓 Tu examen se acerca»:** usa el mismo apto que Mi práctica (solo el módulo de ese examen).
-2. **Apto · práctica con 50–74 %:** ahora vale **la mitad** en «📚 Prácticas realizadas», también para el 60 % del módulo. Menos de 50 % no cuenta, igual que antes. No entra al «🎯 Nivel de acierto», así que nadie baja por este cambio. El detalle dice cuántas tiene así y que repetirlas las hace valer completas.
-3. **Apto · bonus ⭐ Repasos de la semana:** suma **hasta +10 %** a la preparación. Se calcula con los repasos resueltos desde que se abrió el módulo: resueltos ÷ asignados × 10. **No** cuenta para el 60 % del módulo. Se ve en Mi práctica («⭐ Incluye +N % de bonus…») y en la tarjeta de preparación.
-4. **⭐ Repasos de la semana:** las prácticas con nota bajo el mínimo salen **primero**, también las del módulo de clase. La lista de la semana se arma el lunes y no cambia después, así que esto se nota desde la próxima lista.
-5. **Pre-A1 · Apto con 70 %** (antes 75 %). A1 y A2 siguen en 75 %. Sigue pidiendo el 60 % del módulo. Los textos que decían «75 %» ahora muestran el número del nivel del alumno: Inicio, Mi práctica, Mis planetas, Diagnóstico, Boletín, Reporte y las vistas del teacher (Grupo, Exámenes, panel). Lo mismo pasa con el aviso al publicar un examen, que dice «eres apto» o «no».
-6. **Campanita del alumno (opción C):** si hay avisos sin leer, se pone **roja**, se mueve y dice «2 avisos». Adentro, cada aviso nuevo es una tarjeta de color con su botón («▶ Practicar ahora», «📝 Abrir», etc.). La campanita del teacher y la del admin **no cambian**.
-7. **Inicio · tarjeta de racha (opción A):** arriba de todo en Inicio aparece una tarjeta con un anillo de los **minutos que faltan** para que hoy cuente en la racha, «⏳ El día termina en X h Y min» y el botón «▶ Practicar N min». Usa los mismos minutos y la misma meta del grupo que ya usa la racha. No sale los domingos, ni si el día ya contaba al entrar. Al llegar a la meta se pone verde «¡Listo! Hoy ya cuenta» y se oculta a los 8 s. En la última hora del día, la tarjeta late.
-
-8. **Tareas · ☑ Marcar alumnos (teacher):** en las entregas de una tarea hay un botón «☑ Marcar alumnos». Aparecen casillas por alumno, con atajos «⏳ Los que faltan · Todos · Ninguno», y tres acciones:
-   - **✅ Sí entregó:** queda como entregada por la teacher (sirve para entregas en papel o en clase). Cuenta para el apto y para el seguimiento.
-   - **↩ No entregó:** pide confirmación. La entrega deja de contar. En la nube queda como «anulada», así que las copias viejas de otros equipos no la vuelven a traer. Si el alumno entrega de nuevo, cuenta la entrega nueva. Sin internet no se anula.
-   - **🔓 Reabrir para los marcados:** se elige una fecha nueva (por defecto, 2 días después a las 11:59 pm). Solo esos alumnos pueden volver a entregar; los demás siguen con la fecha de siempre. Les llega un aviso a la campanita y ven «🔓 Tu teacher te la abrió de nuevo». En la lista de la teacher se ve «🔓 hasta …». El apto no les cuenta la tarea como atrasada hasta la nueva fecha.
-   - No aplica a las tareas «desde documento» (sets), que tienen su propia pantalla.
+1. **Día y hora en el chat:** los días se separan con «Hoy», «Ayer» o «Lun 3 nov», y cada mensaje lleva su hora («9:35 p. m.»). Al pasar el mouse se ve la fecha completa. Siempre en **hora Perú**. En la lista de chats sale la hora si el mensaje es de hoy, si no «Ayer», el día de la semana o la fecha.
+2. **Enter = nueva línea:** la caja de texto ahora acepta varias líneas y crece sola hasta unas 5. Se envía con ➤ o con **Ctrl + Enter** (⌘ + Enter en Mac). El mensaje se ve con sus saltos de línea. Vale para el teacher y para los alumnos.
+3. **Reacciones 👍 ❤️ 😂 😮 👏 ✅:** en la computadora se abren con ☺ al pasar el mouse sobre un mensaje; en el celular, manteniendo el dedo encima. Cada persona puede dejar una reacción por mensaje, y tocarla otra vez la quita. Solo se reacciona a mensajes de otros. Reaccionar no manda campanita.
+4. **Contador de «💬 Chats» (teacher):** se actualiza solo cada 30 s y al volver a la pestaña. Si llega algo nuevo, late.
+5. **Burbuja flotante (teacher):** en todas las pantallas menos Chats aparece «N alumnos esperan respuesta», con sus iniciales. Al tocarla se abre el chat que más espera. Con ✕ se oculta hasta que llegue el próximo mensaje.
+6. **Filtro «⏳ Por responder» (teacher):** cada chat muestra cuánto lleva esperando. «Por responder» = el último mensaje es del alumno, es de los últimos 14 días y no le respondiste ni le reaccionaste (un 👍 cuenta como atendido). No cuenta los grupos de trabajo.
+7. **Alumno · tarjeta «¡Tu teacher te respondió!»:** sale arriba de todo en su Inicio (estilo A), con tu carita saludando, tu mensaje, a qué pregunta respondes, tu reacción si la hay y el botón «💬 Leer y responder». Desaparece cuando el alumno abre el chat. Con ✕ se oculta hasta tu próxima respuesta.
 
 ## Lo que NO cambia
-XP, medallas, «módulo terminado», **nota mínima de las prácticas** (Pre-A1 sigue en 75), el aviso «Por mejorar», quién puede dar el examen fuera del apto, ni el resto de pantallas.
+El resto del chat (adjuntos, nota de voz, grupos de trabajo, nuevo chat), la campanita, el foro, el resto del Inicio del alumno y las demás pantallas del teacher. No se agregó el número en la pestaña del navegador (4c), porque no estaba marcado.
 
-## Archivos
-StudentDashboard.comp.js · Notifications.comp.js · Assignments.comp.js · assignments.js · supabase-sync.js · seguimiento.js · docsets.js · Correcciones.comp.js · SeguimientoAreas.comp.js · data.js · mixed.js · ExamsFolders.comp.js · Readiness.comp.js · MisPlanetas.comp.js · StudentDiagnosis.comp.js · exams.js · Exams.comp.js · GroupWorkspace.comp.js · StudentReport.comp.js · TeacherDashboard.comp.js · ExamsCenter.comp.js · Boletin.comp.js · index.html (los ?v= + los estilos de la campanita viva y de la tarjeta de racha) · app-build.js (generado de nuevo)
+## Prueba sin nube
+`herramientas/Prueba - Chat mejoras.html` (no toca datos reales).

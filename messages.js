@@ -19,6 +19,11 @@
  *   uploadMedia(file) -> {url, kind}
  *   markRead(threadKey, reader, readerId)  reader: 'teacher' | 'student'
  *   unreadForTeacher() / unreadForStudent(sid) / unreadForThread(key, reader, readerId)
+ *   CHAT-MEJORAS-V1 (09-nov-2026):
+ *   react(msgId, who, emoji)               reacción (who = 'teacher' | id del alumno); mismo emoji otra vez = quitar
+ *   pendingForTeacher()                    hilos «por responder» (último mensaje del alumno, ≤14 días, sin reacción del teacher)
+ *   teacherNewsFor(sid)                    [alumno] respuestas sin leer + reacciones nuevas del teacher en su 1:1
+ *   markReactionsSeen(sid)
  */
 (function () {
   'use strict';
@@ -40,8 +45,10 @@
       mediaKind: r.media_kind || r.mediaKind || null, created_at: r.created_at,
       authorId: r.author_id || r.authorId || null, authorName: r.author_name || r.authorName || null,
       teacher_read: !!(r.teacher_read), student_read: !!(r.student_read),
+      reactions: parseR(r.reactions),
     };
   }
+  function parseR(x) { try { var o = typeof x === 'string' ? JSON.parse(x) : x; return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch (e) { return {}; } }
   function normT(r) {
     var members = [];
     try { members = typeof r.member_ids === 'string' ? JSON.parse(r.member_ids) : (r.member_ids || r.memberIds || []); } catch (e) {}
@@ -67,6 +74,7 @@
         if (!rt.error) threads = (rt.data || []).map(normT);
       } catch (e2) {} // tabla aún no creada → solo 1:1
       save();
+      try { window.dispatchEvent(new Event('jucum-chat-change')); } catch (e3) {}   // CHAT-MEJORAS-V1: contador y avisos se repintan
     } catch (e) { console.warn('JUCUM_MSG refresh:', e.message); }
     return cache;
   }
@@ -105,8 +113,49 @@
       var msgs = listThread(t.id);
       rows.push({ key: t.id, kind: 'group', name: t.name, memberIds: t.memberIds, last: msgs[msgs.length - 1] || null, unread: msgs.filter(m => m.sender === 'student' && !m.teacher_read).length });
     });
+    // grupos de trabajo: los alumnos conversan entre ellos, no se cuentan como «por responder»
+    rows.forEach(r => { var w = r.kind === 'dm' ? waitInfo(r.key) : null; r.pending = !!w; r.waitSince = w ? w.since : null; });
     rows.sort((a, b) => (b.unread > 0 ? 1 : 0) - (a.unread > 0 ? 1 : 0) || byDate(a.last || { created_at: a.created_at || '' }, b.last || { created_at: b.created_at || '' }) * -1);
     return rows;
+  }
+
+  /* ── CHAT-MEJORAS-V1 · «por responder»: el último mensaje del hilo es de un alumno, de los
+   * últimos 14 días, y el teacher no le reaccionó (un 👍 al «gracias» cuenta como atendido). ── */
+  var PEND_MS = 14 * 864e5;
+  function waitInfo(key) {
+    var msgs = listThread(key), last = msgs[msgs.length - 1];
+    if (!last || last.sender !== 'student' || (last.reactions || {}).teacher) return null;
+    var t = Date.parse(last.created_at || ''); if (!t || Date.now() - t > PEND_MS) return null;
+    var i = msgs.length - 1; while (i > 0 && msgs[i - 1].sender === 'student') i--;
+    return { since: msgs[i].created_at, last: last, count: msgs.length - i };
+  }
+  function pendingForTeacher() {
+    return listInbox().filter(r => r.pending).sort((a, b) => (a.waitSince || '').localeCompare(b.waitSince || ''));
+  }
+  /* ── reacciones ── */
+  async function react(msgId, who, emoji) {
+    var m = cache.find(x => x.id === msgId); if (!m || !who) return null;
+    var r = Object.assign({}, m.reactions || {});
+    if (!emoji || r[who] === emoji) delete r[who]; else r[who] = emoji;
+    m.reactions = r; save();
+    var c = sb();
+    if (c) { try { var res = await c.from('messages').update({ reactions: r }).eq('id', msgId); if (res.error) throw res.error; } catch (e) { console.warn('JUCUM_MSG react:', e.message, '— ¿corriste el script 39?'); } }
+    return r;
+  }
+  /* ── [alumno] lo nuevo del teacher en su 1:1: respuestas sin leer + reacciones aún no vistas ── */
+  var rxKey = sid => 'jucum_chat_rx_seen_' + sid;
+  function rxSeen(sid) { try { return JSON.parse(localStorage.getItem(rxKey(sid)) || '[]'); } catch (e) { return []; } }
+  function teacherRx(sid) { return listThread(sid).filter(m => m.sender === 'student' && (m.reactions || {}).teacher).map(m => ({ id: m.id, emoji: m.reactions.teacher, body: m.body, sig: m.id + ':' + m.reactions.teacher })); }
+  function teacherNewsFor(sid) {
+    var msgs = listThread(sid);
+    var replies = msgs.filter(m => m.sender === 'teacher' && !m.student_read);
+    var seen = rxSeen(sid), rx = teacherRx(sid).filter(x => seen.indexOf(x.sig) < 0);
+    var lastReply = replies[replies.length - 1] || null, askedTo = null;
+    if (lastReply) { for (var i = msgs.indexOf(lastReply) - 1; i >= 0; i--) { if (msgs[i].sender === 'student') { askedTo = msgs[i]; break; } } }
+    return { replies: replies, last: lastReply, askedTo: askedTo, reactions: rx };
+  }
+  function markReactionsSeen(sid) {
+    try { localStorage.setItem(rxKey(sid), JSON.stringify(teacherRx(sid).map(x => x.sig).slice(-60))); } catch (e) {}
   }
 
   function listThreadsForStudent(sid) {
@@ -190,6 +239,6 @@
     if (c) { try { var patch = {}; patch[col] = true; await c.from('messages').update(patch).eq('student_id', threadKey).eq('sender', fromSender); } catch (e) { console.warn('JUCUM_MSG markRead:', e.message); } }
   }
 
-  window.JUCUM_MSG = { refresh, listThread, listInbox, listThreadsForStudent, createGroupThread, threadInfo, isGroupThread, send, uploadMedia, markRead, unreadForTeacher, unreadForStudent, unreadForThread };
+  window.JUCUM_MSG = { refresh, listThread, listInbox, listThreadsForStudent, createGroupThread, threadInfo, isGroupThread, send, uploadMedia, markRead, unreadForTeacher, unreadForStudent, unreadForThread, react, pendingForTeacher, teacherNewsFor, markReactionsSeen };
   if (sb()) refresh();
 })();

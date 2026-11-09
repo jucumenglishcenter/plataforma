@@ -65,7 +65,8 @@ function TeacherDashboard({ onLogout, user }) {
           <a className={`nav-link ${view.kind==='planner'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'planner'});}}>🗓️ Planificar</a>
           <a className={`nav-link ${(view.kind==='assess'||view.kind==='evaluate'||view.kind==='exams')?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'assess'});}}>📊 Evaluación</a>
           <a className={`nav-link ${view.kind==='materials-review'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'materials-review'});}}>📚 Materiales</a>
-          <a className={`nav-link ${view.kind==='messages'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'messages'});}} style={{position:'relative'}}>💬 Chats{(() => { const n = window.JUCUM_MSG ? window.JUCUM_MSG.unreadForTeacher() : 0; return n > 0 ? <span className="nav-dot">{n > 9 ? '9+' : n}</span> : null; })()}</a>
+          {/* CHAT-MEJORAS-V1: contador de Chats que se actualiza solo */}
+          {window.TeacherChatsNav ? <TeacherChatsNav active={view.kind==='messages'} onOpen={()=>setView({kind:'messages'})} /> : <a className={`nav-link ${view.kind==='messages'?'active':''}`} href="#" onClick={(e)=>{e.preventDefault();setView({kind:'messages'});}} style={{position:'relative'}}>💬 Chats{(() => { const n = window.JUCUM_MSG ? window.JUCUM_MSG.unreadForTeacher() : 0; return n > 0 ? <span className="nav-dot">{n > 9 ? '9+' : n}</span> : null; })()}</a>}
           <TeacherForumNav onOpen={(gid)=>setView({kind:'forum', group:gid})} />
           <NotifBell userId="teacher" onNotifClick={(n) => { if (n && n.link === 'leads') setView({kind:'leads'}); }} />
           <div className="user-pill">
@@ -76,6 +77,8 @@ function TeacherDashboard({ onLogout, user }) {
         </div>
       </header>
 
+      {/* CHAT-MEJORAS-V1: burbuja «N alumnos esperan respuesta» en todas las pantallas menos Chats */}
+      {window.TeacherChatFab && <TeacherChatFab hidden={view.kind === 'messages'} onOpen={(sid) => setView({kind:'messages', open: sid})} />}
       {view.kind === 'leads' && window.GradLeads ? (
         <GradLeads onBack={() => setView({kind:'groups'})} />
       ) : view.kind === 'closed' && window.ClosedAllView ? (

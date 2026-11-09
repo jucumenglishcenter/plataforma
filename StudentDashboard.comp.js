@@ -673,6 +673,8 @@ function StudentDashboard({ user, onLogout }) {
         <StudentPractice student={student} settings={settings} onBack={() => setView('dashboard')} />
       ) : (
       <main>
+        {/* 💬 CHAT-MEJORAS-V1: «¡Tu teacher te respondió!» arriba de Inicio hasta que abre el chat */}
+        {window.StudentReplyCard && <StudentReplyCard student={student} onOpen={() => setView('mensajes')} />}
         {/* 🚨 SEGUIMIENTO-V1 · 2B: alerta roja fija desde las 7 pm de la víspera del cierre hasta que termine el set */}
         {window.SegAlarmCard && <SegAlarmCard student={student} onGo={() => setView('practica')} />}
         {/* ⏳ RACHA-TIEMPO-V1: minutos que faltan para la racha de hoy + reloj del día */}
