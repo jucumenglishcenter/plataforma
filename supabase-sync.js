@@ -555,13 +555,14 @@
         bien = false;
         console.warn('entregas: la nube no respondió; se conserva lo de este equipo', rs.error && rs.error.message);
       } else {
-        const sMap = {};
-        rs.data.forEach(s => { if (tomb[s.assignment_id]) return; if (s.status === 'draft') return; /* DOCSETS-V1: avance en curso, solo nube */ (sMap[s.assignment_id] = sMap[s.assignment_id] || {})[s.student_id] = rowToSub(s); });
+        const sMap = {}, vMap = {};   // TAREA-MARCAR-V1: vMap = entregas ANULADAS por la teacher (status 'void')
+        rs.data.forEach(s => { if (tomb[s.assignment_id]) return; if (s.status === 'void') { (vMap[s.assignment_id] = vMap[s.assignment_id] || {})[s.student_id] = _when(s.submitted_at); return; } if (s.status === 'draft') return; /* DOCSETS-V1: avance en curso, solo nube */ (sMap[s.assignment_id] = sMap[s.assignment_id] || {})[s.student_id] = rowToSub(s); });
         const local = read('jucum_submissions_v1');
         Object.keys(local || {}).forEach(aid => {
           if (tomb[aid]) return;
           Object.keys(local[aid] || {}).forEach(sid => {
             const lo = local[aid][sid]; if (!lo) return;
+            const vt = (vMap[aid] || {})[sid]; if (vt && !(lo.pendingSync && _when(lo.submittedAt) > vt)) return;   // anulada: la copia vieja no la resucita
             const cl = (sMap[aid] || {})[sid];
             const gana = !cl || lo.pendingSync || _when(lo.gradedAt || lo.submittedAt) > _when(cl.gradedAt || cl.submittedAt);
             if (!gana) return;

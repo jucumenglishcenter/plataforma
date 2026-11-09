@@ -1,6 +1,6 @@
-# Entrega apto-2026-11-09 (v=20261109e) · APTO-MEDIA-V1 · APTO-BONUS-REPASOS-V1 · REPASO-NOTA-BAJA-V1 · APTO-70-PREA1-V1 · CAMPANA-VIVA-V1 · RACHA-TIEMPO-V1
+# Entrega apto-2026-11-09 (v=20261109f) · APTO-MEDIA-V1 · APTO-BONUS-REPASOS-V1 · REPASO-NOTA-BAJA-V1 · APTO-70-PREA1-V1 · CAMPANA-VIVA-V1 · RACHA-TIEMPO-V1
 
-Subir los 17 archivos a la RAÍZ del repo `plataforma` (reemplazar), en un solo commit. Sin SQL.
+Subir los 24 archivos a la RAÍZ del repo `plataforma` (reemplazar), en un solo commit. Sin SQL.
 Revisado línea por línea contra el repo (09-nov 06:18 UTC): solo cambian las líneas de los puntos 2 a 5. El punto 1 (Inicio) ya está en el repo (v=20261109a) y por eso no se repite aquí.
 Reemplaza a la entrega `inicio-apto-2026-11-09`, que ya no existe: lo de esa entrega viene incluido aquí.
 Base: el repo de hoy (@28f842be8396). Se verificó archivo por archivo que era igual a esta plataforma.
@@ -14,8 +14,14 @@ Base: el repo de hoy (@28f842be8396). Se verificó archivo por archivo que era i
 6. **Campanita del alumno (opción C):** si hay avisos sin leer, se pone **roja**, se mueve y dice «2 avisos». Adentro, cada aviso nuevo es una tarjeta de color con su botón («▶ Practicar ahora», «📝 Abrir», etc.). La campanita del teacher y la del admin **no cambian**.
 7. **Inicio · tarjeta de racha (opción A):** arriba de todo en Inicio aparece una tarjeta con un anillo de los **minutos que faltan** para que hoy cuente en la racha, «⏳ El día termina en X h Y min» y el botón «▶ Practicar N min». Usa los mismos minutos y la misma meta del grupo que ya usa la racha. No sale los domingos, ni si el día ya contaba al entrar. Al llegar a la meta se pone verde «¡Listo! Hoy ya cuenta» y se oculta a los 8 s. En la última hora del día, la tarjeta late.
 
+8. **Tareas · ☑ Marcar alumnos (teacher):** en las entregas de una tarea hay un botón «☑ Marcar alumnos». Aparecen casillas por alumno, con atajos «⏳ Los que faltan · Todos · Ninguno», y tres acciones:
+   - **✅ Sí entregó:** queda como entregada por la teacher (sirve para entregas en papel o en clase). Cuenta para el apto y para el seguimiento.
+   - **↩ No entregó:** pide confirmación. La entrega deja de contar. En la nube queda como «anulada», así que las copias viejas de otros equipos no la vuelven a traer. Si el alumno entrega de nuevo, cuenta la entrega nueva. Sin internet no se anula.
+   - **🔓 Reabrir para los marcados:** se elige una fecha nueva (por defecto, 2 días después a las 11:59 pm). Solo esos alumnos pueden volver a entregar; los demás siguen con la fecha de siempre. Les llega un aviso a la campanita y ven «🔓 Tu teacher te la abrió de nuevo». En la lista de la teacher se ve «🔓 hasta …». El apto no les cuenta la tarea como atrasada hasta la nueva fecha.
+   - No aplica a las tareas «desde documento» (sets), que tienen su propia pantalla.
+
 ## Lo que NO cambia
 XP, medallas, «módulo terminado», **nota mínima de las prácticas** (Pre-A1 sigue en 75), el aviso «Por mejorar», quién puede dar el examen fuera del apto, ni el resto de pantallas.
 
 ## Archivos
-StudentDashboard.comp.js · Notifications.comp.js · data.js · mixed.js · ExamsFolders.comp.js · Readiness.comp.js · MisPlanetas.comp.js · StudentDiagnosis.comp.js · exams.js · Exams.comp.js · GroupWorkspace.comp.js · StudentReport.comp.js · TeacherDashboard.comp.js · ExamsCenter.comp.js · Boletin.comp.js · index.html (los ?v= + los estilos de la campanita viva y de la tarjeta de racha) · app-build.js (generado de nuevo)
+StudentDashboard.comp.js · Notifications.comp.js · Assignments.comp.js · assignments.js · supabase-sync.js · seguimiento.js · docsets.js · Correcciones.comp.js · SeguimientoAreas.comp.js · data.js · mixed.js · ExamsFolders.comp.js · Readiness.comp.js · MisPlanetas.comp.js · StudentDiagnosis.comp.js · exams.js · Exams.comp.js · GroupWorkspace.comp.js · StudentReport.comp.js · TeacherDashboard.comp.js · ExamsCenter.comp.js · Boletin.comp.js · index.html (los ?v= + los estilos de la campanita viva y de la tarjeta de racha) · app-build.js (generado de nuevo)

@@ -1714,7 +1714,7 @@ function getStudentReadiness(student, opts) {
     const limiteSinFecha = peruDayStr(Date.now() - 7 * 86400000);
     const cuentan = mine.filter(a => {
       if ((subs[a.id] || {})[student.id]) return true;
-      const due = window.JUCUM_DAY.of(a.dueAt);   // día Perú (una tarea del 20 a las 23:59 era “del 21”)
+      const due = window.JUCUM_DAY.of((window.JUCUM_TASKS && window.JUCUM_TASKS.dueFor) ? window.JUCUM_TASKS.dueFor(a, student.id) : a.dueAt);   // TAREA-REABRIR-V1 · día Perú (una tarea del 20 a las 23:59 era “del 21”)
       if (due) return due < hoyP;
       const creada = window.JUCUM_DAY.of(a.date);
       return !!creada && creada < limiteSinFecha;

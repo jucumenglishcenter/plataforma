@@ -91,7 +91,7 @@
         });
       }));
       jobs.push(paged('submissions?select=assignment_id,student_id,submitted_at,status,grade&student_id=' + inl + '&order=id').then(function (rows) {
-        rows.forEach(function (r) { if (String(r.status || '') === 'draft') return; (F.subs[r.student_id] = F.subs[r.student_id] || {})[r.assignment_id] = { at: r.submitted_at, status: r.status, grade: r.grade }; });
+        rows.forEach(function (r) { if (String(r.status || '') === 'draft' || String(r.status || '') === 'void') return; /* TAREA-MARCAR-V1: anulada = no entregó */ (F.subs[r.student_id] = F.subs[r.student_id] || {})[r.assignment_id] = { at: r.submitted_at, status: r.status, grade: r.grade }; });
       }));
     });
     if (groups.length) {

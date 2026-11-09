@@ -429,7 +429,7 @@
   const SB = () => (window.JUCUM_SB && window.JUCUM_SB.getClient) ? window.JUCUM_SB.getClient() : null;
   async function fetchSubs(aid) {
     const c = SB(); if (!c) return null;
-    try { const r = await c.from('submissions').select('*').eq('assignment_id', aid); if (r.error) return null; return r.data || []; } catch (e) { return null; }
+    try { const r = await c.from('submissions').select('*').eq('assignment_id', aid); if (r.error) return null; return (r.data || []).filter(x => x.status !== 'void'); } catch (e) { return null; }
   }
   async function fetchGroupTasks(gid) {
     const c = SB(); if (!c || !gid) return null;
@@ -439,7 +439,7 @@
   /* La fila del alumno en la nube (para retomar en otro equipo). undefined = no se pudo consultar · null = no hay. */
   async function fetchMine(aid, sid) {
     const c = SB(); if (!c) return undefined;
-    try { const r = await c.from('submissions').select('*').eq('assignment_id', aid).eq('student_id', sid).limit(1); if (r.error) return undefined; return (r.data && r.data[0]) || null; } catch (e) { return undefined; }
+    try { const r = await c.from('submissions').select('*').eq('assignment_id', aid).eq('student_id', sid).limit(1); if (r.error) return undefined; const x = r.data && r.data[0]; return (x && x.status !== 'void') ? x : null; } catch (e) { return undefined; }
   }
   /* Guarda en la nube la corrección que sube (la llama el panel del teacher al abrir Resultados). */
   async function persistUpgrade(a, set, row, notify) {

@@ -293,8 +293,58 @@ function gradeSubmission(assignmentId, studentId, grade, feedback) {
   }
 }
 
+/* 🔓 TAREA-REABRIR-V1 (09-nov-2026, pedido de la usuaria): la teacher reabre una tarea SOLO para algunos alumnos con
+ * una fecha nueva. Se guarda en el bloque JUCUM_TASK de la descripción: reopen = { alumno: ISO } (sin columnas nuevas).
+ * dueFor(a, alumno) = la fecha que rige para ESE alumno (la más tardía entre la de la tarea y la suya). */
+function _taskMetaOf(a) { const m = ((a && a.description) || '').match(/<!--JUCUM_TASK:([\s\S]*?)-->/); if (!m) return null; try { return JSON.parse(decodeURIComponent(m[1])) || null; } catch (e) { return null; } }
+function reopenOf(a) { const s = _taskMetaOf(a); return (s && s.reopen && typeof s.reopen === 'object') ? s.reopen : {}; }
+function dueFor(a, studentId) {
+  if (!a) return null;
+  const r = reopenOf(a)[studentId];
+  if (r && (!a.dueAt || Date.parse(r) > Date.parse(a.dueAt))) return r;
+  return a.dueAt || null;
+}
+async function reopenFor(assignmentId, studentIds, dueIso) {
+  const a = loadAssignments().find(x => x && x.id === assignmentId);
+  if (!a || !studentIds || !studentIds.length || !dueIso) return { ok: false, msg: 'faltan datos' };
+  const s = _taskMetaOf(a) || {}, ro = Object.assign({}, s.reopen || {});
+  studentIds.forEach(id => { ro[id] = dueIso; });
+  s.reopen = ro;
+  const block = '<!--JUCUM_TASK:' + encodeURIComponent(JSON.stringify(s)) + '-->', desc = a.description || '';
+  const nd = /<!--JUCUM_TASK:[\s\S]*?-->/.test(desc) ? desc.replace(/<!--JUCUM_TASK:[\s\S]*?-->/, () => block) : (desc.trim() + (desc.trim() ? '\n\n' : '') + block);
+  const r = await updateAssignment(assignmentId, { description: nd }, { silent: true });
+  const fecha = new Date(dueIso).toLocaleString('es-PE', { weekday: 'long', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  if (window.JUCUM_NOTIF) studentIds.forEach(id => { try { window.JUCUM_NOTIF.pushNotif(id, { type: 'assignment', link: 'tasks', title: '🔓 Tu tarea se abrió de nuevo', body: '«' + a.title + '»: puedes entregarla hasta el ' + fecha + '.' }); } catch (e) {} });
+  return { ok: !!(r && r.synced), msg: r && r.error };
+}
+/* ✅ TAREA-MARCAR-V1 (09-nov-2026): la teacher marca a mano si un alumno entregó (p. ej. en papel o en clase) o NO.
+ * «No entregó» deja en la nube una fila status 'void' (gana a las copias viejas de otros equipos: no se resucita);
+ * si el alumno entrega después, su entrega nueva la reemplaza (misma fila por tarea+alumno). */
+const TEACHER_MARK_TXT = '✅ Marcada como entregada por la teacher.';
+async function markDelivered(assignmentId, studentId) {
+  const subs = loadSubmissions(); subs[assignmentId] = subs[assignmentId] || {};
+  if (subs[assignmentId][studentId]) return { ok: true, skip: true };
+  const sub = { id: 'sub-' + Date.now() + '-' + String(studentId).slice(0, 4), submittedAt: new Date().toISOString(), text: TEACHER_MARK_TXT, attachments: [], status: 'submitted', grade: null, feedback: null, gradedAt: null, pendingSync: true };
+  subs[assignmentId][studentId] = sub; saveSubmissions(subs);
+  const r = await pushSubSafe(assignmentId, studentId, sub);
+  if (r.ok) markSubSynced(assignmentId, studentId);
+  return r;
+}
+async function markNotDelivered(assignmentId, studentId) {
+  const S = window.JUCUM_SYNC; if (!S || !S.pushSubmission) return { ok: false, msg: 'este equipo no está conectado a la nube' };
+  const subs = loadSubmissions(), prev = (subs[assignmentId] || {})[studentId];
+  let r;
+  try { r = await S.pushSubmission(assignmentId, studentId, { id: (prev && prev.id) || ('sub-void-' + Date.now()), submittedAt: new Date().toISOString(), text: 'Anulada por la teacher: no entregó.', attachments: [], status: 'void' }); }
+  catch (e) { return { ok: false, msg: (e && e.message) || 'sin internet' }; }
+  if (!r || !r.ok) return { ok: false, msg: (r && r.error && r.error.message) || 'la nube no respondió' };   // sin nube NO se anula: volvería sola
+  const s2 = loadSubmissions(); if (s2[assignmentId]) { delete s2[assignmentId][studentId]; saveSubmissions(s2); }
+  return { ok: true };
+}
+function isTeacherMark(sub) { return !!(sub && sub.text === TEACHER_MARK_TXT); }
+
 window.JUCUM_TASKS = {
   getAssignments, assignmentsForStudent, recipientsOf, createAssignment, updateAssignment, deleteAssignment,
   getSubmission, submissionsFor, submitAssignment, gradeSubmission,
   markSynced, markSubSynced, pendingCount, retryPending,
+  dueFor, reopenOf, reopenFor, markDelivered, markNotDelivered, isTeacherMark,   // TAREA-REABRIR-V1 · TAREA-MARCAR-V1
 };

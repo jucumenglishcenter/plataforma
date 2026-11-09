@@ -60,7 +60,7 @@ function hasStructured(s) {
 }
 function buildTaskDescription(plain, structured) {
   let d = (plain || '').trim();
-  if (hasStructured(structured)) d += (d ? '\n\n' : '') + '<!--JUCUM_TASK:' + encodeURIComponent(JSON.stringify(structured)) + '-->';
+  if (hasStructured(structured) || (structured && structured.reopen && Object.keys(structured.reopen).length)) d += (d ? '\n\n' : '') + '<!--JUCUM_TASK:' + encodeURIComponent(JSON.stringify(structured)) + '-->';
   return d;
 }
 const emptyStructured = () => ({ resource: { label: '', url: '' }, focus: [], steps: [], materials: [] });
@@ -899,7 +899,7 @@ function AssignmentForm({ onClose, onSaved, initial, prefill }) {
       groupId,
       targetStudentIds: mode === 'students' ? picked : [],
       title: title.trim(),
-      description: buildTaskDescription(desc, docsetKeep ? { docset: docsetKeep } : (showStruct ? structured : null)),
+      description: buildTaskDescription(desc, (x => (initial && initMeta.structured && initMeta.structured.reopen) ? Object.assign({}, x || {}, { reopen: initMeta.structured.reopen }) : x)(docsetKeep ? { docset: docsetKeep } : (showStruct ? structured : null))),   // TAREA-REABRIR-V1: editar no borra las reaperturas
       dueAt: due ? new Date(due).toISOString() : null,
       gradable,
       attachments: finalAtt,
@@ -1044,6 +1044,11 @@ function TeacherSubmissions({ assignment, onBack, embedded }) {
   const [preview, setPreview] = tUseState(false);
   const [lang, setLang] = tUseState('par');
   const [flt, setFlt] = tUseState('all');
+  /* ✅🔓 TAREA-MARCAR-V1 + TAREA-REABRIR-V1 (09-nov-2026): modo «Marcar alumnos» = casillas por alumno + barra de acciones */
+  const [sel, setSel] = tUseState(null);            // null = apagado · Set de ids = marcando
+  const [busy, setBusy] = tUseState('');
+  const [reOpen, setReOpen] = tUseState(false);
+  const [reDate, setReDate] = tUseState(() => { const d = new Date(Date.now() + 2 * 86400000); const p = n => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T23:59'; });
   const a = T.getAssignments().find(x => x.id === assignment.id) || assignment;
   const recips = T.recipientsOf(a, STUDENTS);
   const subs = T.submissionsFor(a.id);
@@ -1059,7 +1064,38 @@ function TeacherSubmissions({ assignment, onBack, embedded }) {
   const gs = people.filter(x => x.sub && typeof x.sub.grade === 'number').map(x => x.sub.grade), avg = gs.length ? Math.round(gs.reduce((p, q) => p + q, 0) / gs.length) : null;
   const shown = people.filter(x => flt === 'all' || (flt === 'done' && x.sub) || (flt === 'grade' && x.st === 'sent') || (flt === 'miss' && !x.sub));
   const fmt = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('es-PE', { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }); };
-  const late = (sub) => !!(a.dueAt && sub && sub.submittedAt && new Date(sub.submittedAt).getTime() > new Date(a.dueAt).getTime());
+  const dueOf = (sid) => (T.dueFor ? T.dueFor(a, sid) : a.dueAt);
+  const late = (sub, sid) => { const d = dueOf(sid); return !!(d && sub && sub.submittedAt && new Date(sub.submittedAt).getTime() > new Date(d).getTime()); };
+  const reo = T.reopenOf ? T.reopenOf(a) : {};
+  const toggle = (id) => setSel(prev => { const n = new Set(prev || []); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const selIds = sel ? people.filter(x => sel.has(x.s.id) && !x.s._away).map(x => x.s.id) : [];
+  const run = async (kind) => {
+    if (!selIds.length) return;
+    if (kind === 'not') {
+      const withSub = selIds.filter(id => subs[id]);
+      if (!withSub.length) { alert('Ninguno de los marcados tiene una entrega que quitar.'); return; }
+      if (!confirm('¿Marcar como NO entregada para ' + withSub.length + ' alumno' + (withSub.length === 1 ? '' : 's') + '? Su entrega (y su nota, si tenía) deja de contar. Si luego entregan de nuevo, cuenta la nueva.')) return;
+    }
+    setBusy(kind); let fail = 0, n = 0;
+    try {
+      if (kind === 'reopen') {
+        const iso = new Date(reDate).toISOString();
+        if (isNaN(Date.parse(iso)) || Date.parse(iso) < Date.now()) { alert('Elige una fecha y hora que todavía no haya pasado.'); setBusy(''); return; }
+        const r = await T.reopenFor(a.id, selIds, iso); n = selIds.length; if (!r.ok) fail = n;
+      } else {
+        for (const id of selIds) {
+          if (kind === 'yes' && subs[id]) continue;
+          if (kind === 'not' && !subs[id]) continue;
+          n++;
+          const r = kind === 'yes' ? await T.markDelivered(a.id, id) : await T.markNotDelivered(a.id, id);
+          if (!r || !r.ok) fail++;
+        }
+      }
+    } catch (e) { fail = Math.max(fail, 1); }
+    setBusy(''); setReOpen(false); setTick(t => t + 1);
+    if (fail) alert((kind === 'reopen' ? 'Quedó guardado en este equipo, pero la nube no confirmó' : fail + ' de ' + n + ' no se pudieron guardar en la nube') + '. Revisa tu internet y vuelve a intentarlo.');
+    else setSel(null);
+  };
   const tile = (k, big, label, col) => { const on = flt === k; return (
     <button key={k} onClick={() => setFlt(on ? 'all' : k)} title={on ? 'Ver a todos' : 'Ver solo estos'} style={{border:'1.5px solid ' + (on ? '#1F3A8A' : 'var(--border)'), background: on ? '#EEF2FC' : '#fff', borderRadius:13, padding:'9px 12px', cursor:'pointer', textAlign:'left', fontFamily:'inherit', boxShadow: on ? '0 2px 8px rgba(31,58,138,.15)' : 'none'}}>
       <b style={{display:'block', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:21, lineHeight:1.15, color: col || 'inherit'}}>{big}</b>
@@ -1105,6 +1141,36 @@ function TeacherSubmissions({ assignment, onBack, embedded }) {
           {tile('miss', '⏳ ' + nMiss, 'Faltan')}
           {a.gradable && <div style={{border:'1.5px solid var(--border)', borderRadius:13, padding:'9px 12px', background:'#FAFAF6'}}><b style={{display:'block', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:21, lineHeight:1.15}}>📈 {avg != null ? avg : '—'}</b><span style={{fontSize:12, fontWeight:800, color:'#6f6f6f'}}>Promedio{gs.length ? ` de ${gs.length}` : ''}</span></div>}
         </div>
+        {!sel ? (
+          <div style={{display:'flex', alignItems:'center', gap:9, flexWrap:'wrap', margin:'0 0 10px'}}>
+            <button type="button" className="att-btn" onClick={() => setSel(new Set())} style={{fontWeight:800}}>☑ Marcar alumnos</button>
+            <span style={{fontSize:12, fontWeight:700, color:'#6f6f6f'}}>para marcar quién entregó o no, o reabrirles la tarea</span>
+          </div>
+        ) : (
+          <div style={{position:'sticky', top:8, zIndex:5, background:'#EEF2FC', border:'1.5px solid #1F3A8A', borderRadius:13, padding:'10px 12px', margin:'0 0 10px', display:'flex', flexDirection:'column', gap:8, boxShadow:'0 4px 14px rgba(31,58,138,.15)'}}>
+            <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
+              <b style={{fontSize:13.5, color:'#1F3A8A'}}>{selIds.length} marcado{selIds.length === 1 ? '' : 's'}</b>
+              <span style={{fontSize:12, fontWeight:700, color:'#555'}}>Marcar rápido:</span>
+              <button type="button" className="att-btn" onClick={() => setSel(new Set(people.filter(x => !x.sub && !x.s._away).map(x => x.s.id)))}>⏳ Los que faltan</button>
+              <button type="button" className="att-btn" onClick={() => setSel(new Set(people.filter(x => !x.s._away).map(x => x.s.id)))}>Todos</button>
+              <button type="button" className="att-btn" onClick={() => setSel(new Set())}>Ninguno</button>
+              <button type="button" className="att-btn" style={{marginLeft:'auto'}} onClick={() => { setSel(null); setReOpen(false); }}>✕ Salir</button>
+            </div>
+            <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
+              <button type="button" disabled={!selIds.length || !!busy} onClick={() => run('yes')} style={{border:'none', borderRadius:20, padding:'9px 14px', minHeight:40, fontFamily:'inherit', fontWeight:800, fontSize:13, cursor:'pointer', color:'#fff', background:'#2E7D32', opacity: selIds.length ? 1 : .5}}>{busy === 'yes' ? 'Guardando…' : '✅ Sí entregó'}</button>
+              <button type="button" disabled={!selIds.length || !!busy} onClick={() => run('not')} style={{border:'none', borderRadius:20, padding:'9px 14px', minHeight:40, fontFamily:'inherit', fontWeight:800, fontSize:13, cursor:'pointer', color:'#fff', background:'#C62828', opacity: selIds.length ? 1 : .5}}>{busy === 'not' ? 'Guardando…' : '↩ No entregó'}</button>
+              <button type="button" disabled={!selIds.length || !!busy} onClick={() => setReOpen(v => !v)} style={{border:'none', borderRadius:20, padding:'9px 14px', minHeight:40, fontFamily:'inherit', fontWeight:800, fontSize:13, cursor:'pointer', color:'#fff', background:'#1F3A8A', opacity: selIds.length ? 1 : .5}}>🔓 Reabrir para {selIds.length || 'los marcados'}</button>
+            </div>
+            {reOpen && selIds.length > 0 && (
+              <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', background:'#fff', borderRadius:10, padding:'8px 10px'}}>
+                <span style={{fontSize:12.5, fontWeight:800}}>Podrán entregar hasta:</span>
+                <input type="datetime-local" className="input-text" style={{width:'auto', padding:'5px 8px'}} value={reDate} onChange={e => setReDate(e.target.value)} />
+                <button type="button" className="btn-save" disabled={!!busy} onClick={() => run('reopen')}>{busy === 'reopen' ? 'Reabriendo…' : 'Reabrir y avisarles'}</button>
+                <span style={{fontSize:11.5, fontWeight:700, color:'#6f6f6f', flexBasis:'100%'}}>Solo para los marcados: los demás siguen con la fecha de siempre. Les llega un aviso a la campanita.</span>
+              </div>
+            )}
+          </div>
+        )}
         {shown.length === 0 && <div className="empty-state" style={{padding:'16px 0'}}>{flt === 'grade' ? '🎉 Nada por calificar.' : flt === 'miss' ? '🎉 Todos entregaron.' : flt === 'done' ? 'Todavía nadie entrega.' : 'Esta tarea no tiene alumnos asignados.'}</div>}
         <div className="sm-list">
           {shown.map(({ s, sub, st }) => {
@@ -1113,14 +1179,16 @@ function TeacherSubmissions({ assignment, onBack, embedded }) {
               : st === 'graded' ? {t:`Calificado${typeof sub.grade==='number'?` · ${sub.grade}/100`:''}`, c:'#1565C0', bg:'#E3F2FD'}
               : a.gradable ? {t:'Por calificar', c:'#8A5A00', bg:'#FFF8E1'} : {t:'Entregado', c:'#2E7D32', bg:'#E8F5E9'};
             return (
-              <div key={s.id} className="sm-row" onClick={sub ? () => setGrading(s) : undefined} style={{flexWrap:'wrap', cursor: sub ? 'pointer' : 'default', background: st === 'sent' && a.gradable ? '#FFFCF2' : undefined}}>
+              <div key={s.id} className="sm-row" onClick={sel ? (s._away ? undefined : () => toggle(s.id)) : (sub ? () => setGrading(s) : undefined)} style={{flexWrap:'wrap', cursor: sel ? (s._away ? 'default' : 'pointer') : sub ? 'pointer' : 'default', background: sel && sel.has(s.id) ? '#EEF2FC' : st === 'sent' && a.gradable ? '#FFFCF2' : undefined}}>
+                {sel && <input type="checkbox" checked={sel.has(s.id)} disabled={!!s._away} onChange={() => toggle(s.id)} onClick={e => e.stopPropagation()} aria-label={'Marcar a ' + tName(s)} style={{width:22, height:22, flexShrink:0, accentColor:'#1F3A8A', cursor:'pointer'}} />}
                 <div className="st-ava" style={{background: s._away ? '#CFC9B8' : `linear-gradient(135deg,${level.color}80,${level.dark})`}}>{tIni(s)}</div>
                 <div className="sm-info">
                   <div className="sm-name">{tName(s)}</div>
-                  <div className="sm-meta">{s.username ? '@' + s.username : ''}{sub && sub.submittedAt ? `${s.username ? ' · ' : ''}entregó ${fmt(sub.submittedAt)}` : ''}{late(sub) ? ' · después del plazo' : ''}{s._away ? ' · ya no está en este grupo' : ''}</div>
+                  <div className="sm-meta">{s.username ? '@' + s.username : ''}{sub && sub.submittedAt ? `${s.username ? ' · ' : ''}entregó ${fmt(sub.submittedAt)}` : ''}{late(sub, s.id) ? ' · después del plazo' : ''}{T.isTeacherMark && T.isTeacherMark(sub) ? ' · marcada por ti' : ''}{s._away ? ' · ya no está en este grupo' : ''}</div>
                 </div>
+                {reo[s.id] && Date.parse(reo[s.id]) > Date.now() && <span className="mm-chip" style={{background:'#E3E9F8', color:'#1F3A8A', whiteSpace:'nowrap'}}>🔓 hasta {fmt(reo[s.id])}</span>}
                 <span className="mm-chip" style={{background:status.bg, color:status.c}}>{status.t}</span>
-                {sub && <button className="att-btn" onClick={e => { e.stopPropagation(); setGrading(s); }}>{a.gradable ? (st === 'graded' ? '✏️ Cambiar nota' : '📊 Calificar') : '👁 Ver entrega'}</button>}
+                {sub && !sel && <button className="att-btn" onClick={e => { e.stopPropagation(); setGrading(s); }}>{a.gradable ? (st === 'graded' ? '✏️ Cambiar nota' : '📊 Calificar') : '👁 Ver entrega'}</button>}
                 {sub && (sub.attachments?.length > 0 || sub.text) && (
                   <div className="att-list" style={{flexBasis:'100%', marginTop:8}} onClick={e => e.stopPropagation()}>
                     {(sub.attachments || []).map((x, i) => <TaskAttachmentChip key={i} att={x} />)}
@@ -1304,7 +1372,8 @@ function TaskActivityPanel({ a, link, student, onSubmitGrade, onCaptureAttach, o
 function StudentTaskCard({ a, student, onChange }) {
   const T = window.JUCUM_TASKS;
   const sub = T.getSubmission(a.id, student.id);
-  const due = taskDueLabel(a.dueAt);
+  const due = taskDueLabel(T.dueFor ? T.dueFor(a, student.id) : a.dueAt);   // TAREA-REABRIR-V1: su fecha (si se la reabrieron)
+  const reopened = !!(T.reopenOf && T.reopenOf(a)[student.id] && due && !due.late);
   const closed = !!(due && due.late);
   const [open, setOpen] = tUseState(!sub);
   const [text, setText] = tUseState(sub?.text || '');
@@ -1353,7 +1422,7 @@ function StudentTaskCard({ a, student, onChange }) {
           <span className="mm-chip" style={{background:statusPill.bg, color:statusPill.c}}>{statusPill.t}</span>
         </div>
       </div>
-      {due && <div className="mm-meta" style={{marginTop:-6, marginBottom:8, color: due.late ? '#C62828' : '#E65100', fontWeight:800}}>⏰ {due.txt}</div>}
+      {due && <div className="mm-meta" style={{marginTop:-6, marginBottom:8, color: due.late ? '#C62828' : '#E65100', fontWeight:800}}>{reopened ? '🔓 Tu teacher te la abrió de nuevo · ' : ''}⏰ {due.txt}</div>}
       {(plain || hasStructured(structured)) && (
         <div style={{marginBottom:10}}>
           {hasStructured(structured) && <div style={{marginBottom:10}}><TaskLangToggle lang={lang} setLang={setLang} /></div>}

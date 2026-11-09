@@ -58,7 +58,7 @@ async function cxPending(group, taskId) {
     const ids = tasks.slice(i, i + 40).map(a => a.id);
     const r = await sb.from('submissions').select('id,assignment_id,student_id,submitted_at,text,attachments,status,grade').in('assignment_id', ids);
     if (r.error) throw new Error('No pude leer las entregas de la nube: ' + r.error.message);
-    rows.push(...(r.data || []));
+    rows.push(...(r.data || []).filter(x => x.status !== 'void'));   // TAREA-MARCAR-V1
   }
   const out = [];
   rows.forEach(row => {
