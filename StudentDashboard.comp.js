@@ -681,21 +681,8 @@ function StudentDashboard({ user, onLogout }) {
         {window.StudentReplyCard && <StudentReplyCard student={student} onOpen={() => setView('mensajes')} />}
         {/* 🚨 SEGUIMIENTO-V1 · 2B: alerta roja fija desde las 7 pm de la víspera del cierre hasta que termine el set */}
         {window.SegAlarmCard && <SegAlarmCard student={student} onGo={() => setView('practica')} />}
-        {/* ⏳ RACHA-TIEMPO-V1: minutos que faltan para la racha de hoy + reloj del día */}
-        <StreakNowCard student={student} todayMin={todayMin} target={targetMin} onGo={() => setView('practica')} />
-        <div className="welcome" data-level={student.level} style={{background:'linear-gradient(135deg,'+level.color+','+level.dark+')'}}>
-          <div className="welcome-text">
-            <div className="eyebrow" style={{color:'#fff', opacity:1, textShadow:'0 1px 3px rgba(0,0,0,.4)'}}>{level.emoji} {level.code} · {group.name}</div>
-            <h1>¡Hola, {student.fullName.split(' ')[0]}!</h1>
-            <p>{student.streak == null && window.JUCUM_STREAK ? 'Cargando tu racha… 🔥' : student.streak > 0
-              ? <>Racha de <b>{student.streak} {student.streak === 1 ? 'día' : 'días'}</b> 🔥 ¡No la rompas hoy!</>
-              : 'Hoy es buen día para retomar la práctica 🌱'}</p>
-          </div>
-          <div className="welcome-streak">
-            <div className="streak-num">{student.streak == null ? '…' : student.streak}</div>
-            <div className="streak-lbl">días<br/>seguidos</div>
-          </div>
-        </div>
+        {/* ⏳ RACHA-TIEMPO-V1 → 🏠 INICIO-VISUAL-V1 (09-nov): «Tu día» = minutos que faltan para la racha + reloj del día + saludo + los últimos 7 días */}
+        <IvDayCard student={student} level={level} group={group} todayMin={todayMin} target={targetMin} onGo={() => setView('practica')} />
 
         {/* — 🏫 Actividad de clase abierta por el profe (DOCSETS-V1) — */}
         {window.DocSetLiveBanner && <DocSetLiveBanner student={student} />}
@@ -703,57 +690,437 @@ function StudentDashboard({ user, onLogout }) {
         {/* — 🔇 Aviso de restricción del foro (mientras dure) — */}
         <ForumMuteBanner student={student} />
 
-        {/* — Puntos SIEMPRE visibles + aviso de semana nueva — */}
-        <PointsStrip student={student} xp={xp} xpInfo={xpInfo} />
-
-        {/* — 🎓 Cuenta regresiva del examen anunciado — */}
-        <ExamCountdownCard student={student} onGo={() => setView('practica')} />
-        {/* 🧠 NEURO-FIX-V1: errores de Neuro que esperan o ya volvieron (solo Pre-A1 con Neuro) */}
-        {window.NeuroBoxHomeCard && <NeuroBoxHomeCard student={student} onGo={() => setView('practica')} />}
-
-        {/* — Neuro + (Racha fusionada con Meta de hoy) — */}
-        <div className="two-col" style={{gridTemplateColumns:'1.4fr 1fr', marginTop:18}}>
-          <div data-tut="neuro"><MascotCard student={student} /></div>
-          <div data-tut="meta"><DayCard student={student} streak={student.streak} todayMin={todayMin} target={targetMin} /></div>
-        </div>
-
-        {/* — Campeones de la semana (protagonista) + Top del grupo (simple) — */}
-        <div className="two-col" style={{gridTemplateColumns:'1.35fr 1fr', marginTop:18}}>
-          <WeekChampionsCard student={student} />
-          <GroupTopSimple student={student} onSeeTop={() => setView('practica')} />
-        </div>
-
-        {/* — CTA: todo el material vive en "Mi práctica" — */}
-        <button type="button" data-tut="practica" onClick={() => setView('practica')} style={{marginTop:18, width:'100%', border:'none', cursor:'pointer', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:20, color:'#fff', background:'linear-gradient(135deg,#F4A02C,#E07A12)', borderRadius:18, padding:18, display:'flex', alignItems:'center', justifyContent:'center', gap:12, boxShadow:'0 10px 24px rgba(224,122,18,.32)'}}>▶ Empieza a practicar →</button>
-        <div style={{textAlign:'center', fontSize:12, color:'var(--text-mute,#A8A8A8)', fontWeight:700, marginTop:9}}>Todo tu material y tus repasos de hoy en un solo lugar</div>
-
-        {/* ── Recordatorio suave de vocabulario (2–3x al día) ── */}
-        <VocabReminder student={student} settings={settings} onGo={(vocab, mod) => {
+        {/* — «Para hoy»: examen anunciado (INICIO-APTO-V1) · vocabulario del día · aviso de semana nueva — */}
+        <IvTodayTiles student={student} settings={settings} onGo={() => setView('practica')} onVocab={(vocab, mod) => {
           const href = vocab && vocab.url ? linkFor(vocab, mod, student.id) : null;
           if (href) openMat(href); else setView('practica');
         }} />
+        {/* 🧠 NEURO-FIX-V1: errores de Neuro que esperan o ya volvieron (solo Pre-A1 con Neuro) */}
+        {window.NeuroBoxHomeCard && <NeuroBoxHomeCard student={student} onGo={() => setView('practica')} />}
+
+        {/* — Neuro con su mensaje + Tus puntos (SIEMPRE visibles) — */}
+        <div className="iv-two">
+          <div data-tut="neuro" style={{display:'flex', minWidth:0}}><IvNeuroCard student={student} /></div>
+          <IvPointsCard xp={xp} xpInfo={xpInfo} onProfile={() => setView('profile')} />
+        </div>
+
+        {/* — Esta semana en tu grupo: Campeones (podio grande) + Top 5 completo — */}
+        <div className="iv-sec">
+          <div className="iv-h">Esta semana en tu grupo</div>
+          <div className="iv-two eq">
+            <div className="iv-champ"><WeekChampionsCard student={student} /></div>
+            <IvGroupTop student={student} />
+          </div>
+        </div>
 
         {/* ── Motivación: no pierdas tu avance ── */}
         <AchievementWarning student={student} />
 
-        <ProgressExplainer studentId={student.id} />
-
-        {/* Acceso a lo "acumulado" (nivel, medallas, liga) → Mi perfil */}
-        <div className="scard" style={{marginTop:18}}>
-          <button type="button" onClick={()=>setView('profile')} style={{display:'flex',alignItems:'center',gap:11,width:'100%',border:'none',background:'none',cursor:'pointer',textAlign:'left',padding:0,fontFamily:'inherit'}}>
-            <span style={{fontSize:24}}>🏅</span>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontFamily:"'Fredoka',sans-serif",fontWeight:600,fontSize:15,color:'var(--text)'}}>Tu nivel, medallas y liga semanal</div>
-              <div style={{fontSize:12,color:'var(--text-soft)',fontWeight:600}}>Míralas en Mi perfil</div>
-            </div>
-            <span style={{color:'var(--lp)',fontWeight:800,fontSize:20}}>→</span>
-          </button>
-        </div>
+        <IvShortcuts student={student} />
       </main>
       )}
       </div>
       </div>
     </>
+  );
+}
+
+/* 🏠 INICIO-VISUAL-V1 (09-nov-2026 · aprobado por la usuaria en «Propuesta - Inicio del alumno v3 - rediseno visual»):
+ * el Inicio muestra la MISMA información, pero de un vistazo: anillos, puntitos, números grandes y barras.
+ * En Inicio reemplaza a: StreakNowCard + saludo + DayCard → «Tu día» (IvDayCard) · ExamCountdownCard + VocabReminder +
+ * aviso «Nueva semana» → «Para hoy» (IvTodayTiles) · MascotCard → IvNeuroCard · PointsStrip → IvPointsCard ·
+ * GroupTopSimple → IvGroupTop · «Empieza a practicar» → el botón de «Tu día». Los componentes viejos siguen en el archivo
+ * (con sus marcadores) pero ya no se dibujan en Inicio. Reglas, datos y XP NO cambian: se usan las mismas funciones. */
+const IVIS_CSS = `
+.iv-card{background:#fff;border-radius:20px;border:1px solid #ECE7DC;box-shadow:0 1px 2px rgba(40,30,10,.05),0 6px 18px rgba(40,30,10,.07);padding:16px;min-width:0}
+.iv-lab{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:900;letter-spacing:.07em;text-transform:uppercase;color:#8a7f6a}
+.iv-lab i{font-style:normal;width:26px;height:26px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.iv-sec{display:flex;flex-direction:column;gap:9px;margin-top:18px}
+.iv-h{font-family:'Fredoka',sans-serif;font-weight:600;font-size:17px;color:var(--text,#2A2A2A);padding:2px 2px 0}
+.iv-day{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"ring head cta" "ring week cta" "ring meta cta";column-gap:20px;row-gap:10px;align-items:center}
+.iv-day .iv-ring{grid-area:ring}.iv-day .iv-head{grid-area:head;min-width:0}.iv-day .iv-week{grid-area:week}.iv-day .iv-meta{grid-area:meta}.iv-day .iv-cta{grid-area:cta}
+.iv-day.slim{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"head cta" "week cta" "meta cta";padding:13px 16px}
+.iv-ring{width:118px;height:118px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.iv-ring .in{width:92px;height:92px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+.iv-ring .fl{font-size:18px}
+.iv-ring b{font-family:'Fredoka',sans-serif;font-weight:700;font-size:34px;color:var(--ivc,#FF7A1A)}
+.iv-ring small{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.04em;color:#6B6B6B;margin-top:2px}
+.iv-hi{font-family:'Fredoka',sans-serif;font-weight:600;font-size:15px;color:#6b6453;display:flex;gap:2px 10px;flex-wrap:wrap;align-items:baseline;min-width:0}
+.iv-hi span{font-family:'Nunito',sans-serif;font-size:12px;font-weight:800;color:#9a917e;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.iv-msg{font-family:'Fredoka',sans-serif;font-weight:600;font-size:22px;line-height:1.2;margin-top:3px;color:#2A2A2A}
+.iv-msg b{color:var(--ivc,#FF7A1A)}
+.iv-day.slim .iv-msg{font-size:18px}
+.iv-sub{display:block;font-size:12.5px;font-weight:800;color:#8a6a60;margin-top:4px}
+.iv-week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;max-width:420px}
+.iv-dy{display:flex;flex-direction:column;align-items:center;gap:3px}
+.iv-dy>span{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;background:#F3F0E8;color:#C9BFAE}
+.iv-dy.on>span{background:#FF8A3D;color:#fff}
+.iv-dy.shield>span{background:#E3EEFB}
+.iv-dy.broke>span{color:#B5AA98}
+.iv-dy.free>span{background:#EEF6EE;color:#5C9A66;font-family:'Fredoka',sans-serif}
+.iv-dy.pending>span{background:#fff;border:2.5px dashed var(--ivc,#FF7A1A)}
+.iv-dy small{font-size:10.5px;font-weight:900;color:#9a917e}
+.iv-dy.td small{color:var(--ivc,#FF7A1A)}
+.iv-shd{width:14px;height:16px;background:#3B7DD8;border-radius:3px 3px 8px 8px;display:block}
+.iv-meta{display:flex;gap:6px;flex-wrap:wrap}
+.iv-meta span{font-size:12px;font-weight:700;color:#5d564a;background:#F6F3EC;border-radius:10px;padding:4px 9px;white-space:nowrap}
+.iv-meta b{font-weight:900;color:#2A2A2A}
+.iv-cta{display:flex;flex-direction:column;align-items:stretch;gap:8px;min-width:190px}
+.iv-go{border:none;border-radius:16px;padding:14px 18px;min-height:52px;background:#1F3A8A;color:#fff;font-family:'Fredoka',sans-serif;font-weight:600;font-size:17px;box-shadow:0 6px 14px rgba(31,58,138,.28);white-space:nowrap;cursor:pointer}
+.iv-go.sec{background:#fff;color:#1F3A8A;border:2px solid #1F3A8A;box-shadow:none;font-size:15px;padding:10px 14px;min-height:44px}
+.iv-clock{text-align:center;font-size:12px;font-weight:900;color:#6b6453;background:#F6F3EC;border-radius:10px;padding:6px 9px;white-space:nowrap}
+.iv-clock.urg{background:#FDECEA;color:#B71C1C}
+.iv-today{display:grid;grid-template-columns:minmax(0,1.3fr) repeat(2,minmax(0,1fr));gap:12px}
+.iv-today.n2{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}.iv-today.n1{grid-template-columns:minmax(0,1fr)}
+.iv-tile{display:flex;flex-direction:column;gap:6px;text-align:left;background:#fff;border-radius:20px;border:1px solid #ECE7DC;box-shadow:0 1px 2px rgba(40,30,10,.05),0 6px 18px rgba(40,30,10,.07);padding:14px 16px;min-width:0}
+.iv-tile>small{font-size:12px;font-weight:700;color:#6B6B6B;line-height:1.35}
+.iv-big{font-family:'Fredoka',sans-serif;font-weight:600;font-size:30px;line-height:1.05;color:#2A2A2A}
+.iv-big small{font-size:15px;color:#8a7f6a;font-weight:600}
+.iv-exr{display:flex;align-items:center;gap:10px}
+.iv-exr>div{display:flex;flex-direction:column;min-width:0;gap:1px}
+.iv-exr b.st{font-weight:900;font-size:14px}
+.iv-exr small{font-size:11.5px;color:#6B6B6B;font-weight:700;line-height:1.35}
+.iv-mr{width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.iv-mr b{width:42px;height:42px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-family:'Fredoka',sans-serif;font-weight:600;font-size:15px}
+.iv-mr b small{font-size:9px}
+.iv-lk{margin-top:auto;font-size:12.5px;font-weight:900;color:#1F3A8A;background:none;border:none;padding:0;text-align:left;cursor:pointer;font-family:inherit}
+.iv-tf{display:flex;align-items:center;gap:8px;margin-top:auto}
+.iv-btn{border:none;border-radius:12px;padding:9px 14px;font-weight:900;font-size:13px;cursor:pointer;font-family:inherit}
+.iv-btn.pur{background:#6C4FB0;color:#fff}.iv-btn.soft{background:#F3F0E8;color:#5d564a}
+.iv-x{border:none;background:none;color:#B5AC9A;font-size:15px;cursor:pointer;padding:4px}
+.iv-two{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:14px;align-items:stretch;margin-top:18px}
+.iv-sec .iv-two{margin-top:0}
+.iv-two.eq{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.iv-neu{flex:1;display:flex;flex-direction:column;gap:12px;border-color:#F6D4E4;background:linear-gradient(180deg,#FFF6FA,#fff 55%)}
+.iv-nrow{display:flex;gap:16px;align-items:center}
+.nv-scene.iv-nsc{width:132px;height:132px;flex-shrink:0}
+.iv-bub{position:relative;flex:1;min-width:0;background:#fff;border:1.5px solid #F4D3E3;border-radius:18px;padding:12px 14px}
+.iv-bub::before{content:'';position:absolute;left:-9px;top:34px;width:16px;height:16px;background:#fff;border-left:1.5px solid #F4D3E3;border-bottom:1.5px solid #F4D3E3;transform:rotate(45deg)}
+.iv-bub .who{font-family:'Fredoka',sans-serif;font-weight:600;font-size:11.5px;color:#E1357F;margin-bottom:3px}
+.iv-bub .msg{font-size:14.5px;font-weight:700;line-height:1.5;color:#2A2A2A}
+.iv-bub .msg b{color:#E1357F}
+.iv-step{margin-top:8px;font-size:12.5px;font-weight:800;color:#0E5A2A;background:#E7F6EC;border-radius:10px;padding:7px 10px}
+.iv-stg{display:flex;align-items:center;gap:10px;margin-top:2px}
+.iv-sc{font-size:12.5px;font-weight:900;border-radius:12px;padding:5px 10px;background:#F3F0E8;color:#8a7f6a;white-space:nowrap}
+.iv-sb{flex:1;position:relative;height:12px;background:#F6E4EC;border-radius:8px}
+.iv-sb>span{display:block;height:100%;border-radius:8px}
+.iv-sb small{position:absolute;right:0;top:15px;font-size:11px;font-weight:900;color:#E1357F;white-space:nowrap}
+.iv-en{font-size:12px;font-weight:800;color:#8a6a78;margin-top:8px}
+.iv-pts{display:flex;flex-direction:column;gap:12px}
+.iv-lvl{display:flex;align-items:center;gap:14px}
+.iv-badge{width:96px;height:96px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.iv-badge>div{width:76px;height:76px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+.iv-badge small{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.05em}
+.iv-badge b{font-family:'Fredoka',sans-serif;font-weight:700;font-size:32px}
+.iv-lv{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.iv-xp{font-family:'Fredoka',sans-serif;font-weight:600;font-size:28px;line-height:1.05;white-space:nowrap;color:#2A2A2A}
+.iv-xp small{font-size:14px;color:#8a7f6a}
+.iv-tier{font-size:13px;font-weight:900}
+.iv-lv>small{font-size:12px;font-weight:700;color:#6B6B6B}
+.iv-pts .iv-lk{margin-top:auto}
+.iv-champ{display:flex;min-width:0}
+.iv-champ>.scard{flex:1;display:flex;flex-direction:column;margin:0}
+.iv-champ>.scard>div:first-child{flex:1;display:flex;flex-direction:column;justify-content:space-between}
+.iv-top{display:flex;flex-direction:column;gap:9px}
+.iv-tr{display:flex;align-items:center;gap:10px}
+.iv-ps{width:24px;height:24px;border-radius:50%;background:#EFEBE2;color:#8a7f6a;font-weight:900;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.iv-tr.g .iv-ps{background:#F4B400;color:#fff}
+.iv-av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#5B8DEF,#2E5BC4);color:#fff;font-family:'Fredoka',sans-serif;font-weight:600;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.iv-tr.me .iv-av{box-shadow:0 0 0 2px #fff,0 0 0 4px #1F3A8A}
+.iv-tb{flex:1;min-width:0}
+.iv-tb .nm{font-size:13px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#2A3550}
+.iv-tb .cr{font-size:10px;font-weight:900;color:#B07D00}
+.iv-tbar{height:9px;background:#F1EEE6;border-radius:6px;overflow:hidden;margin-top:4px}
+.iv-tbar span{display:block;height:100%;background:#9DB2E8;border-radius:6px}
+.iv-tr.g .iv-tbar span{background:linear-gradient(90deg,#FFD75E,#F4B400)}
+.iv-tr>b{font-family:'Fredoka',sans-serif;font-weight:600;font-size:16px;white-space:nowrap;color:#2A2A2A}
+.iv-tr>b small{font-size:11px;color:#8a7f6a}
+.iv-tn{font-size:12px;font-weight:800;color:#8a7f6a;text-align:center;margin-top:auto;padding-top:4px}
+.iv-empty{background:#F6F8FD;border-radius:10px;padding:14px;font-size:12.5px;font-weight:700;text-align:center;line-height:1.5;color:#6B6B6B}
+.iv-short{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:18px}
+.iv-short>button{border:1px solid #E5DFD2;background:#fff;border-radius:14px;padding:9px 14px;font-size:12.5px;font-weight:800;color:#4d473c;cursor:pointer;font-family:inherit;white-space:nowrap}
+.iv-expl{margin-top:10px}
+@media (max-width:900px){.iv-day{grid-template-columns:auto minmax(0,1fr);grid-template-areas:"ring head" "ring week" "meta meta" "cta cta"}.iv-day.slim{grid-template-columns:minmax(0,1fr);grid-template-areas:"head" "week" "meta" "cta"}.iv-cta{flex-direction:row;align-items:center;min-width:0}.iv-go{flex:1}.iv-two,.iv-two.eq{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:600px){.iv-day{grid-template-areas:"ring head" "week week" "meta meta" "cta cta";column-gap:12px;padding:14px}.iv-ring{width:88px;height:88px}.iv-ring .in{width:68px;height:68px}.iv-ring b{font-size:26px}.iv-ring .fl{font-size:14px}.iv-msg{font-size:18px}.iv-week{gap:4px;max-width:none}.iv-dy>span{width:30px;height:30px;font-size:13px}.iv-cta{flex-direction:column;align-items:stretch}.iv-today,.iv-today.n2,.iv-today.n3{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.iv-today.n1,.iv-today.hasx.n2{grid-template-columns:minmax(0,1fr)}.iv-today .ex{grid-column:1/-1}.iv-tile{padding:12px 13px;border-radius:16px}.iv-big{font-size:24px}.iv-nrow{flex-direction:column;align-items:stretch}.iv-nrow .iv-nsc{align-self:center}.iv-bub::before{left:50%;top:-9px;margin-left:-8px;transform:rotate(135deg)}.iv-tb .cl{display:none}}
+`;
+(function injectIvisCSS() { if (typeof document === 'undefined' || document.getElementById('ivis-css')) return; const st = document.createElement('style'); st.id = 'ivis-css'; st.textContent = IVIS_CSS; document.head.appendChild(st); })();
+const IVIS_DOW = ['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá'];
+
+/* Los últimos 7 días con la MISMA regla de la racha (streakInfo.days: on · shield · free · broke · pending · off), marcas dibujadas */
+function IvWeek({ si }) {
+  const days = (si && si.days ? si.days : []).slice(-7);
+  if (si && si.today && (!days.length || days[days.length - 1].d !== si.today)) days.push({ d: si.today, st: si.isSunday ? 'free' : 'pending', dow: new Date(si.today + 'T12:00:00Z').getUTCDay() });
+  const cells = Array.from({ length: Math.max(0, 7 - days.length) }).map(() => null).concat(days.slice(-7));
+  return (
+    <div className="iv-week">
+      {cells.map((x, i) => {
+        const st = x ? x.st : 'off';
+        const mk = st === 'on' ? '✓' : st === 'broke' ? '✕' : st === 'free' ? 'z' : '';
+        return <div key={i} className={'iv-dy ' + st + (i === cells.length - 1 ? ' td' : '')}><span>{st === 'shield' ? <i className="iv-shd"></i> : mk}</span><small>{i === cells.length - 1 ? 'Hoy' : x ? IVIS_DOW[x.dow] : ''}</small></div>;
+      })}
+    </div>
+  );
+}
+
+/* «Tu día» (RACHA-TIEMPO-V1 + saludo + Tu constancia): mismos datos y misma lógica que StreakNowCard (los 8 s en verde al cumplir).
+ * Sin racha que cuidar (cumplida, domingo libre o sin datos de la nube) queda como franja chica con el saludo. */
+function IvDayCard({ student, level, group, todayMin, target, onGo }) {
+  const D = window.JUCUM_DATA;
+  const [, setTk] = React.useState(0);
+  const [doneAt, setDoneAt] = React.useState(null);
+  const pendSeen = React.useRef(false);
+  const si = student && student.streakInfo;
+  const goal = (si && si.goal) || target || 15;
+  const done = Math.max(todayMin || 0, (si && si.todayMin) || 0);
+  const met = !!si && (!!si.todayCounts || done >= goal);
+  React.useEffect(() => { const iv = setInterval(() => setTk(t => t + 1), 30000); return () => clearInterval(iv); }, []);
+  React.useEffect(() => {
+    if (!si) return;
+    if (!met) { pendSeen.current = true; return; }
+    if (pendSeen.current && !doneAt) { setDoneAt(Date.now()); const to = setTimeout(() => setTk(t => t + 1), 8200); return () => clearTimeout(to); }
+  }, [met, !!si]);
+  const stLoad = student.streak == null && !!window.JUCUM_STREAK;   // RACHA-REAL-V1: nunca un 0 falso
+  const n = si ? (si.streak || 0) : (student.streak || 0);
+  const dTxt = (k) => k + ' ' + (k === 1 ? 'día' : 'días');
+  const best = D && D.getBestStreak ? D.getBestStreak(student) : 0;
+  const p = new Date(Date.now() - 5 * 3600e3);
+  const secLeft = Math.max(0, 86400 - (p.getUTCHours() * 3600 + p.getUTCMinutes() * 60 + p.getUTCSeconds()));
+  const hL = Math.floor(secLeft / 3600), mL = Math.floor((secLeft % 3600) / 60);
+  const left = Math.max(1, Math.ceil(goal - done));
+  const pct = Math.min(100, Math.round(done / Math.max(1, goal) * 100));
+  const late = p.getUTCHours() >= 19, urgent = secLeft < 3600;
+  const celebrate = met && !!doneAt && Date.now() - doneAt < 8000;
+  const ring = !!si && ((!met && !si.isSunday) || celebrate);
+  const hot = !met && (late || urgent);
+  const c = met ? '#2EA84B' : hot ? '#E11930' : '#FF7A1A';
+  const look = met ? ['#EFF8F1', '#CBE8D2'] : hot ? ['#FFF1EF', '#F5C9C2'] : ['#FFF6EC', '#F6DDBF'];
+  const cardStyle = { '--ivc': c, background: 'linear-gradient(180deg,' + look[0] + ',#fff 75%)', borderColor: look[1] };
+  const first = (student.fullName || '').split(' ')[0];
+  const head = (msg, sub) => (
+    <div className="iv-head">
+      <div className="iv-hi">{'¡Hola, ' + first + '! 👋'} <span>{level.emoji} {group.name}</span></div>
+      <div className="iv-msg">{msg}</div>
+      {sub && <small className="iv-sub">{sub}</small>}
+    </div>
+  );
+  const meta = (
+    <div className="iv-meta">
+      {best > 0 && !stLoad && <span>🏆 Récord <b>{dTxt(best)}</b></span>}
+      {si && <span>🛡 Escudo <b>{si.shieldLeft ? 'disponible' : 'usado'}</b></span>}
+      {si && <span>🎯 Meta <b>{goal} min</b> al día</span>}
+    </div>
+  );
+  if (!ring) {
+    const msg = !si ? (stLoad ? 'Cargando tu racha… 🔥' : n > 0 ? <>Racha de <b>{dTxt(n)}</b> 🔥 ¡No la rompas hoy!</> : 'Hoy es buen día para retomar la práctica 🌱')
+      : met ? <>✅ Hoy ya cuenta · racha de <b>{dTxt(n)}</b> 🔥</>
+      : <>😴 Hoy es domingo libre{n > 0 ? <> · tu racha de <b>{dTxt(n)}</b> está a salvo</> : ''}</>;
+    return (
+      <div className="iv-card iv-day slim" data-tut="meta" style={cardStyle}>
+        {head(msg)}
+        {si && <IvWeek si={si} />}
+        {meta}
+        <div className="iv-cta"><button type="button" data-tut="practica" className={'iv-go' + (met ? ' sec' : '')} onClick={onGo}>{met ? '▶ Seguir practicando' : '▶ Empieza a practicar'}</button></div>
+      </div>
+    );
+  }
+  const msg = celebrate ? <>¡Listo! Hoy ya cuenta para tu racha 🔥</>
+    : n > 0 && late && !si.shieldLeft ? <>¡Tu racha de <b>{dTxt(n)}</b> se apaga hoy! Te faltan <b>{left} min</b></>
+    : n > 0 ? <>{urgent ? <>¡Quedan <b>{mL} min</b>! </> : ''}Te faltan <b>{left} min</b> para tu racha de <b>{dTxt(n)}</b></>
+    : <>{urgent ? <>¡Quedan <b>{mL} min</b>! </> : ''}Empieza tu racha hoy: te faltan <b>{left} min</b></>;
+  const sub = !celebrate && hot && n > 0 && si.shieldLeft ? 'Si hoy no llegas, tu escudo 🛡 de la semana cubre el día.' : null;
+  return (
+    <div className={'iv-card iv-day' + (urgent && !met ? ' stk-now urgent' : '')} data-tut="meta" style={cardStyle}>
+      <div className="iv-ring" style={{ background: 'conic-gradient(' + c + ' ' + ((celebrate ? 100 : pct) * 3.6) + 'deg, #F1ECE2 0)' }}>
+        <div className="in"><span className="fl">{celebrate ? '✅' : '🔥'}</span><b>{celebrate ? goal : left}</b><small>{celebrate ? 'de ' + goal + ' min' : 'min faltan'}</small></div>
+      </div>
+      {head(msg, sub)}
+      <IvWeek si={si} />
+      {meta}
+      <div className="iv-cta">
+        {celebrate ? <button type="button" data-tut="practica" className="iv-go sec" onClick={onGo}>▶ Seguir practicando</button>
+          : <><button type="button" data-tut="practica" className="iv-go" onClick={onGo}>▶ Practicar {left} min</button>
+            <span className={'iv-clock' + (hot ? ' urg' : '')}>⏳ El día termina en {hL > 0 ? hL + ' h ' : ''}{mL} min</span></>}
+      </div>
+    </div>
+  );
+}
+
+/* Examen anunciado: MISMO cálculo que ExamCountdownCard (fecha en hora Perú, ≤ 30 días, apto del módulo de ESTE examen) */
+function ivExamInfo(student) {
+  const D = window.JUCUM_DATA, X = window.JUCUM_EXAMS, F1 = window.JUCUM_EXAMFLOW;
+  if (!X || !X.getAnnouncement) return null;
+  const mods = D.MODULE_CATALOG[student.level] || [];
+  const solos = (F1 && F1.standaloneExams ? F1.standaloneExams(student.level) : []).map(e => ({ id: 'exam:' + e.id, name: e.title, emoji: '🎓', activities: [] }));
+  const today = peruDayKey();
+  let best = null;
+  mods.concat(solos).forEach(m => {
+    const a = (F1 && F1.getAnn && F1.getAnn(student.group, m.id)) || X.getAnnouncement(student.group, m.id);
+    if (a && a.date && a.date >= today && (!best || a.date < best.date)) best = { ...a, mod: m };
+  });
+  if (!best) return null;
+  const days = Math.round((Date.parse(best.date + 'T00:00:00Z') - Date.parse(today + 'T00:00:00Z')) / 86400000);
+  if (days > 30) return null;
+  /* 🎯 INICIO-APTO-V1: el mismo apto que Mi práctica = el del módulo de ESTE examen (infoForModule) */
+  let exInfo = null;
+  try { exInfo = F1 && F1.infoForModule ? F1.infoForModule(student, best.mod) : null; } catch (e) {}
+  const r = (exInfo && exInfo.r) || D.getStudentReadiness(student);
+  const habil = !!(exInfo && exInfo.canTake && !r.apt);
+  const m = D.getStudentMastery(student);
+  const fecha = new Date(best.date + 'T12:00:00Z').toLocaleDateString('es-PE', { weekday:'long', day:'numeric', month:'long' });
+  const hora = best.from && F1 && F1.fmtHora ? F1.fmtHora(best.from) : '';
+  const pend = r.total != null ? Math.max(0, (r.total || 0) - (r.done || 0)) : Math.max(0, (m.total || 0) - (m.done || 0));
+  const compsW = (D.COMPETENCIES || []).map(c => ({ c, v: r.competencies?.[c.key] })).filter(x => typeof x.v === 'number').sort((a, b) => a.v - b.v);
+  const tip = pend > 0 ? <>Completa tus <b>{pend} actividad{pend === 1 ? '' : 'es'} pendiente{pend === 1 ? '' : 's'}</b> del módulo.</>
+    : (compsW.length && compsW[0].v < 75) ? <>Refuerza <b>{compsW[0].c.icon} {compsW[0].c.label}</b> (vas en {compsW[0].v}%).</>
+    : (m.active7 || 0) < 5 ? <>Practica un poco <b>cada día</b> ({m.active7 || 0}/7 esta semana).</>
+    : <>¡Vas muy bien! Mantén tu ritmo diario.</>;
+  const color = (r.apt || habil) ? '#2EA84B' : r.overall >= 50 ? '#F9A825' : '#E53935';
+  const status = habil ? '✅ Habilitada por tu teacher' : r.apt ? '✓ Apto' : r.blocker === 'coverage' ? '📚 Te falta terminar el módulo' : 'Falta ' + Math.max(0, (r.threshold || 75) - r.overall) + '%';
+  return { best, days, fecha, hora, r, color, status, tip };
+}
+
+/* «Para hoy»: examen · vocabulario del día (misma lógica y misma clave de «ocultar por hoy» que VocabReminder) · semana nueva */
+function IvTodayTiles({ student, settings, onGo, onVocab }) {
+  const D = window.JUCUM_DATA;
+  const [, force] = React.useReducer(x => x + 1, 0);
+  const today = peruDayKey();
+  const vKey = `jucum_vocab_dismiss_${student.id}_${today}`;
+  const [vHidden, setVHidden] = React.useState(() => { try { return localStorage.getItem(vKey) === '1'; } catch { return false; } });
+  const ex = ivExamInfo(student);
+  const mods = D.MODULE_CATALOG[student.level] || [];
+  const activeIds = D.getStudentModuleIds ? D.getStudentModuleIds(student) : ((settings && (settings.activeModuleIds || (settings.activeModuleId ? [settings.activeModuleId] : []))) || []);   // MOD-ACCESO-V1
+  const mod = mods.find(m => activeIds.includes(m.id)) || ((D.isCyclicLevel && D.isCyclicLevel(student.level)) ? null : mods[0]);
+  const vocab = mod && (mod.activities || []).find(a => a.type === 'quizlet');
+  const showVocab = !vHidden && !!(mod && vocab);
+  const newWeek = D.isNewWeekFor ? D.isNewWeekFor(student.id) : false;
+  const tiles = [];
+  if (ex) tiles.push(
+    <div key="ex" className="iv-tile ex">
+      <span className="iv-lab"><i style={{background:'#FDECEA'}}>🎓</i>Tu examen</span>
+      <div className="iv-big">{ex.days === 0 ? 'HOY' : ex.days === 1 ? 'Mañana' : ex.days + ' días'}{ex.days <= 1 && ex.hora ? <small> {ex.hora}</small> : null}</div>
+      {ex.days > 1 && <small>{ex.fecha}{ex.hora ? ' · ' + ex.hora : ''}</small>}
+      <div className="iv-exr">
+        <span className="iv-mr" style={{background:'conic-gradient(' + ex.color + ' ' + (Math.min(100, ex.r.overall) * 3.6) + 'deg, #EEE9E0 0)'}}><b style={{color:ex.color}}>{ex.r.overall}<small>%</small></b></span>
+        <div><b className="st" style={{color:ex.color}}>{ex.status}</b><small>{ex.best.mod.name}</small><small>🧠 {ex.tip}</small></div>
+      </div>
+      <button type="button" className="iv-lk" onClick={onGo}>Ver mi preparación ›</button>
+    </div>);
+  if (showVocab) tiles.push(
+    <div key="vo" className="iv-tile">
+      <span className="iv-lab"><i style={{background:'#F1EAFB'}}>🗂️</i>Vocabulario del día</span>
+      <div className="iv-big">5 <small>min</small></div>
+      <small>Repásalo 2–3 veces al día. Corto y frecuente = se queda.</small>
+      <div className="iv-tf"><button type="button" className="iv-btn pur" onClick={() => onVocab(vocab, mod)}>Repasar</button>
+        <button type="button" className="iv-x" title="Ocultar por hoy" aria-label="Ocultar por hoy" onClick={() => { try { localStorage.setItem(vKey, '1'); } catch {} setVHidden(true); }}>✕</button></div>
+    </div>);
+  if (newWeek) tiles.push(
+    <div key="nw" className="iv-tile">
+      <span className="iv-lab"><i style={{background:'#FFF2D1'}}>🎉</i>Nueva semana</span>
+      <div className="iv-big">XP <small>extra</small></div>
+      <small>Vuelve a practicar tus materiales: cada uno da XP otra vez, una vez esta semana.</small>
+      <div className="iv-tf"><button type="button" className="iv-btn soft" onClick={() => { if (D.markWeekSeen) D.markWeekSeen(student.id); force(); }}>¡Entendido!</button></div>
+    </div>);
+  if (!tiles.length) return null;
+  return (
+    <div className="iv-sec">
+      <div className="iv-h">Para hoy</div>
+      <div className={'iv-today n' + tiles.length + (ex ? ' hasx' : '')}>{tiles}</div>
+    </div>
+  );
+}
+
+/* Neuro con su mensaje grande (mismo estado y mismo diálogo que MascotCard; sin la lista «¿Cómo ayudo a Neuro?», que repetía la racha) */
+function IvNeuroCard({ student }) {
+  const M = window.JUCUM_MASCOT;
+  if (!M || typeof neuroSceneHTML !== 'function') return <MascotCard student={student} />;
+  const s = M.getMascotState(student);
+  const dlg = React.useMemo(() => M.getNeuroDialogue(student, s), [student.id, s.stage, s.w, s.todayMin]);
+  const [showLetter, setShowLetter] = React.useState(false);
+  const ST = M.STAGES || [], b = s.bounds || [];
+  const lo = s.stage > 0 ? (b[s.stage - 1] || 0) : 0, hi = s.stage < 6 ? (b[s.stage] || 100) : 100;
+  const inSt = s.stage >= 6 ? 100 : Math.max(4, Math.min(100, Math.round((s.w - lo) / Math.max(1, hi - lo) * 100)));
+  const cur = ST[s.stage] ? ST[s.stage].label : s.label;
+  const nxt = s.next && s.next.nextLabel ? s.next.nextLabel : (ST[s.stage + 1] ? ST[s.stage + 1].label : null);
+  const gap = s.next && s.next.peak ? '¡en la cima!' : s.next && s.next.pts ? 'faltan ' + s.next.pts + ' pts' : '';
+  return (
+    <div className="iv-card iv-neu">
+      <span className="iv-lab"><i style={{background:'#FFE3EF'}}>🧠</i>Neuro, tu mascota de estudio</span>
+      <div className="iv-nrow">
+        <div className={'nv-scene iv-nsc' + (s.stage === 0 ? ' clickable' : '')} onClick={s.stage === 0 ? () => setShowLetter(true) : undefined} dangerouslySetInnerHTML={{__html: neuroSceneHTML(s.stage, s.mood, s.color)}} />
+        <div className="iv-bub">
+          <div className="who">{dlg.who}</div>
+          <div className="msg" dangerouslySetInnerHTML={{__html: dlg.msg}} />
+          {dlg.step && <div className="iv-step">👉 {dlg.step}</div>}
+        </div>
+      </div>
+      <div className="iv-stg">
+        <span className="iv-sc" style={{background:s.color, color:'#fff'}}>{cur}</span>
+        <div className="iv-sb"><span style={{width:inSt + '%', background:s.color}}></span>{gap && <small>{gap}</small>}</div>
+        {nxt && s.stage < 6 && <span className="iv-sc">{nxt}</span>}
+      </div>
+      <div className="iv-en">⚡ Energía de Neuro: <b>{s.w}%</b></div>
+      {showLetter && typeof NeuroLetter === 'function' && <NeuroLetter onClose={() => setShowLetter(false)} />}
+    </div>
+  );
+}
+
+/* Tus puntos: insignia del nivel que se llena hacia el siguiente (mismos números que PointsStrip) */
+function IvPointsCard({ xp, xpInfo, onProfile }) {
+  const col = xpInfo.tier.color, pct = Math.min(100, Math.round((xpInfo.currentXP || 0) / Math.max(1, xpInfo.nextNeeded || 1) * 100));
+  return (
+    <div className="iv-card iv-pts">
+      <span className="iv-lab"><i style={{background:xpInfo.tier.bg}}>{xpInfo.tier.emoji}</i>Tus puntos</span>
+      <div className="iv-lvl">
+        <div className="iv-badge" style={{background:'conic-gradient(' + col + ' ' + (pct * 3.6) + 'deg, #F1ECE2 0)'}}><div style={{background:xpInfo.tier.bg}}><small style={{color:col}}>nivel</small><b style={{color:col}}>{xpInfo.level}</b></div></div>
+        <div className="iv-lv">
+          <div className="iv-xp">{(xp || 0).toLocaleString()} <small>XP</small></div>
+          <div className="iv-tier" style={{color:col}}>{xpInfo.tier.name}</div>
+          <small>{xpInfo.currentXP} / {xpInfo.nextNeeded} XP para el nivel {xpInfo.level + 1}</small>
+        </div>
+      </div>
+      <button type="button" className="iv-lk" onClick={onProfile}>🏅 Medallas y liga semanal ›</button>
+    </div>
+  );
+}
+
+/* Top 5 del grupo con barras (mismo ranking y misma regla que GroupTopSimple) */
+function IvGroupTop({ student }) {
+  const { getWeeklyRanking } = window.JUCUM_DATA;
+  const ranking = getWeeklyRanking(student.group) || [];
+  const me = ranking.find(r => r.student.id === student.id);
+  const ranked = me && me.xp > 0;
+  const top = ranking.slice(0, 5), mx = Math.max(1, ...top.map(r => r.xp || 0));
+  const nm = (r) => r.student.id === student.id ? 'Tú' : r.student.fullName.split(' ')[0] + ' ' + ((r.student.fullName.split(' ')[1] || '')[0] || '') + '.';
+  return (
+    <div className="iv-card iv-top">
+      <span className="iv-lab"><i style={{background:'#FFF4D6'}}>🏅</i>Top del grupo · esta semana</span>
+      {!ranked ? <div className="iv-empty">🏁 Aún no estás en el ranking. Completa tu primera práctica para <b>entrar y competir</b>.</div> : <>
+        {top.map((r, i) => (
+          <div key={r.student.id} className={'iv-tr' + (i < 3 ? ' g' : '') + (r.student.id === student.id ? ' me' : '')}>
+            <span className="iv-ps">{i + 1}</span><span className="iv-av">{lgIni(r.student)}</span>
+            <div className="iv-tb"><div className="nm">{nm(r)}{i < 3 && <span className="cr"> 👑<span className="cl"> próx. campeón</span></span>}</div><div className="iv-tbar"><span style={{width:Math.max(6, Math.round((r.xp || 0) / mx * 100)) + '%'}}></span></div></div>
+            <b>{(r.xp || 0).toLocaleString()}<small> XP</small></b>
+          </div>
+        ))}
+        <div className="iv-tn">✨ Los 3 primeros serán los próximos campeones si siguen así</div>
+      </>}
+    </div>
+  );
+}
+
+/* Ayudas juntas en una línea: «¿Cómo gano XP y subo al Top?» (la ventana de siempre) y «¿Cómo funciona mi avance?» */
+function IvShortcuts({ student }) {
+  const [how, setHow] = React.useState(false);
+  const [exp, setExp] = React.useState(false);
+  return (
+    <div>
+      <div className="iv-short">
+        <button type="button" onClick={() => setHow(true)}>❓ ¿Cómo gano XP y subo al Top?</button>
+        <button type="button" onClick={() => setExp(e => !e)}>❔ ¿Cómo funciona mi avance?</button>
+      </div>
+      {exp && <div className="iv-expl"><ExplainerBody /></div>}
+      {how && <HowToTopModal student={student} onClose={() => setHow(false)} />}
+    </div>
   );
 }
 
@@ -1719,7 +2086,7 @@ function WeekChampionsCard({ student }) {
         ) : (
           <button onClick={()=>setModal(true)} style={{display:'block',width:'100%',marginTop:14,border:'none',cursor:'pointer',fontFamily:"'Fredoka',sans-serif",fontWeight:600,fontSize:15,color:'#3a2a00',background:'linear-gradient(135deg,#FFD75E,#F4B400)',borderRadius:13,padding:13,boxShadow:'0 6px 16px rgba(244,180,0,.4)'}}>🎁 Reclama tu premio de campeón →</button>
         )) : (
-          <div style={{marginTop:14,background:'rgba(255,255,255,.14)',border:'1px solid rgba(255,255,255,.28)',borderRadius:12,padding:'11px 13px',fontSize:12,fontWeight:700,lineHeight:1.45,textShadow:'0 1px 2px rgba(0,0,0,.4)'}}>🏆 Estos son los <b style={{color:'#FFE08A'}}>campeones de la semana</b>{champ1?<> y el escenario que eligió <b style={{color:'#FFE08A'}}>{champ1.student.fullName.split(' ')[0]}</b></>:''}. ¡Practica mucho para ser el próximo en <b style={{color:'#FFE08A'}}>reclamar este premio</b> 🎁!</div>
+          <div style={{marginTop:14,background:'rgba(255,255,255,.14)',border:'1px solid rgba(255,255,255,.28)',borderRadius:12,padding:'11px 13px',fontSize:12,fontWeight:700,lineHeight:1.45,textShadow:'0 1px 2px rgba(0,0,0,.4)',textAlign:'center'}}>{/* INICIO-VISUAL-V1: texto más corto */}{champ1?<><b style={{color:'#FFE08A'}}>{champ1.student.fullName.split(' ')[0]}</b> eligió este escenario{champ1.emoji ? ' ' + champ1.emoji : ''} · </>:''}¡Practica para reclamar el próximo <b style={{color:'#FFE08A'}}>premio</b> 🎁!</div>
         ))}
       </div>
       {modal && <ChampionRewardModal student={student} myRank={myRank} onClose={()=>setModal(false)} onSaved={()=>{setModal(false);force();}} />}
