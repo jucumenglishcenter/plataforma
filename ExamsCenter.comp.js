@@ -157,7 +157,7 @@ function EcReglasStrip({ group, onChange }) {
   return (
     <div style={{display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', marginBottom:16}}>
       <span style={chip}>✅ Aprueba con <input type="number" min="1" max="100" className="input-text" style={{width:58, padding:'3px 6px', textAlign:'center'}} value={min} onChange={e => setMin(e.target.value)} onBlur={save} onKeyDown={e => { if (e.key === 'Enter') save(); }} /></span>
-      <span style={chip}>🎯 Apto = preparación ≥ 75% y práctica {F.retMin} de los últimos {F.retDe} días · tú decides en la fila de cada alumno</span>
+      <span style={chip}>🎯 Apto = preparación ≥ 75% (Pre-A1: 70%) y práctica {F.retMin} de los últimos {F.retDe} días · tú decides en la fila de cada alumno</span>
       <span style={chip}>📤 La nota se publica sola al entregar</span>
     </div>
   );
@@ -866,7 +866,7 @@ function EcRetFicha({ group, module, exam, win, min, recupera, porRendir, onChan
         </div>
         <div className="settings-hint" style={{margin:'7px 0 0'}}>
           {ret ? <>✓ Ventana: <b>{F.fmtFecha(ret.from)} – {F.fmtFecha(ret.to)}</b>{F.retActive(ret) ? ' · 🟢 abierta AHORA' : ''} · </> : null}
-          Una sola ventana para <b>desaprobados y quienes no rindieron</b> — dentro de ella cada uno rinde <b>apenas cumple sus requisitos</b> (apto ≥75% + práctica {F.retMin}/{F.retDe} días + avance {F.retAvanceMin || 2} días de su plan en la ventana); tú puedes abrir o pausar por alumno.
+          Una sola ventana para <b>desaprobados y quienes no rindieron</b> — dentro de ella cada uno rinde <b>apenas cumple sus requisitos</b> (apto ≥75%, Pre-A1 70% + práctica {F.retMin}/{F.retDe} días + avance {F.retAvanceMin || 2} días de su plan en la ventana); tú puedes abrir o pausar por alumno.
         </div>
       </div>
       {need.length === 0 && <div className="settings-hint" style={{margin:0}}>Nadie necesita recuperación 🎉</div>}

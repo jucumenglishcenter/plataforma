@@ -1,14 +1,19 @@
-# Entrega inicio-apto-2026-11-09 (v=20261109a) · INICIO-APTO-V1
+# Entrega apto-2026-11-09 (v=20261109c) · INICIO-APTO-V1 · APTO-MEDIA-V1 · APTO-BONUS-REPASOS-V1 · REPASO-NOTA-BAJA-V1 · APTO-70-PREA1-V1
 
-Subir los 3 archivos a la RAÍZ del repo `plataforma` (reemplazar), en un solo commit. Sin SQL.
-Base: el repo de hoy (@28f842be8396), que se verificó archivo por archivo y es igual a la plataforma de este proyecto.
+Subir los 15 archivos a la RAÍZ del repo `plataforma` (reemplazar), en un solo commit. Sin SQL.
+Revisado línea por línea contra el repo (09-nov 06:18 UTC): solo cambian las líneas de los puntos 2 a 5. El punto 1 (Inicio) ya está en el repo (v=20261109a) y por eso StudentDashboard.comp.js no va en esta entrega.
+Reemplaza a la entrega `inicio-apto-2026-11-09`, que ya no existe: lo de esa entrega viene incluido aquí.
+Base: el repo de hoy (@28f842be8396). Se verificó archivo por archivo que era igual a esta plataforma.
 
 ## Lo que cambia (y nada más)
-1. **Alumno · Inicio · tarjeta roja «🎓 Tu examen se acerca»:** el porcentaje y el «✓ Apto / Falta X %» ahora salen del **mismo cálculo que Mi práctica** (solo el módulo de ese examen). Antes mezclaba todos los módulos abiertos y podía decir «Apto 77 %» mientras Mi práctica decía «62 %, falta 13 %».
-2. En esa misma tarjeta, la etiqueta dice **«📚 Te falta terminar el módulo»** cuando eso es lo que falta, y **«✅ Habilitada por tu teacher»** si la teacher le abrió el examen. Es lo mismo que ya muestra Mi práctica.
-3. El consejo «Completa tus N actividades pendientes» cuenta solo las del módulo del examen.
+1. **Inicio · «🎓 Tu examen se acerca»:** usa el mismo apto que Mi práctica (solo el módulo de ese examen).
+2. **Apto · práctica con 50–74 %:** ahora vale **la mitad** en «📚 Prácticas realizadas», también para el 60 % del módulo. Menos de 50 % no cuenta, igual que antes. No entra al «🎯 Nivel de acierto», así que nadie baja por este cambio. El detalle dice cuántas tiene así y que repetirlas las hace valer completas.
+3. **Apto · bonus ⭐ Repasos de la semana:** suma **hasta +10 %** a la preparación. Se calcula con los repasos resueltos desde que se abrió el módulo: resueltos ÷ asignados × 10. **No** cuenta para el 60 % del módulo. Se ve en Mi práctica («⭐ Incluye +N % de bonus…») y en la tarjeta de preparación.
+4. **⭐ Repasos de la semana:** las prácticas con nota bajo el mínimo salen **primero**, también las del módulo de clase. La lista de la semana se arma el lunes y no cambia después, así que esto se nota desde la próxima lista.
+5. **Pre-A1 · Apto con 70 %** (antes 75 %). A1 y A2 siguen en 75 %. Sigue pidiendo el 60 % del módulo. Los textos que decían «75 %» ahora muestran el número del nivel del alumno: Inicio, Mi práctica, Mis planetas, Diagnóstico, Boletín, Reporte y las vistas del teacher (Grupo, Exámenes, panel). Lo mismo pasa con el aviso al publicar un examen, que dice «eres apto» o «no».
 
-No cambia quién puede dar el examen, ni la nota mínima, ni ninguna otra pantalla.
+## Lo que NO cambia
+XP, medallas, «módulo terminado», **nota mínima de las prácticas** (Pre-A1 sigue en 75), el aviso «Por mejorar», quién puede dar el examen fuera del apto, ni el resto de pantallas.
 
 ## Archivos
-- StudentDashboard.comp.js · index.html (solo cambian los ?v= de este archivo + config.js) · app-build.js (regenerado)
+data.js · mixed.js · ExamsFolders.comp.js · Readiness.comp.js · MisPlanetas.comp.js · StudentDiagnosis.comp.js · exams.js · Exams.comp.js · GroupWorkspace.comp.js · StudentReport.comp.js · TeacherDashboard.comp.js · ExamsCenter.comp.js · Boletin.comp.js · index.html (solo cambian los ?v=) · app-build.js (generado de nuevo)

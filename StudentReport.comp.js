@@ -145,7 +145,7 @@ function StudentReport({ student, onBack, forTeacher, topTabs }) {
         <div className="rstat"><b>{dx.month.pct}%</b> de la meta de práctica</div>
         <div className="rstat"><b>{Math.floor(dx.month.minutes/60)}h {dx.month.minutes%60}m</b> este mes</div>
         <div className="rstat"><b>{student.streak}</b> días de racha</div>
-        <div className="rstat"><b style={{color: dx.r.apt?'#2E7D32':'#E65100'}}>{dx.r.overall}%</b> cumplimiento general {dx.r.apt?'· apto':'· falta 75%'}</div>
+        <div className="rstat"><b style={{color: dx.r.apt?'#2E7D32':'#E65100'}}>{dx.r.overall}%</b> cumplimiento general {dx.r.apt?'· apto':'· pide ' + (dx.r.threshold || 75) + '%'}</div>
       </div>
 
       <SRStoriesCloud student={student} />

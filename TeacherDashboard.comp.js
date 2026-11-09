@@ -232,7 +232,7 @@ function PrepNotas() {
       </div>
 
       <div className="scard" style={{marginTop:12, display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', padding:'12px 16px'}}>
-        <span style={{fontWeight:800, fontSize:13.5, color: aptos > 0 ? '#2E7D32' : '#B26A00'}}>🎓 <b>{aptos}</b>/{members.length} aptos para examen (≥75%)</span>
+        <span style={{fontWeight:800, fontSize:13.5, color: aptos > 0 ? '#2E7D32' : '#B26A00'}}>🎓 <b>{aptos}</b>/{members.length} aptos para examen (≥{members[0] && members[0].level === 'pre-a1' ? 70 : 75}%)</span>
         <span style={{fontSize:12.5, fontWeight:700, color:'var(--text-soft)'}}>
           {ann
             ? <>📣 Examen anunciado: <b>{ann.mod.name}</b> · {ann.date ? new Date(ann.date + 'T12:00:00Z').toLocaleDateString('es-PE', { weekday:'long', day:'numeric', month:'long' }) : 'sin fecha'}</>

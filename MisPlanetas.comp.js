@@ -254,7 +254,7 @@ function MisPlanetas({ student, onBack, onPractice, onTasks }) {
     if (inf.phase === 'waitgrade') return <span>Ese examen ya cerró. Toca el planeta para ver qué sigue.</span>;
     const habil = inf.canTake && !r.apt;
     if (inf.phase === 'announced' && (r.apt || habil)) return <span>{last}¡{r.apt ? 'Eres apto' : 'Tu teacher te habilitó'}! Tu examen es el <b>{mpShort(inf.ann && inf.ann.date)}</b>.</span>;
-    if (!r.apt) return <span>{last}Para ser apto te falta <b>{Math.max(0, 75 - r.overall)} %</b>{r.blocker === 'coverage' ? ' de tus prácticas' : ''}. Toca el planeta y te digo qué hacer.</span>;
+    if (!r.apt) return <span>{last}Para ser apto te falta <b>{Math.max(0, (r.threshold || 75) - r.overall)} %</b>{r.blocker === 'coverage' ? ' de tus prácticas' : ''}. Toca el planeta y te digo qué hacer.</span>;
     return <span>{last}¡Eres apto! Tu examen aún no tiene fecha.</span>;
   })();
 
@@ -430,10 +430,10 @@ function MpSheet({ p, student, lvl, onClose, onPractice, onTasks }) {
     body = <div className="mp-card">{head('#8EE6F2', title, <>{p.mod.name}{inf.ann && inf.ann.date ? <> · <b>{F.fmtFecha(inf.ann.date)}</b> · {mpHorario(F, inf.ann)}</> : ' · aún sin fecha'}</>)}
       <div className="mp-rw">{inf.days != null && <span><b>{inf.days === 0 ? 'HOY' : inf.days}</b>{inf.days === 0 ? 'a la hora' : inf.days === 1 ? 'día' : 'días'}</span>}<span><b>{nParts}</b>{nParts === 1 ? 'parte' : 'partes'}</span><span><b>{min}</b>para aprobar</span></div>
       <div style={{display:'flex', alignItems:'center', gap:9}}><div className="mp-bar" style={{flex:1}}><span style={{width:Math.min(100, ok ? 100 : r.overall) + '%', background:color}}></span><i></i></div><b style={{fontSize:13, color, whiteSpace:'nowrap'}}>{habil ? '✓ habilitado' : r.apt ? '✓ APTO' : r.overall + ' %'}</b></div>
-      <span className="mp-s">{habil ? <>✅ <b>Tu teacher te habilitó</b>: no necesitas llegar al 75 %. El botón aparecerá aquí el día del examen.</>
-        : r.apt ? <>¡Eres apto! 🎉 Ojo: si dejas de practicar puede bajar del 75 %. Mantenlo con un poco cada día. El botón aparecerá aquí el día del examen.</>
-        : r.blocker === 'coverage' ? <>Ya pasaste el 75 % ({r.overall} %), pero también hay que <b>terminar el módulo</b>: llevas <b>{r.coverage || 0} %</b> de tus prácticas aprobadas y necesitas <b>{r.needCoverage || 60} %</b>.</>
-        : <>El examen se abre para alumnos <b>aptos (75 %)</b>. Te falta <b>{Math.max(0, 75 - r.overall)} %</b>: ¡aún estás a tiempo!</>}</span>
+      <span className="mp-s">{habil ? <>✅ <b>Tu teacher te habilitó</b>: no necesitas llegar al {r.threshold || 75} %. El botón aparecerá aquí el día del examen.</>
+        : r.apt ? <>¡Eres apto! 🎉 Ojo: si dejas de practicar puede bajar del {r.threshold || 75} %. Mantenlo con un poco cada día. El botón aparecerá aquí el día del examen.</>
+        : r.blocker === 'coverage' ? <>Ya pasaste el {r.threshold || 75} % ({r.overall} %), pero también hay que <b>terminar el módulo</b>: llevas <b>{r.coverage || 0} %</b> de tus prácticas aprobadas y necesitas <b>{r.needCoverage || 60} %</b>.</>
+        : <>El examen se abre para alumnos <b>aptos ({r.threshold || 75} %)</b>. Te falta <b>{Math.max(0, (r.threshold || 75) - r.overall)} %</b>: ¡aún estás a tiempo!</>}</span>
       {!ok && <MpGuide student={student} p={p} onPractice={go(onPractice)} onTasks={go(onTasks)} />}
       <button type="button" className="mp-cta off" disabled>{inf.ann && inf.ann.date ? 'Se abre el ' + mpShort(inf.ann.date) + (inf.ann.from ? ' · ' + F.fmtHora(inf.ann.from) : '') : 'Tu teacher pondrá la fecha'}</button></div>;
   }

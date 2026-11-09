@@ -51,9 +51,9 @@ function ReadinessCard({ student, forTeacher }) {
         <div style={{flex:1}}>
           <div style={{height:12, background:'#ECE9E0', borderRadius:7, overflow:'hidden', position:'relative'}}>
             <div style={{height:'100%', width:r.overall + '%', background:barColor, borderRadius:7, transition:'width .6s'}}></div>
-            <div style={{position:'absolute', top:-2, bottom:-2, left:'75%', width:2, background:'#1F3A8A'}} title="Mínimo 75%"></div>
+            <div style={{position:'absolute', top:-2, bottom:-2, left:(r.threshold || 75) + '%', width:2, background:'#1F3A8A'}} title={'Mínimo ' + (r.threshold || 75) + '%'}></div>
           </div>
-          <div style={{fontSize:11, color:'var(--text-soft)', fontWeight:700, marginTop:4}}>Cumplimiento general · mínimo 75% (línea azul)</div>
+          <div style={{fontSize:11, color:'var(--text-soft)', fontWeight:700, marginTop:4}}>Cumplimiento general · mínimo {r.threshold || 75}% (línea azul)</div>
         </div>
       </div>
 
@@ -64,6 +64,8 @@ function ReadinessCard({ student, forTeacher }) {
 
       {/* Los 4 criterios */}
       {pillars.map(p => <CompBar key={p.key} icon={p.icon} label={p.label} value={p.value} detail={p.detail} weight={p.weight} />)}
+      {/* APTO-BONUS-REPASOS-V1 */}
+      {r.reviewBonus && r.reviewBonus.cap > 0 && <div style={{fontSize:12, fontWeight:800, color:'#8A5100', background:'#FFF8E1', border:'1px solid #F0DDB0', borderRadius:10, padding:'6px 10px', marginBottom:11}}>⭐ Bonus por Repasos de la semana: +{r.reviewBonus.pts}% <span style={{fontWeight:600}}>· {r.reviewBonus.ok} de {r.reviewBonus.cap} resueltos (máx. +{r.reviewBonus.max}%)</span></div>}
 
       <button onClick={() => setShowComp(v => !v)} style={{marginTop:2, cursor:'pointer', border:'1.5px solid var(--border)', background:'#fff',
         borderRadius:20, padding:'7px 13px', fontFamily:'inherit', fontWeight:800, fontSize:11.5, color:'#666'}}>

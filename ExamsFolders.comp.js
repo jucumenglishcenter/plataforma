@@ -170,7 +170,7 @@ function AptRoster({ members }) {
           <span style={{fontWeight:800, flex:'1 1 150px', minWidth:150}}>{s.fullName}</span>
           <span style={{flex:'0 0 110px', height:8, background:'#E8E4DA', borderRadius:5, overflow:'hidden', position:'relative'}}>
             <i style={{position:'absolute', inset:0, width:Math.min(100, r.overall) + '%', background: r.apt ? '#2EA84B' : r.overall >= 50 ? '#F9A825' : '#E53935', borderRadius:5, display:'block'}}></i>
-            <i style={{position:'absolute', top:-1, bottom:-1, left:'75%', width:2, background:'#1F3A8A', display:'block'}}></i>
+            <i style={{position:'absolute', top:-1, bottom:-1, left:(r.threshold || 75) + '%', width:2, background:'#1F3A8A', display:'block'}}></i>
           </span>
           <b style={{width:44, textAlign:'right', color: r.apt ? '#2E7D32' : '#8A5100'}}>{r.overall}%</b>
           {r.apt ? exfPill('#E8F5E9', '#2E7D32', '✅ apto', 'p') : exfPill('#FFF8E1', '#E65100', exfFalta(r), 'p')}
@@ -916,7 +916,7 @@ function ModuleExamBanner({ mod, studentId }) {
         <div style={{display:'flex', alignItems:'center', gap:9, marginBottom:9}}>
           <div style={{flex:1, height:9, background:'#EEE9E2', borderRadius:5, overflow:'hidden', position:'relative'}}>
             <div style={{height:'100%', width:Math.min(100, r.overall) + '%', background:color, borderRadius:5}}></div>
-            <i style={{position:'absolute', top:-2, bottom:-2, left:'75%', width:2, background:'#1F3A8A'}}></i>
+            <i style={{position:'absolute', top:-2, bottom:-2, left:(r.threshold || 75) + '%', width:2, background:'#1F3A8A'}}></i>
           </div>
           <b style={{fontSize:13, color}}>{r.overall}%</b>
           {habil
@@ -924,14 +924,16 @@ function ModuleExamBanner({ mod, studentId }) {
             : exfPill(r.apt ? '#E8F5E9' : '#FFF8E1', r.apt ? '#2E7D32' : '#E65100', r.apt ? '✓ Apto'
                 : r.blocker === 'coverage' ? '📚 Te falta terminar el módulo' : 'Falta ' + Math.max(0, (r.threshold || 75) - r.overall) + '% para ser Apto', 'apt')}
         </div>
+        {/* APTO-BONUS-REPASOS-V1 */}
+        {r.reviewBonus && r.reviewBonus.pts > 0 && <div style={{fontSize:11.5, fontWeight:800, color:'#8A5100', marginBottom:7}}>⭐ Incluye +{r.reviewBonus.pts}% de bonus por tus Repasos de la semana ({r.reviewBonus.ok} de {r.reviewBonus.cap} resueltos)</div>}
         <div style={{fontSize:12.5, lineHeight:1.6, color:'#4A4A44', fontWeight:600}}>
           {habil
-            ? <>✅ <b>Tu teacher te habilitó</b> para rendir este examen: no necesitas llegar al 75%. El botón para entrar aparecerá <b>aquí mismo</b> {info.ann && info.ann.date ? <>el <b>{F.fmtFecha(info.ann.date)}</b>{horario ? <> a la hora indicada ({horario})</> : null}</> : 'el día del examen'}. Mientras tanto, repasa con calma. 💪</>
+            ? <>✅ <b>Tu teacher te habilitó</b> para rendir este examen: no necesitas llegar al {r.threshold || 75}%. El botón para entrar aparecerá <b>aquí mismo</b> {info.ann && info.ann.date ? <>el <b>{F.fmtFecha(info.ann.date)}</b>{horario ? <> a la hora indicada ({horario})</> : null}</> : 'el día del examen'}. Mientras tanto, repasa con calma. 💪</>
             : r.apt
-            ? <>¡Eres Apto! 🎉 Pero ojo: tu preparación es una <b>foto viva</b> — si dejas de practicar puede <b>bajar del 75%</b> y quedarías sin rendir tu examen. Mantén tu Apto con <b>{minDia} min cada día</b>. El botón para dar tu examen aparecerá <b>aquí mismo</b> ese día.</>
+            ? <>¡Eres Apto! 🎉 Pero ojo: tu preparación es una <b>foto viva</b> — si dejas de practicar puede <b>bajar del {r.threshold || 75}%</b> y quedarías sin rendir tu examen. Mantén tu Apto con <b>{minDia} min cada día</b>. El botón para dar tu examen aparecerá <b>aquí mismo</b> ese día.</>
             : r.blocker === 'coverage'
-            ? <>Ya pasaste el <b>75%</b> ({r.overall}%) 🎉, pero para ser Apto también hay que tener <b>terminado el módulo</b>: llevas <b>{r.coverage || 0}%</b> de tus prácticas aprobadas y necesitas <b>{r.needCoverage || 60}%</b>. Termina (o mejora) las prácticas que te faltan y tu examen se abre solo. 💪</>
-            : <>El examen se abre solo para alumnos <b>Aptos (75%)</b>. Aún estás a tiempo: tu preparación sube con la <b>práctica de cada día</b> — <b>{minDia} min diarios</b>, no todo de golpe. 💪</>}
+            ? <>Ya pasaste el <b>{r.threshold || 75}%</b> ({r.overall}%) 🎉, pero para ser Apto también hay que tener <b>terminado el módulo</b>: llevas <b>{r.coverage || 0}%</b> de tus prácticas aprobadas y necesitas <b>{r.needCoverage || 60}%</b>. Termina (o mejora) las prácticas que te faltan y tu examen se abre solo. 💪</>
+            : <>El examen se abre solo para alumnos <b>Aptos ({r.threshold || 75}%)</b>. Aún estás a tiempo: tu preparación sube con la <b>práctica de cada día</b> — <b>{minDia} min diarios</b>, no todo de golpe. 💪</>}
         </div>
         {!r.apt && !habil && <button type="button" onClick={() => setPlan(true)} style={{marginTop:10, width:'100%', border:'none', borderRadius:24, padding:'11px', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:14, cursor:'pointer', color:'#fff', background:'linear-gradient(135deg,#F4A02C,#E07A12)'}}>🎯 ¿Qué hago para dar mi examen?</button>}
       </div>
@@ -957,7 +959,7 @@ function ExamPlanModal({ student, mod, info, minDia, onClose }) {
       <div className="modal settings-modal" style={{maxWidth:520}} onClick={e => e.stopPropagation()}>
         <div className="modal-head"><div className="modal-title">🎯 Tu plan para dar el examen</div><button className="modal-close" onClick={onClose}>✕</button></div>
         <div className="modal-body">
-          <p style={{fontSize:13, lineHeight:1.6, margin:'0 0 12px'}}>Vas en <b style={{color:'#E65100'}}>{r.overall}%</b> y necesitas <b>75%</b> para ser Apto{info.ann && info.ann.date ? <> — tu examen es el <b>{F.fmtFecha(info.ann.date)}</b>{info.days != null ? <> (faltan <b>{info.days}</b> día{info.days === 1 ? '' : 's'})</> : null}</> : null}. Te alcanza si empiezas <b>hoy</b>:</p>
+          <p style={{fontSize:13, lineHeight:1.6, margin:'0 0 12px'}}>Vas en <b style={{color:'#E65100'}}>{r.overall}%</b> y necesitas <b>{r.threshold || 75}%</b> para ser Apto{info.ann && info.ann.date ? <> — tu examen es el <b>{F.fmtFecha(info.ann.date)}</b>{info.days != null ? <> (faltan <b>{info.days}</b> día{info.days === 1 ? '' : 's'})</> : null}</> : null}. Te alcanza si empiezas <b>hoy</b>:</p>
           <Step n="1"><b>Completa tus {pend} actividad{pend === 1 ? '' : 'es'} pendiente{pend === 1 ? '' : 's'} del módulo.</b> Es lo que más sube tu preparación.</Step>
           <Step n="2"><b>Repite las prácticas que quedaron bajas.</b>{improve.length ? <> Ahora mismo: {improve.map(x => x.name + ' (' + x.pct + '%)').join(' · ')}.</> : ' Revisa "A mejorar" en tu práctica.'} Repetirlas hasta aprobar también cuenta.</Step>
           <Step n="3"><b>Practica {minDia} minutos CADA DÍA — no todo de golpe.</b> Tu preparación mide tu <b>constancia</b>: {minDia} min diarios suben más que 2 horas un solo día.</Step>
@@ -1071,15 +1073,15 @@ function ExamChecklistRow({ mod, studentId }) {
       <span className="al-name">Examen del módulo · {mod.name}
         <span style={{display:'block', fontSize:10.5, color:'#999', fontWeight:800}}>
           {info.ann && info.ann.date
-            ? <>Se abre el {F.fmtFecha(info.ann.date)}{info.ann.from ? ', ' + F.fmtHora(info.ann.from) : ''}{hab ? ' · tu teacher te habilitó' : <> · solo Aptos (75%){r.apt ? ' — mantén tu Apto practicando a diario' : ''}</>}</>
-            : hab ? 'Tu teacher te habilitó · anunciará la fecha' : 'Tu teacher anunciará la fecha · solo Aptos (75%)'}
+            ? <>Se abre el {F.fmtFecha(info.ann.date)}{info.ann.from ? ', ' + F.fmtHora(info.ann.from) : ''}{hab ? ' · tu teacher te habilitó' : <> · solo Aptos ({r.threshold || 75}%){r.apt ? ' — mantén tu Apto practicando a diario' : ''}</>}</>
+            : hab ? 'Tu teacher te habilitó · anunciará la fecha' : 'Tu teacher anunciará la fecha · solo Aptos (' + (r.threshold || 75) + '%)'}
         </span>
       </span>
       {hab
         ? <span className="mm-chip" style={{background:'#E8F5E9', color:'#2E7D32', whiteSpace:'nowrap'}}>✓ Habilitada</span>
         : r.apt
         ? <span className="mm-chip" style={{background:'#E8F5E9', color:'#2E7D32', whiteSpace:'nowrap'}}>✓ Apto</span>
-        : <span className="mm-chip" style={{background:'#FFF8E1', color:'#E65100', whiteSpace:'nowrap'}}>Falta {Math.max(0, 75 - r.overall)}%</span>}
+        : <span className="mm-chip" style={{background:'#FFF8E1', color:'#E65100', whiteSpace:'nowrap'}}>Falta {Math.max(0, (r.threshold || 75) - r.overall)}%</span>}
     </div>
   );
 }

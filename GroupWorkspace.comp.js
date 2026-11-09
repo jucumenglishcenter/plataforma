@@ -438,7 +438,7 @@ function GwPanel({ x, pos, total, onMove, group, level, onOpen, onClose, onDelet
     <div className={'gw-sg ' + x.k}><span className={'gw-dot ' + x.k}></span><div>{gwSuggest(x, cls)}</div>{x.sugg && onClose && <button type="button" className="gw-bt sm warn" onClick={onClose}>⏸ Cerrar avance</button>}</div>
     <div className="gw-tl">
       <div title="Dominio = lo hecho × aciertos × constancia"><span>Dominio</span><b style={{ color: x.m.pct >= 85 ? '#2E7D32' : x.m.pct >= 70 ? '#A15C00' : '#C62828' }}>{x.m.pct > 0 ? x.m.pct + '%' : '—'}</b><small>{x.m.done} de {x.m.total} actividades · {Math.round(x.m.quality || 0)}% aciertos</small></div>
-      <div><span>Examen</span><b>{x.r.apt ? 'Listo' : x.r.overall + '%'}</b><small>{x.r.apt ? 'apto para rendirlo' : 'aún no apto · pide 75%'}</small></div>
+      <div><span>Examen</span><b>{x.r.apt ? 'Listo' : x.r.overall + '%'}</b><small>{x.r.apt ? 'apto para rendirlo' : 'aún no apto · pide ' + (x.r.threshold || 75) + '%'}</small></div>
       {/* RACHA-REAL-V1 */}<div><span>Racha</span><b>{s.streak == null && window.JUCUM_STREAK ? '…' : s.streak ? s.streak + (s.streak === 1 ? ' día' : ' días') : '—'}</b><small>{s.streak == null && window.JUCUM_STREAK ? 'cargando…' : s.streak ? 'días seguidos' : 'sin racha activa'}</small></div>
       <div><span>Tiempo total</span><b>{gwFm(s.totalMinutes)}</b><small>{(s.achievements || []).length} logros</small></div>
     </div>

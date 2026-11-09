@@ -667,18 +667,23 @@
     var allowed = D.getStudentModuleIds ? D.getStudentModuleIds(student) : mods.map(function (m) { return m.id; });
     var cls = D.getClassModuleId ? D.getClassModuleId(student.group || student.closedGroup) : null;
     var comp = ((D.getStudentProgress && D.getStudentProgress(student.id)) || {}).completed || {};
+    /* 🔁 REPASO-NOTA-BAJA-V1 (09-nov-2026): lo que tiene nota bajo el mínimo sale PRIMERO, también del módulo de clase */
+    var thr = 75; try { if (D.passThreshold) thr = D.passThreshold(student.level, student.group); } catch (e) {}
     var out = [];
     mods.forEach(function (m) {
-      if (allowed.indexOf(m.id) < 0 || m.id === cls) return;
+      if (allowed.indexOf(m.id) < 0) return;
+      var isCls = m.id === cls;
       var num = D.getModuleNumber ? D.getModuleNumber(student.level, m.id) : null;
       (m.activities || []).forEach(function (a) {
         var k = m.id + ':' + a.id, e = comp[k], kd = kindOf(a.url); if (!e || !kd) return;
+        var sc = D.scorePct ? D.scorePct(e.score) : (e.score || 0), low = typeof sc === 'number' && sc < thr;
+        if (isCls && !low) return;
         var short = (a.group ? a.group.split('·')[0].trim() + ' · ' : '') + a.name;
         out.push({ key: k, moduleId: m.id, activityId: a.id, url: a.url, kind: kd, short: short, name: (num ? 'M' + num + ' · ' : '') + short,
-          at: Date.parse(e.date) || 0, sc: D.scorePct ? D.scorePct(e.score) : (e.score || 0) });
+          at: Date.parse(e.date) || 0, sc: sc, low: low });
       });
     });
-    out.sort(function (x, y) { return (x.at - y.at) || (x.sc - y.sc); });
+    out.sort(function (x, y) { return ((y.low ? 1 : 0) - (x.low ? 1 : 0)) || (x.at - y.at) || (x.sc - y.sc); });
     return out.slice(0, REV_MAX_MATS);
   }
   /* ☁️ WEEK-PLAN-NUBE-V1 (15-oct-2026) · la lista semanal vive en Supabase (script 36, tabla week_reviews,
@@ -808,7 +813,8 @@
     answer: answer, flush: flush, pull: pull, refreshReady: refreshReady, boxStatus: boxStatus, addSeconds: addSeconds, merge: merge,
     hooks: hooks, plain: plain, _lastUid: null, transOk: transOk, bankOrder: bankOrder, teacherFetch: teacherFetch,
     extraMaterials: extraMaterials, parseExtra: parseExtra, wordNorm: wordNorm, xpToday: xpToday, areasOf: areasOf,
-    weekReviews: weekReviews, weekState: function (uid) { return getU(uid).wk || null; }, live: live, weekMonday: weekMonday, weekDayIdx: weekDayIdx, LVREV: LVREV,
+    weekReviews: weekReviews, weekState: function (uid) { return getU(uid).wk || null; },
+    weekOkLocal: function (uid) { /* APTO-BONUS-REPASOS-V1 */ var u = getU(uid), w = u.wk; if (!w || !w.id) return null; var pre = 'rv:' + w.id + ':', ok = 0; Object.keys(u.m).forEach(function (k) { if (k.indexOf(pre) !== 0) return; var rs = u.m[k] || {}; Object.keys(rs).forEach(function (id) { if (rs[id] && rs[id].s === 'ok') ok++; }); }); return { wk: w.id, cap: w.cap || 0, ok: ok }; }, live: live, weekMonday: weekMonday, weekDayIdx: weekDayIdx, LVREV: LVREV,
     _setAdapter: function (o) { Object.keys(o || {}).forEach(function (k) { AD[k] = o[k]; }); mem = {}; },
     _keys: { STATE_KEY: STATE_KEY, CACHE_KEY: CACHE_KEY }
   };

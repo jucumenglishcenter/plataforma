@@ -236,7 +236,7 @@ function groupsReadyForExam() {
     const members = D.STUDENTS.filter(s => s.group === g.id);
     if (!members.length) return null;
     const readies = members.map(s => D.getStudentReadiness(s));
-    const ready = readies.filter(r => r.overall >= 75).length;
+    const ready = readies.filter(r => r.overall >= (r.threshold || 75)).length;
     const pct = Math.round(readies.reduce((a, r) => a + r.overall, 0) / members.length);
     return { group: g, ready, total: members.length, pct, crossed: ready / members.length >= 0.6 };
   }).filter(Boolean);
@@ -249,7 +249,7 @@ function notifyExamSoon(groupId) {
   const members = D.STUDENTS.filter(s => s.group === groupId);
   members.forEach(s => {
     const r = D.getStudentReadiness(s);
-    const apt = r.overall >= 75;
+    const apt = r.overall >= (r.threshold || 75);   // APTO-70-PREA1-V1
     window.JUCUM_NOTIF.pushNotif(s.id, {
       type: 'assignment',
       title: '🎓 ¡Tu examen se acerca!',
@@ -361,7 +361,7 @@ function announceExam(groupId, moduleId, examId, dateStr, dateToStr) {
   const members = D.STUDENTS.filter(s => s.group === groupId);
   members.forEach(s => {
     const r = D.getStudentReadiness(s);
-    const apt = r.overall >= 75;
+    const apt = r.overall >= (r.threshold || 75);   // APTO-70-PREA1-V1
     if (window.JUCUM_NOTIF) window.JUCUM_NOTIF.pushNotif(s.id, {
       type: 'assignment',
       title: '📣 Examen programado',

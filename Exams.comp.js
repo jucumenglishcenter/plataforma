@@ -226,7 +226,7 @@ function WindowCard({ w, onChange }) {
               </div>
               {res
                 ? <span className="mm-chip" style={{background: res.passed?'#E8F5E9':'#FFEBEE', color: res.passed?'#2E7D32':'#C62828'}}>{res.passed?'Aprobó':'Reprobó'}{typeof res.grade==='number'?` · ${res.grade}`:''}</span>
-                : <label className="check-row" title="Habilitar pese a no llegar al 75%"><input type="checkbox" checked={canTake} disabled={r.apt} onChange={() => { X.toggleOverride(w.id, s.id); onChange(); }} /><span style={{fontSize:12}}>{r.apt ? 'Apto' : 'Habilitar'}</span></label>}
+                : <label className="check-row" title={'Habilitar pese a no llegar al ' + (r.threshold || 75) + '%'}><input type="checkbox" checked={canTake} disabled={r.apt} onChange={() => { X.toggleOverride(w.id, s.id); onChange(); }} /><span style={{fontSize:12}}>{r.apt ? 'Apto' : 'Habilitar'}</span></label>}
               <button className="att-btn" onClick={() => setGrading(s)}>📊 Resultado</button>
               {sub && sub.attachments?.length > 0 && (
                 <div className="att-list" style={{flexBasis:'100%', marginTop:8}}>

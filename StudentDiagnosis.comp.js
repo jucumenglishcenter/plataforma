@@ -41,11 +41,11 @@ function StudentDiagnosis({ user, onBack, topTabs }) {
   const goals = [
     { ico:'📅', t:'Practica al menos 5 de 7 días', sub:`Vas ${mastery.active7}/7 esta semana`, done: mastery.active7 >= 5 },
     weakest && { ico: weakest.icon, t:`Sube tu ${weakest.label} a 70%+`, sub:`Ahora está en ${weakest.val}%`, done: weakest.val >= 70 },
-    { ico:'🎯', t:'Llega al 75% de cumplimiento', sub:`Tu cumplimiento es ${r.overall}%`, done: r.overall >= 75 },
+    { ico:'🎯', t:`Llega al ${r.threshold || 75}% de cumplimiento`, sub:`Tu cumplimiento es ${r.overall}%`, done: r.overall >= (r.threshold || 75) },
   ].filter(Boolean);
 
-  const moodIco = r.overall >= 75 ? '🌟' : r.overall >= 50 ? '💪' : '🌱';
-  const moodMsg = r.overall >= 75
+  const moodIco = r.overall >= (r.threshold || 75) ? '🌟' : r.overall >= 50 ? '💪' : '🌱';
+  const moodMsg = r.overall >= (r.threshold || 75)
     ? '¡Vas excelente! Estás en camino (o ya listo) para tu examen.'
     : r.overall >= 50
       ? 'Vas por buen camino. Con un poco más de constancia llegas al 75%.'

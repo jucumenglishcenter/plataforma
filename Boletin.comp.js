@@ -127,7 +127,7 @@ const BO_EXPL = {
   prac: ['🔥 Práctica diaria', 'Días practicados ÷ días que el módulo lleva abierto. Así la nota es justa dure lo que dure el módulo: la barra crece contigo. ⭐ Es el área que MÁS pesa en tu nota final (40%).', 'Practica un poquito HOY: cada día practicado sube esta nota más que cualquier otra cosa. Para rendir examen además cuentan 10 de tus últimos 14 días.'],
   dom: ['🧠 Dominio de temas', 'Combina el promedio de tus prácticas con cuánto del módulo ya practicaste (eso vale 60%) y tu examen (40%). Mientras no rindas el examen, se muestra solo la parte de prácticas.', 'Repite las prácticas del tema más flojo — como pesan 60%, tu dominio sube rápido sin esperar al examen.'],
   parti: ['🙋 Participación', 'Sale de lo que tu teacher registra EN CLASE (Evaluar la clase y el tablero): ⭐ 100 · 👍 80 · 🙂 60 · 🤝 40 — tu promedio en %. Toca tu porcentaje para ver cada registro por día.', 'Participa en cada clase: lee en voz alta, responde, pregunta. Cada ⭐ vale 100.'],
-  exam: ['🎓 Examen', 'La nota de tu examen del módulo, publicada apenas terminas. Si desapruebas, tu recuperación la reemplaza — siempre vale tu mejor nota.', 'Llega apto (75% + práctica de 10 de los últimos 14 días) y rinde tranquilo: el examen pesa 20% directo y 40% dentro del dominio.'],
+  exam: ['🎓 Examen', 'La nota de tu examen del módulo, publicada apenas terminas. Si desapruebas, tu recuperación la reemplaza — siempre vale tu mejor nota.', 'Llega apto (75%, Pre-A1 70% + práctica de 10 de los últimos 14 días) y rinde tranquilo: el examen pesa 20% directo y 40% dentro del dominio.'],
   fin: ['🏅 Nota final', 'Se arma con: 🔥 práctica diaria 40% + 🧠 dominio de temas 25% + 🎓 examen 20% + 🙋 participación 15%. Más de la mitad de tu nota nace de practicar. Si aún no tienes registro en algo, su peso se reparte entre lo demás.', 'Practica un poco CADA día — es el camino más rápido a 100. Y si te faltan puntos: hasta 🎁 +5 al final del programa por seguir practicando.'],
 };
 
@@ -188,7 +188,7 @@ function boComo(student, fila) {
     if (imp.length) out.push('🧠 Dominio de temas: repite ' + imp.map(x => x.name + ' (' + x.pct + '%)').join(' y ') + ' — las prácticas pesan 60%.');
     else if ((fila.stats.coverage || 0) < 100) out.push('🧠 Dominio de temas: aún te faltan ' + Math.max(0, (fila.stats.total || 0) - (fila.stats.done || 0)) + ' actividades del módulo — cada una que apruebas sube tu dominio.');
   } catch (e) {}
-  if (fila.examNota == null) out.push('🎓 Examen: llega apto (75% + práctica 10 de los últimos 14 días) y apunta alto — pesa 20% directo y 40% del dominio.');
+  if (fila.examNota == null) out.push('🎓 Examen: llega apto (' + (fila.r && fila.r.threshold ? fila.r.threshold : (student.level === 'pre-a1' ? 70 : 75)) + '% + práctica 10 de los últimos 14 días) y apunta alto — pesa 20% directo y 40% del dominio.');
   else if (fila.examNota < fila.min) out.push('🎓 Aprueba tu recuperación: tu nueva nota reemplaza al ' + fila.examNota + ' y levanta dominio y nota final.');
   if (fila.parti == null) out.push('🙋 Participación: aún sin registros en este módulo — participa en la próxima clase (⭐ vale 100).');
   else if (fila.parti < 90) out.push('🙋 Participación: vas en ' + fila.parti + '% — una ⭐ más en clase te acerca a 100.');

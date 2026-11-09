@@ -1517,8 +1517,10 @@ function inGraceWeek(student) {
 
 /* 🎯 APTO-POR-EXAMEN-V1 (24-oct-2026): scopeIds opcional = medir SOLO esos módulos (el del examen).
  * Sin scopeIds, igual que siempre: los módulos que el alumno tiene abiertos. */
-function getStudentMastery(student, scopeIds) {
-  if (!student) return { pct: 0, coverage: 0, quality: 0, done: 0, total: 0, active7: 0, constancyPct: 0 };
+/* 🎯 APTO-MEDIA-V1 (09-nov-2026): mopts.halfLow = una práctica con nota 50–74 % vale MEDIA en la cobertura
+ * (solo la usa el apto del examen). No entra al promedio de acierto: así nadie baja por esta regla. */
+function getStudentMastery(student, scopeIds, mopts) {
+  if (!student) return { pct: 0, coverage: 0, quality: 0, done: 0, partial: 0, total: 0, active7: 0, constancyPct: 0 };
   const prog = getStudentProgress(student.id);
   const completed = prog.completed || {};
   const mods = MODULE_CATALOG[student.level] || [];
@@ -1531,11 +1533,16 @@ function getStudentMastery(student, scopeIds) {
     if (active.length) scope = active;
   }
   if (Array.isArray(scopeIds) && scopeIds.length) { const sc = mods.filter(m => scopeIds.includes(m.id)); if (sc.length) scope = sc; }
-  let total = 0, done = 0, scoreSum = 0, scoreN = 0, partN = 0;
+  let total = 0, done = 0, scoreSum = 0, scoreN = 0, partN = 0, partial = 0;
   scope.forEach(m => (m.activities || []).forEach(a => {
     total++;
     const e = completed[`${m.id}:${a.id}`];
     const low = isLowStakesType(a.type);
+    if (mopts && mopts.halfLow && e && !low && a.type !== 'story' && !entryPassed(e, student.level, student.group)) {
+      const lp = scorePct(e.score);
+      if (lp !== null && lp >= 50) partial++;
+      return;
+    }
     // PASO 2 · cuenta como hecha si APROBÓ, o es participación (sin nota o baja exigencia)
     if (e && (entryPassed(e, student.level, student.group) || low)) {
       done++;
@@ -1545,7 +1552,7 @@ function getStudentMastery(student, scopeIds) {
       } else partN++;   // participación (story / resumen / quizlet / sin nota)
     }
   }));
-  const coverage = total ? done / total : 0;
+  const coverage = total ? (done + partial * 0.5) / total : 0;
   /* 🎯 FIX 22-ago-2026 · El "nivel de acierto" promedia SOLO lo que tiene nota.
    * Antes la participación (story / resumen / quizlet) entraba como un 70 fijo
    * y ARRASTRABA el promedio hacia abajo: leer una historia podía BAJARLE el
@@ -1569,7 +1576,7 @@ function getStudentMastery(student, scopeIds) {
   const pct = Math.max(0, Math.min(100, Math.round(coverage * quality * 100 * constancyFactor)));
   return {
     pct, coverage: Math.round(coverage * 100), quality: Math.round(quality * 100),
-    done, total, active7, constancyPct: Math.round(constancy * 100),
+    done, partial, total, active7, constancyPct: Math.round(constancy * 100),
   };
 }
 
@@ -1651,7 +1658,7 @@ function getStudentReadiness(student, opts) {
   const prog = getStudentProgress(student.id);
   const completed = prog.completed || {};
   const mods = MODULE_CATALOG[student.level] || [];
-  const m = getStudentMastery(student, opts && opts.moduleIds);
+  const m = getStudentMastery(student, opts && opts.moduleIds, { halfLow: true });   // APTO-MEDIA-V1
   const constancyFactor = 0.8 + 0.2 * Math.min(1, (m.active7 || 0) / 5);
 
   const comp = {};
@@ -1733,7 +1740,7 @@ function getStudentReadiness(student, opts) {
   const pTasks = (taskCompliance == null) ? 100 : taskCompliance;
   const pillars = [
     { key:'practices', icon:'📚', label:'Prácticas realizadas', value:pPractices, weight:0.40,
-      detail:`${m.done} de ${m.total} actividades del módulo activo` },
+      detail:`${m.done} de ${m.total} actividades del módulo activo` + (m.partial ? ` · ${m.partial} con nota de 50–74 % (valen la mitad: repítelas para que valgan completas)` : '') },
     { key:'daily', icon:'⏱️', label:'Práctica diaria', value:daily.pct, weight:0.25,
       detail:`practicó ${daily.activeDays} de ~${daily.expected} días esperados${daily.since ? ' desde que se abrió el módulo' : ''} · meta ${daily.target} min/día` },
     { key:'quality', icon:'🎯', label:'Nivel de acierto', value:pQuality, weight:0.20,
@@ -1751,19 +1758,48 @@ function getStudentReadiness(student, opts) {
     else if (inactive >= 7) overall = Math.round(overall * 0.88);
   }
 
+  /* ⭐ APTO-BONUS-REPASOS-V1 (09-nov-2026): los ⭐ Repasos de la semana resueltos desde que se abrió el módulo
+   * suman hasta +10 % (resueltos ÷ asignados). Solo sube la preparación: NO cuenta para el 60 % del módulo. */
+  const rvSince = (opts && opts.moduleIds && opts.moduleIds.length === 1 && getModuleOpenedAt(student.group, opts.moduleIds[0])) || daily.since;
+  const reviewBonus = getReviewBonus(student, rvSince);
+  overall += reviewBonus.pts;
   overall = Math.max(0, Math.min(100, overall));
   // tope de seguridad: sin cubrir la mayoría del módulo no se puede ser "apto"
   const needCoverage = (opts && opts.needCoverage) || 60;
-  const apt = overall >= 75 && coverageAll >= needCoverage / 100;
+  /* 🎯 APTO-70-PREA1-V1 (09-nov-2026): en Pre-A1 basta 70 % para ser Apto; A1/A2 siguen en 75 %. */
+  const aptThr = APT_THRESHOLD[student.level] || 75;
+  const apt = overall >= aptThr && coverageAll >= needCoverage / 100;
   /* 🔎 QUÉ le falta exactamente (22-ago-2026). El candado de cobertura era
    * INVISIBLE: un alumno con 81% veía "falta 0% para ser Apto" y su examen
    * seguía cerrado porque le faltaba terminar el módulo. Ahora las pantallas
    * dicen cuál de los dos requisitos es el que falta. */
-  const blocker = apt ? null : (overall < 75 ? 'overall' : 'coverage');
+  const blocker = apt ? null : (overall < aptThr ? 'overall' : 'coverage');
   return { competencies: comp, practiceAvg, taskCompliance, taskDone, taskTotal, pillars, daily,
-           overall, apt, threshold: 75, needCoverage, blocker,
+           overall, apt, threshold: aptThr, needCoverage, blocker,
            coverage: m.coverage, quality: m.quality, daysInactive: inactive,
-           scopeLabel: (opts && opts.scopeLabel) || null, done: m.done, total: m.total };
+           scopeLabel: (opts && opts.scopeLabel) || null, done: m.done, partial: m.partial || 0, total: m.total, reviewBonus };
+}
+
+/* ⭐ APTO-BONUS-REPASOS-V1 · window.__JEC_RV = { alumno: { lunes: { cap, ok } } } (nube, jecRepasoLoader).
+ * La semana actual también mira lo resuelto en este equipo (aún sin subir) y se queda con lo mayor. */
+const REVIEW_BONUS_MAX = 10;
+const APT_THRESHOLD = { 'pre-a1': 70 };   // APTO-70-PREA1-V1 · el resto de niveles: 75
+function getReviewBonus(student, since) {
+  const none = { pts: 0, ok: 0, cap: 0, max: REVIEW_BONUS_MAX };
+  if (!student) return none;
+  const weeks = {};
+  const rv = window.__JEC_RV && window.__JEC_RV[student.id];
+  if (rv) Object.keys(rv).forEach(wk => { weeks[wk] = { cap: rv[wk].cap || 0, ok: rv[wk].ok || 0 }; });
+  try {
+    const MX = window.JUCUM_MIX, loc = MX && MX.weekOkLocal ? MX.weekOkLocal(student.id) : null;
+    if (loc && loc.wk) { const w = weeks[loc.wk] || { cap: 0, ok: 0 }; w.cap = Math.max(w.cap, loc.cap || 0); w.ok = Math.max(w.ok, loc.ok || 0); weeks[loc.wk] = w; }
+  } catch (e) {}
+  let sinceWk = null;
+  if (since) { const d = new Date(String(since).slice(0, 10) + 'T00:00:00Z'); if (!isNaN(d)) { d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7); sinceWk = d.toISOString().slice(0, 10); } }
+  let ok = 0, cap = 0;
+  Object.keys(weeks).forEach(wk => { if (sinceWk && wk < sinceWk) return; const w = weeks[wk]; if (!(w.cap > 0)) return; cap += w.cap; ok += Math.min(w.cap, w.ok); });
+  if (!cap) return none;
+  return { pts: Math.round(REVIEW_BONUS_MAX * ok / cap), ok, cap, max: REVIEW_BONUS_MAX };
 }
 
 /* ── Registro de notas (boletín consolidado) ─────────────────────────
@@ -2817,6 +2853,37 @@ function jecPagedDaily(cols, applyFilter, done) {
   }
   setTimeout(load, 3000);
   setInterval(load, 5 * 60 * 1000);
+})();
+
+/* ⭐ APTO-BONUS-REPASOS-V1 · trae de la nube (solo lectura) cuántas preguntas de ⭐ Repasos de la semana se
+ * asignaron (week_reviews.cap) y cuántas se resolvieron (practice_items rv:… status ok), últimas 10 semanas.
+ * Solo conteos en memoria: nada se guarda en el equipo. */
+(function jecRepasoLoader() {
+  function pages(build, from, acc) {
+    return Promise.resolve(build().range(from, from + 999)).then(function (res) {
+      if (!res || res.error) throw (res && res.error) || 'sin respuesta';
+      var d = res.data || []; acc = acc.concat(d);
+      return d.length === 1000 && acc.length < 60000 ? pages(build, from + 1000, acc) : acc;
+    });
+  }
+  function load() {
+    try {
+      if (!window.JUCUM_SB || !window.JUCUM_SB.getClient) return;
+      var c = window.JUCUM_SB.getClient();
+      var since = new Date(Date.now() - 5 * 3600000 - 70 * 86400000).toISOString().slice(0, 10);
+      var out = {};
+      pages(function () { return c.from('week_reviews').select('user_id,week,cap').gte('week', since).order('user_id').order('week'); }, 0, []).then(function (ws) {
+        ws.forEach(function (x) { (out[x.user_id] = out[x.user_id] || {})[x.week] = { cap: x.cap || 0, ok: 0 }; });
+        return pages(function () { return c.from('practice_items').select('user_id,mat_key').like('mat_key', 'rv:%').gte('mat_key', 'rv:' + since).eq('status', 'ok').order('user_id').order('mat_key').order('item_id'); }, 0, []);
+      }).then(function (rows) {
+        rows.forEach(function (x) { var wk = String(x.mat_key || '').split(':')[1], w = out[x.user_id] && out[x.user_id][wk]; if (w) w.ok++; });
+        window.__JEC_RV = out;
+        try { window.dispatchEvent(new Event('jucum-rv-ready')); } catch (e) {}
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  setTimeout(load, 3600);
+  setInterval(load, 10 * 60 * 1000);
 })();
 
 /* Trae los bonos persistentes (asistencia/encuesta) desde la nube al arrancar. */
