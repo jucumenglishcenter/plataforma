@@ -370,10 +370,56 @@ function seedSampleForum() {
 }
 seedSampleForum();
 
+/* ── 📢 FORO-AVISOS-V1 (09-nov-2026, aprobado en «Propuesta - Foro avisos y comentarios») ──────────
+ * Aviso = publicación del teacher con kind:'aviso'. Mientras esté vigente (annUntil ≥ hoy Perú, o sin fecha)
+ * va ARRIBA del foro y, si annHome, como tarjeta en el Inicio del alumno hasta «✓ Entendido».
+ * Leídos: tabla forum_ann_reads (script 40) + copia chiquita local (solo ids y fechas). */
+const ANNR_KEY = 'jucum_ann_reads_v1';
+function _annDay(off) { return new Date(Date.now() - 5 * 3600000 + (off || 0) * 864e5).toISOString().slice(0, 10); }
+function _annLoad() { try { return JSON.parse(localStorage.getItem(ANNR_KEY) || '{}') || {}; } catch (e) { return {}; } }
+function _annSave(m) { try { if (window.JUCUM_STORE && window.JUCUM_STORE.setJSON) window.JUCUM_STORE.setJSON(ANNR_KEY, m); else localStorage.setItem(ANNR_KEY, JSON.stringify(m)); } catch (e) {} }
+function _annSB() { try { return window.JUCUM_SB ? window.JUCUM_SB.getClient() : null; } catch (e) { return null; } }
+function isAnnActive(p) { return !!(p && p.kind === 'aviso' && (!p.annUntil || p.annUntil >= _annDay(0))); }
+function annReads(postId) { return _annLoad()[postId] || {}; }
+async function loadAnnReads(postIds, userId) {
+  const c = _annSB(); if (!c || !postIds || !postIds.length) return false;
+  try {
+    let q = c.from('forum_ann_reads').select('post_id,user_id,read_at').in('post_id', postIds);
+    if (userId) q = q.eq('user_id', userId);
+    const r = await q; if (r.error) throw r.error;
+    const m = _annLoad();
+    if (!userId) postIds.forEach(id => { m[id] = {}; });
+    (r.data || []).forEach(x => { (m[x.post_id] = m[x.post_id] || {})[x.user_id] = x.read_at || true; });
+    _annSave(m); return true;
+  } catch (e) { console.warn('JUCUM_FORUM avisos:', e.message, '— ¿corriste el script 40?'); return false; }
+}
+function markAnnRead(postId, userId) {
+  if (!postId || !userId) return;
+  const m = _annLoad(); if ((m[postId] || {})[userId]) return;
+  const at = new Date().toISOString();
+  (m[postId] = m[postId] || {})[userId] = at; _annSave(m);
+  const c = _annSB();
+  if (c) c.from('forum_ann_reads').upsert({ post_id: postId, user_id: userId, read_at: at }, { onConflict: 'post_id,user_id' })
+    .then(r => { if (r && r.error) console.warn('JUCUM_FORUM avisos:', r.error.message); }).catch(() => {});
+}
+function endAnn(groupId, postId) {
+  const data = loadForum();
+  const p = (data[groupId]?.posts || []).find(x => x.id === postId); if (!p) return;
+  p.annUntil = _annDay(-1); saveForum(data);
+  if (window.JUCUM_SYNC && window.JUCUM_SYNC.pushPostFields) window.JUCUM_SYNC.pushPostFields(postId, { ann_until: p.annUntil });
+}
+function studentAnns(student) {
+  if (!student || !student.group) return [];
+  const m = _annLoad();
+  return (getGroupForum(student.group).posts || []).filter(p => isAnnActive(p) && p.annHome && !(m[p.id] || {})[student.id])
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+}
+
 window.JUCUM_FORUM = {
   getGroupForum, createPost, addReply, togglePin, deletePost, deleteReply,
   isMuted, setMute, getMutes, toggleLike, postLikes, getReactions, toggleReaction,
   markForumSeen, forumUnreadCount, findPostById,
   MUTE_REASONS, getMuteInfo, containsBadLanguage, registerBadAttempt, getFlags, deleteStudentFlags,
   MAX_TITLE: FORUM_MAX_TITLE, MAX_BODY: FORUM_MAX_BODY,   // FORO-LIMITE-V1
+  isAnnActive, annReads, loadAnnReads, markAnnRead, endAnn, studentAnns, annDay: _annDay,   // FORO-AVISOS-V1
 };

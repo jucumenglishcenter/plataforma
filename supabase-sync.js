@@ -306,6 +306,7 @@
         id:p.id, date:p.created_at, pinned:p.pinned,
         authorId:p.author_id, authorName:p.author_name, authorRole:p.author_role,
         title:fClip(p.title, F_MAX_T, '…'), body:fClip(p.body, F_MAX_B, F_NOTE), mediaUrl:p.media_url || null, mediaKind:p.media_kind || null, replies:[],
+        kind:p.kind || null, annUntil:p.ann_until || null, annHome:!!p.ann_home, annBatch:p.ann_batch || null,   // FORO-AVISOS-V1 (script 40)
       });
     });
     const postIndex = {};
@@ -423,12 +424,18 @@
   }
 
   function pushPost(groupId, post) {
-    safe(SB().from('forum_posts').insert({
+    const row = {
       id: post.id, group_id: groupId, author_id: post.authorId, author_name: post.authorName,
       author_role: post.authorRole, title: post.title, body: post.body, pinned: false,
       media_url: post.mediaUrl || null, media_kind: post.mediaKind || null,
-    }));
+    };
+    if (!post.kind) { safe(SB().from('forum_posts').insert(row)); return; }
+    // FORO-AVISOS-V1: con las columnas del script 40; si aún no existen, se guarda como publicación normal
+    SB().from('forum_posts').insert(Object.assign({}, row, { kind: post.kind, ann_until: post.annUntil || null, ann_home: !!post.annHome, ann_batch: post.annBatch || null }))
+      .then(({ error }) => { if (error) { console.warn('sync aviso:', error.message, '— ¿corriste el script 40?'); safe(SB().from('forum_posts').insert(row)); } })
+      .catch(() => safe(SB().from('forum_posts').insert(row)));
   }
+  function pushPostFields(postId, patch) { safe(SB().from('forum_posts').update(patch).eq('id', postId)); }
   function pushReply(postId, reply) {
     safe(SB().from('forum_replies').insert({
       id: reply.id, post_id: postId, author_id: reply.authorId, author_name: reply.authorName,
@@ -462,7 +469,7 @@
 
   window.JUCUM_SYNC = {
     hydrate, prefetch, roster, pullNotifs, pushSettings, pushProgress, pushNotif, markNotifRead, markAllNotifRead,
-    pushEvaluation, pushPost, pushReply, pushPin, deletePostDb, deleteReplyDb, pushLike, pushMute, pushFlag, deleteFlagsDb,
+    pushEvaluation, pushPost, pushPostFields, pushReply, pushPin, deletePostDb, deleteReplyDb, pushLike, pushMute, pushFlag, deleteFlagsDb,
     pushModule, deleteModuleDb, fetchModules, fetchActivityParts, fetchModuleProgress, fetchModuleParts, computeStats,    pushAssignment, deleteAssignmentDb, pushSubmission, gradeSubmissionDb, uploadAttachments, refreshTasks, refreshProgress,
     pushExam, deleteExamDb, pushWindow, deleteWindowDb,
     pushAttendance, pushSurvey,
