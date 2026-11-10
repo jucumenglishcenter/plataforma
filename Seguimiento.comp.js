@@ -251,7 +251,9 @@ function SegSetChip({ plan }) {
 /* C · 🔔 Recordar a los que faltan (texto editable, campanita solo a ellos) */
 function SegRemindBox({ G, onCancel }) {
   const S = window.JUCUM_SEG;
-  const [txt, setTxt] = React.useState(() => S.remindText(G));
+  const [txt, setTxt] = React.useState(() => G.phase === 'closed'   // RECORDAR-CERRADOS-V1: texto para un set que ya cerró
+    ? '⏰ Tu práctica «' + String(G.title || '').replace(/^📌\s*/, '') + '» ya cerró y te faltó terminarla. ¡Hazla hoy para ponerte al día! 💪'
+    : S.remindText(G));
   const [sent, setSent] = React.useState(null);
   const miss = G.missingRows.length;
   if (sent != null) return <div style={segOk}>✓ Recordatorio enviado a {sent} alumno{sent === 1 ? '' : 's'} por la campanita.</div>;
@@ -297,6 +299,7 @@ function SegCloseCard({ plan, onTrack, onSeen, compact }) {
   const S = window.JUCUM_SEG;
   const seg = useSegFacts(segGroupReq(plan));
   const [res, setRes] = React.useState(null);
+  const [rem, setRem] = React.useState(false);   // 🔔 RECORDAR-CERRADOS-V1 (09-nov): recordar también desde la tarjeta «🏁 Terminó…»
   if (!seg.F || !S) return null;
   const live = (seg.F.plans || []).find(x => x.id === plan.id) || plan;
   const G = S.evalGroupSet(live, seg.F);
@@ -321,10 +324,12 @@ function SegCloseCard({ plan, onTrack, onSeen, compact }) {
         <div style={{display:'flex', flexWrap:'wrap', gap:5}}>{G.missingRows.map(x => <span key={x.st.id} title={x.ev.missing.map(c => c.name).join(' · ')} style={{background:'#FDECEA', color:'#7A2A1E', borderRadius:9, padding:'3px 9px', fontSize:12, fontWeight:800}}>{segFirst(x.st)}</span>)}</div>
       </> : <span style={{fontSize:12.5, fontWeight:800, color:'#2E7D32'}}>¡Todos lo completaron!</span>}
       </>}
+      {rem && <SegRemindBox G={G} onCancel={() => setRem(false)} />}
       <div style={{display:'flex', gap:7, flexWrap:'wrap', alignItems:'center'}}>
         {G.missingRows.length > 0 && (carried ? <span style={segOk}>✓ Lo pendiente pasó a «{carried.next.title}»{carried.n != null ? ' · ' + carried.n + ' alumno' + (carried.n === 1 ? '' : 's') : ''}</span>
           : nx ? <button type="button" onClick={pass} style={segBtnPu}>➡ Pasar lo pendiente al próximo set</button>
           : <span style={{fontSize:12, fontWeight:700, color:'#8a7f6a'}}>Para pasar lo pendiente, primero crea el próximo set del grupo.</span>)}
+        {G.missingRows.length > 0 && !rem && <button type="button" onClick={() => setRem(true)} style={segBtnPu}>🔔 Recordar a {G.missingRows.length}</button>}
         {onTrack && <button type="button" onClick={() => onTrack(live)} style={segBtn}>Ver avance final</button>}
         {onSeen && <button type="button" onClick={onSeen} style={segBtn}>{compact ? '✓ Listo' : '✓ Entendido'}</button>}
       </div>

@@ -540,6 +540,28 @@ function DuplicateClassModal({ plan, onClose, onDone }) {
   );
 }
 
+/* 📋 TAREA-MATERIAL-V1 (09-nov-2026, pedido de la usuaria): una tarea puesta como material de un bloque del plan. En el Modo clase
+ * su botón abre esta ventana: quién la entregó y, si es 🏫 de clase, abrirla en vivo a los alumnos (lo mismo de 📋 Tareas). */
+function CpTaskModal({ taskId, plan, onClose }) {
+  const T = window.JUCUM_TASKS, X = window.JUCUM_DOCSETS;
+  const a = T ? T.getAssignments().find(x => x.id === taskId) : null;
+  const isDs = !!(a && X && X.isDocset && X.isDocset(a)), isCls = !!(isDs && X.isClass && X.isClass(a));
+  return (
+    <div onClick={onClose} style={{position:'fixed', inset:0, zIndex:1001, background:'rgba(15,23,42,0.55)', display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'40px 16px', overflowY:'auto'}}>
+      <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:18, width:'100%', maxWidth:880, boxShadow:'0 24px 60px rgba(0,0,0,0.35)'}}>
+        <div style={{padding:'14px 18px', borderBottom:'1.5px solid #E3DCC9', display:'flex', alignItems:'center', gap:10}}>
+          <div style={{flex:1, minWidth:0, fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:17, color:'#9A4B00'}}>📋 {a ? a.title : 'Tarea'}</div>
+          <button onClick={onClose} style={{width:32, height:32, borderRadius:'50%', border:'none', background:'#FAFAF6', color:'#8a7f6a', fontSize:14, fontWeight:800, cursor:'pointer'}}>✕</button>
+        </div>
+        <div style={{padding:'14px 18px 18px'}}>
+          {!a ? <div style={mutedStyle}>Esta tarea ya no existe (se borró). Quítala del plan con ✏️ Editar.</div>
+            : isDs ? <>{isCls && window.DocSetSeqRow && <div style={{marginBottom:12}}><DocSetSeqRow a={a} plan={plan} /></div>}{window.DocSetResults ? <DocSetResults a={a} /> : null}</>
+            : window.TeacherSubmissions ? <TeacherSubmissions assignment={a} embedded onBack={onClose} /> : <div style={mutedStyle}>Ábrela en 📋 Tareas.</div>}
+        </div>
+      </div>
+    </div>);
+}
+
 /* PLAN-BORRAR-V1 (28-oct): la × pide confirmación — antes un toque borraba el plan o el set sin preguntar. */
 function DayRow({ icon, tint, border, title, sub, chip, onOpen, openLabel, onDelete, onPlay, onDup, onTrack, onReport, onFollow, onPrint }) {
   /* PLAN-FILA-V1 (28-oct, P1 aprobada): a la vista solo ▶ Modo clase · 📊 Avance · Abrir; lo demás va en «⋯ Más». */
@@ -710,7 +732,7 @@ function PracticeSetProgress({ plan, onClose, onChanged, embed }) {
         {tool === 'rem' && window.SegRemindBox ? <SegRemindBox G={G} onCancel={() => setTool(null)} />
           : tool === 'ext' && window.SegExtendBox ? <SegExtendBox G={G} onCancel={() => setTool(null)} onDone={() => { if (onChanged) onChanged(); }} />
           : <>
-            {G.phase === 'open' && miss > 0 && <button onClick={() => setTool('rem')} style={{...btnPrimary, padding:'7px 12px', fontSize:12.5, whiteSpace:'nowrap', background:'linear-gradient(135deg,#7B5CC8,#5B3FA0)'}}>🔔 Recordar a {miss === 1 ? 'el que falta' : 'los ' + miss + ' que faltan'}</button>}
+            {G.phase !== 'fut' && miss > 0 && <button onClick={() => setTool('rem')} style={{...btnPrimary, padding:'7px 12px', fontSize:12.5, whiteSpace:'nowrap', background:'linear-gradient(135deg,#7B5CC8,#5B3FA0)'}}>🔔 Recordar a {miss === 1 ? 'el que falta' : 'los ' + miss + ' que faltan'}</button>}
             {remToday && <span style={{fontSize:12, fontWeight:800, color:'#2E7D32'}}>✓ Ya les recordaste hoy</span>}
             <button onClick={() => setTool('ext')} style={{...btnGhost, padding:'7px 12px', fontSize:12.5, whiteSpace:'nowrap'}}>⏳ Extender…</button>
             <button onClick={() => { S.setAlarm(live, !!live.noAlarm); if (onChanged) onChanged(); }} title="Tarjeta roja en el Inicio del alumno desde las 7 pm de la víspera del cierre, hasta que lo termine" style={{...btnGhost, padding:'7px 12px', fontSize:12.5, whiteSpace:'nowrap', borderColor: live.noAlarm ? '#DDD3BE' : '#F2B8AE', color: live.noAlarm ? '#8a7f6a' : '#B23A2A'}}>🚨 Alerta la víspera: {live.noAlarm ? 'apagada · Encender' : 'activada · Apagar'}</button>
@@ -769,7 +791,7 @@ function cpMatsToMaterials(blocks, extra, catalog) {
     out.push({ moduleId: f.mod.id, activityId: a.id, name: a.name, type: a.type, group: a.group || null, url: a.url || null, ...(a.type === 'quizlet' ? { quizLinks: { vocabulario: a.quizVocabulario || '', vocabulario2: a.quizVocabulario2 || '', traducir: a.quizTraducir || '', ordenar: a.quizOrdenar || '' } } : {}) }); };
   (blocks || []).forEach(b => (b.mats || []).forEach(add)); (extra || []).forEach(add); return out;
 }
-function CpMatPicker({ level, classModId, onPick, onClose }) {
+function CpMatPicker({ level, classModId, groupId, onPick, onClose }) {
   const { MODULE_CATALOG } = window.JUCUM_DATA; const [q, setQ] = React.useState('');
   const mods = (MODULE_CATALOG[level] || []).slice().sort((a, b) => (a.id === classModId ? -1 : b.id === classModId ? 1 : 0));
   const opts = []; mods.forEach(m => (m.activities || []).forEach(a => { if (a.type === 'quizlet') ['vocabulario', 'vocabulario2', 'traducir', 'ordenar'].forEach(k => opts.push({ m, a, k })); else opts.push({ m, a, k: null }); }));
@@ -781,6 +803,9 @@ function CpMatPicker({ level, classModId, onPick, onClose }) {
       <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Busca: story, P2, quizlet traducir…" style={{border:'1px solid #E3DCC9', borderRadius:9, padding:'7px 10px', fontFamily:'inherit', fontSize:13}} />
       {list.map((o, i) => <button key={i} onClick={() => onPick({ moduleId: o.m.id, activityId: o.a.id, quizKey: o.k })} style={{display:'flex', alignItems:'center', gap:9, textAlign:'left', border:'none', background:'none', padding:'6px 8px', borderRadius:8, cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:700}}><span>{typeIcon(o.a.type)}</span><span style={{flex:1}}>{lab(o)}</span><span style={{fontSize:11, color:'#8a7f6a'}}>{o.m.id === classModId ? 'módulo en clase' : o.m.name}</span></button>)}
       {!list.length && <div style={{fontSize:12, color:'#999', fontWeight:700}}>Nada con ese nombre.</div>}
+      {(() => { /* 📋 TAREA-MATERIAL-V1: las tareas del grupo también son material del bloque */
+        const tks = groupId && window.JUCUM_TASKS ? window.JUCUM_TASKS.getAssignments().filter(a => a.groupId === groupId && toks.every(x => String(a.title || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(x))).slice(0, 6) : [];
+        return tks.length ? <><div style={{fontSize:11, fontWeight:900, letterSpacing:'.05em', textTransform:'uppercase', color:'#9A4B00', marginTop:4}}>📋 Tareas del grupo</div>{tks.map(a => <button key={a.id} onClick={() => onPick({ taskId: a.id, name: '📋 ' + a.title })} style={{display:'flex', alignItems:'center', gap:9, textAlign:'left', border:'none', background:'none', padding:'6px 8px', borderRadius:8, cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:700}}>📋 <span style={{flex:1, minWidth:0}}>{a.title}</span></button>)}</> : null; })()}
       <button onClick={onClose} style={{...btnGhost, alignSelf:'flex-start', padding:'4px 10px', fontSize:12}}>Cerrar</button>
     </div>
   );
@@ -827,7 +852,7 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
   const baseTpl = cpBaseTpl(cfg.level);
   const lastPlan = TT.getClassPlans().filter(p => p.groupId === cfg.groupId && p.date && p.date < (cfg.date || date) && (!initial || p.id !== initial.id)).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0] || null;
   const [pickFor, setPickFor] = React.useState(null);
-  const addMat = (bid, m) => { setPlan(p => ({ ...p, blocks: p.blocks.map(b => b.id === bid ? { ...b, mats: [...(b.mats || []).filter(x => !(x.activityId === m.activityId && (x.quizKey || null) === (m.quizKey || null))), m] } : b) })); setPickFor(null); };
+  const addMat = (bid, m) => { setPlan(p => ({ ...p, blocks: p.blocks.map(b => b.id === bid ? { ...b, mats: [...(b.mats || []).filter(x => !((x.taskId || m.taskId) ? x.taskId === m.taskId : (x.activityId === m.activityId && (x.quizKey || null) === (m.quizKey || null)))), m] } : b) })); setPickFor(null); };
   const delMat = (bid, k) => setPlan(p => ({ ...p, blocks: p.blocks.map(b => b.id === bid ? { ...b, mats: (b.mats || []).filter((_, j) => j !== k) } : b) }));
   const addPending = (lines) => { const blk = { id: cpNewId(), emoji: '📌', title: 'Pendientes de la clase anterior', mins: 10, steps: lines.slice(), mats: [] };
     if (!plan) { const base = buildClassPlan({ ...cfg, date }, MODULE_CATALOG); setPlan({ ...base, blocks: [blk, ...cpWithMats(base.blocks, mod, cfg.themeGroup)] }); } else setPlan(p => ({ ...p, blocks: [blk, ...p.blocks] })); };
@@ -952,7 +977,7 @@ function ClassPlanEditor({ date, initial, onSaved, onCancel, onClassMode, defaul
                   {(plan.blocks.find(x => x.id === b.id).mats || []).map((m, k) => { const f = cpMatInfo(m, MODULE_CATALOG); return <span key={k} style={{display:'inline-flex', alignItems:'center', gap:6, whiteSpace:'nowrap', fontSize:11.5, fontWeight:800, padding:'4px 10px', borderRadius:20, background:'#EEF2FC', color:'#1F3A8A', border:'1px solid #C9D4F0'}}>{typeIcon(f ? f.a.type : '')} {cpMatLabel(m, MODULE_CATALOG)}<span onClick={() => delMat(b.id, k)} title="Quitar" style={{cursor:'pointer', color:'#C0392B'}}>✕</span></span>; })}
                   <button onClick={() => setPickFor(pickFor === b.id ? null : b.id)} style={{whiteSpace:'nowrap', border:'1px dashed #9FB0DA', background:'none', color:'#3F5BB8', borderRadius:8, padding:'4px 10px', fontSize:11.5, fontWeight:800, cursor:'pointer'}}>＋ material</button>
                 </div>
-                {pickFor === b.id && <CpMatPicker level={cfg.level} classModId={mod ? mod.id : null} onPick={m => addMat(b.id, m)} onClose={() => setPickFor(null)} />}
+                {pickFor === b.id && <CpMatPicker level={cfg.level} classModId={mod ? mod.id : null} groupId={cfg.groupId} onPick={m => addMat(b.id, m)} onClose={() => setPickFor(null)} />}
               </div>
             ))}
           </div>
@@ -1513,7 +1538,7 @@ function ClassMode({ plan, onBack }) {
   /* LINKS-BLOQUE (09-oct): cada bloque trae sus materiales (guardados en el bloque o detectados del título).
    * Si el plan no guardó la lista de materiales (planes importados), se arma con los de los bloques. */
   const cmMod = (MODULE_CATALOG[plan.level] || []).find(m => m.id === plan.moduleId) || Object.values(MODULE_CATALOG).flat().find(m => m.id === plan.moduleId);
-  const blocks = withClock(plan.blocks || [], plan.startTime).map(b => { const raw = Array.isArray(b.mats) && b.mats.length ? b.mats.map(m => ({ ...m, moduleId: m.moduleId || plan.moduleId })) : cpDetectMats(cmMod, b, plan.themeGroup); return { ...b, _mats: cpMatsToMaterials([{ mats: raw }], [], MODULE_CATALOG).map((m, k) => ({ ...m, quizKey: (raw[k] && raw[k].quizKey) || null })) }; });
+  const blocks = withClock(plan.blocks || [], plan.startTime).map(b => { const raw0 = Array.isArray(b.mats) && b.mats.length ? b.mats.map(m => ({ ...m, moduleId: m.moduleId || plan.moduleId })) : cpDetectMats(cmMod, b, plan.themeGroup); const raw = raw0.filter(m => !m.taskId); /* 📋 TAREA-MATERIAL-V1: las tareas van aparte (_tasks) */ return { ...b, _tasks: raw0.filter(m => m.taskId), _mats: cpMatsToMaterials([{ mats: raw }], [], MODULE_CATALOG).map((m, k) => ({ ...m, quizKey: (raw[k] && raw[k].quizKey) || null })) }; });
   const mats = ((plan.materials || []).length ? plan.materials : cpMatsToMaterials(blocks.map(b => ({ mats: b._mats })), [], MODULE_CATALOG)).slice().sort((a, b) => matRank(a.type) - matRank(b.type));
   const group = (GROUPS || []).find(g => g.id === plan.groupId);
   const cmSeq = (window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.seq) ? window.JUCUM_DOCSETS.seq(blocks, window.JUCUM_DOCSETS.classForDay(plan.groupId, plan.date)) : blocks.map(b => ({ t: 'b', b }));   /* DOCSETS-FIX-V2: los sets 🏫 en su lugar de la secuencia */
@@ -1529,6 +1554,7 @@ function ClassMode({ plan, onBack }) {
   const [pzOn, setPzOn] = React.useState(false);
   const [followOn, setFollowOn] = React.useState(false);   // SEGUIMIENTO-BOTON-V1: el seguimiento se abre con su botón (cerrado por defecto) · SEGUIMIENTO-VENTANA-V1 (02-nov): se abre en una ventana emergente y arranca cerrada (jucum_cm_follow_v1 era del panel desplegado)
   const [closedPlan, setClosedPlan] = React.useState(plan.closing ? plan : null);
+  const [taskOpen, setTaskOpen] = React.useState(null);   // 📋 TAREA-MATERIAL-V1
   const focusKeys = mats.filter(m => m.moduleId && m.activityId).map(m => m.moduleId + ':' + m.activityId);
   const cmRec = (plan.source && plan.source.importId && window.JUCUM_PLANIMPORT) ? window.JUCUM_PLANIMPORT.get(plan.source.importId) : null;
   const cmPrev = cmRec ? (window.fuPickPlan ? window.fuPickPlan(plan) : (window.fuLastPlan ? window.fuLastPlan(plan.groupId, plan.date) : null)) : null;   // CLASE-SELECTOR-V1: la clase cuya práctica está en curso
@@ -1546,6 +1572,7 @@ function ClassMode({ plan, onBack }) {
   return (
     <main>
       <button className="back-btn" onClick={onBack}>← Salir del modo clase</button>
+      {taskOpen && <CpTaskModal taskId={taskOpen} plan={plan} onClose={() => setTaskOpen(null)} />}
       {closeOn && window.ClassCloseModal && <ClassCloseModal plan={closedPlan || plan} onClose={() => setCloseOn(false)} onOpenRoster={() => { setCloseOn(false); setRosterOpen(true); }} onOpenEval={() => { setCloseOn(false); setEvalOn(true); }} onSaved={(p) => { setClosedPlan(p); setCloseOn(false); }} />}
       <div style={{background:'linear-gradient(135deg,#3F5BB8,#0D1B5A)', color:'#fff', borderRadius:16, padding:'18px 22px', margin:'4px 0 16px', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap'}}>
         <div style={{flex:1, minWidth:200}}>
@@ -1637,9 +1664,10 @@ function ClassMode({ plan, onBack }) {
                 {b.steps && b.steps.length > 0 && (
                   <ul style={{margin:'7px 0 0', paddingLeft:20, color:'#666', fontSize:12.5, lineHeight:1.5}}>{b.steps.map((s, i) => <li key={i}>{s}</li>)}</ul>
                 )}
-                {b._mats.length > 0 && (
+                {(b._mats.length > 0 || b._tasks.length > 0) && (
                   <div style={{display:'flex', gap:6, flexWrap:'wrap', marginTop:8}}>
                     {b._mats.map((m, i) => <button key={i} onClick={() => open(m)} title="Abrir en pestaña nueva" style={{display:'inline-flex', alignItems:'center', gap:6, whiteSpace:'nowrap', border:'1.5px solid #9FB0DA', background:'#EEF2FC', color:'#1F3A8A', borderRadius:20, padding:'5px 12px', fontFamily:'inherit', fontWeight:800, fontSize:12, cursor:'pointer'}}>▶ {typeIcon(m.type)} {m.type === 'quizlet' ? 'Quizlet' : m.name}{m.group ? ' · ' + m.group.replace(/^(T\d+)\s*·\s*/, '$1 ') : ''}</button>)}
+                    {b._tasks.map((m, i) => { const ta = window.JUCUM_TASKS ? window.JUCUM_TASKS.getAssignments().find(x => x.id === m.taskId) : null; return <button key={'t' + i} onClick={() => setTaskOpen(m.taskId)} title="Ver quién la entregó (y abrirla en vivo si es de clase)" style={{display:'inline-flex', alignItems:'center', gap:6, whiteSpace:'nowrap', border:'1.5px solid #F0C28A', background:'#FFF4E5', color:'#9A4B00', borderRadius:20, padding:'5px 12px', fontFamily:'inherit', fontWeight:800, fontSize:12, cursor:'pointer'}}>📋 {ta ? ta.title : 'Tarea borrada'}</button>; })}
                   </div>
                 )}
               </div>

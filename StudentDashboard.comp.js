@@ -319,6 +319,8 @@ function StudentDashboard({ user, onLogout }) {
   const activeModule = activeModules[0] || allModules[0];
   const [view, setViewRaw] = React.useState(() => (window.JUCUM_NAV ? window.JUCUM_NAV.load('student', 'dashboard') : 'dashboard'));
   React.useEffect(() => { if (window.JUCUM_NAV) window.JUCUM_NAV.save('student', view); }, [view]);
+  /* 📋 TAREA-MATERIAL-V1: una fila de tarea en la práctica pide ir a 📝 Tareas */
+  React.useEffect(() => { const go = (e) => { const v = e && e.detail && e.detail.view; if (v) { setViewRaw(v); try { window.scrollTo(0, 0); } catch (x) {} } }; window.addEventListener('jucum-go', go); return () => window.removeEventListener('jucum-go', go); }, []);
   const narrow = useIsNarrow('(max-width: 820px)');
   // Web: el menú lateral se recuerda abierto/cerrado (clave chiquita). Celular: siempre empieza cerrado.
   const [sideDesk, setSideDesk] = React.useState(() => { try { return localStorage.getItem(ST_NAV_KEY) !== '0'; } catch (e) { return true; } });
@@ -2864,6 +2866,32 @@ function RetryNote({ studentId, moduleId, activityId, pct }) {
     return <span style={{color:'#92510F', fontWeight:800}}>Hecha hoy · {pct}% · 🔁 Vuelve a hacerla para subir tu nota desde las {hh} <span style={{fontVariantNumeric:'tabular-nums'}}>(en {G.fmt(left)})</span></span>; }
   return <span style={{color:'#92510F', fontWeight:800}}>Hecha hoy · {pct}% · 🔁 ¡Ya puedes subir tu nota! Vuelve a hacerla</span>;
 }
+/* 📋 TAREA-MATERIAL-V1 (09-nov-2026): una tarea puesta en la práctica de la semana → fila en la práctica de hoy que abre 📝 Tareas */
+function ptGoTasks() { try { window.dispatchEvent(new CustomEvent('jucum-go', { detail: { view: 'tasks' } })); } catch (e) {} }
+function PracticeTaskRow({ it, student }) {
+  const T = window.JUCUM_TASKS; const a = T ? T.getAssignments().find(x => x.id === it.taskId) : null;
+  if (!a || !student) return null;
+  const sub = T.getSubmission(a.id, student.id);
+  const bb = {width:22, height:22, borderRadius:'50%', border:'2px solid', display:'inline-flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:13, flexShrink:0};
+  const due = a.dueAt ? new Date(a.dueAt).toLocaleDateString('es-PE', { weekday:'short', day:'numeric', month:'short' }) : '';
+  return (
+    <div role="button" tabIndex={0} className="next-card" onClick={ptGoTasks} onKeyDown={e => { if (e.key === 'Enter') ptGoTasks(); }} style={{cursor:'pointer', ...(sub ? {background:'#F2FAF3', borderColor:'#BFE3C3'} : {})}}>
+      {sub ? <span style={{...bb, background:'#2EA84B', borderColor:'#2EA84B', color:'#fff'}}>✓</span> : <span style={{...bb, background:'#fff', borderColor:'#D8D2C0', color:'transparent'}}>·</span>}
+      <span className="next-ico">📋</span>
+      <div className="next-info"><b>{it.label || a.title}</b><span>{sub ? <span style={{color:'#2E7D32', fontWeight:800}}>✓ Entregada</span> : <>Tarea · ábrela en 📝 Tareas{due ? ' · cierra ' + due : ''}</>}</span></div>
+      <span className="next-arr">→</span>
+    </div>);
+}
+function PracticeTaskStrip({ student, items }) {
+  const list = (items || []).filter(it => it && it.taskId);
+  if (!list.length) return null;
+  return (
+    <div style={{display:'flex', flexDirection:'column', gap:8, margin:'10px 0'}}>
+      <div style={{fontSize:11, fontWeight:900, letterSpacing:'.06em', textTransform:'uppercase', color:'#8a7f6a'}}>📋 Tareas de esta práctica</div>
+      {list.map((it, i) => <PracticeTaskRow key={i} it={it} student={student} />)}
+    </div>);
+}
+Object.assign(window, { PracticeTaskRow, PracticeTaskStrip });
 function TodayPracticeCard({ student }) {
   const TT = window.JUCUM_TT; if (!TT) return null;
   const D = window.JUCUM_DATA;
@@ -2936,6 +2964,7 @@ function TodayPracticeCard({ student }) {
       )}
       <div className="next-row" style={{padding:'12px 13px'}}>
         {items.map((it, i) => {
+          if (it.taskId) return <PracticeTaskRow key={i} it={it} student={student} />;   // 📋 TAREA-MATERIAL-V1
           const st = stats[i];
           const mod = mods.find(m => m.id === it.moduleId);
           const a = mod && (mod.activities || []).find(x => x.id === it.activityId);

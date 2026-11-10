@@ -426,6 +426,18 @@ function Wrap0({ embedded, children }) { return embedded ? <div>{children}</div>
  * Primero se elige el grupo (GroupPicker, compartido con el Planificador), luego sus tareas con 4 filtros
  * (por revisar · en curso · para clase · cerradas), los sets de un mismo documento juntos, un botón principal
  * por fila + menú ⋯, y selección múltiple para duplicar · pasar a otro grupo · cambiar fecha · eliminar. */
+/* 🔢 PASOS-ORDEN-V1 (09-nov-2026, pedido de la usuaria): orden de los pasos de un documento = ds.seq (el teacher lo cambia con ▲▼
+ * en 📋 Tareas) y, si no lo tocó, el Step del documento. Sin candado: el alumno los ve numerados y con el siguiente resaltado. */
+function tbgSeqSort(list, dsOf) { const k = a => { const d = dsOf(a) || {}; return d.seq != null ? d.seq : 1e6; }; return list.slice().sort((p, q) => (k(p) - k(q)) || String((dsOf(p) || {}).step).localeCompare(String((dsOf(q) || {}).step), undefined, { numeric: true })); }
+function stSeqOrder(list, student, T) {
+  const X = window.JUCUM_DOCSETS; const dsOf = a => (X && X.isDocset(a)) ? X.meta(a) : null;
+  const docOf = a => { const d = dsOf(a); return d && d.mode !== 'class' ? (d.docTitle || d.file || '') : ''; };
+  const groups = {}; list.forEach(a => { const k = docOf(a); if (k) (groups[k] = groups[k] || []).push(a); });
+  const out = [], seen = {};
+  list.forEach(a => { const k = docOf(a); if (!k || groups[k].length < 2) { out.push({ a, sq: null }); return; } if (seen[k]) return; seen[k] = 1;
+    let nx = false; tbgSeqSort(groups[k], dsOf).forEach((x, i, arr) => { const done = !!T.getSubmission(x.id, student.id); const next = !done && !nx; if (next) nx = true; out.push({ a: x, sq: { k: i + 1, n: arr.length, done, next } }); }); });
+  return out;
+}
 function tbgInfo(a, T, STUDENTS) {
   const X = window.JUCUM_DOCSETS, ds = X && X.isDocset(a) ? X.meta(a) : null;
   const subs = T.submissionsFor(a.id), ids = Object.keys(subs);
@@ -642,7 +654,12 @@ function TeacherAssignments({ onBack, embedded, groupId: gidProp, onGroupChange,
             <div className="mm-actions" style={{alignItems:'center'}} onClick={e => e.stopPropagation()}>{mainBtn(a, i)}{menuEl(a, i)}</div>
           </div>); };
         const pack = (doc, list) => { const k = gid + '|' + doc, op = !fold[k], all = list.every(a => isSel(a.id)), rv = list.reduce((n, a) => n + infoAll[a.id].rev, 0), nc = list.filter(a => infoAll[a.id].ds.mode === 'class').length;
-          const sorted = list.slice().sort((p, q) => String(infoAll[p.id].ds.step).localeCompare(String(infoAll[q.id].ds.step), undefined, { numeric: true }));
+          const sorted = tbgSeqSort(list, x => infoAll[x.id].ds);   // PASOS-ORDEN-V1
+          const full = tbgSeqSort(mine.filter(x => infoAll[x.id].doc === doc), x => infoAll[x.id].ds);
+          const moveStep = async (a, dir) => { const i0 = full.findIndex(x => x.id === a.id), j0 = i0 + dir; if (i0 < 0 || j0 < 0 || j0 >= full.length) return;
+            const arr = full.slice(); const t0 = arr[i0]; arr[i0] = arr[j0]; arr[j0] = t0; const X = window.JUCUM_DOCSETS;
+            for (let n = 0; n < arr.length; n++) { if ((infoAll[arr[n].id].ds || {}).seq !== n) { try { await X.patch(arr[n], ds => { ds.seq = n; }); } catch (e) {} } }
+            refresh(); };
           return (
             <div key={k} className="scard" style={{padding:0, overflow:'hidden'}}>
               <div onClick={() => setFold(o => ({ ...o, [k]: op }))} style={{display:'flex', alignItems:'center', gap:12, padding:'12px 14px', background:'#F6F8FD', cursor:'pointer', flexWrap:'wrap'}}>
@@ -659,14 +676,14 @@ function TeacherAssignments({ onBack, embedded, groupId: gidProp, onGroupChange,
                 <button className="att-btn" style={{borderColor:'#9FB0DA', color:'#3F5BB8', whiteSpace:'nowrap'}} onClick={e => { e.stopPropagation(); setBulkDup({ tasks: sorted, move: false }); }}>⧉ Duplicar documento</button>
                 <span style={{fontWeight:900, color:'#1F3A8A', fontSize:14}}>{op ? '▾' : '▸'}</span>
               </div>
-              {op && sorted.map(a => { const i = infoAll[a.id]; return (
+              {op && sorted.map(a => { const i = infoAll[a.id], pos = full.findIndex(x => x.id === a.id); return (
                 <div key={a.id} onClick={() => setViewing(a)} style={{display:'flex', alignItems:'center', gap:12, padding:'10px 14px 10px 18px', borderTop:'1px solid #EEF0F6', flexWrap:'wrap', cursor:'pointer', background:'#fff'}}>
-                  {ck(a)}<span style={{fontSize:19}}>{i.ds.mode === 'class' ? '🏫' : '🏠'}</span>
+                  {ck(a)}{full.length > 1 && <span title="Orden en que los alumnos deben hacerlos" style={{fontSize:11.5, fontWeight:900, color:'#3F5BB8', background:'#EEF2FC', borderRadius:8, padding:'2px 7px', whiteSpace:'nowrap'}}>Paso {pos + 1}</span>}<span style={{fontSize:19}}>{i.ds.mode === 'class' ? '🏫' : '🏠'}</span>
                   <div style={{flex:1, minWidth:200}}>
                     <div style={{fontWeight:800, fontSize:13.8}}>{a.title} {a.pendingSync && <span className="mm-chip" style={{background:'#FFF8E1', color:'#7A4E00'}}>⏳ sin subir</span>}</div>
                     {metaEl(a, i)}
                   </div>
-                  <div className="mm-actions" style={{alignItems:'center'}} onClick={e => e.stopPropagation()}>{mainBtn(a, i)}{menuEl(a, i)}</div>
+                  <div className="mm-actions" style={{alignItems:'center'}} onClick={e => e.stopPropagation()}>{full.length > 1 && <span style={{display:'inline-flex', gap:3}}><button type="button" className="att-btn" title="Subir: que lo hagan antes" disabled={pos <= 0} onClick={() => moveStep(a, -1)} style={{padding:'4px 9px', opacity: pos <= 0 ? .35 : 1}}>▲</button><button type="button" className="att-btn" title="Bajar: que lo hagan después" disabled={pos >= full.length - 1} onClick={() => moveStep(a, 1)} style={{padding:'4px 9px', opacity: pos >= full.length - 1 ? .35 : 1}}>▼</button></span>}{mainBtn(a, i)}{menuEl(a, i)}</div>
                 </div>); })}
             </div>); };
         const out = [], seen = {};
@@ -1290,9 +1307,18 @@ function StudentAssignments({ user, onBack }) {
         <div className="scard" style={{marginTop:18}}><div className="empty-state"><div className="icon">🎉</div>No tienes tareas asignadas por ahora.</div></div>
       ) : (
         <div style={{marginTop:18, display:'flex', flexDirection:'column', gap:12}}>
-          {list.map(a => (window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.isDocset(a) && window.DocSetTaskCard)
-            ? <DocSetTaskCard key={a.id} a={a} student={student} onChange={() => setTick(t=>t+1)} />
-            : <StudentTaskCard key={a.id} a={a} student={student} onChange={() => setTick(t=>t+1)} />)}
+          {stSeqOrder(list, student, T).map(({ a, sq }) => {   /* 🔢 PASOS-ORDEN-V1 */
+            const card = (window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.isDocset(a) && window.DocSetTaskCard)
+              ? <DocSetTaskCard a={a} student={student} onChange={() => setTick(t=>t+1)} />
+              : <StudentTaskCard a={a} student={student} onChange={() => setTick(t=>t+1)} />;
+            if (!sq) return <React.Fragment key={a.id}>{card}</React.Fragment>;
+            return (<div key={a.id} style={{display:'flex', flexDirection:'column', gap:5}}>
+              <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', fontSize:12.5, fontWeight:900, color: sq.next ? '#1F3A8A' : '#8a7f6a'}}>
+                <span style={{background: sq.next ? '#1F3A8A' : '#EFEBE2', color: sq.next ? '#fff' : '#6b6453', borderRadius:10, padding:'2px 9px'}}>Paso {sq.k} de {sq.n}</span>
+                {sq.next ? '👉 Te toca este' : sq.done ? '✓ Hecho' : 'Hazlo después del paso ' + (sq.k - 1)}
+              </div>
+              <div style={sq.next ? {borderRadius:16, boxShadow:'0 0 0 3px rgba(31,58,138,.35)'} : null}>{card}</div>
+            </div>); })}
         </div>
       )}
     </main>

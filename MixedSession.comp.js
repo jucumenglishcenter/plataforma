@@ -1,4 +1,5 @@
-/* MixedSession · SESION-MIXTA-V1 (14-oct-2026) — Parte 1 · Pre-A1 · NEURO-HOY-V1: la tarjeta pasó a NeuroHoy.jsx
+/* NEURO-A1A2-V1 (10-nov): en A1/A2 lectura y listening en inglés con «Ver en español» (pregunta + opciones).
+ * MixedSession · SESION-MIXTA-V1 (14-oct-2026) — Parte 1 · Pre-A1 · NEURO-HOY-V1: la tarjeta pasó a NeuroHoy.jsx
  * Reproductor de ejercicios mezclados (mix · caja de errores · ⭐ repaso bonus) + resumen.
  * MIX-TRANSFORM-V1 (15-oct): Transform = armar la oración con fichas (bandeja + banco + Comprobar).
  * MIX-RL-V1 (15-oct): Comprensión lectora (párrafo con la prueba + vecino, 🔊 y español) y auditiva
@@ -233,7 +234,7 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
               {q.paras.map((p, i) => <React.Fragment key={i}><p dangerouslySetInnerHTML={html(answered ? mxHeard(p.en, q.proof.replace(/[.!?]+$/, '')) : p.en)}></p>{show.es && <p className="es">{p.es}</p>}</React.Fragment>)}
             </div>
             {!answered && <div className="mx-sup"><button type="button" className="tr" onClick={() => setShow({ ...show, es: !show.es })}>🔤 {show.es ? 'Ocultar español' : 'Ver en español'}</button></div>}
-            <div className="mx-qq">{q.q}{q.qEn && q.qEn !== q.q && <small>{q.qEn}</small>}</div>
+            <div className="mx-qq">{q.q}{q.qEn && q.qEn !== q.q && <small>{q.qEn}</small>}{q.inEn && show.es && q.qEs && <small>{q.qEs}</small>}</div>
           </>
         ) : q.kind === 'listen' ? (
           <>
@@ -244,7 +245,8 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
             </div>
             {!answered && plays >= 2 && <div className="mx-sup"><button type="button" className="tr" onClick={() => setShow({ ...show, txt: !show.txt })}>📝 {show.txt ? 'Ocultar el texto' : 'Ver el texto'}</button></div>}
             {!answered && show.txt && <div className="mx-say">{q.audio}</div>}
-            <div className="mx-qq">{q.q}{q.qEn && q.qEn !== q.q && <small>{q.qEn}</small>}</div>
+            {!answered && q.inEn && q.qEs && <div className="mx-sup"><button type="button" className="tr" onClick={() => setShow({ ...show, es: !show.es })}>🔤 {show.es ? 'Ocultar español' : 'Ver la pregunta en español'}</button></div>}
+            <div className="mx-qq">{q.q}{q.qEn && q.qEn !== q.q && <small>{q.qEn}</small>}{q.inEn && show.es && q.qEs && <small>{q.qEs}</small>}</div>
           </>
         ) : isTr ? (
           <>
@@ -273,7 +275,7 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
           <div className="mx-hint" style={{ fontSize: 15, color: '#1E2433', fontFamily: "'Fredoka',sans-serif", fontWeight: 600 }}>¿Cuál oración está bien escrita?</div>
         )}
         {!isTr && pres !== 'write' && pres !== 'hunt' && <div className="mx-opts">
-          {st.opts.map((o, i) => <button type="button" key={i} className={'mx-opt ' + cls(i)} disabled={answered} onClick={() => choose(i)}><span className="lt">{L[i]}</span><span>{o}</span></button>)}
+          {st.opts.map((o, i) => <button type="button" key={i} className={'mx-opt ' + cls(i)} disabled={answered} onClick={() => choose(i)}><span className="lt">{L[i]}</span><span>{o}{isRL && q.inEn && show.es && q.optEs && q.optEs[o] && <small style={{ display: 'block', fontWeight: 600, opacity: .75 }}>{q.optEs[o]}</small>}</span></button>)}
         </div>}
       {answered && (
         <div className={'mx-fb ' + (ok ? 'ok' : 'no')} ref={fbRef}>

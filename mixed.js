@@ -26,7 +26,7 @@
   'use strict';
   if (window.JUCUM_MIX) return;
 
-  var CFG = { levels: { 'pre-a1': 1 }, size: 12, minPer: 2, maxPer: 4, maxMats: 6,
+  var CFG = { levels: { 'pre-a1': 1, a1: 1, a2: 1 }, /* NEURO-A1A2-V1 (10-nov): Neuro también en A1 y A2 */ size: 12, minPer: 2, maxPer: 4, maxMats: 6,
     boxMs: 2 * 3600e3, retryMs: 2 * 3600e3, cacheMs: 6 * 3600e3, secPerQ: 35, maxSecQ: 90, boxInMix: 3, boxMax: 10, xpOk: 2, xpTry: 1, xpExtra: 1, xpDayCap: 80, maxExtras: 4 };
   var STATE_KEY = 'jucum_mix_v1';        // HEAVY (config.js)
   var CACHE_KEY = 'jucum_mix_cache_v1';  // HEAVY (config.js)
@@ -147,29 +147,30 @@
    * Solo las preguntas que CUENTAN para la nota (1..SCORED de cada historia). Pregunta y opciones en
    * español (modo Pre-A1 del material) con el inglés guardado para la retroalimentación. Lectora: se
    * muestran el párrafo con la prueba + uno vecino. Auditiva: la oración se escucha (voz del navegador). */
-  function rlOpts(q, i, warn) {
+  function rlOpts(q, i, warn, inEn) {
     var en = (q.opts || []).map(String), es = (Array.isArray(q.oes) && q.oes.length === en.length) ? q.oes.map(String) : null;
     var ci = typeof q.correct === 'number' ? q.correct : en.indexOf(String(q.correct));
     var why = [];
     if (en.length < 2) why.push('menos de 2 opciones');
     if (!(ci >= 0 && ci < en.length)) why.push('sin respuesta correcta válida');
-    var show = es && Object.keys(es.reduce(function (o, x) { o[x.toLowerCase()] = 1; return o; }, {})).length === es.length ? es : en;
+    var show = !inEn && es && Object.keys(es.reduce(function (o, x) { o[x.toLowerCase()] = 1; return o; }, {})).length === es.length ? es : en;
     if (Object.keys(show.reduce(function (o, x) { o[x.toLowerCase()] = 1; return o; }, {})).length !== show.length) why.push('opciones repetidas');
     if (why.length) { warn.push('Pregunta ' + i + ': ' + why.join(', ')); return null; }
     var map = {}; show.forEach(function (o, k) { map[o] = en[k]; });
-    return { opts: show, correct: show[ci], correctEn: en[ci], en: map };
+    var esMap = null; if (inEn && es) { esMap = {}; en.forEach(function (o, k) { esMap[o] = es[k]; }); } // NEURO-A1A2-V1: A1/A2 ven el inglés + «Ver en español»
+    return { opts: show, correct: show[ci], correctEn: en[ci], en: map, optEs: esMap };
   }
-  function normRL(stories, kind, scored, warn) {
+  function normRL(stories, kind, scored, warn, inEn) {
     var out = [], seen = {}, keys = Object.keys(stories || {}).sort(function (a, b) { return (+a || 0) - (+b || 0); });
     keys.forEach(function (sk) {
       var S = stories[sk] || {}, list = kind === 'read' ? (S.qs || []) : (S.items || []), paras = S.paras || [];
       list.slice(0, scored).forEach(function (q, j) {
-        var tag = 'Historia ' + sk + ' · pregunta ' + (j + 1), o = rlOpts(q || {}, tag, warn); if (!o) return;
+        var tag = 'Historia ' + sk + ' · pregunta ' + (j + 1), o = rlOpts(q || {}, tag, warn, inEn); if (!o) return;
         var qes = String(q.qes || q.q || ''), qen = String(q.q || '');
-        if (!qes) { warn.push(tag + ': sin pregunta'); return; }
+        if (!(inEn ? qen : qes)) { warn.push(tag + ': sin pregunta'); return; }
         var id = hash((kind === 'read' ? 'r|' : 'l|') + sk + '|' + qen + '|' + o.correctEn);
         if (seen[id]) { warn.push(tag + ': repetida'); return; } seen[id] = 1;
-        var it = { id: id, kind: kind, n: out.length + 1, storyN: sk, storyTitle: String(S.title || ''), q: qes, qEn: qen, opts: o.opts, correct: o.correct, correctEn: o.correctEn, optEn: o.en,
+        var it = { id: id, kind: kind, n: out.length + 1, storyN: sk, storyTitle: String(S.title || ''), q: inEn ? qen : qes, qEn: qen, qEs: inEn && q.qes ? String(q.qes) : '', optEs: o.optEs, inEn: !!inEn, opts: o.opts, correct: o.correct, correctEn: o.correctEn, optEn: o.en,
           skill: pickLang(q.skill), tip: pickLang(q.tip), tag: pickLang(q.reinf) };
         if (kind === 'listen') {
           if (!q.audio) { warn.push(tag + ': sin audio'); return; }
@@ -196,12 +197,12 @@
     for (var t = 0; t < 20; t++) { shuffle(idx); if (transNorm(idx.slice(0, q.answer.length).map(function (i) { return q.tiles[i]; })) !== want) break; }
     return idx.slice();
   }
-  function parseHtml(html, kind) {
+  function parseHtml(html, kind, url) {
     if (kind === 'read' || kind === 'listen') {
       var w0 = [], st = parseArr(extractArray(html, 'STORIES', '{'));
       if (!st) return { items: [], warn: ['No se encontraron las historias dentro del material'] };
       var sm = /const\s+SCORED\s*=\s*(\d+)/.exec(html), sc = sm ? +sm[1] : 7;
-      var its = normRL(st, kind, sc, w0);
+      var its = normRL(st, kind, sc, w0, /github\.io\/A[12]\//i.test(String(url || '')));
       return { items: its, warn: w0, raw: its.length };
     }
     var warn = [], arr = parseArr(extractArray(html, kind === 'identify' ? 'quizData' : 'QS'));
@@ -280,7 +281,7 @@
     if (mem[url] && t - mem[url].at < CFG.cacheMs) return Promise.resolve(mem[url].res);
     var cache = AD.read(CACHE_KEY) || {}, c = cache[url];
     var net = AD.fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(function (html) {
-      var p = parseHtml(html, kind), res = { ok: p.items.length > 0, kind: kind, items: p.items, warn: p.warn, raw: p.raw, err: p.items.length ? null : 'sin preguntas válidas' };
+      var p = parseHtml(html, kind, url), res = { ok: p.items.length > 0, kind: kind, items: p.items, warn: p.warn, raw: p.raw, err: p.items.length ? null : 'sin preguntas válidas' };
       mem[url] = { at: AD.now(), res: res };
       if (res.ok) { var cc = AD.read(CACHE_KEY) || {}; cc[url] = { at: AD.now(), kind: kind, items: p.items }; var ks = Object.keys(cc); if (ks.length > 80) ks.sort(function (a, b) { return cc[a].at - cc[b].at; }).slice(0, ks.length - 80).forEach(function (k) { delete cc[k]; }); AD.write(CACHE_KEY, cc); }
       return res;

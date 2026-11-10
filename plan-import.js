@@ -716,7 +716,7 @@
     const planId = (rec.published && rec.published.classPlanId) || (dupG && a.dup === 'replace' ? dupG.dupId : undefined);
     const classPlan = { id: planId, kind: 'class', level: d.level, groupId: rec.groupId, moduleId: mod.id, moduleName: mod.name, themeGroup: d.ctxGroup || '', lengthMin: total || d.lengthMin,
       date: e.date, startTime: e.startTime || '09:00', sessionLabel: d.sessionLabel, emphasis: d.emphasis || (d.blocks.map(b => b.title).slice(0, 3).join(' · ')),
-      blocks: d.blocks.map(b => ({ id: b.id, emoji: b.emoji, title: b.title, mins: Number(b.mins) || 0, mats: (b.mats || []).map(m => ({ moduleId: mod.id, activityId: m.activityId, quizKey: m.quizKey || null })), steps: (b.steps || []).concat(b.warn && !(b.steps || []).some(s => s.includes(b.warn)) ? ['⚠ ' + b.warn] : []) })),
+      blocks: d.blocks.map(b => ({ id: b.id, emoji: b.emoji, title: b.title, mins: Number(b.mins) || 0, mats: (b.mats || []).map(m => m.taskId ? { taskId: m.taskId } /* 📋 TAREA-MATERIAL-V1 */ : ({ moduleId: mod.id, activityId: m.activityId, quizKey: m.quizKey || null })), steps: (b.steps || []).concat(b.warn && !(b.steps || []).some(s => s.includes(b.warn)) ? ['⚠ ' + b.warn] : []) })),
       materials, source: { importId: rec.id, files: rec.files, importedAt: rec.createdAt }, carry: d.carry, nextNotes: d.myNotes || [] };
     /* CLASSMODE-IMPORT-V1: republicar conserva lo marcado en ➡ Para la próxima clase */
     if (planId) { const prevCP = TT.getClassPlans().find(p => p.id === planId); if (prevCP && prevCP.nextBox) classPlan.nextBox = prevCP.nextBox; }
@@ -754,7 +754,7 @@
     const TT = window.JUCUM_TT; const d = rec.draft;
     const qz = { traducir: a['qz-traducir'], ordenar: a['qz-ordenar'], vocabulario: a['qz-vocabulario'] };
     const items = d.practice.filter(p => !drop.has(p.activityId)).map(p => (TT.fixRL ? TT.fixRL(p, mod) : p));
-    const acts = items.filter(p => p.activityId).map(p => ({ moduleId: p.moduleId, activityId: p.activityId, label: p.label, type: p.type, note: '', quizKey: p.quizKey || null, quizUrl: (p.quizKey && qz[p.quizKey]) || null, onlyPending: !!p.onlyPending, prio: p.prio || 0, fromImport: true }));
+    const acts = items.filter(p => p.activityId || p.taskId).map(p => p.taskId ? ({ taskId: p.taskId, label: p.label, type: 'task', note: '', prio: p.prio || 0, fromImport: true }) /* 📋 TAREA-MATERIAL-V1: tarea en la práctica (no cuenta en el «Completo» del set) */ : ({ moduleId: p.moduleId, activityId: p.activityId, label: p.label, type: p.type, note: '', quizKey: p.quizKey || null, quizUrl: (p.quizKey && qz[p.quizKey]) || null, onlyPending: !!p.onlyPending, prio: p.prio || 0, fromImport: true }));
     const prv = prevImport(rec); const oldIds = (rec.published && rec.published.practicePlanIds) || (prv && prv.published.practicePlanIds) || {}; const newIds = {};
     if (items.length && e.practiceDays.length) {
       const days = e.practiceDays; const title = (d.kind === 'practice' ? '📝 ' + (d.setTitle || 'Práctica') + ' · ' + mod.name + ' · ' : '📌 ' + mod.name + ' · ' + d.sessionLabel + ' · ') + fmtDay(days[0]) + (days.length > 1 ? ' → ' + fmtDay(days[days.length - 1]) : '');

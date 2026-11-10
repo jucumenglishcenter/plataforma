@@ -503,6 +503,7 @@ function NeuroPractice({ student, settings, onBack, helpers, extras, explore, co
       </div>
       {tab === 'hoy' ? (
         <>
+          {window.PracticeTaskStrip && <PracticeTaskStrip student={student} items={items} />}
           <div className="nh-g">
             <div className="nh-col" style={{ gridArea: 'd' }}>{dayCard}</div>
             <div className="nh-col" style={{ gridArea: 'b' }}>{brain}</div>
