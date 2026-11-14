@@ -504,6 +504,24 @@
   }
   const trUrl = q => 'https://translate.google.com/?sl=en&tl=es&op=translate&text=' + encodeURIComponent(q);
 
+  /* 🔁 TAREA-REHACER-V1 (14-nov-2026, aprobado en «Propuesta - Volver a hacer tareas (modo espejo)»): la teacher deja
+   * REHACER una tarea 🏠 a quien ya la entregó. ds.redo = { alumno: { at, due } }. Mientras no la rehace sigue contando su
+   * nota anterior. Al entregar otra vez, la entrega guarda ans.hist = [intentos anteriores completos]; la nota que cuenta
+   * es la ÚLTIMA. El alumno solo ve la última; la teacher ve todas (ventana 📈 Notas). */
+  function redoOf(set, sid) { const r = set && set.redo && set.redo[sid]; return r && r.at ? r : null; }
+  function redoPending(set, sid, ans) { const r = redoOf(set, sid); if (!r) return null; const last = ans && ans.at ? Date.parse(ans.at) : 0; return (last && last >= Date.parse(r.at)) ? null : r; }
+  function redoOpen(set, sid, ans, now) { const r = redoPending(set, sid, ans); if (!r) return null; return (r.due && Date.parse(r.due) < (now || Date.now())) ? null : r; }
+  const histOf = ans => (ans && Array.isArray(ans.hist)) ? ans.hist : [];
+  function snapOf(set, ans, row) { ans = ans || {}; const g = row && typeof row.grade === 'number' ? row.grade : typeof ans.grade === 'number' ? ans.grade : score(set, ans.res || []);
+    return { g, at: ans.at || (row && (row.submitted_at || row.submittedAt)) || null, ans: ans.ans || [], res: ans.res || [], fb: ans.fb || [], nr: ans.nr || [], tr: ans.tr || [], cm: ans.cm || [] }; }
+  async function giveRedo(a, sids, dueIso) {
+    const at = new Date().toISOString(); const u = await patch(a, d => { const ro = Object.assign({}, d.redo || {}); sids.forEach(id => { ro[id] = { at, due: dueIso || null }; }); d.redo = ro; });
+    const N = window.JUCUM_NOTIF; let hasta = ''; try { hasta = dueIso ? ' · hasta el ' + new Date(dueIso).toLocaleString('es-PE', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : ''; } catch (e) {}
+    if (N && u) sids.forEach(id => { try { N.pushNotif(id, { type: 'assignment', title: '🔁 Tu profe te dio otra oportunidad', body: '“' + a.title + '”: hazla otra vez para mejorar tu nota' + hasta + '.', link: 'tasks' }); } catch (e) {} });
+    return u;
+  }
+  async function cancelRedo(a, sid) { return patch(a, d => { if (d.redo && d.redo[sid]) { const ro = Object.assign({}, d.redo); delete ro[sid]; d.redo = ro; } }); }
+
   /* ── Dentro del plan del día (pedido 22-oct, DOCSETS-FIX-V2): el set 🏫 entra a la lista de actividades de ese día
    * y se reordena con ▲▼. ds.after = id del bloque del plan tras el que va ('__start' = antes del primero; sin valor
    * = al final) · ds.ord = orden entre sets del mismo hueco. ── */
@@ -526,5 +544,5 @@
     return out;
   }
 
-  window.JUCUM_DOCSETS = { setItemComment, setLabel, sent: SENT, detect, merge, propose, meta, isDocset, isClass, describe, liveState, grade, score, nRev, warnings, norm, packAns, unpack, fetchSubs, fetchMine, fetchGroupTasks, saveDraft, finalize, setItemResult, closeDrafts, patch, notifyGroup, trUrl, cueEs, combineAlts, multiSentence, upgrade, persistUpgrade, classDays, classForDay, seq, reorder };
+  window.JUCUM_DOCSETS = { setItemComment, setLabel, sent: SENT, detect, merge, propose, meta, isDocset, isClass, describe, liveState, grade, score, nRev, warnings, norm, packAns, unpack, fetchSubs, fetchMine, fetchGroupTasks, saveDraft, finalize, setItemResult, closeDrafts, patch, notifyGroup, trUrl, cueEs, combineAlts, multiSentence, upgrade, persistUpgrade, classDays, classForDay, seq, reorder, redoOf, redoPending, redoOpen, histOf, snapOf, giveRedo, cancelRedo };
 })();

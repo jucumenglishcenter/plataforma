@@ -280,16 +280,22 @@ function DocSetResults({ a: a0, compact }) {
   const closedHome = ds.mode === 'home' && a.dueAt && new Date(a.dueAt).getTime() < Date.now();
   const [view, setView] = dsUS(null); const [editDue, setEditDue] = dsUS(false); const [due, setDue] = dsUS(dsLocalInput(a.dueAt));
   const [flt, setFlt] = dsUS('all');
+  /* 🔁 TAREA-REHACER-V1: casillas + «🔁 Dar otra oportunidad» + ventana 📈 Notas (todas las veces que la hizo) */
+  const [sel, setSel] = dsUS({}); const [rdue, setRdue] = dsUS(() => { const d = new Date(Date.now() + 3 * 86400000); d.setHours(23, 59, 0, 0); return dsLocalInput(d.toISOString()); }); const [hist, setHist] = dsUS(null); const [rBusy, setRBusy] = dsUS(false);
   /* TAREAS-ENTREGAS-V1: arriba el resumen (cada recuadro filtra), abajo una línea tocable por alumno: por revisar → entregaron → en curso → faltan */
   const nIt = (ds.items || []).length, cls = ds.mode === 'class';
   const info = roster.map(s => { const r = by[s.id], z0 = r ? X.unpack(r.text) : null, z = z0 ? X.upgrade(ds, z0).ans : null, res = (z && z.res) || [], k = res.filter(Boolean).length, nr = X.nRev(res), done = !!(r && r.status !== 'draft');
-    return { s, r, k, nr, done, g: done ? X.score(ds, res) : null, st: !r ? 'miss' : nr ? 'rev' : done ? 'done' : 'draft', at: r && r.submitted_at ? new Date(r.submitted_at).getTime() : 0 }; });
+    const rp = done ? X.redoPending(ds, s.id, z0) : null, ro = rp && (!rp.due || Date.parse(rp.due) >= Date.now()) ? rp : null;
+    return { s, r, k, nr, done, g: done ? X.score(ds, res) : null, st: !r ? 'miss' : nr ? 'rev' : done ? 'done' : 'draft', at: r && r.submitted_at ? new Date(r.submitted_at).getTime() : 0, z: z0, hist: X.histOf(z0), rp, ro }; });
   const RANK = { rev: 0, done: 1, draft: 2, miss: 3 };
   const sorted = info.slice().sort((p, q) => RANK[p.st] - RANK[q.st] || (!!p.s._away - !!q.s._away) || (p.st === 'miss' ? dsName(p.s).localeCompare(dsName(q.s)) : p.at - q.at));
   const pend = info.reduce((n, x) => n + x.nr, 0), nDone = info.filter(x => x.done).length, nRevS = info.filter(x => x.nr).length, nMiss = info.length - nDone;
   const gs = info.filter(x => x.done && x.g != null).map(x => x.g), avg = gs.length ? Math.round(gs.reduce((p, q) => p + q, 0) / gs.length) : null;
   const shown = sorted.filter(x => flt === 'all' || (flt === 'done' && x.done) || (flt === 'rev' && x.nr) || (flt === 'miss' && !x.done));
   const order = sorted.filter(x => x.r).map(x => x.s.id);
+  const showCk = !cls && nDone > 0, selIds = Object.keys(sel).filter(k => sel[k] && info.some(x => x.s.id === k && x.done && !x.ro));
+  const doRedo = async () => { if (!selIds.length) return; const iso = rdue ? new Date(rdue).toISOString() : null; if (!iso || Date.parse(iso) < Date.now()) { alert('Elige una fecha límite que todavía no haya pasado.'); return; }
+    setRBusy(true); const u = await X.giveRedo(a, selIds, iso); setRBusy(false); if (!u) { alert('No se pudo guardar. Revisa tu internet e inténtalo de nuevo.'); return; } setA(u); setSel({}); if (u._synced === false) alert('Se guardó en este equipo, pero todavía no en la nube (sin internet). Se sube sola al abrir Tareas con conexión.'); };
   const saveDue = async () => { const iso = new Date(due).toISOString(); const u = await X.patch(a, d => { d.dueAt = iso; }); if (u) { setA(u); X.notifyGroup(a, '⏰ Tu profe cambió el plazo', `“${a.title}” · ahora hasta ${dsFmt(iso)}.`, 'tasks'); } setEditDue(false); };
   const tile = (k, big, label, col) => { const on = flt === k; return (
     <button key={k} onClick={() => setFlt(on ? 'all' : k)} title={on ? 'Ver a todos' : 'Ver solo estos'} style={{ border: '1.5px solid ' + (on ? '#1F3A8A' : 'var(--border)'), background: on ? '#EEF2FC' : '#fff', borderRadius: 13, padding: '8px 11px', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', boxShadow: on ? '0 2px 8px rgba(31,58,138,.15)' : 'none' }}>
@@ -312,26 +318,65 @@ function DocSetResults({ a: a0, compact }) {
           {tile('miss', '⏳ ' + nMiss, cls ? 'No terminaron' : 'Faltan')}
           <div style={{ border: '1.5px solid var(--border)', borderRadius: 13, padding: '8px 11px', background: '#FAFAF6' }}><b style={{ display: 'block', fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 20, lineHeight: 1.15 }}>📈 {avg != null ? avg : '—'}</b><span style={{ fontSize: 11.5, fontWeight: 800, color: '#6f6f6f' }}>Promedio{gs.length ? ' de ' + gs.length : ''}</span></div>
         </div>
+        {showCk && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', background: selIds.length ? DS_PURL : '#FAFAF6', border: '1.5px solid ' + (selIds.length ? '#CE93D8' : 'var(--border)'), borderRadius: 12, padding: '8px 12px', marginBottom: 10, fontSize: 12.5, fontWeight: 800, color: selIds.length ? '#4A1466' : '#6f6f6f', lineHeight: 1.45 }}>
+          <span style={{ flex: '1 1 220px' }}>{selIds.length ? `🔁 ${selIds.length} marcado${selIds.length > 1 ? 's' : ''}: la rehará${selIds.length > 1 ? 'n' : ''} desde cero. Su nota de ahora sigue contando hasta que entregue${selIds.length > 1 ? 'n' : ''}.` : '🔁 ¿Quieres que alguien la vuelva a hacer? Marca ☐ a los alumnos que ya entregaron.'}</span>
+          {selIds.length > 0 && <><label style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>⏰ hasta <input type="datetime-local" className="input-text" style={{ width: 'auto', padding: '5px 8px' }} value={rdue} onChange={e => setRdue(e.target.value)} /></label>
+            <button className="btn-save" disabled={rBusy || !rdue} onClick={doRedo} style={{ background: DS_PUR, whiteSpace: 'nowrap' }}>{rBusy ? 'Guardando…' : '🔁 Dar otra oportunidad'}</button>
+            <button className="btn-cancel" onClick={() => setSel({})}>Cancelar</button></>}
+        </div>}
         <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
           {fixed > 0 && <div style={{ background: '#E8F5E9', color: '#1B5E20', fontSize: 12.5, fontWeight: 800, padding: '8px 12px', borderBottom: '1px solid #C8E6C9', lineHeight: 1.45 }}>✨ Corregí {fixed} entrega{fixed > 1 ? 's' : ''}: había respuestas bien escritas que salieron ✘ (por ejemplo, unir sin repetir el sujeto: “Tomás sees a ship and a bridge.”). Su nota subió y les avisé por la campanita.</div>}
           {shown.length === 0 && <div className="settings-hint" style={{ padding: '14px 12px', margin: 0, background: '#fff' }}>{flt === 'rev' ? '🎉 Nada por revisar.' : flt === 'miss' ? '🎉 Todos entregaron.' : flt === 'done' ? 'Todavía nadie entrega.' : 'No hay alumnos en este grupo.'}</div>}
           {shown.map(x => { const { s, r, k, nr, done } = x;
             return (
               <div key={s.id} onClick={r ? () => setView(s.id) : undefined} title={r ? 'Ver su actividad' : ''} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '9px 12px', borderBottom: '1px solid #F0EDE4', flexWrap: 'wrap', background: x.st === 'rev' ? '#FFFCF2' : '#fff', cursor: r ? 'pointer' : 'default' }}>
+                {showCk && (done && !x.ro ? <input type="checkbox" checked={!!sel[s.id]} onClick={e => e.stopPropagation()} onChange={e => { const v = e.target.checked; setSel(o => ({ ...o, [s.id]: v })); }} title="Darle otra oportunidad" style={{ width: 20, height: 20, accentColor: DS_PUR, flex: 'none', cursor: 'pointer', margin: 0 }} /> : <span style={{ width: 20, flex: 'none' }}></span>)}
                 <span style={{ width: 34, height: 34, borderRadius: '50%', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 12.5, background: s._away ? '#ECEAE3' : '#E3E9F8', color: s._away ? '#6f6a5c' : '#1F3A8A' }}>{dsIni(s)}</span>
                 <div style={{ flex: 1, minWidth: 150 }}>
                   <b style={{ display: 'block', fontSize: 13.8 }}>{dsName(s)}</b>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: '#8a7f6a' }}>{!r ? (s.username ? '@' + s.username : '') : done ? (cls ? 'Respondió' : 'Entregó') + (r.submitted_at ? ' · ' + dsFmt(r.submitted_at) : '') : 'Empezó · va en ' + k + ' de ' + nIt}{s._away ? ' · ya no está en este grupo' : ''}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: x.rp ? DS_PUR : '#8a7f6a' }}>{!r ? (s.username ? '@' + s.username : '') : x.rp ? (x.ro ? '🔁 Rehaciendo' + (x.rp.due ? ' · hasta ' + dsFmt(x.rp.due) : '') : '🔁 Venció su otra oportunidad · sigue su nota') : done ? (cls ? 'Respondió' : 'Entregó') + (r.submitted_at ? ' · ' + dsFmt(r.submitted_at) : '') : 'Empezó · va en ' + k + ' de ' + nIt}{s._away ? ' · ya no está en este grupo' : ''}</span>
                 </div>
                 {!r ? dsChip(cls ? 'No participó' : 'Aún no entrega', '#FFF3E0', '#E65100') : <>
                   {k < nIt && (done || closedHome) && dsChip('no terminó · ' + k + ' de ' + nIt, '#FFF3E0', '#E65100')}
                   {nr > 0 && dsChip('🟨 ' + nr + ' por revisar', '#FFF8E1', '#8A5A00')}
-                  {done && dsChip(x.g + '/100' + (nr ? ' provisional' : ''), '#E3F2FD', '#1565C0')}
+                  {done && (x.hist.length || x.rp ? <button type="button" onClick={e => { e.stopPropagation(); setHist(s.id); }} title="Ver todas sus notas" style={{ border: '1.5px solid #90CAF9', background: '#E3F2FD', color: '#0D47A1', borderRadius: 20, padding: '3px 10px', fontWeight: 900, fontSize: 11.5, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', display: 'inline-flex', gap: 5, alignItems: 'center' }}>📈 {x.g}/100{nr ? ' provisional' : ''}<span style={{ background: DS_PUR, color: '#fff', borderRadius: 8, padding: '0 6px', fontSize: 10.5 }}>{x.hist.length + 1 + (x.ro ? 1 : 0)}×</span></button> : dsChip(x.g + '/100' + (nr ? ' provisional' : ''), '#E3F2FD', '#1565C0'))}
                   <button className="att-btn" onClick={e => { e.stopPropagation(); setView(s.id); }}>👁 Ver su actividad</button></>}
               </div>); })}
         </div></>}
       {view && dsSafe(<DocSetStudentView a={a} ds={ds} rows={rows} who={view} order={order} onClose={() => setView(null)} onChanged={(u) => { if (u) setA(u); refresh(); }} />, () => setView(null), true)}
+      {hist && dsSafe(<DocSetRedoHistory a={a} ds={ds} x={info.find(y => y.s.id === hist)} onClose={() => setHist(null)} onView={() => { const id = hist; setHist(null); setView(id); }} onChanged={(u) => { if (u) setA(u); refresh(); }} />, () => setHist(null), true)}
     </div>);
+}
+/* 🔁 TAREA-REHACER-V1 · ventana 📈 Notas: cada vez que la hizo (fecha, nota, respuestas) + la oportunidad abierta (✕ Quitar) */
+function DocSetRedoHistory({ a, ds, x, onClose, onView, onChanged }) {
+  const X = DSX(); const [open, setOpen] = dsUS(-1); const [busy, setBusy] = dsUS(false);
+  if (!x || !x.r || !ds || !ds.items) return null;
+  const cur = X.snapOf(ds, x.z || {}, x.r); cur.g = x.g; const list = x.hist.concat([cur]);
+  const quitar = async () => { if (!window.confirm('¿Quitarle la otra oportunidad a ' + dsFirst(x.s) + '? Se queda con su nota de ahora (' + x.g + ').')) return; setBusy(true); const u = await X.cancelRedo(a, x.s.id); setBusy(false); onChanged(u); onClose(); };
+  const nb = { fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 14, color: '#0D1B5A', minWidth: 92 };
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal settings-modal" style={{ maxWidth: 540 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-head"><div className="modal-title" style={{ flex: 1 }}>📈 Notas de {dsName(x.s)}</div><button className="modal-close" onClick={onClose}>✕</button></div>
+        <div className="modal-body">
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-soft)', marginBottom: 10, lineHeight: 1.45 }}>{a.title} · cuenta la <b>última</b> nota. {dsFirst(x.s)} solo ve la última.</div>
+          {list.map((h, i) => { const last = i === list.length - 1, on = open === i; return (
+            <div key={i} style={{ border: '1.5px solid ' + (last ? '#90CAF9' : 'var(--border)'), background: last ? '#F5FAFF' : '#fff', borderRadius: 12, padding: '9px 12px', marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <b style={nb}>{i + 1}.ª vez{i === 0 && list.length > 1 ? ' (original)' : ''}</b>
+                <span style={{ flex: 1, minWidth: 120, fontSize: 12, fontWeight: 700, color: '#6B7A93' }}>{h.at ? dsFmt(h.at) : ''}{last ? <> · <b style={{ color: '#0D47A1' }}>la que cuenta</b></> : null}</span>
+                <b style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 20, color: last ? '#0D47A1' : '#6B7A93' }}>{h.g}</b>
+                {last ? <button className="att-btn" onClick={onView}>👁 Ver y revisar</button> : <button className="att-btn" onClick={() => setOpen(on ? -1 : i)}>{on ? 'Ocultar' : '👁 Ver'}</button>}
+              </div>
+              {on && <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 8 }}>{ds.items.map((it, k) => { const v = (h.res || [])[k], t = (h.ans || [])[k]; return (
+                <div key={k} style={{ fontSize: 12.5, fontWeight: 700, background: '#F6F8FC', borderRadius: 9, padding: '6px 9px', lineHeight: 1.45 }}><span style={{ color: '#6B7A93' }}>{k + 1}. </span>{v === 'bad' ? '❌' : !v ? '⬜' : v === 'rev' ? '📝' : '✅'} {t || <i style={{ color: '#9A9484' }}>en blanco</i>}{(h.cm || [])[k] ? <div style={{ color: '#4A148C' }}>💬 {h.cm[k]}</div> : null}</div>); })}</div>}
+            </div>); })}
+          {x.rp && <div style={{ border: '1.5px dashed #CE93D8', borderRadius: 12, padding: '9px 12px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', background: '#FCF6FD' }}>
+            <b style={nb}>{list.length + 1}.ª vez</b>
+            <span style={{ flex: 1, minWidth: 140, fontSize: 12, fontWeight: 700, color: DS_PUR }}>{x.ro ? '🔁 Abierta' + (x.rp.due ? ' hasta ' + dsFmt(x.rp.due) : '') + ' · aún no la entrega' : '🔁 Venció' + (x.rp.due ? ' el ' + dsFmt(x.rp.due) : '') + ' sin entregar'}</span>
+            <button className="att-btn" disabled={busy} style={{ color: '#B23C00' }} onClick={quitar}>✕ Quitar oportunidad</button>
+          </div>}
+        </div></div></div>);
 }
 
 /* ═══════════ 3 · EN EL MODO CLASE (teacher) ═══════════ */
@@ -395,7 +440,12 @@ function dsDraftSet(aid, sid, v) { try { const o = JSON.parse(localStorage.getIt
 function DocSetPlayer({ a: a0, student, onClose }) {
   const X = DSX(), T = window.JUCUM_TASKS; const [a, setA] = dsUS(a0); const ds = X.meta(a); const n = ds.items.length;
   const sub = T.getSubmission(a.id, student.id); const final0 = sub && X.unpack(sub.text);
-  const [st, setSt] = dsUS(() => X.upgrade(ds, final0 ? { ...final0, done: true } : (dsDraftGet(a.id, student.id) || { ans: [], res: [], tr: [], fb: [], startedAt: new Date().toISOString() })).ans);
+  /* 🔁 TAREA-REHACER-V1: con otra oportunidad abierta empieza DESDE CERO; el borrador queda solo en este equipo (la nube
+   * conserva la entrega anterior y su nota hasta que entregue) y al entregar se guarda la anterior en ans.hist. */
+  const [redo] = dsUS(() => (final0 && X.redoOpen ? X.redoOpen(ds, student.id, final0) : null)); const baseRef = dsUR({ ans: final0, row: sub });
+  const [st, setSt] = dsUS(() => { const dr = dsDraftGet(a.id, student.id); return X.upgrade(ds, redo ? (dr && dr.redoAt === redo.at ? dr : { ans: [], res: [], tr: [], fb: [], startedAt: new Date().toISOString(), redoAt: redo.at }) : final0 ? { ...final0, done: true } : (dr || { ans: [], res: [], tr: [], fb: [], startedAt: new Date().toISOString() })).ans; });
+  dsUE(() => { if (!redo) return; let stop = false; X.fetchMine(a.id, student.id).then(row => { const z = !stop && row && X.unpack(row.text); if (!z) return; baseRef.current = { ans: z, row };
+    if (z.at && Date.parse(z.at) >= Date.parse(redo.at)) { dsDraftSet(a.id, student.id, null); setSt({ ...X.upgrade(ds, z).ans, done: true }); } }); return () => { stop = true; }; }, []);
   const [i, setI] = dsUS(() => Math.min((st.res || []).filter(Boolean).length, n - 1)); const [txt, setTxt] = dsUS(''); const [showTr, setShowTr] = dsUS(false);
   const [now, setNow] = dsUS(Date.now()); const [saving, setSaving] = dsUS(false); const [closedMsg, setClosedMsg] = dsUS(false); const taRef = dsUR(null); const [msgEs, setMsgEs] = dsUS(false);
   /* ☁️ DOCSETS-FIX-V2: antes de dejar responder se mira la nube. Si empezó en otro equipo, sigue donde iba (sin repetir
@@ -408,16 +458,20 @@ function DocSetPlayer({ a: a0, student, onClose }) {
       else if (row !== undefined && nL > nC) X.saveDraft(a.id, student.id, st);
       setSync(false); });
     return () => { stop = true; clearTimeout(tmo); }; }, []);
-  dsUE(() => { if (!final0) return; let stop = false; X.fetchMine(a.id, student.id).then(row => { const z = !stop && row && X.unpack(row.text); if (z && z.cm) setSt(p => ({ ...p, cm: z.cm })); }); return () => { stop = true; }; }, []); /* DOCSETS-COMENTARIO-V1: trae los comentarios del teacher aunque la entrega ya esté en este equipo */
+  dsUE(() => { if (!final0 || redo) return; let stop = false; X.fetchMine(a.id, student.id).then(row => { const z = !stop && row && X.unpack(row.text); if (z && z.cm) setSt(p => ({ ...p, cm: z.cm })); }); return () => { stop = true; }; }, []); /* DOCSETS-COMENTARIO-V1: trae los comentarios del teacher aunque la entrega ya esté en este equipo */
   const done = !!st.done; const cls = ds.mode === 'class'; const left = cls && ds.live && ds.live.endAt ? new Date(ds.live.endAt).getTime() - now : 0;
   dsUE(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
   dsUE(() => { if (!cls || done) return; let stop = false; const poll = async () => { const L = await X.fetchGroupTasks(a.groupId); const r = L && L.find(x => x.id === a.id); if (!stop && r) setA(p => ({ ...p, description: r.description })); };
     const id = setInterval(poll, 10000); return () => { stop = true; clearInterval(id); }; }, [cls, done]);
-  const finish = async (s2) => { setSaving(true); const z = X.upgrade(ds, { ...s2 }).ans; try { await X.finalize(a, ds, student.id, z); } catch (e) {} dsDraftSet(a.id, student.id, null); setSt({ ...z, done: true }); setSaving(false); };
+  const finish = async (s2) => { setSaving(true); let z = X.upgrade(ds, { ...s2 }).ans;
+    if (redo) { const b = baseRef.current || {}; z = { ...z, hist: X.histOf(b.ans).concat([X.snapOf(ds, b.ans, b.row)]) }; delete z.redoAt; }
+    try { await X.finalize(a, ds, student.id, z); } catch (e) {}
+    if (redo && window.JUCUM_NOTIF) { try { const pv = X.histOf(z).slice(-1)[0] || {}; window.JUCUM_NOTIF.pushNotif('teacher', { type: 'assignment', title: '🔁 Volvió a hacer una tarea', body: dsName(student) + ' rehizo “' + a.title + '”: ' + z.grade + '/100 (antes ' + pv.g + ').', link: 'tasks' }); } catch (e) {} }
+    dsDraftSet(a.id, student.id, null); setSt({ ...z, done: true }); setSaving(false); };
   dsUE(() => { if (cls && !done && !sync && X.liveState(ds, now) === 'closed' && !closedMsg) { setClosedMsg(true); finish(st); } }, [now, a, sync]);
   const it = ds.items[i], r = (st.res || [])[i];
   const check = () => { if (sync) return; const g = X.grade(ds, i, txt); if (g.r === 'blank') return; const s2 = { ...st, ans: [...(st.ans || [])], res: [...(st.res || [])], tr: [...(st.tr || [])], fb: [...(st.fb || [])], nr: [...(st.nr || [])] };
-    s2.ans[i] = txt; s2.res[i] = g.r; s2.tr[i] = !!showTr; s2.fb[i] = g.d || g.h || ''; s2.nr[i] = g.r === 'bad' && g.near ? g.near : ''; setSt(s2); dsDraftSet(a.id, student.id, s2); X.saveDraft(a.id, student.id, s2); };
+    s2.ans[i] = txt; s2.res[i] = g.r; s2.tr[i] = !!showTr; s2.fb[i] = g.d || g.h || ''; s2.nr[i] = g.r === 'bad' && g.near ? g.near : ''; setSt(s2); dsDraftSet(a.id, student.id, s2); if (!redo) X.saveDraft(a.id, student.id, s2); };
   /* DOCSETS-APOSTROFO-V1 (03-nov) · botón ' para el alumno: en el teclado en español la tecla ´ queda a la mano y el corrector no la toma como apóstrofo. Inserta ' donde está el cursor. */
   const putApos = () => { const el = taRef.current, s0 = el && el.selectionStart != null ? el.selectionStart : txt.length, e0 = el && el.selectionEnd != null ? el.selectionEnd : txt.length; setTxt(txt.slice(0, s0) + "'" + txt.slice(e0)); setTimeout(() => { if (el) { el.focus(); try { el.setSelectionRange(s0 + 1, s0 + 1); } catch (e) {} } }, 0); };
   const next = () => { setTxt(''); if (i < n - 1) setI(i + 1); else finish(st); };
@@ -425,7 +479,7 @@ function DocSetPlayer({ a: a0, student, onClose }) {
   const head = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
       <button className="back-btn" style={{ margin: 0 }} onClick={onClose}>← Salir</button>
-      <span style={{ marginLeft: 'auto' }}>{cls ? dsChip('🏫 En clase' + (!done && left > 0 ? ' · ' + dsMMSS(left) : ''), DS_PURL, DS_PUR) : dsChip('🏠 Tarea' + (a.dueAt ? ' · hasta ' + dsFmt(a.dueAt) : ''), '#FFF3E0', '#BF360C')}</span>
+      <span style={{ marginLeft: 'auto' }}>{redo && !done ? dsChip('🔁 Otra oportunidad' + (redo.due ? ' · hasta ' + dsFmt(redo.due) : ''), DS_PURL, DS_PUR) : cls ? dsChip('🏫 En clase' + (!done && left > 0 ? ' · ' + dsMMSS(left) : ''), DS_PURL, DS_PUR) : dsChip('🏠 Tarea' + (a.dueAt ? ' · hasta ' + dsFmt(a.dueAt) : ''), '#FFF3E0', '#BF360C')}</span>
     </div>);
   const box = { position: 'fixed', inset: 0, zIndex: 1200, background: 'var(--bg-tint,#F0F7FF)', overflowY: 'auto' };
   const inner = { maxWidth: 620, margin: '0 auto', padding: '16px 14px 40px' };
@@ -494,19 +548,22 @@ function DocSetLiveBanner({ student }) {
 }
 function DocSetTaskCard({ a, student, onChange }) {
   const X = DSX(), T = window.JUCUM_TASKS; const ds = X.meta(a); const [open, setOpen] = dsUS(false);
-  const sub = T.getSubmission(a.id, student.id); const z0 = sub && X.unpack(sub.text), up = z0 ? X.upgrade(ds, z0) : null, z = up ? up.ans : null; const dr = !sub && dsDraftGet(a.id, student.id); const k = ((dr && dr.res) || []).filter(Boolean).length;
+  const sub = T.getSubmission(a.id, student.id); const z0 = sub && X.unpack(sub.text), up = z0 ? X.upgrade(ds, z0) : null, z = up ? up.ans : null;
+  const ro = z0 && X.redoOpen ? X.redoOpen(ds, student.id, z0) : null; /* 🔁 TAREA-REHACER-V1 */ const dr0 = dsDraftGet(a.id, student.id); const dr = ro ? (dr0 && dr0.redoAt === ro.at ? dr0 : null) : (!sub && dr0); const k = ((dr && dr.res) || []).filter(Boolean).length;
   const shown = sub ? ((up && up.changed) || typeof sub.grade !== 'number' ? X.score(ds, (z && z.res) || []) : sub.grade) : null;
   const late = a.dueAt && new Date(a.dueAt).getTime() < Date.now() && !sub; const nr = z ? X.nRev(z.res) : 0;
   return (
-    <div className="scard" style={{ borderColor: sub ? '#C8E6C9' : late ? '#E6E2D8' : '#FFB74D', borderWidth: 2 }}>
+    <div className="scard" style={{ borderColor: ro ? '#CE93D8' : sub ? '#C8E6C9' : late ? '#E6E2D8' : '#FFB74D', borderWidth: 2 }}>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
         {sub ? dsChip('✓ Entregada · ' + shown + '/100' + (nr ? ' provisional' : ''), '#E8F5E9', '#2E7D32') : late ? dsChip('⏰ Cerró · ' + dsFmt(a.dueAt), '#FFEBEE', '#C62828') : dsChip('⏰ Entrega hasta ' + dsFmt(a.dueAt), '#FFF3E0', '#E65100')}
+        {ro && dsChip('🔁 Otra oportunidad' + (ro.due ? ' · hasta ' + dsFmt(ro.due) : ''), DS_PURL, DS_PUR)}
         {dsChip('✍️ ' + ds.items.length + ' ejercicios · +' + (a.xp || 40) + ' XP', '#F2F0EA', '#555')}
       </div>
       <div style={{ fontWeight: 900, fontSize: 15.5 }}>{a.title}</div>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-soft)', margin: '3px 0 10px' }}>{ds.es || ds.en}{k ? ` · vas ${k}/${ds.items.length}` : ''}{nr ? ' · 📝 tu profe revisa ' + nr + ' respuesta' + (nr > 1 ? 's' : '') : ''}</div>
       {late ? <div className="settings-hint">{k ? `Esta tarea cerró antes de que la entregaras (respondiste ${k} de ${ds.items.length}); tu profe ve tus respuestas.` : 'Esta tarea ya cerró y no la entregaste.'} Si necesitas otra oportunidad, escríbele a tu profe.</div>
-        : <button className="btn-save" style={{ width: '100%', minHeight: 46 }} onClick={() => setOpen(true)}>{sub ? 'Ver mis respuestas' : k ? '✍️ Seguir' : '▶ Empezar'}</button>}
+        : <>{ro && <div style={{ background: DS_PURL, border: '1.5px solid #CE93D8', color: '#4A1466', borderRadius: 12, padding: '8px 11px', fontSize: 12.8, fontWeight: 800, lineHeight: 1.45, marginBottom: 8 }}>🔁 Tu profe te dio otra oportunidad para mejorar tu nota. Hazla desde el inicio: se queda tu nueva nota.</div>}
+          <button className="btn-save" style={{ width: '100%', minHeight: 46, ...(ro ? { background: DS_PUR } : {}) }} onClick={() => setOpen(true)}>{ro ? (k ? '✍️ Seguir' : '🔁 Volver a hacerla') : sub ? 'Ver mis respuestas' : k ? '✍️ Seguir' : '▶ Empezar'}</button></>}
       {open && <DocSetPlayer a={a} student={student} onClose={() => { setOpen(false); onChange && onChange(); }} />}
     </div>);
 }
@@ -559,4 +616,4 @@ function DocSetSeqRow({ a: a0, plan }) {
     </div>);
 }
 
-Object.assign(window, { DocSetReview, DocSetBoard, DocSetStudentView, DocSetResults, DocSetClassPanel, DocSetPlayer, DocSetLiveBanner, DocSetTaskCard, DocSetDayCard, DocSetSeqRow });
+Object.assign(window, { DocSetRedoHistory, DocSetReview, DocSetBoard, DocSetStudentView, DocSetResults, DocSetClassPanel, DocSetPlayer, DocSetLiveBanner, DocSetTaskCard, DocSetDayCard, DocSetSeqRow });

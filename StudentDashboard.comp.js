@@ -2888,10 +2888,71 @@ function PracticeTaskStrip({ student, items }) {
   return (
     <div style={{display:'flex', flexDirection:'column', gap:8, margin:'10px 0'}}>
       <div style={{fontSize:11, fontWeight:900, letterSpacing:'.06em', textTransform:'uppercase', color:'#8a7f6a'}}>📋 Tareas de esta práctica</div>
-      {list.map((it, i) => <PracticeTaskRow key={i} it={it} student={student} />)}
+      <PracticeTasksGroup items={list} student={student} />
     </div>);
 }
-Object.assign(window, { PracticeTaskRow, PracticeTaskStrip });
+/* 📋 TAREAS-VENTANA-V1 (14-nov-2026, aprobado en «Propuesta - Volver a hacer tareas (modo espejo)»): las tareas de la práctica
+ * van en UNA fila que abre una ventana DENTRO del plan con los pasos en orden (mismo orden que 📝 Tareas · PASOS-ORDEN-V1).
+ * Las de documento (🏠) se hacen ahí mismo con DocSetPlayer y al cerrar vuelve a la lista; las demás abren 📝 Tareas.
+ * El orden se RECOMIENDA («Paso N», el siguiente resaltado), no se bloquea. */
+function ptTaskList(items) {
+  const T = window.JUCUM_TASKS, X = window.JUCUM_DOCSETS; if (!T) return [];
+  const seen = {}, all = T.getAssignments();
+  const list = (items || []).filter(it => it && it.taskId).map(it => ({ it, a: all.find(x => x.id === it.taskId) })).filter(o => { if (!o.a || seen[o.a.id]) return false; seen[o.a.id] = 1; return true; });
+  const dsOf = a => (X && X.isDocset && X.isDocset(a)) ? X.meta(a) : null;
+  if (list.length > 1 && list.every(o => dsOf(o.a))) { const key = a => { const d = dsOf(a) || {}; return d.seq != null ? d.seq : 1e6; }; list.sort((p, q) => (key(p.a) - key(q.a)) || String((dsOf(p.a) || {}).step).localeCompare(String((dsOf(q.a) || {}).step), undefined, { numeric: true })); }
+  return list;
+}
+function ptTaskState(a, student) {
+  const T = window.JUCUM_TASKS, X = window.JUCUM_DOCSETS; const sub = T.getSubmission(a.id, student.id);
+  const isDs = !!(X && X.isDocset && X.isDocset(a)), ds = isDs ? X.meta(a) : null, z = sub && isDs ? X.unpack(sub.text) : null;
+  const ro = z && X.redoOpen ? X.redoOpen(ds, student.id, z) : null;   // 🔁 TAREA-REHACER-V1
+  const g = sub ? (typeof sub.grade === 'number' ? sub.grade : (z && ds ? X.score(ds, z.res || []) : null)) : null;
+  const due = T.dueFor ? T.dueFor(a, student.id) : a.dueAt, late = !sub && due && Date.parse(due) < Date.now();
+  return { sub, isDs, ds, ro, g, due, late, done: !!sub && !ro, inline: isDs && ds && ds.mode !== 'class' && !late && !!window.DocSetPlayer };
+}
+const ptFmt = (iso) => { try { return new Date(iso).toLocaleDateString('es-PE', { weekday:'short', day:'numeric', month:'short' }); } catch (e) { return ''; } };
+function PracticeTasksGroup({ items, student }) {
+  const [open, setOpen] = React.useState(false); const [, setTick] = React.useState(0);
+  if (!student || !window.JUCUM_TASKS) return null;
+  const list = ptTaskList(items); if (!list.length) return null;
+  const sts = list.map(o => ptTaskState(o.a, student)); const n = list.length, k = sts.filter(s => s.done).length, nx = sts.findIndex(s => !s.done), allDone = k === n;
+  const bb = {width:22, height:22, borderRadius:'50%', border:'2px solid', display:'inline-flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:13, flexShrink:0};
+  return (<>
+    <div role="button" tabIndex={0} className="next-card" onClick={() => setOpen(true)} onKeyDown={e => { if (e.key === 'Enter') setOpen(true); }} style={{cursor:'pointer', ...(allDone ? {background:'#F2FAF3', borderColor:'#BFE3C3'} : {background:'#FFFAF3', borderColor:'#FDBA74'})}}>
+      {allDone ? <span style={{...bb, background:'#2EA84B', borderColor:'#2EA84B', color:'#fff'}}>✓</span> : <span style={{...bb, background:'#fff', borderColor:'#D8D2C0', color:'transparent'}}>·</span>}
+      <span className="next-ico">📋</span>
+      <div className="next-info"><b>{n === 1 ? (list[0].it.label || list[0].a.title) : 'Tus tareas de hoy'}</b><span>{allDone ? <span style={{color:'#2E7D32', fontWeight:800}}>✓ {n === 1 ? 'Entregada' : 'Las ' + n + ' entregadas'}</span> : n === 1 ? (sts[0].ro ? '🔁 Otra oportunidad · tócala para hacerla' : 'Tarea · tócala para hacerla') : k + ' de ' + n + ' hechas · sigue el paso ' + (nx + 1)}</span></div>
+      <span className="next-arr">→</span>
+    </div>
+    {open && <PracticeTasksSheet list={list} student={student} onClose={() => { setOpen(false); setTick(t => t + 1); }} />}
+  </>);
+}
+function PracticeTasksSheet({ list, student, onClose }) {
+  const [play, setPlay] = React.useState(null); const [, setTick] = React.useState(0);
+  if (play) return <DocSetPlayer a={play} student={student} onClose={() => { setPlay(null); setTick(t => t + 1); }} />;
+  const sts = list.map(o => ptTaskState(o.a, student)); const nx = sts.findIndex(s => !s.done), n = list.length, allDone = nx < 0;
+  const go = (o, s) => { if (s.inline) { setPlay(o.a); return; } onClose(); ptGoTasks(); };
+  return (
+    <div onClick={onClose} style={{position:'fixed', inset:0, zIndex:1100, background:'rgba(15,23,42,.5)', display:'flex', alignItems:'flex-end', justifyContent:'center'}}>
+      <div onClick={e => e.stopPropagation()} role="dialog" aria-label="Tus tareas de hoy" style={{background:'#fff', width:'100%', maxWidth:560, maxHeight:'88vh', overflowY:'auto', borderRadius:'20px 20px 0 0', padding:'12px 16px 20px', boxShadow:'0 -10px 30px rgba(0,0,0,.25)', display:'flex', flexDirection:'column', gap:9}}>
+        <div style={{width:44, height:5, borderRadius:3, background:'#D6DEEA', margin:'0 auto 4px'}}></div>
+        <div style={{display:'flex', alignItems:'center', gap:8}}><b style={{flex:1, fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:17, color:'#0D1B5A'}}>📋 Tus tareas de hoy</b><button type="button" onClick={onClose} aria-label="Cerrar" style={{width:40, height:40, borderRadius:'50%', border:'none', background:'#F2F0EA', color:'#555', fontWeight:800, fontSize:15, cursor:'pointer'}}>✕</button></div>
+        {n > 1 && <div style={{fontSize:12.5, fontWeight:700, color:'#6B7A93', lineHeight:1.45}}>Hazlas en orden: cada paso te prepara para el siguiente.</div>}
+        {list.map((o, i) => { const s = sts[i], next = i === nx, hot = !s.done && (next || s.ro);
+          const subTxt = s.ro ? '🔁 Otra oportunidad para mejorar tu nota' : s.done ? '✓ Entregada' + (s.g != null ? ' · ' + s.g + '/100' : '') : s.late ? '⏰ Cerró el ' + ptFmt(s.due) : (s.isDs && s.ds ? s.ds.items.length + ' ejercicios' : 'Se abre en 📝 Tareas') + (s.due ? ' · cierra ' + ptFmt(s.due) : '');
+          return (
+          <button key={o.a.id} type="button" onClick={() => go(o, s)} style={{display:'flex', gap:10, alignItems:'center', width:'100%', textAlign:'left', border:'1.5px solid ' + (s.done ? '#BFE3C3' : next ? '#1565C0' : '#E1E7F0'), boxShadow: next ? '0 0 0 3px #E3F2FD' : 'none', background: s.done ? '#F2FAF3' : '#fff', borderRadius:13, padding:'10px 12px', minHeight:58, cursor:'pointer', fontFamily:'inherit', color:'inherit'}}>
+            <span style={{width:30, height:30, borderRadius:'50%', flex:'none', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:900, fontSize:13, background: s.done ? '#2EA84B' : next ? '#1565C0' : '#E3E9F8', color: s.done || next ? '#fff' : '#1F3A8A'}}>{s.done ? '✓' : i + 1}</span>
+            <span style={{flex:1, minWidth:0}}><b style={{display:'block', fontSize:13.8, color:'#0D1B5A', lineHeight:1.35}}>{n > 1 ? 'Paso ' + (i + 1) + ' · ' : ''}{o.it.label || o.a.title}</b><small style={{fontSize:11.8, fontWeight:700, color: s.ro ? '#6A1B9A' : s.late ? '#C62828' : '#6B7A93'}}>{subTxt}</small></span>
+            <span style={{flex:'none', fontWeight:900, fontSize:12.5, borderRadius:10, padding:'7px 11px', whiteSpace:'nowrap', background: hot ? (s.ro ? '#6A1B9A' : '#1565C0') : s.done ? 'transparent' : '#F2F0EA', color: hot ? '#fff' : s.done ? '#2E7D32' : '#444'}}>{s.done || s.late ? 'Ver' : s.ro ? '🔁 Rehacer' : '▶ Hacer'}</span>
+          </button>); })}
+        {allDone && <div style={{background:'#E8F5E9', border:'1.5px solid #A5D6A7', color:'#1E6B23', borderRadius:12, padding:'10px 12px', fontSize:13, fontWeight:800}}>🎉 ¡Terminaste {n > 1 ? 'las ' + n + ' tareas' : 'tu tarea'} de hoy!</div>}
+        <button type="button" onClick={() => { onClose(); ptGoTasks(); }} style={{alignSelf:'center', border:'none', background:'none', color:'#1F3A8A', fontWeight:800, fontSize:13, textDecoration:'underline', cursor:'pointer', padding:10, minHeight:44, fontFamily:'inherit'}}>Ver todas mis tareas →</button>
+      </div>
+    </div>);
+}
+Object.assign(window, { PracticeTaskRow, PracticeTaskStrip, PracticeTasksGroup, PracticeTasksSheet });
 function TodayPracticeCard({ student }) {
   const TT = window.JUCUM_TT; if (!TT) return null;
   const D = window.JUCUM_DATA;
@@ -2964,7 +3025,7 @@ function TodayPracticeCard({ student }) {
       )}
       <div className="next-row" style={{padding:'12px 13px'}}>
         {items.map((it, i) => {
-          if (it.taskId) return <PracticeTaskRow key={i} it={it} student={student} />;   // 📋 TAREA-MATERIAL-V1
+          if (it.taskId) return items.findIndex(x => x && x.taskId) === i ? <PracticeTasksGroup key={i} items={items} student={student} /> : null;   // 📋 TAREA-MATERIAL-V1 · TAREAS-VENTANA-V1 (todas en una fila)
           const st = stats[i];
           const mod = mods.find(m => m.id === it.moduleId);
           const a = mod && (mod.activities || []).find(x => x.id === it.activityId);
