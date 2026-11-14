@@ -2888,17 +2888,39 @@ function PracticeTaskStrip({ student, items }) {
   return (
     <div style={{display:'flex', flexDirection:'column', gap:8, margin:'10px 0'}}>
       <div style={{fontSize:11, fontWeight:900, letterSpacing:'.06em', textTransform:'uppercase', color:'#8a7f6a'}}>📋 Tareas de esta práctica</div>
-      <PracticeTasksGroup items={list} student={student} />
+      {ptTaskRows(list, student)}
     </div>);
 }
 /* 📋 TAREAS-VENTANA-V1 (14-nov-2026, aprobado en «Propuesta - Volver a hacer tareas (modo espejo)»): las tareas de la práctica
  * van en UNA fila que abre una ventana DENTRO del plan con los pasos en orden (mismo orden que 📝 Tareas · PASOS-ORDEN-V1).
  * Las de documento (🏠) se hacen ahí mismo con DocSetPlayer y al cerrar vuelve a la lista; las demás abren 📝 Tareas.
  * El orden se RECOMIENDA («Paso N», el siguiente resaltado), no se bloquea. */
+/* 🔗 TAREA-DESTINO-V1 (14-nov): la teacher elige adónde va cada tarea: 'win' = ventana de pasos (por defecto) · 'one' = solo esa tarea · 'list' = 📝 Mis tareas */
+const ptDest = it => (it && (it.dest === 'one' || it.dest === 'list')) ? it.dest : 'win';
+function PracticeTaskOne({ it, student }) {
+  const [play, setPlay] = React.useState(false); const [, setTick] = React.useState(0);
+  const T = window.JUCUM_TASKS; const a = T && student ? T.getAssignments().find(x => x.id === it.taskId) : null; if (!a) return null;
+  const s = ptTaskState(a, student);
+  const bb = {width:22, height:22, borderRadius:'50%', border:'2px solid', display:'inline-flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:13, flexShrink:0};
+  const go = () => { if (s.inline) setPlay(true); else ptGoTasks(); };
+  return (<>
+    <div role="button" tabIndex={0} className="next-card" onClick={go} onKeyDown={e => { if (e.key === 'Enter') go(); }} style={{cursor:'pointer', ...(s.done ? {background:'#F2FAF3', borderColor:'#BFE3C3'} : {background:'#FFFAF3', borderColor:'#FDBA74'})}}>
+      {s.done ? <span style={{...bb, background:'#2EA84B', borderColor:'#2EA84B', color:'#fff'}}>✓</span> : <span style={{...bb, background:'#fff', borderColor:'#D8D2C0', color:'transparent'}}>·</span>}
+      <span className="next-ico">📋</span>
+      <div className="next-info"><b>{it.label || a.title}</b><span>{s.done ? <span style={{color:'#2E7D32', fontWeight:800}}>✓ Entregada{s.g != null ? ' · ' + s.g + '/100' : ''}</span> : s.ro ? '🔁 Otra oportunidad · tócala para hacerla' : s.late ? '⏰ Cerró el ' + ptFmt(s.due) : 'Tarea · tócala para hacerla'}</span></div>
+      <span className="next-arr">→</span>
+    </div>
+    {play && ptPortal(<DocSetPlayer a={a} student={student} onClose={() => { setPlay(false); setTick(t => t + 1); }} />)}
+  </>);
+}
+function ptTaskRows(items, student) {   // todas las tareas de la práctica, cada una con su destino
+  const L = (items || []).filter(it => it && it.taskId); const w = L.findIndex(it => ptDest(it) === 'win');
+  return L.map((it, i) => ptDest(it) === 'one' ? <PracticeTaskOne key={'o' + i} it={it} student={student} /> : ptDest(it) === 'list' ? <PracticeTaskRow key={'l' + i} it={it} student={student} /> : i === w ? <PracticeTasksGroup key="w" items={L} student={student} /> : null);
+}
 function ptTaskList(items) {
   const T = window.JUCUM_TASKS, X = window.JUCUM_DOCSETS; if (!T) return [];
   const seen = {}, all = T.getAssignments();
-  const list = (items || []).filter(it => it && it.taskId).map(it => ({ it, a: all.find(x => x.id === it.taskId) })).filter(o => { if (!o.a || seen[o.a.id]) return false; seen[o.a.id] = 1; return true; });
+  const list = (items || []).filter(it => it && it.taskId && ptDest(it) === 'win').map(it => ({ it, a: all.find(x => x.id === it.taskId) })).filter(o => { if (!o.a || seen[o.a.id]) return false; seen[o.a.id] = 1; return true; });
   const dsOf = a => (X && X.isDocset && X.isDocset(a)) ? X.meta(a) : null;
   if (list.length > 1 && list.every(o => dsOf(o.a))) { const key = a => { const d = dsOf(a) || {}; return d.seq != null ? d.seq : 1e6; }; list.sort((p, q) => (key(p.a) - key(q.a)) || String((dsOf(p.a) || {}).step).localeCompare(String((dsOf(q.a) || {}).step), undefined, { numeric: true })); }
   return list;
@@ -2955,7 +2977,7 @@ function PracticeTasksSheet({ list, student, onClose }) {
       </div>
     </div>);
 }
-Object.assign(window, { PracticeTaskRow, PracticeTaskStrip, PracticeTasksGroup, PracticeTasksSheet });
+Object.assign(window, { PracticeTaskRow, PracticeTaskStrip, PracticeTasksGroup, PracticeTasksSheet, PracticeTaskOne });
 function TodayPracticeCard({ student }) {
   const TT = window.JUCUM_TT; if (!TT) return null;
   const D = window.JUCUM_DATA;
@@ -3028,7 +3050,7 @@ function TodayPracticeCard({ student }) {
       )}
       <div className="next-row" style={{padding:'12px 13px'}}>
         {items.map((it, i) => {
-          if (it.taskId) return items.findIndex(x => x && x.taskId) === i ? <PracticeTasksGroup key={i} items={items} student={student} /> : null;   // 📋 TAREA-MATERIAL-V1 · TAREAS-VENTANA-V1 (todas en una fila)
+          if (it.taskId) return items.findIndex(x => x && x.taskId) === i ? <React.Fragment key={i}>{ptTaskRows(items, student)}</React.Fragment> : null;   // 🔗 TAREA-DESTINO-V1   // 📋 TAREA-MATERIAL-V1 · TAREAS-VENTANA-V1 (todas en una fila)
           const st = stats[i];
           const mod = mods.find(m => m.id === it.moduleId);
           const a = mod && (mod.activities || []).find(x => x.id === it.activityId);
