@@ -2917,12 +2917,24 @@ function ptTaskRows(items, student) {   // todas las tareas de la práctica, cad
   const L = (items || []).filter(it => it && it.taskId); const w = L.findIndex(it => ptDest(it) === 'win');
   return L.map((it, i) => ptDest(it) === 'one' ? <PracticeTaskOne key={'o' + i} it={it} student={student} /> : ptDest(it) === 'list' ? <PracticeTaskRow key={'l' + i} it={it} student={student} /> : i === w ? <PracticeTasksGroup key="w" items={L} student={student} /> : null);
 }
-function ptTaskList(items) {
+/* 📋 PRACTICA-TAREA-SET-V1 (14-nov): item taskId '*' = TODAS las tareas disponibles del alumno (las de clase 🏫 no; las que ya cerraron
+ * solo si tiene otra oportunidad abierta), en orden de pasos y luego por fecha de cierre */
+function ptAllAvail(student) {
+  const T = window.JUCUM_TASKS, X = window.JUCUM_DOCSETS; if (!T || !student || !T.assignmentsForStudent) return [];
+  const now = Date.now();
+  return T.assignmentsForStudent(student).filter(a => { const isDs = X && X.isDocset && X.isDocset(a), ds = isDs ? X.meta(a) : null; if (ds && ds.mode === 'class') return false;
+    const due = T.dueFor ? T.dueFor(a, student.id) : a.dueAt; if (!due || Date.parse(due) >= now) return true;
+    const sub = T.getSubmission(a.id, student.id), z = sub && ds ? X.unpack(sub.text) : null; return !!(z && X.redoOpen && X.redoOpen(ds, student.id, z)); });
+}
+function ptTaskList(items, student) {
   const T = window.JUCUM_TASKS, X = window.JUCUM_DOCSETS; if (!T) return [];
-  const seen = {}, all = T.getAssignments();
-  const list = (items || []).filter(it => it && it.taskId && ptDest(it) === 'win').map(it => ({ it, a: all.find(x => x.id === it.taskId) })).filter(o => { if (!o.a || seen[o.a.id]) return false; seen[o.a.id] = 1; return true; });
+  const seen = {}, all = T.getAssignments(), src = (items || []).filter(it => it && it.taskId && ptDest(it) === 'win'), out = [];
+  src.forEach(it => { if (it.taskId === '*') ptAllAvail(student).forEach(a => out.push({ it: { taskId: a.id, label: a.title, dest: 'win' }, a })); else out.push({ it, a: all.find(x => x.id === it.taskId) }); });
+  const list = out.filter(o => { if (!o.a || seen[o.a.id]) return false; seen[o.a.id] = 1; return true; });
   const dsOf = a => (X && X.isDocset && X.isDocset(a)) ? X.meta(a) : null;
-  if (list.length > 1 && list.every(o => dsOf(o.a))) { const key = a => { const d = dsOf(a) || {}; return d.seq != null ? d.seq : 1e6; }; list.sort((p, q) => (key(p.a) - key(q.a)) || String((dsOf(p.a) || {}).step).localeCompare(String((dsOf(q.a) || {}).step), undefined, { numeric: true })); }
+  if (src.some(it => it.taskId === '*')) { const dueK = a => { const d = T.dueFor ? T.dueFor(a, student && student.id) : a.dueAt; return d ? Date.parse(d) || 9e15 : 9e15; }, sk = a => { const d = dsOf(a); return d && d.seq != null ? d.seq : 1e6; };
+    list.sort((p, q) => (sk(p.a) - sk(q.a)) || String((dsOf(p.a) || {}).step || '').localeCompare(String((dsOf(q.a) || {}).step || ''), undefined, { numeric: true }) || (dueK(p.a) - dueK(q.a))); }
+  else if (list.length > 1 && list.every(o => dsOf(o.a))) { const key = a => { const d = dsOf(a) || {}; return d.seq != null ? d.seq : 1e6; }; list.sort((p, q) => (key(p.a) - key(q.a)) || String((dsOf(p.a) || {}).step).localeCompare(String((dsOf(q.a) || {}).step), undefined, { numeric: true })); }
   return list;
 }
 function ptTaskState(a, student) {
@@ -2940,7 +2952,8 @@ function ptPortal(el) { const stop = e => e.stopPropagation(); const box = <div 
 function PracticeTasksGroup({ items, student }) {
   const [open, setOpen] = React.useState(false); const [, setTick] = React.useState(0);
   if (!student || !window.JUCUM_TASKS) return null;
-  const list = ptTaskList(items); if (!list.length) return null;
+  const list = ptTaskList(items, student);
+  if (!list.length) return (items || []).some(it => it && it.taskId === '*') ? <div role="button" tabIndex={0} className="next-card" onClick={ptGoTasks} style={{cursor:'pointer', background:'#F2FAF3', borderColor:'#BFE3C3'}}><span style={{width:22, height:22, borderRadius:'50%', background:'#2EA84B', color:'#fff', display:'inline-flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:13, flexShrink:0}}>✓</span><span className="next-ico">📋</span><div className="next-info"><b>Tareas</b><span>No tienes tareas por hacer ahora</span></div><span className="next-arr">→</span></div> : null;
   const sts = list.map(o => ptTaskState(o.a, student)); const n = list.length, k = sts.filter(s => s.done).length, nx = sts.findIndex(s => !s.done), allDone = k === n;
   const bb = {width:22, height:22, borderRadius:'50%', border:'2px solid', display:'inline-flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:13, flexShrink:0};
   return (<>

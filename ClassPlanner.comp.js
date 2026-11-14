@@ -1062,11 +1062,9 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
   const [actTypeFilter, setActTypeFilter] = React.useState('all');
   const [collapsedTopics, setCollapsedTopics] = React.useState({});
   const isPicked = (m, a) => picked.some(p => p.moduleId === m.id && p.activityId === a.id);
-  /* 📋 PRACTICA-TAREA-SET-V1 (14-nov): las tareas del grupo también se eligen en el set, con «🔗 Al tocarla, el alumno va a» (TAREA-DESTINO-V1) */
-  const setTasks = (window.JUCUM_TASKS && groupId) ? window.JUCUM_TASKS.getAssignments().filter(a => a.groupId === groupId) : [];
-  const isTaskPicked = id => picked.some(p => p.taskId === id);
-  const toggleTask = a => setPicked(arr => arr.some(p => p.taskId === a.id) ? arr.filter(p => p.taskId !== a.id) : [...arr, { taskId: a.id, label: a.title, type: 'task', dest: 'win', note: '', prio: 0 }]);
-  const setTaskDest = (id, v) => setPicked(arr => arr.map(p => p.taskId === id ? { ...p, dest: v } : p));
+  /* 📋 PRACTICA-TAREA-SET-V1 (14-nov): UNA casilla «📋 Tareas» → al alumno le sale una fila que abre la ventana con TODAS sus tareas disponibles, en orden de pasos (item taskId '*') */
+  const tasksOn = picked.some(p => p.taskId);
+  const toggleTasks = () => setPicked(arr => arr.some(p => p.taskId) ? arr.filter(p => !p.taskId) : [...arr, { taskId: '*', label: 'Tareas', type: 'task', dest: 'win', note: '', prio: 0 }]);
   const togglePick = (m, a) => setPicked(arr => isPicked(m, a) ? arr.filter(p => !(p.moduleId === m.id && p.activityId === a.id)) : [...arr, { moduleId: m.id, activityId: a.id, label: a.name, type: a.type, group: a.group || null }]);
   const togglePickReview = (m, a) => setPicked(arr => isPicked(m, a) ? arr.filter(p => !(p.moduleId === m.id && p.activityId === a.id)) : [...arr, { moduleId: m.id, activityId: a.id, label: a.name, type: a.type, group: a.group || null, review: true, moduleName: m.name }]);
   const setPickedPart = (m, a, n) => setPicked(arr => arr.map(p => (p.moduleId === m.id && p.activityId === a.id) ? { ...p, storyNo: n || null, dialogNo: (a.type === 'story' ? (n || null) : p.dialogNo) } : p));
@@ -1148,7 +1146,6 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
               <div style={{display:'flex', gap:7, flexWrap:'wrap', marginBottom:10}}>
                 <button onClick={() => setActTypeFilter('all')} style={pillStyle(actTypeFilter === 'all')}>Todas</button>
                 {typesPresent.map(t => <button key={t} onClick={() => setActTypeFilter(t)} style={pillStyle(actTypeFilter === t)}>{TLAB[t] || t}</button>)}
-                {setTasks.length > 0 && <button onClick={() => setActTypeFilter('task')} style={pillStyle(actTypeFilter === 'task')}>📋 Tareas</button>}
               </div>
               <div style={{display:'flex', flexDirection:'column', gap:8}}>
                 {topicGroups.map(g => {
@@ -1190,34 +1187,13 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
                     </div>
                   );
                 })}
-                {(actTypeFilter === 'all' || actTypeFilter === 'task') && setTasks.length > 0 && (() => { const tk = '📋 Tareas del grupo', collapsed = !!collapsedTopics[tk], pN = setTasks.filter(a => isTaskPicked(a.id)).length; return (
-                  <div style={{border:'1px solid #FDBA74', borderRadius:11, overflow:'hidden'}}>
-                    <button onClick={() => setCollapsedTopics(c => ({ ...c, [tk]: !c[tk] }))} style={{display:'flex', alignItems:'center', gap:9, width:'100%', textAlign:'left', cursor:'pointer', border:'none', background:'#FFF4E5', padding:'10px 12px', font:'inherit'}}>
-                      <span style={{flex:1, fontWeight:800, fontSize:13, color:'#9A4B00'}}>{tk}</span>
-                      {pN > 0 && <span style={{fontSize:11, fontWeight:800, color:'#9A4B00', background:'#FFE0B2', borderRadius:11, padding:'2px 9px'}}>{pN} ✓</span>}
-                      <span style={{fontSize:11, fontWeight:800, color:'#8a7f6a'}}>{setTasks.length}</span>
-                      <span style={{fontSize:12, color:'#8a7f6a', transform: collapsed ? 'none' : 'rotate(180deg)', display:'inline-block'}}>▾</span>
-                    </button>
-                    {!collapsed && <div style={{display:'flex', flexDirection:'column', gap:7, padding:'8px 10px'}}>
-                      {setTasks.map(a => { const on = isTaskPicked(a.id), p = picked.find(x => x.taskId === a.id); return (
-                        <React.Fragment key={a.id}>
-                          <button onClick={() => toggleTask(a)} style={{display:'flex', alignItems:'center', gap:10, textAlign:'left', cursor:'pointer', border:'1px solid ' + (on ? '#FDBA74' : '#E3DCC9'), background: on ? '#FFFAF3' : '#fff', borderRadius:10, padding:'9px 12px', font:'inherit', width:'100%'}}>
-                            <span style={{width:20, height:20, borderRadius:6, border:'2px solid ' + (on ? '#E67E00' : '#cdc4ad'), background: on ? '#E67E00' : '#fff', color:'#fff', fontSize:13, fontWeight:900, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>{on ? '✓' : ''}</span>
-                            <span style={{fontSize:15}}>📋</span>
-                            <span style={{flex:1, fontWeight:700, fontSize:13}}>{a.title}</span>
-                          </button>
-                          {on && <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', margin:'-2px 0 2px 30px', background:'#FFF4E5', border:'1.5px solid #FDBA74', borderRadius:9, padding:'7px 10px'}}>
-                            <span style={{fontSize:11.5, fontWeight:800, color:'#9A4B00'}}>🔗 Al tocarla, el alumno va a:</span>
-                            <select value={(p && p.dest) || 'win'} onChange={e => setTaskDest(a.id, e.target.value)} style={{fontFamily:'inherit', fontWeight:800, fontSize:12.5, border:'1.5px solid #FDBA74', borderRadius:9, padding:'6px 9px', cursor:'pointer', background:'#fff'}}>
-                              <option value="win">🪟 La ventana con las tareas de hoy (en orden)</option>
-                              <option value="one">📋 Solo esta tarea</option>
-                              <option value="list">📝 La lista «Mis tareas»</option>
-                            </select>
-                          </div>}
-                        </React.Fragment>); })}
-                    </div>}
-                  </div>); })()}
-                {topicGroups.length === 0 && actTypeFilter !== 'task' && <div style={{padding:'16px', textAlign:'center', color:'#999', fontWeight:700, fontSize:12.5}}>Sin actividades de este tipo en el módulo.</div>}
+                {actTypeFilter === 'all' && (
+                  <button onClick={toggleTasks} style={{display:'flex', alignItems:'center', gap:10, textAlign:'left', cursor:'pointer', border:'1.5px solid ' + (tasksOn ? '#FDBA74' : '#E3DCC9'), background: tasksOn ? '#FFFAF3' : '#fff', borderRadius:11, padding:'11px 12px', font:'inherit', width:'100%'}}>
+                    <span style={{width:20, height:20, borderRadius:6, border:'2px solid ' + (tasksOn ? '#E67E00' : '#cdc4ad'), background: tasksOn ? '#E67E00' : '#fff', color:'#fff', fontSize:13, fontWeight:900, display:'inline-flex', alignItems:'center', justifyContent:'center', flex:'none'}}>{tasksOn ? '✓' : ''}</span>
+                    <span style={{fontSize:15}}>📋</span>
+                    <span style={{flex:1, minWidth:0}}><b style={{display:'block', fontWeight:800, fontSize:13, color:'#9A4B00'}}>Tareas</b><span style={{fontSize:11.5, fontWeight:700, color:'#8a7f6a'}}>El alumno toca un botón y ve todas sus tareas disponibles, en orden de pasos.</span></span>
+                  </button>)}
+                {topicGroups.length === 0 && <div style={{padding:'16px', textAlign:'center', color:'#999', fontWeight:700, fontSize:12.5}}>Sin actividades de este tipo en el módulo.</div>}
               </div>
             </>
           );
