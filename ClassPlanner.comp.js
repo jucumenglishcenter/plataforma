@@ -1029,9 +1029,9 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
   const [guideOpen, setGuideOpen] = React.useState(false);   // PLAN-INSTR-V1 (28-oct, P7 aprobada): instructivo cerrado por defecto
   const lang = (guide && guide.lang) || 'es';
   const setLang = (lg) => setGuide(g => g ? { ...g, lang: lg } : g);
-  const regenGuide = () => setGuide(window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }));
+  const regenGuide = () => setGuide(window.JUCUM_GUIDE.build(level, picked.filter(p => !p.taskId) /* PRACTICA-TAREA-SET-V1: las tareas no van al instructivo */, mod ? mod.name : '', { title, note, lang }));
   const themes = mod ? Array.from(new Set((mod.activities || []).filter(a => a.group).map(a => a.group))) : [];
-  const previewGuide = () => { const g = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }); if (!guide) setGuide(g); window.JUCUM_GUIDE.openOverlay(g, {}); };
+  const previewGuide = () => { const g = guide || window.JUCUM_GUIDE.build(level, picked.filter(p => !p.taskId) /* PRACTICA-TAREA-SET-V1: las tareas no van al instructivo */, mod ? mod.name : '', { title, note, lang }); if (!guide) setGuide(g); window.JUCUM_GUIDE.openOverlay(g, {}); };
   const updateStep = (i, patch) => setGuide(g => ({ ...g, steps: g.steps.map((s, k) => k === i ? { ...s, ...patch } : s) }));
   const allTemas = Array.from(new Set(mods.flatMap(m => (m.activities || []).map(a => a.group).filter(Boolean))));
   const focusText = (s) => {
@@ -1055,13 +1055,18 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
   const delLine = (i, key, li) => setGuide(g => ({ ...g, steps: g.steps.map((s, k) => k === i ? { ...s, [key]: (s[key] || []).filter((_, j) => j !== li) } : s) }));
   const addGuideBlock = () => setGuide(g => ({ ...g, steps: [...g.steps, { emoji: '•', title: '', type: 'custom', linesEs: [''], linesEn: [''] }] }));
   const loadFav = (favId) => { const f = (TT.getGuideFavs() || []).find(x => x.id === favId); if (!f) return; const g = JSON.parse(JSON.stringify(f.guide)); g.title = title; g.note = note; g.moduleName = mod ? mod.name : g.moduleName; setGuide(g); };
-  const saveFav = () => { const g = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }); if (!guide) setGuide(g); const name = window.prompt('Ponle un nombre a este instructivo favorito (para reconocerlo después):', title || 'Mi instructivo'); if (!name) return; TT.addGuideFav(name.trim(), g); setFavTick(t => t + 1); alert('⭐ Guardado en favoritos como “' + name.trim() + '”'); };
+  const saveFav = () => { const g = guide || window.JUCUM_GUIDE.build(level, picked.filter(p => !p.taskId) /* PRACTICA-TAREA-SET-V1: las tareas no van al instructivo */, mod ? mod.name : '', { title, note, lang }); if (!guide) setGuide(g); const name = window.prompt('Ponle un nombre a este instructivo favorito (para reconocerlo después):', title || 'Mi instructivo'); if (!name) return; TT.addGuideFav(name.trim(), g); setFavTick(t => t + 1); alert('⭐ Guardado en favoritos como “' + name.trim() + '”'); };
   const delFav = (id) => { if (window.confirm('¿Borrar este instructivo favorito?')) { TT.deleteGuideFav(id); setFavTick(t => t + 1); } };
   const cur = new Date(); const [pcur, setPcur] = React.useState({ y: cur.getFullYear(), m: cur.getMonth() });
 
   const [actTypeFilter, setActTypeFilter] = React.useState('all');
   const [collapsedTopics, setCollapsedTopics] = React.useState({});
   const isPicked = (m, a) => picked.some(p => p.moduleId === m.id && p.activityId === a.id);
+  /* 📋 PRACTICA-TAREA-SET-V1 (14-nov): las tareas del grupo también se eligen en el set, con «🔗 Al tocarla, el alumno va a» (TAREA-DESTINO-V1) */
+  const setTasks = (window.JUCUM_TASKS && groupId) ? window.JUCUM_TASKS.getAssignments().filter(a => a.groupId === groupId) : [];
+  const isTaskPicked = id => picked.some(p => p.taskId === id);
+  const toggleTask = a => setPicked(arr => arr.some(p => p.taskId === a.id) ? arr.filter(p => p.taskId !== a.id) : [...arr, { taskId: a.id, label: a.title, type: 'task', dest: 'win', note: '', prio: 0 }]);
+  const setTaskDest = (id, v) => setPicked(arr => arr.map(p => p.taskId === id ? { ...p, dest: v } : p));
   const togglePick = (m, a) => setPicked(arr => isPicked(m, a) ? arr.filter(p => !(p.moduleId === m.id && p.activityId === a.id)) : [...arr, { moduleId: m.id, activityId: a.id, label: a.name, type: a.type, group: a.group || null }]);
   const togglePickReview = (m, a) => setPicked(arr => isPicked(m, a) ? arr.filter(p => !(p.moduleId === m.id && p.activityId === a.id)) : [...arr, { moduleId: m.id, activityId: a.id, label: a.name, type: a.type, group: a.group || null, review: true, moduleName: m.name }]);
   const setPickedPart = (m, a, n) => setPicked(arr => arr.map(p => (p.moduleId === m.id && p.activityId === a.id) ? { ...p, storyNo: n || null, dialogNo: (a.type === 'story' ? (n || null) : p.dialogNo) } : p));
@@ -1075,7 +1080,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
     if (!groupReal) { alert('⚠️ Primero elige la clase destino en “👥 Grupo destino”.\n\nEl grupo que tenía este set ya no existe en la nube, así que nadie lo recibiría.'); return; }
     if (!picked.length) { alert('Elige al menos una actividad.'); return; }
     if (!dates.length) { alert('Elige al menos un día en el calendario.'); return; }
-    const finalGuide = syncRL(guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang }));   // PLAN-HISTORIA-V1
+    const finalGuide = syncRL(guide || window.JUCUM_GUIDE.build(level, picked.filter(p => !p.taskId) /* PRACTICA-TAREA-SET-V1: las tareas no van al instructivo */, mod ? mod.name : '', { title, note, lang }));   // PLAN-HISTORIA-V1
     const ds = dates.slice().sort(); const rec = { groupId, level, themeGroup, title, activities: picked, dates, assignToStudents: assign, note, guide: { ...finalGuide, from: ds[0], to: ds[ds.length - 1] } };
     const destino = '“' + groupReal.name + '”' + (groupReal.schedule && !String(groupReal.name).includes(groupReal.schedule) ? ' (' + groupReal.schedule + ')' : '') + ' · ' + nAlumnos + ' alumno' + (nAlumnos === 1 ? '' : 's');
     if (initial && !initial._tpl) { TT.updatePracticePlan(initial.id, rec); alert('✅ Set actualizado para ' + destino); }
@@ -1086,7 +1091,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
     if (!picked.length) { alert('Elige al menos una actividad antes de guardar la plantilla.'); return; }
     const name = window.prompt('Nombre para esta plantilla de práctica:', title);
     if (!name) return;
-    const finalGuide = guide || window.JUCUM_GUIDE.build(level, picked, mod ? mod.name : '', { title, note, lang });
+    const finalGuide = guide || window.JUCUM_GUIDE.build(level, picked.filter(p => !p.taskId) /* PRACTICA-TAREA-SET-V1: las tareas no van al instructivo */, mod ? mod.name : '', { title, note, lang });
     TT.addTemplate({ kind: 'practice', name: name.trim(), level, payload: { title, activities: picked, assignToStudents: assign, note, guide: finalGuide, dates: [] } });
     alert('⭐ Plantilla "' + name.trim() + '" guardada. La encuentras en 📁 Guardados.');
   };
@@ -1143,6 +1148,7 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
               <div style={{display:'flex', gap:7, flexWrap:'wrap', marginBottom:10}}>
                 <button onClick={() => setActTypeFilter('all')} style={pillStyle(actTypeFilter === 'all')}>Todas</button>
                 {typesPresent.map(t => <button key={t} onClick={() => setActTypeFilter(t)} style={pillStyle(actTypeFilter === t)}>{TLAB[t] || t}</button>)}
+                {setTasks.length > 0 && <button onClick={() => setActTypeFilter('task')} style={pillStyle(actTypeFilter === 'task')}>📋 Tareas</button>}
               </div>
               <div style={{display:'flex', flexDirection:'column', gap:8}}>
                 {topicGroups.map(g => {
@@ -1184,7 +1190,34 @@ function PracticePlanEditor({ date, initial, onSaved, onCancel, defaultGroupId, 
                     </div>
                   );
                 })}
-                {topicGroups.length === 0 && <div style={{padding:'16px', textAlign:'center', color:'#999', fontWeight:700, fontSize:12.5}}>Sin actividades de este tipo en el módulo.</div>}
+                {(actTypeFilter === 'all' || actTypeFilter === 'task') && setTasks.length > 0 && (() => { const tk = '📋 Tareas del grupo', collapsed = !!collapsedTopics[tk], pN = setTasks.filter(a => isTaskPicked(a.id)).length; return (
+                  <div style={{border:'1px solid #FDBA74', borderRadius:11, overflow:'hidden'}}>
+                    <button onClick={() => setCollapsedTopics(c => ({ ...c, [tk]: !c[tk] }))} style={{display:'flex', alignItems:'center', gap:9, width:'100%', textAlign:'left', cursor:'pointer', border:'none', background:'#FFF4E5', padding:'10px 12px', font:'inherit'}}>
+                      <span style={{flex:1, fontWeight:800, fontSize:13, color:'#9A4B00'}}>{tk}</span>
+                      {pN > 0 && <span style={{fontSize:11, fontWeight:800, color:'#9A4B00', background:'#FFE0B2', borderRadius:11, padding:'2px 9px'}}>{pN} ✓</span>}
+                      <span style={{fontSize:11, fontWeight:800, color:'#8a7f6a'}}>{setTasks.length}</span>
+                      <span style={{fontSize:12, color:'#8a7f6a', transform: collapsed ? 'none' : 'rotate(180deg)', display:'inline-block'}}>▾</span>
+                    </button>
+                    {!collapsed && <div style={{display:'flex', flexDirection:'column', gap:7, padding:'8px 10px'}}>
+                      {setTasks.map(a => { const on = isTaskPicked(a.id), p = picked.find(x => x.taskId === a.id); return (
+                        <React.Fragment key={a.id}>
+                          <button onClick={() => toggleTask(a)} style={{display:'flex', alignItems:'center', gap:10, textAlign:'left', cursor:'pointer', border:'1px solid ' + (on ? '#FDBA74' : '#E3DCC9'), background: on ? '#FFFAF3' : '#fff', borderRadius:10, padding:'9px 12px', font:'inherit', width:'100%'}}>
+                            <span style={{width:20, height:20, borderRadius:6, border:'2px solid ' + (on ? '#E67E00' : '#cdc4ad'), background: on ? '#E67E00' : '#fff', color:'#fff', fontSize:13, fontWeight:900, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>{on ? '✓' : ''}</span>
+                            <span style={{fontSize:15}}>📋</span>
+                            <span style={{flex:1, fontWeight:700, fontSize:13}}>{a.title}</span>
+                          </button>
+                          {on && <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', margin:'-2px 0 2px 30px', background:'#FFF4E5', border:'1.5px solid #FDBA74', borderRadius:9, padding:'7px 10px'}}>
+                            <span style={{fontSize:11.5, fontWeight:800, color:'#9A4B00'}}>🔗 Al tocarla, el alumno va a:</span>
+                            <select value={(p && p.dest) || 'win'} onChange={e => setTaskDest(a.id, e.target.value)} style={{fontFamily:'inherit', fontWeight:800, fontSize:12.5, border:'1.5px solid #FDBA74', borderRadius:9, padding:'6px 9px', cursor:'pointer', background:'#fff'}}>
+                              <option value="win">🪟 La ventana con las tareas de hoy (en orden)</option>
+                              <option value="one">📋 Solo esta tarea</option>
+                              <option value="list">📝 La lista «Mis tareas»</option>
+                            </select>
+                          </div>}
+                        </React.Fragment>); })}
+                    </div>}
+                  </div>); })()}
+                {topicGroups.length === 0 && actTypeFilter !== 'task' && <div style={{padding:'16px', textAlign:'center', color:'#999', fontWeight:700, fontSize:12.5}}>Sin actividades de este tipo en el módulo.</div>}
               </div>
             </>
           );
