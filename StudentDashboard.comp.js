@@ -2912,6 +2912,9 @@ function ptTaskState(a, student) {
   return { sub, isDs, ds, ro, g, due, late, done: !!sub && !ro, inline: isDs && ds && ds.mode !== 'class' && !late && !!window.DocSetPlayer };
 }
 const ptFmt = (iso) => { try { return new Date(iso).toLocaleDateString('es-PE', { weekday:'short', day:'numeric', month:'short' }); } catch (e) { return ''; } };
+/* TAREAS-VENTANA-PORTAL-V1 (14-nov): la ventana se dibuja en <body>. Dentro de la práctica, una tarjeta con transform/animación
+ * atrapaba el position:fixed (no se veía). Además, los clics no suben a la tarjeta de afuera. */
+function ptPortal(el) { const stop = e => e.stopPropagation(); const box = <div onClick={stop} onKeyDown={stop}>{el}</div>; try { return (window.ReactDOM && ReactDOM.createPortal && document.body) ? ReactDOM.createPortal(box, document.body) : box; } catch (e) { return box; } }
 function PracticeTasksGroup({ items, student }) {
   const [open, setOpen] = React.useState(false); const [, setTick] = React.useState(0);
   if (!student || !window.JUCUM_TASKS) return null;
@@ -2925,7 +2928,7 @@ function PracticeTasksGroup({ items, student }) {
       <div className="next-info"><b>{n === 1 ? (list[0].it.label || list[0].a.title) : 'Tus tareas de hoy'}</b><span>{allDone ? <span style={{color:'#2E7D32', fontWeight:800}}>✓ {n === 1 ? 'Entregada' : 'Las ' + n + ' entregadas'}</span> : n === 1 ? (sts[0].ro ? '🔁 Otra oportunidad · tócala para hacerla' : 'Tarea · tócala para hacerla') : k + ' de ' + n + ' hechas · sigue el paso ' + (nx + 1)}</span></div>
       <span className="next-arr">→</span>
     </div>
-    {open && <PracticeTasksSheet list={list} student={student} onClose={() => { setOpen(false); setTick(t => t + 1); }} />}
+    {open && ptPortal(<PracticeTasksSheet list={list} student={student} onClose={() => { setOpen(false); setTick(t => t + 1); }} />)}
   </>);
 }
 function PracticeTasksSheet({ list, student, onClose }) {
