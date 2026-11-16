@@ -76,8 +76,8 @@ function DocSetReview({ doc, groupId, fileName, onClose, onDone }) {
     setBusy(true); setErr(''); let ok = 0, fail = 0;
     for (const s of chosen) {
       const c = cfg[s.id]; const mode = c.dest === 'cls' ? 'class' : 'home';
-      const ds = { v: 1, step: s.step, title: s.title, part: s.part, kind: s.kind, grade: s.grade, en: s.en, es: s.es, ex: s.ex, file: fileName || '', docTitle: doc.title || '', lab: s.lab || 'Step', ...(s.ws ? { ws: s.ws } : {}), ...((s.bank || []).length ? { bank: s.bank } : {}), ...((s.msg || []).length ? { msg: s.msg } : {}),
-        items: s.items.map(x => ({ q: x.q, cue: x.cue, ces: x.ces || X.cueEs(x.cue), key: String(x.key || '').trim(), also: (x.also || []).filter(Boolean), tr: x.tr || '', ...(x.opts ? { opts: x.opts } : {}), ...(String(x.look || '').trim() ? { look: String(x.look).trim() } : {}), ...(String(x.story || '').trim() ? { story: String(x.story).trim() } : {}) })), mode, live: {} };
+      const ds = { v: 1, step: s.step, title: s.title, part: s.part, kind: s.kind, grade: s.grade, en: s.en, es: s.es, ex: s.ex, file: fileName || '', docTitle: doc.title || '', lab: s.lab || 'Step', ...(s.ws ? { ws: s.ws } : {}), ...((s.bank || []).length ? { bank: s.bank } : {}), ...((s.msg || []).length ? { msg: s.msg } : {}), ...((s.listen || []).length ? { listen: s.listen } : {}), ...(s.tap ? { tap: true } : {}),
+        items: s.items.map(x => ({ q: x.q, cue: x.cue, ces: x.ces || X.cueEs(x.cue), key: String(x.key || '').trim(), also: (x.also || []).filter(Boolean), tr: x.tr || '', ...(x.opts ? { opts: x.opts } : {}), ...(String(x.look || '').trim() ? { look: String(x.look).trim() } : {}), ...(String(x.story || '').trim() ? { story: String(x.story).trim() } : {}), ...(x.listen ? { listen: x.listen } : {}), ...(x.mean ? { mean: x.mean } : {}) })), mode, live: {} };
       if (mode === 'class') { ds.planDate = c.day; ds.time = c.time; if (c.time === 'mas') ds.until = new Date(c.until).toISOString(); }
       else ds.dueAt = new Date(c.due).toISOString();
       try { const r = await window.JUCUM_TASKS.createAssignment({ groupId, targetStudentIds: [], title: X.setLabel(s) + ': ' + s.title + (s.part ? ' · Practice ' + s.part : ''), description: X.describe(ds), dueAt: mode === 'home' ? ds.dueAt : null, gradable: true, xp: 40, attachments: [] }); (r && r.synced === false) ? fail++ : ok++; }
@@ -437,8 +437,66 @@ function DocSetViewLoader({ a, sid, onClose }) { const [rows, refresh] = dsUseSu
 const DS_DRAFT_KEY = 'jucum_docset_draft_v1';
 function dsDraftGet(aid, sid) { try { const o = JSON.parse(localStorage.getItem(DS_DRAFT_KEY) || '{}'); const v = o[aid + '|' + sid]; return v && v.sid === sid ? v : null; } catch (e) { return null; } }
 function dsDraftSet(aid, sid, v) { try { const o = JSON.parse(localStorage.getItem(DS_DRAFT_KEY) || '{}'); const lim = Date.now() - 14 * 86400000; Object.keys(o).forEach(k => { if (!o[k] || (o[k]._t || 0) < lim || k.indexOf('|') < 0) delete o[k]; }); const key = aid + '|' + sid; if (v) o[key] = { ...v, sid, _t: Date.now() }; else delete o[key]; if (window.JUCUM_STORE) window.JUCUM_STORE.setJSON(DS_DRAFT_KEY, o); else localStorage.setItem(DS_DRAFT_KEY, JSON.stringify(o)); } catch (e) {} }
+/* 🎧 TAREAS-ESCUCHA-V1 · 🤔 TAREAS-SIGNIFICA-V1 · 🧩 TAREAS-BLOQUES-V1 · 🔀 TAREAS-AZAR-V1 (16-nov-2026, aprobado en «Propuesta v2 - Tareas PreA1 M6»)
+ * Escuchar (voz del navegador, como los materiales) · «¿Qué significa?» después de comprobar (no cambia la nota) · bloques para tocar ·
+ * opciones, bloques y banco al azar por alumno (la nota se compara por TEXTO, nunca por posición; los bloques nunca quedan en el orden correcto). */
+const dsRng = (seed) => { let t = seed >>> 0; return () => { t += 0x6D2B79F5; let r = Math.imul(t ^ (t >>> 15), 1 | t); r ^= r + Math.imul(r ^ (r >>> 7), 61 | r); return ((r ^ (r >>> 14)) >>> 0) / 4294967296; }; };
+const dsNrm = (s) => String(s || '').toLowerCase().replace(/[^a-z' ]/g, ' ').replace(/\s+/g, ' ').trim();
+function dsMix(ds0, seed) {
+  if (!ds0 || !ds0.items) return ds0; const rnd = dsRng(seed); const mix = (a) => { const o = a.slice(); for (let k = o.length - 1; k > 0; k--) { const j = Math.floor(rnd() * (k + 1)); [o[k], o[j]] = [o[j], o[k]]; } return o; };
+  const ds = { ...ds0, items: ds0.items.map(it => ({ ...it })) }; if ((ds.bank || []).length) ds.bank = mix(ds.bank);
+  ds.items.forEach(it => { if (it.opts && it.opts.length > 1) { it.opts = mix(it.opts); return; }
+    const q = String(it.q || ''); if (q.indexOf(' / ') < 0) return; const m = q.match(/^(.*?→\s*)?(.+?)(\s*\([^)]*\))?$/); if (!m) return;
+    const bl = m[2].split(' / '), good = [it.key].concat(it.also || []).map(dsNrm).filter(Boolean); let o = bl, t = 0;
+    do { o = mix(bl); t++; } while (t < 25 && good.some(g => g.indexOf(dsNrm(o.join(' '))) === 0));
+    it.q = (m[1] || '') + o.join(' / ') + (m[3] || ''); });
+  return ds;
+}
+function DsListenCard({ text, small }) {
+  const [n, setN] = dsUS(0), [on, setOn] = dsUS(false);
+  const say = (rate) => { const S = window.speechSynthesis; if (!S) { alert('Este equipo no puede leer en voz alta.'); return; } S.cancel();
+    const u = new SpeechSynthesisUtterance(text); u.lang = 'en-US'; u.rate = rate; const vs = S.getVoices ? S.getVoices() : [];
+    const v = vs.find(z => /en[-_]US/i.test(z.lang) && /female|samantha|google us|zira|jenny|aria/i.test(z.name)) || vs.find(z => /en[-_]US/i.test(z.lang)); if (v) u.voice = v;
+    u.onend = () => setOn(false); u.onerror = () => setOn(false); setOn(true); setN(x => x + 1); S.speak(u); };
+  dsUE(() => () => { try { window.speechSynthesis.cancel(); } catch (e) {} }, [text]);
+  const b = { border: '1.5px solid #80CBC4', background: '#fff', color: '#00695C', borderRadius: 22, padding: '8px 14px', fontWeight: 900, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', minHeight: 44 };
+  return <div style={{ marginTop: small ? 4 : 8, marginBottom: small ? 6 : 0, background: '#E0F2F1', borderRadius: 13, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+    {!small && <b style={{ fontSize: 10.5, letterSpacing: '.06em', textTransform: 'uppercase', color: '#00695C', width: '100%' }}>🎧 Escucha</b>}
+    <button type="button" onClick={() => say(.85)} style={b}>{on ? '🔊 Escuchando…' : '▶ Escuchar'}</button>
+    <button type="button" onClick={() => say(.6)} style={b}>🐢 Más lento</button>
+    {n > 0 && <span style={{ fontSize: 12, fontWeight: 800, color: '#00695C' }}>Escuchaste {n} {n === 1 ? 'vez' : 'veces'}</span>}
+  </div>;
+}
+
+function DsMeaningCard({ opts, pick, onPick, seed }) {
+  const order = React.useMemo(() => { const rnd = dsRng(seed || 1); const o = opts.map((t, k) => k); for (let k = o.length - 1; k > 0; k--) { const j = Math.floor(rnd() * (k + 1)); [o[k], o[j]] = [o[j], o[k]]; } return o; }, [opts.join('|'), seed]);
+  const done = pick != null;
+  return <div style={{ marginTop: 10, background: '#FFF8E1', border: '2px solid #FFE082', borderRadius: 13, padding: '11px 12px' }}>
+    <div style={{ fontSize: 14.5, fontWeight: 900, color: '#7A4A00' }}>🤔 ¿Qué significa la oración?</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 8 }}>{order.map(k => { const ok = k === 0, me = pick === k;
+      const bd = done ? (ok ? '#66BB6A' : me ? '#FFB74D' : '#F0E3B5') : '#FFE082', bg = done ? (ok ? '#E8F5E9' : me ? '#FFF3E0' : '#fff') : '#fff';
+      return <button key={k} type="button" disabled={done} onClick={() => onPick(k)} style={{ textAlign: 'left', border: '2px solid ' + bd, background: bg, borderRadius: 12, padding: '10px 12px', fontSize: 15, fontWeight: 800, minHeight: 46, cursor: done ? 'default' : 'pointer', fontFamily: 'inherit', color: '#1d2433' }}>{done && ok ? '✔ ' : done && me ? '✘ ' : ''}{opts[k]}</button>; })}</div>
+    {done && <div style={{ marginTop: 8, fontSize: 13, fontWeight: 800, color: pick === 0 ? '#1B5E20' : '#8A4B00' }}>{pick === 0 ? '¡Exacto! Entendiste la oración.' : 'Casi. Mira la respuesta en verde y vuelve a leer la oración en inglés.'}</div>}
+    {!done && <div style={{ marginTop: 6, fontSize: 11.5, fontWeight: 700, color: '#8A6A2A' }}>Responde para pasar al siguiente. No cambia tu nota.</div>}
+  </div>;
+}
+
+function DsTapBlocks({ q, setTxt }) {
+  const blocks = React.useMemo(() => String(q || '').split(/\s*\/\s*/).map(s => s.trim()).filter(Boolean), [q]);
+  const [used, setUsed] = dsUS([]);
+  const build = u => { let s = u.map(k => blocks[k]).join(' '); if (s) { s = s.charAt(0).toUpperCase() + s.slice(1); if (!/[.!?]$/.test(s)) s += '.'; } return s; };
+  const upd = u => { setUsed(u); setTxt(build(u)); };
+  const chip = (on) => ({ border: '2px solid ' + (on ? '#1E88E5' : '#BBDEFB'), background: on ? '#E3F2FD' : '#fff', color: '#0D47A1', borderRadius: 12, padding: '9px 13px', fontWeight: 900, fontSize: 15.5, cursor: 'pointer', fontFamily: 'inherit', minHeight: 44 });
+  return <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div style={{ minHeight: 54, border: '2px dashed #90CAF9', borderRadius: 12, padding: 6, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', background: '#F9FBFF' }}>
+      {used.length ? used.map((k, p) => <button key={p} type="button" onClick={() => upd(used.filter((_, z) => z !== p))} style={chip(true)}>{blocks[k]}</button>) : <span style={{ fontSize: 13, fontWeight: 700, color: '#7A8BA8', padding: '0 6px' }}>Toca los bloques en el orden que escuchaste</span>}
+    </div>
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{blocks.map((b, k) => used.includes(k) ? <span key={k} style={{ ...chip(false), opacity: .25, cursor: 'default' }}>{b}</span> : <button key={k} type="button" onClick={() => upd(used.concat([k]))} style={chip(false)}>{b}</button>)}</div>
+    {used.length > 0 && <button type="button" onClick={() => upd([])} style={{ alignSelf: 'flex-start', border: 'none', background: 'none', color: '#5A6A90', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit', padding: 4 }}>↺ Borrar y empezar</button>}
+  </div>;
+}
 function DocSetPlayer({ a: a0, student, onClose }) {
-  const X = DSX(), T = window.JUCUM_TASKS; const [a, setA] = dsUS(a0); const ds = X.meta(a); const n = ds.items.length;
+  const X = DSX(), T = window.JUCUM_TASKS; const [a, setA] = dsUS(a0); const [mixSeed] = dsUS(() => Math.floor(Math.random() * 1e9) + 1); const ds = dsMix(X.meta(a), mixSeed); const n = ds.items.length; /* 🔀 TAREAS-AZAR-V1 */
   const sub = T.getSubmission(a.id, student.id); const final0 = sub && X.unpack(sub.text);
   /* 🔁 TAREA-REHACER-V1: con otra oportunidad abierta empieza DESDE CERO; el borrador queda solo en este equipo (la nube
    * conserva la entrega anterior y su nota hasta que entregue) y al entregar se guarda la anterior en ans.hist. */
@@ -446,7 +504,7 @@ function DocSetPlayer({ a: a0, student, onClose }) {
   const [st, setSt] = dsUS(() => { const dr = dsDraftGet(a.id, student.id); return X.upgrade(ds, redo ? (dr && dr.redoAt === redo.at ? dr : { ans: [], res: [], tr: [], fb: [], startedAt: new Date().toISOString(), redoAt: redo.at }) : final0 ? { ...final0, done: true } : (dr || { ans: [], res: [], tr: [], fb: [], startedAt: new Date().toISOString() })).ans; });
   dsUE(() => { if (!redo) return; let stop = false; X.fetchMine(a.id, student.id).then(row => { const z = !stop && row && X.unpack(row.text); if (!z) return; baseRef.current = { ans: z, row };
     if (z.at && Date.parse(z.at) >= Date.parse(redo.at)) { dsDraftSet(a.id, student.id, null); setSt({ ...X.upgrade(ds, z).ans, done: true }); } }); return () => { stop = true; }; }, []);
-  const [i, setI] = dsUS(() => Math.min((st.res || []).filter(Boolean).length, n - 1)); const [txt, setTxt] = dsUS(''); const [showTr, setShowTr] = dsUS(false);
+  const [i, setI] = dsUS(() => Math.min((st.res || []).filter(Boolean).length, n - 1)); const [txt, setTxt] = dsUS(''); const [showTr, setShowTr] = dsUS(false); const [mean, setMean] = dsUS({});
   const [now, setNow] = dsUS(Date.now()); const [saving, setSaving] = dsUS(false); const [closedMsg, setClosedMsg] = dsUS(false); const taRef = dsUR(null); const [msgEs, setMsgEs] = dsUS(false);
   /* ☁️ DOCSETS-FIX-V2: antes de dejar responder se mira la nube. Si empezó en otro equipo, sigue donde iba (sin repetir
    * ejercicios = 1 intento de verdad); si ya la entregó, ve sus respuestas. Sin red (5 s) sigue con lo de este equipo. */
@@ -503,25 +561,28 @@ function DocSetPlayer({ a: a0, student, onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><b style={{ fontSize: 10.5, letterSpacing: '.06em', textTransform: 'uppercase', color: '#00695C' }}>✉️ Mensaje</b>{ds.msg.some(m => dsMsgSplit(m).es) && <button type="button" onClick={() => setMsgEs(v => !v)} style={{ marginLeft: 'auto', border: '1.5px solid ' + (msgEs ? '#80CBC4' : 'var(--border)'), background: msgEs ? '#E0F2F1' : '#fff', color: '#00695C', borderRadius: 20, padding: '5px 11px', fontWeight: 900, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', minHeight: 36 }}>🌐 {msgEs ? 'Ocultar español' : 'Ver en español'}</button>}</div>
         {ds.msg.map((m, k2) => { const p = dsMsgSplit(m); return <div key={k2} style={{ fontSize: 14.5, fontWeight: 700, lineHeight: 1.5, marginTop: 4 }}>{p.en}{msgEs && p.es ? <div style={{ fontSize: 12.5, fontWeight: 700, color: '#5A6A90', fontStyle: 'italic' }}>{p.es}</div> : null}</div>; })}
       </div>}
+      {(ds.listen || []).length > 0 && <DsListenCard text={ds.listen.join(' ')} />}
       {i === 0 && !r && ds.ex && ds.ex[0] && <div style={{ marginTop: 8, background: '#FFFDF4', border: '1px dashed #F0C66B', borderRadius: 12, padding: '9px 11px', fontSize: 12.5, fontWeight: 700, color: '#5A4A1A' }}><b style={{ fontSize: 10.5, letterSpacing: '.06em', textTransform: 'uppercase', color: '#8A5A00', display: 'block' }}>Ejemplo</b>{ds.ex[0]}<br />→ <i>{ds.ex[1]}</i></div>}
       {ds.grade === 'sent' && i === 0 && !r && <div style={{ marginTop: 8, background: '#E3F2FD', color: '#0D47A1', borderRadius: 12, padding: '9px 11px', fontSize: 12.8, fontWeight: 800, lineHeight: 1.5 }}>💡 Responde con una <b>oración completa</b> (quién + verbo + lo demás) con la información de la historia. Si lo dices con otras palabras, <b>la revisa tu profe</b>: “📝 la revisa tu profe” no es un error.</div>}
       {ds.grade !== 'exact' && ds.grade !== 'sent' && i === 0 && !r && <div style={{ marginTop: 8, background: '#E3F2FD', color: '#0D47A1', borderRadius: 12, padding: '9px 11px', fontSize: 12.8, fontWeight: 800, lineHeight: 1.5 }}>💡 Aquí <b>no hay una sola respuesta correcta</b>: usa tu propia idea. Algunas respuestas las revisa tu profe a mano. Si ves “📝 la revisa tu profe”, <b>no te equivocaste</b>.</div>}
       <div style={{ display: 'flex', gap: 5, margin: '12px 0 8px' }}>{ds.items.map((x, k) => { const v = (st.res || [])[k]; return <i key={k} style={{ flex: 1, height: 8, borderRadius: 5, background: v === 'ok' || v === 'okd' ? '#66BB6A' : v === 'rev' ? '#90CAF9' : v === 'bad' ? '#FFB74D' : k === i ? '#2196F3' : '#E3E8F0' }}></i>; })}</div>
       <div style={{ background: '#fff', borderRadius: 16, padding: '13px 14px', boxShadow: 'var(--shadow-sm)', border: '2px solid #BBDEFB' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 900, color: '#0D47A1', letterSpacing: '.05em', textTransform: 'uppercase' }}>Ejercicio {i + 1} de {n} · 1 intento
-          <button onClick={() => { if (!it.tr) { window.open(X.trUrl(it.q), '_blank'); setShowTr(true); return; } setShowTr(v => !v); }} style={{ marginLeft: 'auto', border: '1.5px solid ' + (showTr ? '#90CAF9' : 'var(--border)'), background: showTr ? '#E3F2FD' : '#fff', color: '#0D47A1', borderRadius: 20, padding: '6px 12px', fontWeight: 900, fontSize: 12, textTransform: 'none', letterSpacing: 0, cursor: 'pointer', fontFamily: 'inherit', minHeight: 36 }}>🌐 {showTr && it.tr ? 'Ocultar traducción' : 'Traducir'}</button></div>
-        <div style={{ fontSize: 16.5, fontWeight: 800, lineHeight: 1.5, margin: '6px 0' }}>{it.q}</div>
+          {/* TAREAS-TRADUCIR-AQUI-V1: sin traducción no hay botón (ya no abre otra página) */ it.tr && <button onClick={() => setShowTr(v => !v)} style={{ marginLeft: 'auto', border: '1.5px solid ' + (showTr ? '#90CAF9' : 'var(--border)'), background: showTr ? '#E3F2FD' : '#fff', color: '#0D47A1', borderRadius: 20, padding: '6px 12px', fontWeight: 900, fontSize: 12, textTransform: 'none', letterSpacing: 0, cursor: 'pointer', fontFamily: 'inherit', minHeight: 36 }}>🌐 {showTr && it.tr ? 'Ocultar traducción' : 'Traducir'}</button>}</div>
+        {ds.tap ? null : <div style={{ fontSize: 16.5, fontWeight: 800, lineHeight: 1.5, margin: '6px 0' }}>{it.q}</div>}{it.listen && <DsListenCard small key={'l' + i} text={it.listen} />}
         {it.look && <div style={{ display: 'inline-block', fontSize: 12.5, fontWeight: 800, color: '#8A5A00', background: '#FFF8E1', borderRadius: 9, padding: '5px 9px', marginBottom: 6 }}>🔎 Busca en: {it.look}</div>}
         {showTr && it.tr && <div style={{ fontSize: 13.5, fontWeight: 700, color: '#5A6A90', fontStyle: 'italic', background: '#F3F8FF', borderRadius: 9, padding: '6px 9px', marginBottom: 6 }}>🇪🇸 {it.tr}</div>}
         {it.cue && <span style={{ display: 'inline-flex', gap: 6, fontSize: 13, fontWeight: 900, borderRadius: 20, padding: '5px 12px', background: '#EDE7F6', color: '#4527A0' }}>{it.cue}{it.ces ? <small style={{ fontWeight: 700, color: '#6A5A9A' }}>= {it.ces}</small> : null}</span>}
         {ds.kind === 'word' && (ds.bank || []).length > 0 && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}><span style={{ fontSize: 11, fontWeight: 900, color: '#4527A0', textTransform: 'uppercase', letterSpacing: '.05em', whiteSpace: 'nowrap' }}>Banco de palabras</span>{ds.bank.map((w, k2) => <button key={k2} type="button" disabled={!!r || sync} onClick={() => setTxt(w)} style={{ border: '1.5px solid #D1C4E9', background: !r && txt === w ? '#EDE7F6' : '#fff', color: '#4527A0', borderRadius: 18, padding: '6px 12px', fontWeight: 800, fontSize: 13.5, cursor: r ? 'default' : 'pointer', fontFamily: 'inherit', minHeight: 40 }}>{w}</button>)}</div>}
         {ds.kind === 'mcq' && it.opts && <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 10 }}>{it.opts.map((o, k2) => { const picked = (r ? (st.ans || [])[i] : txt) === o; return <button key={k2} type="button" disabled={!!r || sync} onClick={() => setTxt(o)} style={{ textAlign: 'left', border: '2px solid ' + (picked ? '#1E88E5' : '#BBDEFB'), background: picked ? '#E3F2FD' : r ? '#F6F6F2' : '#F9FBFF', borderRadius: 12, padding: '10px 12px', fontSize: 15.5, fontWeight: 800, minHeight: 48, cursor: r ? 'default' : 'pointer', fontFamily: 'inherit', color: '#1d2433' }}><b style={{ color: '#1565C0', marginRight: 8 }}>{'abcd'[k2]})</b>{o}</button>; })}</div>}
-        {ds.kind === 'mcq' && it.opts ? null : <textarea ref={taRef} value={r ? (st.ans || [])[i] : txt} readOnly={!!r} onChange={e => setTxt(e.target.value)} placeholder={ds.kind === 'word' ? 'Escribe la palabra…' : 'Escribe tu oración en inglés…'} style={{ width: '100%', marginTop: 10, border: '2px solid #BBDEFB', borderRadius: 12, padding: '10px 11px', fontSize: 15.5, fontWeight: 700, minHeight: ds.kind === 'word' ? 46 : 64, resize: 'none', background: r ? '#F6F6F2' : '#F9FBFF', fontFamily: 'inherit', boxSizing: 'border-box' }} />}
+        {ds.tap && !r && <DsTapBlocks key={'tb' + i} q={it.q} setTxt={setTxt} />}
+        {ds.kind === 'mcq' && it.opts ? null : <textarea ref={taRef} value={r ? (st.ans || [])[i] : txt} readOnly={!!r || !!ds.tap} onChange={e => setTxt(e.target.value)} onKeyDown={e => { /* TAREAS-ENTER-V1: Enter = ✓ Comprobar */ if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!r && txt.trim() && !sync) check(); } }} placeholder={ds.kind === 'word' ? 'Escribe la palabra…' : 'Escribe tu oración en inglés…'} style={{ width: '100%', marginTop: 10, border: '2px solid #BBDEFB', borderRadius: 12, padding: '10px 11px', fontSize: 15.5, fontWeight: 700, minHeight: ds.kind === 'word' ? 46 : 64, resize: 'none', background: r ? '#F6F6F2' : '#F9FBFF', fontFamily: 'inherit', boxSizing: 'border-box' }} />}
         {!r && !(ds.kind === 'mcq' && it.opts) && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}><button type="button" onMouseDown={e => e.preventDefault()} onClick={putApos} disabled={sync} title="Apóstrofo: isn't · doesn't · it's" style={{ border: '1.5px solid #BBDEFB', background: '#fff', color: '#0D47A1', borderRadius: 20, padding: '6px 14px', fontWeight: 900, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', minHeight: 44, display: 'inline-flex', gap: 7, alignItems: 'center' }}><b style={{ fontSize: 24, lineHeight: 1, fontFamily: 'Arial, sans-serif' }}>'</b> Apóstrofo</button><span style={{ fontSize: 12, fontWeight: 700, color: '#5A6A90' }}>para isn't · doesn't · it's</span></div>}
         {r && <div style={{ marginTop: 10, borderRadius: 12, padding: '10px 12px', fontSize: 13, fontWeight: 800, lineHeight: 1.5, background: r === 'ok' ? '#E8F5E9' : r === 'okd' ? '#F1F8E9' : r === 'rev' ? '#E3F2FD' : '#FFF3E0', color: r === 'ok' ? '#1B5E20' : r === 'okd' ? '#33691E' : r === 'rev' ? '#0D47A1' : '#8A4B00' }}>
           {r === 'ok' ? '✔ ¡Correcto!' : r === 'okd' ? <>✔ Correcto · vale completo. Ojo: {(st.fb || [])[i] || 'mayúscula, tilde o signo final'}.</> : r === 'rev' ? <>📝 ¡Buena idea! Esta respuesta <b>la revisa tu profe a mano</b>. <b>No es un error.</b></> : <>✘ Todavía no.{(st.fb || [])[i] ? ' 💡 ' + st.fb[i] : ''}{((st.nr || [])[i] || it.key) ? <><br />Respuesta: <u style={{ textDecoration: 'none', background: 'rgba(255,255,255,.7)', borderRadius: 6, padding: '1px 5px' }}>{(st.nr || [])[i] || it.key}</u></> : null}</>}</div>}
+        {r && it.mean && <DsMeaningCard key={'m' + i} seed={mixSeed + i} opts={it.mean} pick={mean[i]} onPick={k => setMean(m => ({ ...m, [i]: k }))} />}
         <div style={{ marginTop: 10 }}>{r
-          ? <button className="btn-save" style={{ width: '100%', minHeight: 48 }} disabled={saving} onClick={next}>{i === n - 1 ? (saving ? 'Entregando…' : '📨 Entregar') : 'Siguiente ▶'}</button>
+          ? <button className="btn-save" style={{ width: '100%', minHeight: 48 }} disabled={saving || (it.mean && mean[i] == null)} onClick={next}>{i === n - 1 ? (saving ? 'Entregando…' : '📨 Entregar') : 'Siguiente ▶'}</button>
           : <button className="btn-save" style={{ width: '100%', minHeight: 48 }} disabled={!txt.trim() || sync} onClick={check}>{sync ? '⏳ Revisando tu avance…' : '✓ Comprobar'}</button>}</div>
       </div>
       <div style={{ marginTop: 12, fontSize: 12, fontWeight: 700, color: 'var(--text-soft)', textAlign: 'center', lineHeight: 1.5 }}>1 intento por ejercicio. Olvidar una tilde, el punto o la mayúscula <b>no te baja la nota</b>: solo te avisamos.</div>

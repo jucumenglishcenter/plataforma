@@ -167,7 +167,10 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
   const chosenText = answered ? (isTr ? (run.chosen || []).join(' ') : pres === 'write' ? String(run.chosen || '') : pres === 'hunt' ? (run.chosen && run.chosen.fix) : st.opts[run.chosen]) : null;
   const rightText = isTr ? q.answer.join(' ') : pres === 'write' ? st.w.want : pres === 'hunt' ? st.h.want : st.opts[st.ans];
   const checkWrite = () => { if (typed.trim()) choose(typed.trim()); };
-  const tapWord = (w) => { if (answered || hunt.hit) return; if (MIX.wordNorm(w) === MIX.wordNorm(st.h.err)) setHunt({ ...hunt, hit: true }); else if (hunt.miss.indexOf(w) < 0) setHunt({ ...hunt, miss: hunt.miss.concat([w]) }); };
+  const tapWord = (w) => { if (answered || hunt.hit) return; if (!/[A-Za-z0-9]/.test(w)) return; /* HUNT-SIN-SIGNOS-V1: tocar «—» u otro signo suelto no cuenta como toque */ if (MIX.wordNorm(w) === MIX.wordNorm(st.h.err)) setHunt({ ...hunt, hit: true }); else if (hunt.miss.indexOf(w) < 0) setHunt({ ...hunt, miss: hunt.miss.concat([w]) }); };
+  // HUNT-TOQUES-EXPLICA-V1 (15-nov-2026): si falló «Caza el error» por los toques, decir por qué (la regla de máx. 1 toque NO cambia)
+  const huntTaps = answered && pres === 'hunt' && !ok && run.chosen && (run.chosen.misses || 0) > 1 ? run.chosen.misses : 0;
+  const huntFixOk = !!(huntTaps && MIX.wordNorm(run.chosen.fix) === MIX.wordNorm(st.h.want));
   const checkTr = () => { if (!tray.length) return; choose(tray.map(i => q.tiles[i])); };
   const html = (s) => ({ __html: s || '' });
   return (
@@ -280,7 +283,8 @@ function MixedPlayer({ uid, mats, run, setRun, color, onFinish, onAnswered }) {
       {answered && (
         <div className={'mx-fb ' + (ok ? 'ok' : 'no')} ref={fbRef}>
           <div className="mx-ft">{ok ? (run.mode === 'bonus' ? '✅ ¡Correcto! +2 XP' : '✅ ¡Correcto!' + (gotXp ? ' +' + gotXp + ' XP' : '')) : 'Casi… veamos por qué' + (gotXp ? ' · +' + gotXp + ' XP por intentarlo' : '')}</div>
-          {!ok && <div className="mx-cmp"><span className="yo">Tu respuesta<b>{chosenText}</b></span><span className="ok2">Correcta<b>{rightText}</b></span></div>}
+          {!ok && !huntFixOk && <div className="mx-cmp"><span className="yo">Tu respuesta<b>{chosenText}</b></span><span className="ok2">Correcta<b>{rightText}</b></span></div>}
+          {huntTaps > 0 && <div className="mx-blk" style={{ background: '#FFF7EC', border: '1px solid #F3C892' }}><small style={{ color: '#B86A00' }}>👆 Por qué no contó</small>{huntFixOk ? <>Elegiste bien la corrección (<b style={{ color: '#2E7D32' }}>{st.h.want}</b>), pero antes de encontrar el error tocaste <b>{huntTaps} palabras</b> que estaban bien</> : <>Además, antes de encontrar el error tocaste <b>{huntTaps} palabras</b> que estaban bien</>}{hunt.miss.length ? <>: <b>{hunt.miss.join(' · ')}</b></> : null}.<div style={{ marginTop: 4 }}>Para que cuente, tienes que encontrar el error con <b>máximo 1 toque equivocado</b>. 💡 Lee toda la oración antes de tocar.</div></div>}
           {pres === 'write' || pres === 'hunt' ? (
             <>
               {pres === 'hunt' && <div className="mx-blk err"><small>⚠ {st.h.type || 'El error'}</small><div style={{ marginBottom: 3 }}><b style={{ color: '#B86A00', textDecoration: 'line-through' }}>{st.h.err}</b> → <b style={{ color: '#2E7D32' }}>{st.h.want}</b></div><span dangerouslySetInnerHTML={html(st.h.exp)}></span></div>}

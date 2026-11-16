@@ -39,7 +39,7 @@
   /* DOCSETS-A2-V1 (03-nov): A2 titula «Working Set 1 • Set 2: …» o «Set 6: …» (igual que Step N) */
   const RE_WSET = /^working\s*set\s*(\d+)\s*[•·|–\-:]\s*set\s*(\d+[a-z]?)\s*[:.\-–]\s*(.+)$/i;
   const RE_SET = /^set\s*(\d+[a-z]?)\s*[:.\-–]\s*(.+)$/i;
-  const MARK = /^(answer|also|look\s*in|source|traducci[oó]n|translation|es|word\s*bank|message|example|step|set|working\s*set)\b/i;
+  const MARK = /^(answer|also|look\s*in|source|listen|meaning|tap|traducci[oó]n|translation|es|word\s*bank|message|example|step|set|working\s*set)\b/i;
   const setLabel = s => s ? ((s.ws ? 'Working Set ' + s.ws + ' • ' : '') + (s.lab || 'Step') + ' ' + s.step) : '';
   function splitOpts(q) { const m = String(q || '').split(/\s*\(([a-dA-D])\)\s*/); if (m.length < 5) return null; const opts = []; for (let k = 1; k < m.length; k += 2) opts.push(String(m[k + 1] || '').trim()); return opts.every(Boolean) ? { stem: m[0].trim(), opts } : null; }
   const RE_JUNK = /(student sheet|teacher sheet|^--\s*\d+\s*of\s*\d+\s*--$|^page\s*\d+|^name\s*[:/]|^date\s*[:/])/i;
@@ -84,6 +84,10 @@
       const last = cur.items[cur.items.length - 1];
       /* PDF: una respuesta larga puede venir partida en dos renglones (el 2.º empieza en minúscula) */
       if (c0 && /^[a-záéíóúñ]/.test(l) && !MARK.test(l) && !/[.?!]$/.test(String(c0.o[c0.k]))) { c0.o[c0.k] += ' ' + l; cont = c0; return; }
+      /* 🎧 TAREAS-ESCUCHA-V1 (16-nov-2026, aprobado en «Propuesta v2 - Tareas PreA1 M6»): Listen: = audio (debajo de la consigna → del set · debajo de una pregunta → de esa pregunta) · Meaning: = «¿Qué significa?» (opciones con |, la 1.ª es la correcta) · Tap: blocks = bloques para tocar */
+      const lsn = l.match(/^listen\s*[:：]\s*(.+)$/i); if (lsn) { if (last && mode === 'items') last.listen = lsn[1].trim(); else (cur.listen = cur.listen || []).push(lsn[1].trim()); return; }
+      const mng = l.match(/^meaning\s*[:：]\s*(.+)$/i); if (mng) { const o = mng[1].split('|').map(t => t.trim()).filter(Boolean); if (last && o.length > 1) last.mean = o; return; }
+      if (/^tap\s*[:：]\s*blocks?$/i.test(l)) { cur.tap = true; return; }
       if (/^example\b/i.test(l)) { mode = 'ex'; const rest = l.replace(/^example\s*[:.]?\s*/i, ''); if (rest) cur.ex[0] = rest; return; }
       if (mode === 'ex' && /^(→|->|=>)/.test(l)) { cur.ex[1] = l.replace(/^(→|->|=>)\s*/, ''); mode = 'items'; return; }
       if (mode === 'ex' && !cur.ex[0]) { cur.ex[0] = l; return; }
@@ -117,8 +121,8 @@
   function merge(a, b) {
     if (!b || !b.sets.length) return a; if (!a || !a.sets.length) return b;
     a.sets.forEach(s => { const t = b.sets.find(x => x.step === s.step && x.practice === s.practice) || b.sets.find(x => x.title === s.title); if (!t) return;
-      s.items.forEach((x, i) => { const y = t.items[i]; if (!y) return; if (y.src === 'teacher' && y.key) { x.key = y.key; x.src = 'teacher'; } if (y.also.length) x.also = y.also; if (y.tr) x.tr = y.tr; if (y.story) x.story = y.story; if (y.look) x.look = y.look; if (y.opts && !x.opts) x.opts = y.opts; });
-      if ((t.bank || []).length && !(s.bank || []).length) s.bank = t.bank; if ((t.msg || []).length && !(s.msg || []).length) s.msg = t.msg; });
+      s.items.forEach((x, i) => { const y = t.items[i]; if (!y) return; if (y.src === 'teacher' && y.key) { x.key = y.key; x.src = 'teacher'; } if (y.also.length) x.also = y.also; if (y.listen) x.listen = y.listen; if (y.mean) x.mean = y.mean; if (y.tr) x.tr = y.tr; if (y.story) x.story = y.story; if (y.look) x.look = y.look; if (y.opts && !x.opts) x.opts = y.opts; });
+      if ((t.bank || []).length && !(s.bank || []).length) s.bank = t.bank; if ((t.msg || []).length && !(s.msg || []).length) s.msg = t.msg; if ((t.listen || []).length && !(s.listen || []).length) s.listen = t.listen; if (t.tap) s.tap = true; });
     return a;
   }
 
