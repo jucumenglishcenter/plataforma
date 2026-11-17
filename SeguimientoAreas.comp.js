@@ -197,7 +197,7 @@ function SaClass({ F, studs, t, daily, date, setDate, onPop }) {
 
 /* ── 📝 Tareas ── */
 function saTasks(F, gid, t) { const S = window.JUCUM_SEG; return (F.tasks || []).filter(x => x.groupId === gid && x.dueAt && saPeru(x.dueAt) >= S.addD(t, -28) && saPeru(x.dueAt) <= S.addD(t, 14)).sort((a, b) => a.dueAt.localeCompare(b.dueAt)).slice(-6); }
-function saTState(tk, st, F, thr) { const s = ((F.subs || {})[String(st.id)] || {})[tk.id]; const past = Date.now() > Date.parse(tk.dueAt); if (tk.targets && tk.targets.length && tk.targets.indexOf(String(st.id)) < 0) return { c: 'na' };
+function saTState(tk, st, F, thr) { const s = ((F.subs || {})[String(st.id)] || {})[tk.id]; const past = Date.now() > Date.parse(tk.dueAt); if (tk.targets && tk.targets.length && tk.targets.indexOf(String(st.id)) < 0) return { c: 'na' }; if (tk.extra && !s) return { c: 'f' }; /* ✨ TAREA-EXTRA-V1: sin entregar ≠ «no entregó» */
   if (!s) return past ? { c: 'n' } : { c: 'f' }; const late = s.at && Date.parse(s.at) > Date.parse(tk.dueAt); const g = s.grade;
   if (g == null) return { c: 'r', late, s }; return g >= thr ? { c: 'o', g, late, s } : { c: 'l', g, late, s }; }
 function SaTasks({ F, studs, t, onTask }) {

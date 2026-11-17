@@ -359,6 +359,7 @@ function StudentDashboard({ user, onLogout }) {
       const soon = (T.assignmentsForStudent(student) || []).filter(a => {
         if (!a.dueAt) return false;
         if (T.getSubmission(a.id, student.id)) return false;          // ya entregada
+        if (window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.isExtra && window.JUCUM_DOCSETS.isExtra(a)) return false;   // ✨ TAREA-EXTRA-V1: sin cartel de «vence pronto»
         const diff = new Date(a.dueAt) - new Date();
         if (diff <= 0) return false;                                  // ya venció
         return Math.ceil(diff / 86400000) <= 3;                       // 3 días o menos

@@ -56,6 +56,7 @@
   }
   /* Tarea 🏫 de clase (documento): «mode":"class"» dentro del bloque oculto (codificado con encodeURIComponent). */
   var CLASS_LIKE = encodeURIComponent('*' + encodeURIComponent('"mode":"class"') + '*');
+  var EXTRA_LIKE = encodeURIComponent('*' + encodeURIComponent('"extra":true') + '*');   /* ✨ TAREA-EXTRA-V1 */
   function stamp(r) { return String((r && (r.savedAt || r.updatedAt || r.createdAt)) || ''); }
   function mergePlans(cloud, local) {   // misma regla que teacher-tools (cloudMerge): por id, gana la marca más nueva
     var m = {}, o = [];
@@ -95,12 +96,13 @@
       }));
     });
     if (groups.length) {
-      var gin = 'in.(' + groups.join(',') + ')', cls = {}, list = [];
+      var gin = 'in.(' + groups.join(',') + ')', cls = {}, ext = {}, list = [];
       jobs.push(paged('assignments?select=id&group_id=' + gin + '&description=like.' + CLASS_LIKE + '&order=id').then(function (rows) { rows.forEach(function (r) { cls[r.id] = 1; }); }));
+      jobs.push(paged('assignments?select=id&group_id=' + gin + '&description=like.' + EXTRA_LIKE + '&order=id').then(function (rows) { rows.forEach(function (r) { ext[r.id] = 1; }); }, function () {}));   /* ✨ TAREA-EXTRA-V1 */
       jobs.push(paged('assignments?select=id,group_id,target_student_ids,title,due_at,gradable&group_id=' + gin + '&order=id').then(function (rows) { list = rows; }));
-      jobs.push(Promise.all(jobs.slice(-2)).then(function () {
+      jobs.push(Promise.all(jobs.slice(-3)).then(function () {
         F.tasks = list.filter(function (a) { return a.due_at && !cls[a.id]; }).map(function (a) {
-          return { id: a.id, groupId: a.group_id, targets: Array.isArray(a.target_student_ids) ? a.target_student_ids.map(String) : [], title: a.title || 'Tarea', dueAt: a.due_at, gradable: !!a.gradable };
+          return { id: a.id, groupId: a.group_id, targets: Array.isArray(a.target_student_ids) ? a.target_student_ids.map(String) : [], title: a.title || 'Tarea', dueAt: a.due_at, gradable: !!a.gradable, extra: !!ext[a.id] };
         });
       }));
     }
@@ -224,6 +226,7 @@
     if (!tk || !tk.dueAt || !st) return null;
     var now = nowMs || Date.now(), due = Date.parse(tk.dueAt); if (!isFinite(due)) return null;
     var sub = ((F.subs || {})[String(st.id)] || {})[tk.id] || null, thr = thrFor(F, st);
+    if (tk.extra) { if (!sub) return null; var gx = pct(sub.grade); return { kind: 'task', id: tk.id, title: '✨ ' + tk.title, day: J().of(due), to: J().of(due), due: tk.dueAt, phase: now > due ? 'closed' : 'open', state: 'ok', note: 'extra' + (gx != null ? ' · nota ' + gx : '') + ' (no cuenta)', grade: gx, total: 1, done: 1, extra: true }; }   /* ✨ TAREA-EXTRA-V1 */
     var g = sub ? pct(sub.grade) : null, state, note;
     if (sub) {
       var at = Date.parse(sub.at);

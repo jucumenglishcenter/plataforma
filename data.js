@@ -1703,6 +1703,7 @@ function getStudentReadiness(student, opts) {
     const subs = JSON.parse(localStorage.getItem('jucum_submissions_v1') || '{}');
     const mine = assigns.filter(a => {
       if (window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.isClass(a)) return false;   // DOCSETS-V1: actividad de clase = participación, no tarea
+      if (window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.isExtra && window.JUCUM_DOCSETS.isExtra(a)) return false;   // ✨ TAREA-EXTRA-V1: la extra no cuenta en «Tareas cumplidas»
       const targeted = Array.isArray(a.targetStudentIds) && a.targetStudentIds.length > 0;
       return targeted ? a.targetStudentIds.includes(student.id) : a.groupId === student.group;
     });

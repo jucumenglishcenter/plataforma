@@ -21,6 +21,9 @@
     if (!m) return null; try { const s = JSON.parse(decodeURIComponent(m[1])); return s && s.docset ? s.docset : null; } catch (e) { return null; }
   }
   const isDocset = a => !!meta(a);
+  /* ✨ TAREA-EXTRA-V1 (17-nov-2026): tarea opcional (línea «Extra: yes» en el documento). No cuenta en el % de tareas ni sale
+   * como pendiente/vencida ni en el cartel de «vence pronto»; en Seguimiento no sale «no entregó». Si la hace, su nota se ve (solo informativa). */
+  const isExtra = a => { const m = meta(a); return !!(m && m.extra); };
   const isClass = a => { const m = meta(a); return !!(m && m.mode === 'class'); };
   function describe(ds) {
     const plain = (ds.en || '') + (ds.es ? '\n' + ds.es : '');
@@ -69,6 +72,7 @@
     const L = (lines || []).map(l => String(l).replace(/\s+/g, ' ').trim()).filter(Boolean).filter(l => !RE_JUNK.test(l));
     const out = { title: '', intro: '', suggest: null, sets: [] };
     const ti = L.findIndex(l => /^(pre-?a1|a1|a2)\b[^:]{0,30}:/i.test(l)); if (ti >= 0) out.title = L[ti];
+    if (L.some(l => /^extra\s*[:：]\s*(yes|s[ií]|true|1|opcional|optional)\s*$/i.test(l))) out.extra = true; /* TAREA-EXTRA-V1 */
     const intro = L.find(l => /start in class|finish at home|your teacher chooses/i.test(l)) || ''; out.intro = intro;
     if (/start in class/i.test(intro)) out.suggest = 'split'; else if (/teacher chooses/i.test(intro)) out.suggest = 'teacher';
     const head = l => { let m = l.match(RE_STEP); if (m) return { step: m[1].toUpperCase(), title: m[2].replace(/\s*[•·|]\s*$/, '').trim(), part: m[3] ? m[3] + ' of ' + m[4] : '', practice: m[3] ? +m[3] : 1, lab: 'Step' };
@@ -78,6 +82,7 @@
     let cur = null, mode = '', cont = null;
     L.forEach(l => {
       const c0 = cont; cont = null;
+      if (/^extra\s*[:：]/i.test(l)) return; /* TAREA-EXTRA-V1 */
       const h = head(l);
       if (h) { cur = Object.assign(h, { en: '', ex: ['', ''], items: [], bank: [], msg: [] }); out.sets.push(cur); mode = 'ins'; return; }
       if (!cur) return;
@@ -88,6 +93,16 @@
       const lsn = l.match(/^listen\s*[:：]\s*(.+)$/i); if (lsn) { if (last && mode === 'items') last.listen = lsn[1].trim(); else (cur.listen = cur.listen || []).push(lsn[1].trim()); return; }
       const mng = l.match(/^meaning\s*[:：]\s*(.+)$/i); if (mng) { const o = mng[1].split('|').map(t => t.trim()).filter(Boolean); if (last && o.length > 1) last.mean = o; return; }
       if (/^tap\s*[:：]\s*blocks?$/i.test(l)) { cur.tap = true; return; }
+      /* 🎯 TAREAS-DESAFIO-V1 (17-nov-2026, aprobado en «Simulacion - Tareas Desafio PreA1»): Guide: paso | cómo se hace → «📘 Cómo se hace» · Why: → «🧠 ¿Por qué?» · Wrong: opción => por qué no · Tap: mistakes + Story: / (n) oración / Fix: (n) mal => bien | por qué → tocar los errores en historias */
+      const gdl = l.match(/^guide\s*[:：]\s*(.+)$/i); if (gdl) { const z = gdl[1].split('|').map(t => t.trim()); (cur.guide = cur.guide || []).push({ c: z[0] || '', ex: z.slice(1).join(' | ') }); return; }
+      if (/^tap\s*[:：]\s*mistakes?$/i.test(l)) { cur.hunt = true; cur.stories = []; mode = 'hunt'; return; }
+      if (cur.hunt) { let q = l.match(/^story\s*[:：]\s*(.+)$/i); if (q) { cur.stories.push({ name: q[1].trim(), lines: [] }); return; }
+        const sto = () => { if (!cur.stories.length) cur.stories.push({ name: '', lines: [] }); return cur.stories.length - 1; };
+        q = l.match(/^\((\d{1,2})\)\s*(.+)$/); if (q) { cur.stories[sto()].lines.push({ n: +q[1], t: q[2].trim() }); return; }
+        q = l.match(/^fix\s*[:：]\s*\((\d{1,2})\)\s*(.+?)\s*=>\s*(.+?)\s*(?:\|\s*(.+))?$/i); if (q) { const si = sto(), nm = cur.stories[si].name; cur.items.push({ q: (nm ? nm + ' · ' : '') + '(' + q[1] + ') ' + q[2].trim(), cue: '', ces: '', key: q[3].trim(), also: [], tr: '', src: 'teacher', look: '', story: '', hunt: { s: si, n: +q[1], w: q[2].trim() }, why: (q[4] || '').trim() }); return; }
+        if (/^message\s*[:：]?\s*$/i.test(l)) return; }
+      const why = l.match(/^why\s*[:：]\s*(.+)$/i); if (why && last) { last.why = why[1].trim(); return; }
+      const wrg = l.match(/^wrong\s*[:：]\s*(.+?)\s*=>\s*(.+)$/i); if (wrg && last) { (last.wrong = last.wrong || []).push({ o: wrg[1].trim(), t: wrg[2].trim() }); return; }
       if (/^example\b/i.test(l)) { mode = 'ex'; const rest = l.replace(/^example\s*[:.]?\s*/i, ''); if (rest) cur.ex[0] = rest; return; }
       if (mode === 'ex' && /^(→|->|=>)/.test(l)) { cur.ex[1] = l.replace(/^(→|->|=>)\s*/, ''); mode = 'items'; return; }
       if (mode === 'ex' && !cur.ex[0]) { cur.ex[0] = l; return; }
@@ -104,7 +119,8 @@
       if (last && /^\([a-d]\)\s/i.test(l)) { last.q += ' ' + l; return; }
       if (mode === 'ins' && !cur.en) { cur.en = l; return; }
     });
-    out.sets = out.sets.filter(s => s.items.length).map((s, i) => {
+    out.sets = out.sets.filter(s => s.items.length || s.hunt).map((s, i) => {
+      if (s.hunt) { s.kind = 'hunt'; s.grade = 'exact'; s.es = 'Toca las palabras que están mal y luego ✓ Comprobar.'; s.id = 'set' + i; return s; }
       let kind = kindOf(s.en, s.title);
       if (kind === 'other' && s.items.every(x => /\(a\)\s*\S/i.test(x.q) && /\(b\)\s*\S/i.test(x.q))) kind = 'mcq';
       if (kind === 'other' && /complete|fill/i.test(s.en + ' ' + s.title) && s.items.every(x => /_{2,}/.test(x.q))) kind = 'word';
@@ -119,10 +135,13 @@
   }
   /* Une varios documentos (Student + Teacher): la versión del teacher aporta Answer/Also/traducción */
   function merge(a, b) {
+    if (a && b && b.extra) a.extra = true; /* TAREA-EXTRA-V1 */
     if (!b || !b.sets.length) return a; if (!a || !a.sets.length) return b;
     a.sets.forEach(s => { const t = b.sets.find(x => x.step === s.step && x.practice === s.practice) || b.sets.find(x => x.title === s.title); if (!t) return;
-      s.items.forEach((x, i) => { const y = t.items[i]; if (!y) return; if (y.src === 'teacher' && y.key) { x.key = y.key; x.src = 'teacher'; } if (y.also.length) x.also = y.also; if (y.listen) x.listen = y.listen; if (y.mean) x.mean = y.mean; if (y.tr) x.tr = y.tr; if (y.story) x.story = y.story; if (y.look) x.look = y.look; if (y.opts && !x.opts) x.opts = y.opts; });
-      if ((t.bank || []).length && !(s.bank || []).length) s.bank = t.bank; if ((t.msg || []).length && !(s.msg || []).length) s.msg = t.msg; if ((t.listen || []).length && !(s.listen || []).length) s.listen = t.listen; if (t.tap) s.tap = true; });
+      s.items.forEach((x, i) => { const y = t.items[i]; if (!y) return; if (y.src === 'teacher' && y.key) { x.key = y.key; x.src = 'teacher'; } if (y.also.length) x.also = y.also; if (y.listen) x.listen = y.listen; if (y.mean) x.mean = y.mean; if (y.tr) x.tr = y.tr; if (y.story) x.story = y.story; if (y.look) x.look = y.look; if (y.opts && !x.opts) x.opts = y.opts; if (y.why) x.why = y.why; if ((y.wrong || []).length) x.wrong = y.wrong; });
+      if ((t.bank || []).length && !(s.bank || []).length) s.bank = t.bank; if ((t.msg || []).length && !(s.msg || []).length) s.msg = t.msg; if ((t.listen || []).length && !(s.listen || []).length) s.listen = t.listen; if (t.tap) s.tap = true;
+      if ((t.guide || []).length && !(s.guide || []).length) s.guide = t.guide; /* TAREAS-DESAFIO-V1 */
+      if (t.hunt) { s.hunt = true; s.kind = 'hunt'; s.grade = 'exact'; s.es = t.es; if (!s.items.length) s.items = t.items; if (!(s.stories || []).some(z => z.lines.length)) s.stories = t.stories; } });
     return a;
   }
 
@@ -168,7 +187,7 @@
       if (/^negative/.test(c)) return 'Negativo: is not / are not · does not / do not + verbo sin -s.';
       if (/^singular/.test(c)) return 'En singular el verbo lleva -s (A ticket costs…).';
       if (/^plural/.test(c)) return 'En plural el verbo va sin -s (The houses are…).';
-      return 'Cambia solo lo que pide la palabra y copia lo demás igual.';
+      return it.cue ? 'Cambia solo lo que pide la palabra y copia lo demás igual.' : 'Solo hay UN error: corrige esa palabra y copia lo demás igual.'; /* TAREAS-DESAFIO-V1 */
     }
     return '';
   }
@@ -392,6 +411,7 @@
   }
   function grade(set, i, txt) {
     const it = set.items[i]; if (!String(txt || '').trim()) return { r: 'blank' };
+    if (set.kind === 'hunt') return { r: 'ok' }; /* TAREAS-DESAFIO-V1: la nota de «toca los errores» la arma el reproductor */
     if (set.kind === 'mcq' || set.kind === 'word') return gradeWord(set, it, txt);
     if (set.grade === 'sent') return SENT.grade(it, txt);
     if (set.grade !== 'manual' && multiSentence(txt) && !multiSentence(set.grade === 'rule' ? it.q : it.key))
@@ -548,5 +568,5 @@
     return out;
   }
 
-  window.JUCUM_DOCSETS = { setItemComment, setLabel, sent: SENT, detect, merge, propose, meta, isDocset, isClass, describe, liveState, grade, score, nRev, warnings, norm, packAns, unpack, fetchSubs, fetchMine, fetchGroupTasks, saveDraft, finalize, setItemResult, closeDrafts, patch, notifyGroup, trUrl, cueEs, combineAlts, multiSentence, upgrade, persistUpgrade, classDays, classForDay, seq, reorder, redoOf, redoPending, redoOpen, histOf, snapOf, giveRedo, cancelRedo };
+  window.JUCUM_DOCSETS = { setItemComment, setLabel, sent: SENT, detect, merge, propose, meta, isDocset, isClass, isExtra, describe, liveState, grade, score, nRev, warnings, norm, packAns, unpack, fetchSubs, fetchMine, fetchGroupTasks, saveDraft, finalize, setItemResult, closeDrafts, patch, notifyGroup, trUrl, cueEs, combineAlts, multiSentence, upgrade, persistUpgrade, classDays, classForDay, seq, reorder, redoOf, redoPending, redoOpen, histOf, snapOf, giveRedo, cancelRedo };
 })();

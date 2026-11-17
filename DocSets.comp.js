@@ -17,7 +17,7 @@ const DS_TIMES = [5, 10, 15, 20, 30];
 const dsTimeLabel = (ds) => ds.time === 'fin' ? 'hasta el final de la clase' : ds.time === 'mas' ? 'hasta ' + dsFmt(ds.until) : (ds.time || 10) + ' min';
 const DS_KIND = { exact: { t: '⚙️ Nota exacta', bg: '#E8F5E9', c: '#2E7D32' }, rule: { t: '📏 Respuesta libre · nota por regla', bg: '#FFF8E1', c: '#8A5A00' }, manual: { t: '✍️ La revisas tú', bg: '#F2F0EA', c: '#555' }, sent: { t: '💬 Oración completa · se corrige sola', bg: '#E3F2FD', c: '#0D47A1' } };
 /* DOCSETS-A2-V1 (03-nov, aprobado): opción múltiple · una palabra · oración completa (Answer + Also + Source) · Look in · Word bank · Message */
-const DS_TYPE = { mcq: '🔘 Opción múltiple', word: '✏️ Una palabra' };
+const DS_TYPE = { mcq: '🔘 Opción múltiple', word: '✏️ Una palabra', hunt: '👆 Toca los errores' };
 const dsKeyed = s => !!s && (s.grade === 'exact' || s.grade === 'sent');
 const dsLbl = { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', fontSize: 11, fontWeight: 800, color: 'var(--text-soft)' };
 const dsIn = { flex: 1, minWidth: 180, padding: '5px 8px', fontSize: 12.5 };
@@ -70,17 +70,19 @@ function DocSetReview({ doc, groupId, fileName, onClose, onDone }) {
   const amber = chosen.filter(s => dsKeyed(s) && s.items.some(x => x.src !== 'teacher' && x.src !== 'ok')).length;
   const missingKey = chosen.filter(s => dsKeyed(s) && s.items.some(x => !String(x.key || '').trim()));
   const badOpt = chosen.filter(s => s.kind === 'mcq' && s.items.some(x => x.opts && String(x.key || '').trim() && !x.opts.some(o => X.norm(o) === X.norm(x.key))));
+  const noHunt = chosen.filter(s => s.kind === 'hunt' && !s.items.length); /* TAREAS-DESAFIO-V1 */
   const publish = async () => {
+    if (noHunt.length) { setErr('A «' + noHunt.map(s => X.setLabel(s)).join(', ') + '» le faltan los errores (líneas Fix:). Sube también la versión del teacher.'); return; }
     if (missingKey.length) { setErr('Falta la respuesta de algún ejercicio en: ' + missingKey.map(s => X.setLabel(s)).join(', ') + '. Ábrelo en 👁 y escríbela.'); return; }
     if (badOpt.length) { setErr('En opción múltiple la respuesta tiene que ser una de las opciones: revisa ' + badOpt.map(s => X.setLabel(s)).join(', ') + ' (toca la opción correcta).'); return; }
     setBusy(true); setErr(''); let ok = 0, fail = 0;
     for (const s of chosen) {
       const c = cfg[s.id]; const mode = c.dest === 'cls' ? 'class' : 'home';
-      const ds = { v: 1, step: s.step, title: s.title, part: s.part, kind: s.kind, grade: s.grade, en: s.en, es: s.es, ex: s.ex, file: fileName || '', docTitle: doc.title || '', lab: s.lab || 'Step', ...(s.ws ? { ws: s.ws } : {}), ...((s.bank || []).length ? { bank: s.bank } : {}), ...((s.msg || []).length ? { msg: s.msg } : {}), ...((s.listen || []).length ? { listen: s.listen } : {}), ...(s.tap ? { tap: true } : {}),
-        items: s.items.map(x => ({ q: x.q, cue: x.cue, ces: x.ces || X.cueEs(x.cue), key: String(x.key || '').trim(), also: (x.also || []).filter(Boolean), tr: x.tr || '', ...(x.opts ? { opts: x.opts } : {}), ...(String(x.look || '').trim() ? { look: String(x.look).trim() } : {}), ...(String(x.story || '').trim() ? { story: String(x.story).trim() } : {}), ...(x.listen ? { listen: x.listen } : {}), ...(x.mean ? { mean: x.mean } : {}) })), mode, live: {} };
+      const ds = { v: 1, step: s.step, title: s.title, part: s.part, kind: s.kind, grade: s.grade, en: s.en, es: s.es, ex: s.ex, file: fileName || '', docTitle: doc.title || '', lab: s.lab || 'Step', ...(doc.extra ? { extra: true } : {}), ...(s.ws ? { ws: s.ws } : {}), ...((s.bank || []).length ? { bank: s.bank } : {}), ...((s.msg || []).length ? { msg: s.msg } : {}), ...((s.listen || []).length ? { listen: s.listen } : {}), ...(s.tap ? { tap: true } : {}), ...((s.guide || []).length ? { guide: s.guide } : {}), ...(s.hunt ? { hunt: true, stories: s.stories || [] } : {}),
+        items: s.items.map(x => ({ q: x.q, cue: x.cue, ces: x.ces || X.cueEs(x.cue), key: String(x.key || '').trim(), also: (x.also || []).filter(Boolean), tr: x.tr || '', ...(x.opts ? { opts: x.opts } : {}), ...(String(x.look || '').trim() ? { look: String(x.look).trim() } : {}), ...(String(x.story || '').trim() ? { story: String(x.story).trim() } : {}), ...(x.listen ? { listen: x.listen } : {}), ...(x.mean ? { mean: x.mean } : {}), ...(x.why ? { why: x.why } : {}), ...((x.wrong || []).length ? { wrong: x.wrong } : {}), ...(x.hunt ? { hunt: x.hunt } : {}) })), mode, live: {} };
       if (mode === 'class') { ds.planDate = c.day; ds.time = c.time; if (c.time === 'mas') ds.until = new Date(c.until).toISOString(); }
       else ds.dueAt = new Date(c.due).toISOString();
-      try { const r = await window.JUCUM_TASKS.createAssignment({ groupId, targetStudentIds: [], title: X.setLabel(s) + ': ' + s.title + (s.part ? ' · Practice ' + s.part : ''), description: X.describe(ds), dueAt: mode === 'home' ? ds.dueAt : null, gradable: true, xp: 40, attachments: [] }); (r && r.synced === false) ? fail++ : ok++; }
+      try { const r = await window.JUCUM_TASKS.createAssignment({ groupId, targetStudentIds: [], title: X.setLabel(s) + ': ' + s.title + (s.part ? ' · Practice ' + s.part : ''), description: X.describe(ds), dueAt: mode === 'home' ? ds.dueAt : null, gradable: true, xp: doc.extra ? 60 : 40, attachments: [] }); /* TAREA-EXTRA-V1: la extra da más XP */ (r && r.synced === false) ? fail++ : ok++; }
       catch (e) { fail++; }
     }
     setBusy(false);
@@ -94,7 +96,7 @@ function DocSetReview({ doc, groupId, fileName, onClose, onDone }) {
         <div className="modal-body">
           <div style={{ flexShrink: 0, background: '#F6F8FD', border: '1px solid #DCE4F7', borderRadius: 14, padding: '11px 13px', marginBottom: 12, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 26 }}>📄</span>
-            <div style={{ flex: 1, minWidth: 200 }}><div style={{ fontWeight: 900, fontSize: 15 }}>{doc.title || fileName}</div><div style={{ fontSize: 12, fontWeight: 700, color: '#5A6A90' }}>{sets.length} set{sets.length === 1 ? '' : 's'} · {sets.reduce((n, s) => n + s.items.length, 0)} ejercicios · {group.name || 'grupo'}</div></div>
+            <div style={{ flex: 1, minWidth: 200 }}><div style={{ fontWeight: 900, fontSize: 15 }}>{doc.title || fileName}{doc.extra ? <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 900, background: '#F3E5F5', color: '#7B1FA2', borderRadius: 12, padding: '2px 9px', verticalAlign: 'middle' }}>✨ Extra · opcional · +60 XP</span> : null}</div><div style={{ fontSize: 12, fontWeight: 700, color: '#5A6A90' }}>{sets.length} set{sets.length === 1 ? '' : 's'} · {sets.reduce((n, s) => n + s.items.length, 0)} ejercicios · {group.name || 'grupo'}</div></div>
             <button className="att-btn" disabled={tvBusy} onClick={() => fileRef.current && fileRef.current.click()}>{tvBusy ? 'Leyendo…' : '＋ Versión del teacher (Answer / Also)'}</button>
             <input ref={fileRef} type="file" accept=".pdf,.docx,.txt" style={{ display: 'none' }} onChange={e => { addTeacher(e.target.files[0]); e.target.value = ''; }} />
           </div>
@@ -229,7 +231,7 @@ function DocSetStudentView({ a, ds, rows, who, order, onClose, onChanged }) {
     let c = 0; for (const r of rows || []) { const z = X.unpack(r.text); if (z && (z.res || [])[i] === 'bad' && X.norm((z.ans || [])[i]) === X.norm(txt)) { await X.setItemResult(a, ds, r.student_id, r, i, 'ok'); c++; if (N) N.pushNotif(r.student_id, { type: 'assignment', title: '✅ Tu profe aceptó tu respuesta', body: `“${a.title}”, ejercicio ${i + 1}.`, link: 'tasks' }); } }
     setBusy(false); alert(`✔ “${txt}” ahora es válida. Se aceptó para ${c} alumno${c === 1 ? '' : 's'}.`); onChanged(upd);
   };
-  const FB = (v) => v === 'ok' ? ['#E8F5E9', '#1B5E20', '✔ Vio: ¡Correcto!'] : v === 'okd' ? ['#F1F8E9', '#33691E', '✔ Correcto · vale completo (aviso: mayúscula, tilde o signo final)'] : v === 'rev' ? ['#E3F2FD', '#0D47A1', '📝 Vio: “la revisa tu profe · no es un error”'] : v === 'bad' ? ['#FFF3E0', '#8A4B00', '✘ Vio: “Todavía no”'] : ['#F2F0EA', '#666', live ? '⏳ Aún no lo responde' : '⬜ En blanco'];
+  const FB = (v) => v === 'ok' ? ['#E8F5E9', '#1B5E20', '✔ Vio: ¡Correcto!'] : v === 'okd' ? ['#F1F8E9', '#33691E', '✔ Correcto · vale completo (aviso: mayúscula, tilde o signo final)'] : v === 'rev' ? ['#E3F2FD', '#0D47A1', '📝 Vio: “la revisa tu profe · no es un error”'] : v === 'bad' ? ['#FFF3E0', '#8A4B00', '✘ Vio: “Todavía no”'] : v === 'pen' ? ['#FFEBEE', '#B71C1C', '✘ Lo encontró, pero se le restó por tocar una palabra que estaba bien'] : ['#F2F0EA', '#666', live ? '⏳ Aún no lo responde' : '⬜ En blanco'];
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal settings-modal" style={{ maxWidth: 640, background: '#F0F7FF' }} onClick={e => e.stopPropagation()}>
@@ -453,18 +455,40 @@ function dsMix(ds0, seed) {
   return ds;
 }
 function DsListenCard({ text, small }) {
-  const [n, setN] = dsUS(0), [on, setOn] = dsUS(false);
-  const say = (rate) => { const S = window.speechSynthesis; if (!S) { alert('Este equipo no puede leer en voz alta.'); return; } S.cancel();
-    const u = new SpeechSynthesisUtterance(text); u.lang = 'en-US'; u.rate = rate; const vs = S.getVoices ? S.getVoices() : [];
-    const v = vs.find(z => /en[-_]US/i.test(z.lang) && /female|samantha|google us|zira|jenny|aria/i.test(z.name)) || vs.find(z => /en[-_]US/i.test(z.lang)); if (v) u.voice = v;
-    u.onend = () => setOn(false); u.onerror = () => setOn(false); setOn(true); setN(x => x + 1); S.speak(u); };
-  dsUE(() => () => { try { window.speechSynthesis.cancel(); } catch (e) {} }, [text]);
-  const b = { border: '1.5px solid #80CBC4', background: '#fff', color: '#00695C', borderRadius: 22, padding: '8px 14px', fontWeight: 900, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', minHeight: 44 };
-  return <div style={{ marginTop: small ? 4 : 8, marginBottom: small ? 6 : 0, background: '#E0F2F1', borderRadius: 13, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+  /* 🎯 TAREAS-DESAFIO-V1: audio largo (3+ frases) = barra para ir a cualquier frase · ⏮ 🔁 ⏭ · 🐢 lento */
+  const parts = React.useMemo(() => (String(text || '').match(/[^.!?]+[.!?]+|[^.!?]+$/g) || []).map(s => s.trim()).filter(Boolean), [text]);
+  const N = parts.length, big = N > 2;
+  const [cur, setCur] = dsUS(-1), [last, setLast] = dsUS(-1), [slow, setSlow] = dsUS(false), [n, setN] = dsUS(0);
+  const tok = dsUR(0), slowR = dsUR(false); slowR.current = slow;
+  const voice = () => { const S = window.speechSynthesis, vs = S && S.getVoices ? S.getVoices() : []; return vs.find(z => /en[-_]US/i.test(z.lang) && /female|samantha|google us|zira|jenny|aria/i.test(z.name)) || vs.find(z => /en[-_]US/i.test(z.lang)); };
+  const stop = () => { tok.current++; try { window.speechSynthesis.cancel(); } catch (e) {} setCur(-1); };
+  const play = (k, only, rate) => { const S = window.speechSynthesis; if (!S) { alert('Este equipo no puede leer en voz alta.'); return; }
+    tok.current++; const t = tok.current; S.cancel(); setN(x => x + 1);
+    const go = j => { if (t !== tok.current) return; if (j >= N || (only && j > k)) { setCur(-1); return; }
+      setCur(j); setLast(j); const u = new SpeechSynthesisUtterance(parts[j]); u.lang = 'en-US'; u.rate = rate || (slowR.current ? .6 : .85); const v = voice(); if (v) u.voice = v;
+      u.onend = () => setTimeout(() => go(j + 1), 280); u.onerror = () => { if (t === tok.current) setCur(-1); }; S.speak(u); };
+    setTimeout(() => go(k), 60); };
+  dsUE(() => () => { tok.current++; try { window.speechSynthesis.cancel(); } catch (e) {} }, [text]);
+  const b = { border: '1.5px solid #80CBC4', background: '#fff', color: '#00695C', borderRadius: 22, padding: '8px 13px', fontWeight: 900, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', minHeight: 44 };
+  const pos = cur >= 0 ? cur : Math.max(0, last);
+  if (!big) return <div style={{ marginTop: small ? 4 : 8, marginBottom: small ? 6 : 0, background: '#E0F2F1', borderRadius: 13, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
     {!small && <b style={{ fontSize: 10.5, letterSpacing: '.06em', textTransform: 'uppercase', color: '#00695C', width: '100%' }}>🎧 Escucha</b>}
-    <button type="button" onClick={() => say(.85)} style={b}>{on ? '🔊 Escuchando…' : '▶ Escuchar'}</button>
-    <button type="button" onClick={() => say(.6)} style={b}>🐢 Más lento</button>
+    <button type="button" onClick={() => cur >= 0 ? stop() : play(0, false, .85)} style={b}>{cur >= 0 ? '⏸ Parar' : '▶ Escuchar'}</button>
+    <button type="button" onClick={() => play(0, false, .6)} style={b}>🐢 Más lento</button>
     {n > 0 && <span style={{ fontSize: 12, fontWeight: 800, color: '#00695C' }}>Escuchaste {n} {n === 1 ? 'vez' : 'veces'}</span>}
+  </div>;
+  return <div style={{ marginTop: small ? 4 : 8, marginBottom: small ? 6 : 0, background: '#E0F2F1', borderRadius: 13, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <b style={{ fontSize: 10.5, letterSpacing: '.06em', textTransform: 'uppercase', color: '#00695C' }}>🎧 Escucha</b>
+    <div style={{ display: 'flex', gap: 4 }}>{parts.map((s, k) => <button key={k} type="button" title={'Frase ' + (k + 1)} onClick={() => play(k)} style={{ flex: 1, height: 22, minWidth: 0, borderRadius: 6, border: '1.5px solid ' + (k === cur ? '#00695C' : '#80CBC4'), background: k === cur ? '#00897B' : k <= last ? '#80CBC4' : '#fff', cursor: 'pointer', padding: 0 }}></button>)}</div>
+    <div style={{ fontSize: 12, fontWeight: 800, color: '#00695C' }}>{cur >= 0 ? '🔊 Frase ' + (cur + 1) + ' de ' + N : 'Toca la barra para escuchar desde esa frase · ' + N + ' frases'}</div>
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <button type="button" onClick={() => cur >= 0 ? stop() : play(last >= 0 && last < N - 1 ? last : 0)} style={b}>{cur >= 0 ? '⏸ Parar' : last >= 0 && last < N - 1 ? '▶ Seguir' : '▶ Escuchar'}</button>
+      <button type="button" aria-label="Frase anterior" onClick={() => play(Math.max(0, pos - 1))} style={b}>⏮</button>
+      <button type="button" aria-label="Repetir esta frase" onClick={() => play(pos, true)} style={b}>🔁</button>
+      <button type="button" aria-label="Frase siguiente" onClick={() => play(Math.min(N - 1, pos + 1))} style={b}>⏭</button>
+      <button type="button" onClick={() => setSlow(v => !v)} style={{ ...b, background: slow ? '#00897B' : '#fff', color: slow ? '#fff' : '#00695C' }}>🐢 {slow ? 'Lento: sí' : 'Lento'}</button>
+    </div>
+    <div style={{ fontSize: 11.5, fontWeight: 700, color: '#2E6B63' }}>⏮ anterior · 🔁 repetir la frase · ⏭ siguiente{n > 0 ? ' · escuchaste ' + n + (n === 1 ? ' vez' : ' veces') : ''}</div>
   </div>;
 }
 
@@ -495,6 +519,71 @@ function DsTapBlocks({ q, setTxt }) {
     {used.length > 0 && <button type="button" onClick={() => upd([])} style={{ alignSelf: 'flex-start', border: 'none', background: 'none', color: '#5A6A90', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit', padding: 4 }}>↺ Borrar y empezar</button>}
   </div>;
 }
+/* 🎯 TAREAS-DESAFIO-V1 (17-nov-2026) · «📘 Cómo se hace» (Guide:) · «🧠 ¿Por qué?» (Why: / Wrong:) · tocar los errores en historias (Tap: mistakes) */
+function DsGuide({ ds, title, onGo }) {
+  return <div style={{ display: 'grid', gap: 10, alignContent: 'start' }}>
+    <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', color: '#1565C0' }}>📘 Cómo se hace</div>
+    <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 20, lineHeight: 1.2 }}>{title}</div>
+    <div style={{ fontSize: 14, fontWeight: 700, color: '#33415C', lineHeight: 1.5 }}>{ds.en || ds.es}</div>
+    {(ds.guide || []).map((g, k) => <div key={k} style={{ background: '#fff', borderRadius: 14, padding: '11px 13px', boxShadow: 'var(--shadow-sm)', display: 'grid', gap: 4 }}>
+      <b style={{ fontSize: 14.5, color: '#0D47A1' }}>{g.c}</b>{g.ex && <div style={{ fontSize: 14.5, fontWeight: 700, color: '#1d2433', lineHeight: 1.5 }}>{g.ex}</div>}</div>)}
+    <button type="button" className="btn-save" onClick={onGo} style={{ width: '100%', minHeight: 50, marginTop: 6 }}>¡Entendido! Empezar ▶</button>
+  </div>;
+}
+function DsWhy({ it, r, chosen }) {
+  const bad = r === 'bad', w = bad && (it.wrong || []).find(x => dsNrm(x.o) === dsNrm(chosen));
+  const lab = { display: 'block', fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 2 };
+  return <div style={{ marginTop: 8, borderRadius: 12, padding: '10px 12px', background: '#FFFDF5', border: '1.5px solid #F3DFA2', fontSize: 13.5, fontWeight: 700, lineHeight: 1.5, color: '#4A3A12', display: 'grid', gap: 8 }}>
+    {w && <div><b style={{ ...lab, color: '#C62828' }}>✘ Elegiste «{chosen}»</b>{w.t}</div>}
+    {it.why && <div><b style={{ ...lab, color: bad ? '#2E7D32' : '#B54708' }}>{bad ? '✔ La correcta: «' + it.key + '»' : '🧠 ¿Por qué?'}</b>{it.why}</div>}
+  </div>;
+}
+const dsHz = w => String(w || '').toLowerCase().replace(/[’´]/g, "'").replace(/[^a-z0-9']/g, '');
+function DsHuntPlay({ ds, st, sync, saving, onSave, onFinish }) {
+  const ST = React.useMemo(() => (ds.stories || []).map(S => ({ name: S.name, lines: (S.lines || []).map(L => ({ n: L.n, words: String(L.t || '').split(/\s+/).filter(Boolean) })) })), [ds]);
+  const errs = React.useMemo(() => ST.map((S, k) => { const e = {}; ds.items.forEach((x, i) => { const h = x.hunt; if (!h || h.s !== k) return; const li = S.lines.findIndex(L => L.n === h.n); if (li < 0) return; const wi = S.lines[li].words.findIndex(w => dsHz(w) === dsHz(h.w)); if (wi >= 0) e[li + ':' + wi] = i; }); return e; }), [ST]);
+  const h0 = st.hunt || {}; const [sel, setSel] = dsUS(() => ST.map((_, k) => (h0.sel || [])[k] || {})); const [ck, setCk] = dsUS(() => ST.map((_, k) => !!(h0.done || [])[k]));
+  const [idx, setIdx] = dsUS(() => { const f = ST.findIndex((_, k) => !(h0.done || [])[k]); return f < 0 ? Math.max(0, ST.length - 1) : f; });
+  const topRef = dsUR(null); const top = () => { try { const el = topRef.current; let p = el && el.parentElement; while (p && p.scrollHeight <= p.clientHeight) p = p.parentElement; if (p) p.scrollTop = 0; } catch (e) {} };
+  const S = ST[idx] || { lines: [], name: '' }, e = errs[idx] || {}, d = ck[idx];
+  const ks = Object.keys(sel[idx] || {}).filter(z => sel[idx][z]), hits = ks.filter(z => e[z] != null).length, badN = ks.length - hits;
+  const myItems = ds.items.map((x, i) => i).filter(i => (ds.items[i].hunt || {}).s === idx);
+  const tap = key => { if (d || sync) return; setSel(o => o.map((m, k) => k === idx ? { ...m, [key]: !m[key] } : m)); };
+  const check = () => { const s2 = { ...st, ans: [...(st.ans || [])], res: [...(st.res || [])], fb: [...(st.fb || [])], nr: [...(st.nr || [])] };
+    const found = {}; Object.keys(e).forEach(z => { if (sel[idx][z]) found[e[z]] = true; });
+    let pen = badN; myItems.forEach(i => { const ok = !!found[i]; s2.ans[i] = ok ? ds.items[i].hunt.w : ''; s2.res[i] = ok ? (pen > 0 ? 'pen' : 'ok') : 'bad'; if (ok && pen > 0) pen--; s2.fb[i] = ''; s2.nr[i] = ''; });
+    const nck = ck.map((v, k) => k === idx ? true : v); setCk(nck); s2.hunt = { sel, done: nck }; onSave(s2); };
+  const chip = (key, w) => { const on = !!(sel[idx] || {})[key], err = e[key] != null; let bg = 'transparent', bd = 'transparent', col = '#1d2433', mark = '';
+    if (!d && on) { bg = '#E3F2FD'; bd = '#1E88E5'; col = '#0D47A1'; }
+    if (d && on && err) { bg = '#E8F5E9'; bd = '#43A047'; col = '#1B5E20'; mark = '✔'; }
+    if (d && on && !err) { bg = '#FFEBEE'; bd = '#E53935'; col = '#B71C1C'; mark = '✘'; }
+    if (d && !on && err) { bg = '#FFF8E1'; bd = '#FFB300'; col = '#8A5A00'; }
+    return <button key={key} type="button" onClick={() => tap(key)} style={{ border: '2px ' + (d && !on && err ? 'dashed ' : 'solid ') + bd, background: bg, color: col, borderRadius: 8, padding: '1px 3px', margin: 0, fontWeight: 800, fontSize: 15.5, lineHeight: 1.3, cursor: d ? 'default' : 'pointer', fontFamily: 'inherit', minHeight: 30 }}>{mark ? mark + ' ' : ''}{w}</button>; };
+  const lab = { fontSize: 11, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase' };
+  const allDone = ck.every(Boolean), nE = myItems.length;
+  return <div ref={topRef} style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+    {ST.length > 1 && <div style={{ display: 'flex', gap: 5 }}>{ST.map((_, k) => <i key={k} style={{ flex: 1, height: 8, borderRadius: 5, background: ck[k] ? '#66BB6A' : k === idx ? '#2196F3' : '#E3E8F0' }}></i>)}</div>}
+    <div style={{ background: '#fff', borderRadius: 16, padding: '12px 12px', boxShadow: 'var(--shadow-sm)', border: '2px solid #BBDEFB' }}>
+      <div style={{ ...lab, color: '#0D47A1', marginBottom: 6 }}>📖 {ST.length > 1 ? 'Historia ' + (idx + 1) + ' de ' + ST.length + (S.name ? ' · ' : '') : ''}{S.name}</div>
+      {S.lines.map((L, li) => <div key={li} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0 1px', padding: '3px 0', borderBottom: li < S.lines.length - 1 ? '1px solid #F0F2F7' : 'none' }}>
+        <small style={{ fontSize: 11, fontWeight: 900, color: '#9AA6BF', marginRight: 2 }}>({L.n})</small>{L.words.map((w, wi) => chip(li + ':' + wi, w))}</div>)}
+    </div>
+    {!d && <div style={{ fontSize: 13, fontWeight: 800, color: '#33415C', textAlign: 'center' }}>Marcaste {ks.length} {ks.length === 1 ? 'palabra' : 'palabras'} · {ST.length > 1 ? 'esta historia tiene' : 'hay'} {nE} errores</div>}
+    {!d && <button className="btn-save" style={{ width: '100%', minHeight: 50 }} disabled={!ks.length || sync} onClick={check}>{sync ? '⏳ Revisando tu avance…' : '✓ Comprobar'}</button>}
+    {d && <div style={{ background: '#fff', borderRadius: 16, padding: '13px 14px', boxShadow: 'var(--shadow-sm)', display: 'grid', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}><b style={{ fontSize: 15 }}>Encontraste {hits} de {nE}</b>{badN ? <span style={{ fontSize: 13, fontWeight: 800, color: '#B71C1C' }}>· {badN} en rojo (restan)</span> : null}</div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 11.5, fontWeight: 800 }}><span style={{ background: '#E8F5E9', color: '#1B5E20', borderRadius: 8, padding: '2px 7px' }}>✔ encontraste el error</span><span style={{ background: '#FFEBEE', color: '#B71C1C', borderRadius: 8, padding: '2px 7px' }}>✘ estaba bien</span><span style={{ background: '#FFF8E1', color: '#8A5A00', border: '1.5px dashed #FFB300', borderRadius: 8, padding: '1px 6px' }}>te faltó</span></div>
+      <div style={{ ...lab, color: '#B54708', marginTop: 4 }}>🧠 Los {nE} errores</div>
+      {myItems.map(i => { const x = ds.items[i], got = Object.keys(e).some(z => e[z] === i && sel[idx][z]);
+        return <div key={i} style={{ borderRadius: 11, padding: '8px 10px', background: got ? '#F1F8E9' : '#FFFBF0', border: '1.5px solid ' + (got ? '#A5D6A7' : '#FFE082'), fontSize: 13.5, fontWeight: 700, lineHeight: 1.45 }}>
+          <div style={{ fontWeight: 900, color: got ? '#1B5E20' : '#8A5A00' }}>{got ? '✔' : '○'} Oración ({x.hunt.n}): <s style={{ color: '#C62828' }}>{x.hunt.w}</s> → <span style={{ color: '#2E7D32' }}>{x.key}</span></div>
+          {x.why && <div style={{ color: '#4A3A12' }}>{x.why}</div>}</div>; })}
+      {badN > 0 && <div style={{ borderRadius: 11, padding: '8px 10px', background: '#FFEBEE', border: '1.5px solid #EF9A9A', fontSize: 13.5, fontWeight: 700, color: '#7F1D1D' }}><b>✘ Estas palabras estaban bien:</b> {ks.filter(z => e[z] == null).map(z => { const [li, wi] = z.split(':').map(Number); return '«' + S.lines[li].words[wi].replace(/[.,!?]$/, '') + '» (' + S.lines[li].n + ')'; }).join(' · ')}</div>}
+      {allDone ? <button className="btn-save" style={{ width: '100%', minHeight: 48, marginTop: 4 }} disabled={saving} onClick={() => onFinish({ ...st, hunt: { sel, done: ck } })}>{saving ? 'Entregando…' : '📨 Entregar'}</button>
+        : <button className="btn-save" style={{ width: '100%', minHeight: 48, marginTop: 4 }} onClick={() => { const nx = ck.findIndex((v, k) => !v && k > idx); setIdx(nx >= 0 ? nx : ck.findIndex(v => !v)); top(); }}>Siguiente historia ▶</button>}
+    </div>}
+  </div>;
+}
 function DocSetPlayer({ a: a0, student, onClose }) {
   const X = DSX(), T = window.JUCUM_TASKS; const [a, setA] = dsUS(a0); const [mixSeed] = dsUS(() => Math.floor(Math.random() * 1e9) + 1); const ds = dsMix(X.meta(a), mixSeed); const n = ds.items.length; /* 🔀 TAREAS-AZAR-V1 */
   const sub = T.getSubmission(a.id, student.id); const final0 = sub && X.unpack(sub.text);
@@ -504,7 +593,7 @@ function DocSetPlayer({ a: a0, student, onClose }) {
   const [st, setSt] = dsUS(() => { const dr = dsDraftGet(a.id, student.id); return X.upgrade(ds, redo ? (dr && dr.redoAt === redo.at ? dr : { ans: [], res: [], tr: [], fb: [], startedAt: new Date().toISOString(), redoAt: redo.at }) : final0 ? { ...final0, done: true } : (dr || { ans: [], res: [], tr: [], fb: [], startedAt: new Date().toISOString() })).ans; });
   dsUE(() => { if (!redo) return; let stop = false; X.fetchMine(a.id, student.id).then(row => { const z = !stop && row && X.unpack(row.text); if (!z) return; baseRef.current = { ans: z, row };
     if (z.at && Date.parse(z.at) >= Date.parse(redo.at)) { dsDraftSet(a.id, student.id, null); setSt({ ...X.upgrade(ds, z).ans, done: true }); } }); return () => { stop = true; }; }, []);
-  const [i, setI] = dsUS(() => Math.min((st.res || []).filter(Boolean).length, n - 1)); const [txt, setTxt] = dsUS(''); const [showTr, setShowTr] = dsUS(false); const [mean, setMean] = dsUS({});
+  const [i, setI] = dsUS(() => Math.min((st.res || []).filter(Boolean).length, n - 1)); const [txt, setTxt] = dsUS(''); const [showTr, setShowTr] = dsUS(false); const [mean, setMean] = dsUS({}); const [gd, setGd] = dsUS('auto');
   const [now, setNow] = dsUS(Date.now()); const [saving, setSaving] = dsUS(false); const [closedMsg, setClosedMsg] = dsUS(false); const taRef = dsUR(null); const [msgEs, setMsgEs] = dsUS(false);
   /* ☁️ DOCSETS-FIX-V2: antes de dejar responder se mira la nube. Si empezó en otro equipo, sigue donde iba (sin repetir
    * ejercicios = 1 intento de verdad); si ya la entregó, ve sus respuestas. Sin red (5 s) sigue con lo de este equipo. */
@@ -548,15 +637,25 @@ function DocSetPlayer({ a: a0, student, onClose }) {
         <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 22, color: '#2E7D32' }}>{closedMsg ? '🔒 Tu profe cerró la actividad' : '¡Entregada!'}</div>
         <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 30, color: '#1B5E20' }}>{(sub && typeof sub.grade === 'number' && sub.grade >= g ? sub.grade : g)}/100</div>
         <div style={{ fontSize: 13, fontWeight: 700, color: '#555', lineHeight: 1.5 }}>{nr ? <span style={{ display: 'inline-block', background: '#E3F2FD', color: '#0D47A1', borderRadius: 9, padding: '4px 9px' }}>📝 Nota provisional · {nr} respuesta{nr > 1 ? 's' : ''} la revisa tu profe a mano (no es un error)</span> : '✔ Nota registrada al instante'}<br />{cls ? 'Cuenta como participación de clase.' : 'Cuenta como tarea cumplida.'}</div>
-        <div style={{ textAlign: 'left', margin: '12px 0', display: 'flex', flexDirection: 'column', gap: 6 }}>{ds.items.map((x, k) => { const v = (st.res || [])[k]; return (
+        <div style={{ textAlign: 'left', margin: '12px 0', display: 'flex', flexDirection: 'column', gap: 6 }}>{ds.items.map((x, k) => { const v = (st.res || [])[k]; if (ds.kind === 'hunt') return (
+          <div key={k} style={{ fontSize: 13, fontWeight: 700, background: '#F6F8FC', borderRadius: 9, padding: '7px 9px', lineHeight: 1.45 }}>{v === 'ok' ? '✅' : '❌'} {x.q} → <b style={{ color: '#2E7D32' }}>{x.key}</b>{v === 'pen' ? <div style={{ color: '#B71C1C' }}>Lo encontraste, pero se restó por una palabra en rojo</div> : v === 'bad' ? <div style={{ color: '#8A5A00' }}>No lo encontraste</div> : null}{(st.cm || [])[k] ? <div style={{ color: '#4A148C', background: '#F3E5F5', borderRadius: 7, padding: '5px 8px', marginTop: 4 }}>💬 Tu profe: {st.cm[k]}</div> : null}</div>); return (
           <div key={k} style={{ fontSize: 13, fontWeight: 700, background: '#F6F8FC', borderRadius: 9, padding: '7px 9px', lineHeight: 1.45 }}>{v === 'bad' ? '❌' : !v ? '⬜' : v === 'rev' ? '📝' : '✅'} {(st.ans || [])[k] || <i style={{ color: '#9A9484' }}>en blanco</i>}
             {(v === 'bad' || !v) && x.key ? <div style={{ color: '#2E7D32' }}>→ {(st.nr || [])[k] || x.key}</div> : null}{v === 'rev' ? <div style={{ color: '#0D47A1' }}>La revisa tu profe · no es un error</div> : null}{(st.cm || [])[k] ? <div style={{ color: '#4A148C', background: '#F3E5F5', borderRadius: 7, padding: '5px 8px', marginTop: 4 }}>💬 Tu profe: {st.cm[k]}</div> : null}</div>); })}</div>
         <button className="btn-save" style={{ width: '100%' }} onClick={onClose}>Volver</button>
       </div></div></div>);
+  const showGd = (ds.guide || []).length > 0 && (gd === 'open' || (gd === 'auto' && !(st.res || []).some(Boolean)));
+  if (showGd) return <div style={box}><div style={inner}>{head}<DsGuide ds={ds} title={a.title} onGo={() => setGd('closed')} /></div></div>;
+  const gdBtn = (ds.guide || []).length > 0 && <button type="button" onClick={() => setGd('open')} style={{ marginTop: 6, border: '1.5px solid #BBDEFB', background: '#F3F8FF', color: '#0D47A1', borderRadius: 18, padding: '5px 11px', fontWeight: 900, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', minHeight: 34, whiteSpace: 'nowrap' }}>📘 Cómo se hace</button>;
+  if (ds.kind === 'hunt') return (
+    <div style={box}><div style={inner}>{head}
+      <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 19, margin: '0 0 6px' }}>{a.title}</div>
+      <div style={{ background: '#fff', borderRadius: 13, padding: '10px 12px', boxShadow: 'var(--shadow-sm)' }}><div style={{ fontSize: 14, fontWeight: 800 }}>{ds.en || ds.es}</div>{gdBtn}</div>
+      <DsHuntPlay ds={ds} st={st} sync={sync} saving={saving} onSave={s2 => { setSt(s2); dsDraftSet(a.id, student.id, s2); if (!redo) X.saveDraft(a.id, student.id, s2); }} onFinish={s2 => finish(s2)} />
+    </div></div>);
   return (
     <div style={box}><div style={inner}>{head}
       <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 19, margin: '0 0 6px' }}>{a.title}</div>
-      <div style={{ background: '#fff', borderRadius: 13, padding: '10px 12px', boxShadow: 'var(--shadow-sm)' }}><div style={{ fontSize: 14, fontWeight: 800 }}>{ds.es || ds.en}</div>{ds.es && <div style={{ fontSize: 12, fontWeight: 700, color: '#5A6A90', fontStyle: 'italic' }}>{ds.en}</div>}</div>
+      <div style={{ background: '#fff', borderRadius: 13, padding: '10px 12px', boxShadow: 'var(--shadow-sm)' }}><div style={{ fontSize: 14, fontWeight: 800 }}>{ds.es || ds.en}</div>{ds.es && <div style={{ fontSize: 12, fontWeight: 700, color: '#5A6A90', fontStyle: 'italic' }}>{ds.en}</div>}{gdBtn}</div>
       {(ds.msg || []).length > 0 && <div style={{ marginTop: 8, background: '#fff', borderRadius: 13, padding: '10px 12px', boxShadow: 'var(--shadow-sm)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><b style={{ fontSize: 10.5, letterSpacing: '.06em', textTransform: 'uppercase', color: '#00695C' }}>✉️ Mensaje</b>{ds.msg.some(m => dsMsgSplit(m).es) && <button type="button" onClick={() => setMsgEs(v => !v)} style={{ marginLeft: 'auto', border: '1.5px solid ' + (msgEs ? '#80CBC4' : 'var(--border)'), background: msgEs ? '#E0F2F1' : '#fff', color: '#00695C', borderRadius: 20, padding: '5px 11px', fontWeight: 900, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', minHeight: 36 }}>🌐 {msgEs ? 'Ocultar español' : 'Ver en español'}</button>}</div>
         {ds.msg.map((m, k2) => { const p = dsMsgSplit(m); return <div key={k2} style={{ fontSize: 14.5, fontWeight: 700, lineHeight: 1.5, marginTop: 4 }}>{p.en}{msgEs && p.es ? <div style={{ fontSize: 12.5, fontWeight: 700, color: '#5A6A90', fontStyle: 'italic' }}>{p.es}</div> : null}</div>; })}
@@ -579,7 +678,8 @@ function DocSetPlayer({ a: a0, student, onClose }) {
         {ds.kind === 'mcq' && it.opts ? null : <textarea ref={taRef} value={r ? (st.ans || [])[i] : txt} readOnly={!!r || !!ds.tap} onChange={e => setTxt(e.target.value)} onKeyDown={e => { /* TAREAS-ENTER-V1: Enter = ✓ Comprobar */ if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!r && txt.trim() && !sync) check(); } }} placeholder={ds.kind === 'word' ? 'Escribe la palabra…' : 'Escribe tu oración en inglés…'} style={{ width: '100%', marginTop: 10, border: '2px solid #BBDEFB', borderRadius: 12, padding: '10px 11px', fontSize: 15.5, fontWeight: 700, minHeight: ds.kind === 'word' ? 46 : 64, resize: 'none', background: r ? '#F6F6F2' : '#F9FBFF', fontFamily: 'inherit', boxSizing: 'border-box' }} />}
         {!r && !(ds.kind === 'mcq' && it.opts) && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}><button type="button" onMouseDown={e => e.preventDefault()} onClick={putApos} disabled={sync} title="Apóstrofo: isn't · doesn't · it's" style={{ border: '1.5px solid #BBDEFB', background: '#fff', color: '#0D47A1', borderRadius: 20, padding: '6px 14px', fontWeight: 900, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', minHeight: 44, display: 'inline-flex', gap: 7, alignItems: 'center' }}><b style={{ fontSize: 24, lineHeight: 1, fontFamily: 'Arial, sans-serif' }}>'</b> Apóstrofo</button><span style={{ fontSize: 12, fontWeight: 700, color: '#5A6A90' }}>para isn't · doesn't · it's</span></div>}
         {r && <div style={{ marginTop: 10, borderRadius: 12, padding: '10px 12px', fontSize: 13, fontWeight: 800, lineHeight: 1.5, background: r === 'ok' ? '#E8F5E9' : r === 'okd' ? '#F1F8E9' : r === 'rev' ? '#E3F2FD' : '#FFF3E0', color: r === 'ok' ? '#1B5E20' : r === 'okd' ? '#33691E' : r === 'rev' ? '#0D47A1' : '#8A4B00' }}>
-          {r === 'ok' ? '✔ ¡Correcto!' : r === 'okd' ? <>✔ Correcto · vale completo. Ojo: {(st.fb || [])[i] || 'mayúscula, tilde o signo final'}.</> : r === 'rev' ? <>📝 ¡Buena idea! Esta respuesta <b>la revisa tu profe a mano</b>. <b>No es un error.</b></> : <>✘ Todavía no.{(st.fb || [])[i] ? ' 💡 ' + st.fb[i] : ''}{((st.nr || [])[i] || it.key) ? <><br />Respuesta: <u style={{ textDecoration: 'none', background: 'rgba(255,255,255,.7)', borderRadius: 6, padding: '1px 5px' }}>{(st.nr || [])[i] || it.key}</u></> : null}</>}</div>}
+          {r === 'ok' ? '✔ ¡Correcto!' : r === 'okd' ? <>✔ Correcto · vale completo. Ojo: {(st.fb || [])[i] || 'mayúscula, tilde o signo final'}.</> : r === 'rev' ? <>📝 ¡Buena idea! Esta respuesta <b>la revisa tu profe a mano</b>. <b>No es un error.</b></> : <>✘ Todavía no.{(st.fb || [])[i] && !(it.why && ds.kind === 'mcq') ? ' 💡 ' + st.fb[i] : ''}{((st.nr || [])[i] || it.key) ? <><br />Respuesta: <u style={{ textDecoration: 'none', background: 'rgba(255,255,255,.7)', borderRadius: 6, padding: '1px 5px' }}>{(st.nr || [])[i] || it.key}</u></> : null}</>}</div>}
+        {r && (it.why || (it.wrong || []).length) ? <DsWhy it={it} r={r} chosen={(st.ans || [])[i]} /> : null}
         {r && it.mean && <DsMeaningCard key={'m' + i} seed={mixSeed + i} opts={it.mean} pick={mean[i]} onPick={k => setMean(m => ({ ...m, [i]: k }))} />}
         <div style={{ marginTop: 10 }}>{r
           ? <button className="btn-save" style={{ width: '100%', minHeight: 48 }} disabled={saving || (it.mean && mean[i] == null)} onClick={next}>{i === n - 1 ? (saving ? 'Entregando…' : '📨 Entregar') : 'Siguiente ▶'}</button>
@@ -612,18 +712,19 @@ function DocSetTaskCard({ a, student, onChange }) {
   const sub = T.getSubmission(a.id, student.id); const z0 = sub && X.unpack(sub.text), up = z0 ? X.upgrade(ds, z0) : null, z = up ? up.ans : null;
   const ro = z0 && X.redoOpen ? X.redoOpen(ds, student.id, z0) : null; /* 🔁 TAREA-REHACER-V1 */ const dr0 = dsDraftGet(a.id, student.id); const dr = ro ? (dr0 && dr0.redoAt === ro.at ? dr0 : null) : (!sub && dr0); const k = ((dr && dr.res) || []).filter(Boolean).length;
   const shown = sub ? ((up && up.changed) || typeof sub.grade !== 'number' ? X.score(ds, (z && z.res) || []) : sub.grade) : null;
-  const late = a.dueAt && new Date(a.dueAt).getTime() < Date.now() && !sub; const nr = z ? X.nRev(z.res) : 0;
+  const ex = !!ds.extra; /* ✨ TAREA-EXTRA-V1 */ const late = a.dueAt && new Date(a.dueAt).getTime() < Date.now() && !sub; const nr = z ? X.nRev(z.res) : 0;
   return (
-    <div className="scard" style={{ borderColor: ro ? '#CE93D8' : sub ? '#C8E6C9' : late ? '#E6E2D8' : '#FFB74D', borderWidth: 2 }}>
+    <div className="scard" style={{ borderColor: ro ? '#CE93D8' : sub ? '#C8E6C9' : late ? '#E6E2D8' : ex ? '#CE93D8' : '#FFB74D', borderWidth: 2 }}>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
-        {sub ? dsChip('✓ Entregada · ' + shown + '/100' + (nr ? ' provisional' : ''), '#E8F5E9', '#2E7D32') : late ? dsChip('⏰ Cerró · ' + dsFmt(a.dueAt), '#FFEBEE', '#C62828') : dsChip('⏰ Entrega hasta ' + dsFmt(a.dueAt), '#FFF3E0', '#E65100')}
+        {sub ? dsChip('✓ Entregada · ' + shown + '/100' + (nr ? ' provisional' : '') + (ex ? ' · no cuenta en tu promedio' : ''), '#E8F5E9', '#2E7D32') : late ? dsChip((ex ? '🔒 Cerró · ' : '⏰ Cerró · ') + dsFmt(a.dueAt), ex ? '#F2F0EA' : '#FFEBEE', ex ? '#6B6453' : '#C62828') : dsChip((ex ? '📅 Disponible hasta ' : '⏰ Entrega hasta ') + dsFmt(a.dueAt), ex ? '#F2F0EA' : '#FFF3E0', ex ? '#555' : '#E65100')}
+        {ex && dsChip('✨ Extra · opcional', '#F3E5F5', '#7B1FA2')}
         {ro && dsChip('🔁 Otra oportunidad' + (ro.due ? ' · hasta ' + dsFmt(ro.due) : ''), DS_PURL, DS_PUR)}
         {dsChip('✍️ ' + ds.items.length + ' ejercicios · +' + (a.xp || 40) + ' XP', '#F2F0EA', '#555')}
       </div>
       <div style={{ fontWeight: 900, fontSize: 15.5 }}>{a.title}</div>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-soft)', margin: '3px 0 10px' }}>{ds.es || ds.en}{k ? ` · vas ${k}/${ds.items.length}` : ''}{nr ? ' · 📝 tu profe revisa ' + nr + ' respuesta' + (nr > 1 ? 's' : '') : ''}</div>
-      {late ? <div className="settings-hint">{k ? `Esta tarea cerró antes de que la entregaras (respondiste ${k} de ${ds.items.length}); tu profe ve tus respuestas.` : 'Esta tarea ya cerró y no la entregaste.'} Si necesitas otra oportunidad, escríbele a tu profe.</div>
-        : <>{ro && <div style={{ background: DS_PURL, border: '1.5px solid #CE93D8', color: '#4A1466', borderRadius: 12, padding: '8px 11px', fontSize: 12.8, fontWeight: 800, lineHeight: 1.45, marginBottom: 8 }}>🔁 Tu profe te dio otra oportunidad para mejorar tu nota. Hazla desde el inicio: se queda tu nueva nota.</div>}
+      {late ? <div className="settings-hint">{ex ? 'Esta tarea extra ya cerró. Era opcional: no te baja nada.' : k ? `Esta tarea cerró antes de que la entregaras (respondiste ${k} de ${ds.items.length}); tu profe ve tus respuestas.` : 'Esta tarea ya cerró y no la entregaste.'}{ex ? '' : ' Si necesitas otra oportunidad, escríbele a tu profe.'}</div>
+        : <>{ex && !sub && !ro && <div style={{ background: '#F8F0FB', border: '1.5px solid #E1BEE7', color: '#4A1466', borderRadius: 12, padding: '8px 11px', fontSize: 12.8, fontWeight: 800, lineHeight: 1.45, marginBottom: 8 }}>✨ Es un desafío extra: no es obligatorio y no cuenta en tu promedio. Si lo haces, ganas +{a.xp || 60} XP y ves tu nota.</div>}{ro && <div style={{ background: DS_PURL, border: '1.5px solid #CE93D8', color: '#4A1466', borderRadius: 12, padding: '8px 11px', fontSize: 12.8, fontWeight: 800, lineHeight: 1.45, marginBottom: 8 }}>🔁 Tu profe te dio otra oportunidad para mejorar tu nota. Hazla desde el inicio: se queda tu nueva nota.</div>}
           <button className="btn-save" style={{ width: '100%', minHeight: 46, ...(ro ? { background: DS_PUR } : {}) }} onClick={() => setOpen(true)}>{ro ? (k ? '✍️ Seguir' : '🔁 Volver a hacerla') : sub ? 'Ver mis respuestas' : k ? '✍️ Seguir' : '▶ Empezar'}</button></>}
       {open && <DocSetPlayer a={a} student={student} onClose={() => { setOpen(false); onChange && onChange(); }} />}
     </div>);

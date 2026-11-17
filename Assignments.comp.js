@@ -1289,7 +1289,8 @@ function StudentAssignments({ user, onBack }) {
     }
   }, []);
   const list = T.assignmentsForStudent(student);
-  const pending = list.filter(a => !T.getSubmission(a.id, student.id));
+  const isEx = a => !!(window.JUCUM_DOCSETS && window.JUCUM_DOCSETS.isExtra && window.JUCUM_DOCSETS.isExtra(a));   /* ✨ TAREA-EXTRA-V1: la extra no es «pendiente» */
+  const pending = list.filter(a => !T.getSubmission(a.id, student.id) && !isEx(a));
   const doneList = list.filter(a => T.getSubmission(a.id, student.id));
 
   return (
