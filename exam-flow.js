@@ -354,9 +354,18 @@ function notaOficial(list, ret, desde) {
   function enHorario(ann, hoy) {
     const min = pMin();
     if (ann.p2mode === 'otro' && ann.p2date && hoy === ann.p2date && hoy !== ann.date) return min >= hm(ann.p2from || ann.from, 0) && min <= hm(ann.p2to || ann.to, 1439);
+    /* 📅 EXAMEN-VARIOS-DIAS-V1 (17-nov-2026): «corrido» (ann.cont) = se abre el primer día a «from»
+     * y no se cierra hasta el último día a «to»; los días del medio, abierto día y noche. */
+    if (ann.cont && ann.dateTo && ann.dateTo > ann.date) { if (hoy === ann.date) return min >= hm(ann.from, 0); if (hoy === ann.dateTo) return min <= hm(ann.to, 1439); return true; }
     return min >= hm(ann.from, 0) && min <= hm(ann.to, 1439);
   }
-  function abiertoAhoraHasta(ann) { return !!(ann && ann.openedAt && ann.openUntil && pDayOf(ann.openedAt) === pDay()); }
+  /* EXAMEN-VARIOS-DIAS-V1: «▶ Abrir ahora» puede durar hasta OTRO día (openUntil en un día posterior) */
+  function abiertoAhoraHasta(ann) { return !!(ann && ann.openedAt && ann.openUntil && (pDayOf(ann.openedAt) === pDay() || Date.now() < Date.parse(ann.openUntil))); }
+  function horarioTxt(ann) {
+    if (!ann) return '';
+    if (ann.cont && ann.dateTo && ann.dateTo > ann.date) return 'abierto día y noche · hasta el ' + fmtFecha(ann.dateTo) + (ann.to ? ', ' + fmtHora(ann.to) : '');
+    return (ann.from ? fmtHora(ann.from) + (ann.to ? ' – ' + fmtHora(ann.to) : '') : 'todo el día') + (ann.dateTo && ann.dateTo !== ann.date ? ' · hasta el ' + fmtFecha(ann.dateTo) : '');
+  }
   function winEffectiveOpen(w) {
     if (!w) return false;
     const ann = annForWindow(w);
@@ -459,7 +468,8 @@ function notaOficial(list, ret, desde) {
         if (ann && ann.p2mode === 'otro' && ann.p2date) href += '&jucum_p2when=' + encodeURIComponent(fmtFecha(ann.p2date) + (ann.p2from ? ', ' + fmtHora(ann.p2from) : ''));
         else {
           href += '&jucum_next=' + encodeURIComponent(X.examPartLink(ps[1], exam.id, student.id, 1) + vq);
-          const cierre = abiertoAhoraHasta(ann) ? new Date(Date.parse(ann.openUntil) - 5 * 3600000).toISOString().slice(11, 16) : (ann && ann.to) || '';
+          const hoyL = pDay();
+          const cierre = abiertoAhoraHasta(ann) ? (pDayOf(ann.openUntil) === hoyL ? new Date(Date.parse(ann.openUntil) - 5 * 3600000).toISOString().slice(11, 16) : '') : (ann && ann.cont && ann.dateTo && hoyL < ann.dateTo) ? '' : (ann && ann.to) || '';
           if (cierre) href += '&jucum_close=' + encodeURIComponent(cierre);
         }
       }
@@ -562,9 +572,30 @@ function notaOficial(list, ret, desde) {
         a.notified = true; a.notifiedAt = new Date().toISOString(); dirty = true;
         if (a.date < pDay()) return;                          // el examen ya pasó: no avisar
         const gi = k.indexOf(':');
-        try { X.announceExam(k.slice(0, gi), k.slice(gi + 1), a.examId || null, a.date); } catch (e) {}
+        try { X.announceExam(k.slice(0, gi), k.slice(gi + 1), a.examId || null, a.date, a.dateTo || null); } catch (e) {}
+      });
+      /* ⏰ EXAMEN-VARIOS-DIAS-V1: el último día del rango, recordatorio SOLO a quien aún no lo dio */
+      const recordar = [];
+      Object.keys(flow.ann).forEach(function (k) {
+        const a = flow.ann[k];
+        if (!a || !a.remindLast || !a.date || !a.dateTo || a.dateTo <= a.date || a.forceClosed) return;
+        if (pDay() !== a.dateTo || a.remindedOn === a.dateTo) return;
+        a.remindedOn = a.dateTo; dirty = true; recordar.push([k, a]);
       });
       if (dirty) save(flow);
+      recordar.forEach(function (ka) {
+        const k = ka[0], a = ka[1], gi = k.indexOf(':'), gid = k.slice(0, gi);
+        const exam = a.examId && X.getExam ? X.getExam(a.examId) : null;
+        if (!exam || !window.JUCUM_NOTIF) return;
+        const members = (D.STUDENTS || []).filter(function (s) { return s.group === gid; });
+        yaRindieron(exam, gid, members).then(function (ya) {
+          const dio = {}; (ya || []).forEach(function (x) { if (x && x.student) dio[x.student.id] = 1; });
+          members.forEach(function (s) {
+            if (dio[s.id] || (a.paused || []).indexOf(s.id) >= 0) return;
+            window.JUCUM_NOTIF.pushNotif(s.id, { type: 'assignment', title: '⏰ Hoy es el último día', body: 'Hoy es el último día para dar tu examen "' + (exam.title || 'del módulo') + '"' + (a.to ? ': se cierra a las ' + fmtHora(a.to) : '') + '. ¡No lo dejes pasar!', link: 'exam' });
+          });
+        }).catch(function () {});
+      });
     } catch (e) {}
   }
 
@@ -589,7 +620,7 @@ function notaOficial(list, ret, desde) {
     getAnn: getAnn, setAnn: setAnn, getPre: getPre, setPre: setPre,
     isPreexamActivity: isPreexamActivity, preOpenNow: preOpenNow, preexamVisibleFor: preexamVisibleFor,
     annForWindow: annForWindow, winEffectiveOpen: winEffectiveOpen, infoForModule: infoForModule,
-    annFin: annFin, enFechaAnn: enFechaAnn, readinessForExam: readinessForExam, abiertoAhoraHasta: abiertoAhoraHasta,
+    annFin: annFin, enFechaAnn: enFechaAnn, horarioTxt: horarioTxt, readinessForExam: readinessForExam, abiertoAhoraHasta: abiertoAhoraHasta,
     registerM1Forms: registerM1Forms, formsWindowFor: formsWindowFor, eventsForDay: eventsForDay, hydrate: hydrate,
     despuesDe: despuesDe, freshFor: freshFor, desdePara: desdePara, setFresh: setFresh, retryQs: retryQs, yaRindieron: yaRindieron,
     getCfg: getCfg, setCfg: setCfg, minGradeFor: minGradeFor, notaOficial: notaOficial, notaOficialPartes: notaOficialPartes, examDesde: examDesde, partesDeExamen: partesDeExamen, lblParte: lblParte, faltanPartes: faltanPartes, notaExamen: notaExamen, canonPart: canonPart,

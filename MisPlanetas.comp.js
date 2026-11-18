@@ -183,6 +183,7 @@ function mpPlanets(student, rows) {
 
 function mpHorario(F, ann) {
   if (!ann) return '';
+  if (F.horarioTxt) return F.horarioTxt(ann);   /* EXAMEN-VARIOS-DIAS-V1 */
   return (ann.from ? F.fmtHora(ann.from) + (ann.to ? ' – ' + F.fmtHora(ann.to) : '') : 'todo el día') + (ann.dateTo && ann.dateTo !== ann.date ? ' · hasta el ' + F.fmtFecha(ann.dateTo) : '');
 }
 function mpTag(p, F) {

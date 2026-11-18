@@ -31,6 +31,26 @@ function ecHM(min) { const t = Math.max(0, Math.min(23 * 60 + 59, min)); return 
 function ecMinOf(hhmm) { if (!hhmm || !/^\d{1,2}:\d{2}$/.test(hhmm)) return null; const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; }
 function ecPeruHM(iso) { return new Date(Date.parse(iso) - 5 * 3600000).toISOString().slice(11, 16); }
 function ecHoyIso(hhmm) { const F = window.JUCUM_EXAMFLOW; return new Date(Date.parse(F.pDay() + 'T' + hhmm + ':00Z') + 5 * 3600000).toISOString(); }
+/* 📅 EXAMEN-VARIOS-DIAS-V1 (17-nov-2026): examen abierto varios días (máx. 14) */
+const EC_MAX_DIAS = 14;
+function ecDiaIso(d, hhmm) { return new Date(Date.parse(d + 'T' + hhmm + ':00Z') + 5 * 3600000).toISOString(); }
+function ecPeruDia(iso) { return new Date(Date.parse(iso) - 5 * 3600000).toISOString().slice(0, 10); }
+function ecDiff(a, b) { return Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 864e5); }
+function ecDiasTira(F, date, dateTo, from, to, cont) {
+  if (!date || !dateTo || dateTo < date) return null;
+  const out = []; for (let d = date; d <= dateTo && out.length < 21; d = ecAddDays(d, 1)) out.push(d);
+  const hoy = F.pDay(), n = out.length;
+  return (
+    <div style={{display:'flex', gap:6, marginTop:10, overflowX:'auto', paddingBottom:2}}>
+      {out.map((d, i) => { const h = cont ? (i === 0 ? 'desde ' + (from ? F.fmtHora(from) : 'temprano') : i === n - 1 ? 'hasta ' + (to ? F.fmtHora(to) : 'fin del día') : 'todo el día') : (from ? F.fmtHora(from) : 'temprano') + (to ? ' – ' + F.fmtHora(to) : ''); return (
+        <div key={d} style={{flex:'0 0 76px', border:'1.5px solid #A5D6A7', background:'#E8F5E9', borderRadius:10, padding:'5px 6px', textAlign:'center', boxShadow: d === hoy ? 'inset 0 0 0 2px #1F3A8A' : 'none'}}>
+          <div style={{fontSize:10, fontWeight:900, textTransform:'uppercase', color:'#A08F63'}}>{ecCorta(d).split(' ')[0]}{d === hoy ? ' · hoy' : ''}</div>
+          <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:15, lineHeight:1.15}}>{ecCorta(d).split(' ').slice(1).join(' ')}</div>
+          <div style={{fontSize:10, fontWeight:800, color:'#2E7D32', marginTop:2}}>{h}</div>
+        </div>); })}
+    </div>
+  );
+}
 function ecNParts(exam) { return ((exam && exam.parts) || []).filter(p => p && p.url).length; }
 
 function ecItems(group) {
@@ -267,6 +287,10 @@ function EcProgramar({ group, it, est, members, onChange, goStep }) {
   const [p2to, setP2to] = ecUS((ann && (ann.p2to || ann.to)) || '');
   const [aviso, setAviso] = ecUS(ann && ann.notifyDate && !ann.notified ? 'antes' : 'ahora');
   const [noDate, setNoDate] = ecUS(!!(ann && ann.notified && !ann.date));
+  const [dias, setDias] = ecUS(ann && ann.dateTo && ann.date && ann.dateTo > ann.date ? 'n' : '1');
+  const [dateTo, setDateTo] = ecUS((ann && ann.dateTo) || '');
+  const [cont, setCont] = ecUS(!!(ann && ann.cont));
+  const [remind, setRemind] = ecUS(ann && ann.date ? ann.remindLast !== false : true);
   const [variant, setVariant] = ecUS((ann && ann.variant) || 'mixed');
   const [more, setMore] = ecUS(false);
   const [ya, setYa] = ecUS(null);
@@ -288,20 +312,30 @@ function EcProgramar({ group, it, est, members, onChange, goStep }) {
   const pre = (it.mod.activities || []).find(a => F.isPreexamActivity && F.isPreexamActivity(a));
   const hoy = F.pDay();
   const diaAviso = date ? ecAddDays(date, -2) : hoy;
+  const varios = dias === 'n' && !noDate;
+  const nDias = varios && date && dateTo && dateTo > date ? ecDiff(date, dateTo) + 1 : 0;
+  const p2m = varios ? 'seguida' : p2mode;
+  const rapido = (n) => { const base = date || hoy; if (!date) setDate(base); if (n === 'dom') { const wd = new Date(base + 'T12:00:00Z').getUTCDay(); setDateTo(ecAddDays(base, (7 - wd) % 7 || 7)); } else setDateTo(ecAddDays(base, n)); };
 
   const lineas = [];
   if (noDate) lineas.push('📣 Aviso sin fecha: “Estás pronto a dar tu examen, practica…”. Cuando pongas la fecha, verán la cuenta regresiva.');
   else {
     lineas.push(aviso === 'ahora' ? '📣 La campanita sale apenas guardes.' : aviso === 'antes' ? (diaAviso > hoy ? '📣 La campanita sale sola el ' + ecCorta(diaAviso) + '.' : '📣 Faltan menos de 2 días: la campanita sale apenas guardes.') : '🔕 Sin campanita: lo verán en su módulo.');
-    if (date) lineas.push('🟢 ' + (multi ? 'La Parte 1' : 'El examen') + ' se abre el ' + ecCorta(date) + (from ? ' a las ' + F.fmtHora(from) : ' (todo el día)') + ' y se cierra solo' + (to ? ' a las ' + F.fmtHora(to) : ' al terminar el día') + '.');
-    if (multi) lineas.push(p2mode === 'otro' ? '🟢 La Parte 2 se abre el ' + (p2date ? ecCorta(p2date) : '(elige la fecha)') + (p2from ? ' a las ' + F.fmtHora(p2from) : '') + (p2to ? ' y se cierra sola a las ' + F.fmtHora(p2to) : '') + '.' : '➡️ Parte 2 seguida: al entregar la Parte 1, la Parte 2 aparece ahí mismo, en la página del examen.');
+    if (date && varios && nDias) lineas.push(cont ? '🟢 Abierto de corrido ' + nDias + ' días: desde el ' + ecCorta(date) + (from ? ', ' + F.fmtHora(from) : '') + ' hasta el ' + ecCorta(dateTo) + (to ? ', ' + F.fmtHora(to) : ' (fin del día)') + '.' : '🟢 Abierto ' + nDias + ' días (' + ecCorta(date) + ' → ' + ecCorta(dateTo) + '), cada día ' + (from ? 'de ' + F.fmtHora(from) : 'desde temprano') + (to ? ' a ' + F.fmtHora(to) : ' hasta el fin del día') + '. Cada alumno lo da una sola vez.');
+    else if (date && varios) lineas.push('📅 Elige hasta qué día queda abierto.');
+    else if (date) lineas.push('🟢 ' + (multi ? 'La Parte 1' : 'El examen') + ' se abre el ' + ecCorta(date) + (from ? ' a las ' + F.fmtHora(from) : ' (todo el día)') + ' y se cierra solo' + (to ? ' a las ' + F.fmtHora(to) : ' al terminar el día') + '.');
+    if (varios && nDias && remind) lineas.push('⏰ El ' + ecCorta(dateTo) + ' se recuerda a quien todavía no lo dio.');
+    if (multi) lineas.push(p2m === 'otro' ? '🟢 La Parte 2 se abre el ' + (p2date ? ecCorta(p2date) : '(elige la fecha)') + (p2from ? ' a las ' + F.fmtHora(p2from) : '') + (p2to ? ' y se cierra sola a las ' + F.fmtHora(p2to) : '') + '.' : '➡️ Parte 2 seguida: al entregar la Parte 1, la Parte 2 aparece ahí mismo, en la página del examen.');
   }
   lineas.push(ya === null ? '⏳ Revisando quién ya dio este examen…' : '👥 Lo dan ' + nLo + ' de ' + members.length + (nSin ? ' · ' + nSin + ' sin acceso' : '') + (nNueva ? ' · ' + nNueva + ' de nuevo como nota nueva' : '') + (nConserva ? ' · ' + nConserva + ' ya lo dieron y conservan su nota' : '') + '.');
 
   const guardar = () => {
     if (!noDate && !date) { alert('Elige la fecha del examen (o marca “Todavía no tengo la fecha”).'); return; }
-    if (!noDate && multi && p2mode === 'otro' && !p2date) { alert('Elige la fecha de la Parte 2.'); return; }
-    if (!noDate && multi && p2mode === 'otro' && p2date <= date) { alert('La Parte 2 debe ser un día DESPUÉS de la Parte 1.'); return; }
+    if (varios && !dateTo) { alert('Elige hasta qué día queda abierto (o elige «Un día»).'); return; }
+    if (varios && dateTo <= date) { alert('El último día debe ser DESPUÉS del primero (o elige «Un día»).'); return; }
+    if (varios && nDias > EC_MAX_DIAS) { alert('Máximo ' + EC_MAX_DIAS + ' días abierto. Elige un último día más cercano.'); return; }
+    if (!noDate && multi && p2m === 'otro' && !p2date) { alert('Elige la fecha de la Parte 2.'); return; }
+    if (!noDate && multi && p2m === 'otro' && p2date <= date) { alert('La Parte 2 debe ser un día DESPUÉS de la Parte 1.'); return; }
     if (sel.length) F.setFresh(group.id, exam.id, sel);
     if (noDate) {
       const n = X.announceExam(group.id, mid, exam.id, null);
@@ -311,15 +345,16 @@ function EcProgramar({ group, it, est, members, onChange, goStep }) {
     }
     const programar = aviso === 'antes' && diaAviso > hoy;
     F.setAnn(group.id, mid, {
-      date, dateTo: null, from: from || null, to: to || null, variant, auto: true, forceClosed: false, closedOn: null, examId: exam.id,
+      date, dateTo: varios ? dateTo : null, cont: varios && cont, remindLast: varios && remind, remindedOn: null,
+      from: from || null, to: to || null, variant, auto: true, forceClosed: false, closedOn: null, examId: exam.id,
       programmedAt: new Date().toISOString(), openedAt: null, openUntil: null,
-      p2mode: multi ? p2mode : null, p2date: multi && p2mode === 'otro' ? p2date : null,
-      p2from: multi && p2mode === 'otro' ? (p2from || null) : null, p2to: multi && p2mode === 'otro' ? (p2to || null) : null,
+      p2mode: multi ? p2m : null, p2date: multi && p2m === 'otro' ? p2date : null,
+      p2from: multi && p2m === 'otro' ? (p2from || null) : null, p2to: multi && p2m === 'otro' ? (p2to || null) : null,
       notifyDate: aviso === 'no' ? null : (programar ? diaAviso : hoy), notified: aviso === 'no' ? true : !programar,
     });
     if (!win) X.createWindow({ examId: exam.id, groupId: group.id, isOpen: false });
     else if (win.isOpen) X.setWindowOpen(win.id, false);   /* manda el horario: nada abierto a mano */
-    if (aviso !== 'no' && !programar) X.announceExam(group.id, mid, exam.id, date);
+    if (aviso !== 'no' && !programar) X.announceExam(group.id, mid, exam.id, date, varios ? dateTo : null);
     alert('💾 Guardado para ' + group.name + ':\n' + lineas.join('\n'));
     onChange();
   };
@@ -339,29 +374,56 @@ function EcProgramar({ group, it, est, members, onChange, goStep }) {
       <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:12}}>
         <div style={ecCard}>
           <div style={ecCardT}>🗓️ Cuándo <span style={{fontFamily:"'Nunito',sans-serif", fontSize:11.5, fontWeight:800, color:'#8A8578'}}>· hora de Perú</span></div>
-          <div className="row-flex" style={{gap:7, flexWrap:'wrap', opacity: noDate ? .45 : 1}}>
-            <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13, minWidth:58}}>{multi ? 'Parte 1' : 'Examen'}</b>
-            <input type="date" className="input-text" style={{width:150}} value={date} disabled={noDate} onChange={e => setDate(e.target.value)} />
-            <span style={{fontSize:11.5, fontWeight:800, color:'#8A8578'}}>de</span>
-            <input type="time" className="input-text" style={{width:108}} value={from} disabled={noDate} onChange={e => setFrom(e.target.value)} />
-            <span style={{fontSize:11.5, fontWeight:800, color:'#8A8578'}}>a</span>
-            <input type="time" className="input-text" style={{width:108}} value={to} disabled={noDate} onChange={e => setTo(e.target.value)} />
+          <div className="row-flex" style={{gap:7, flexWrap:'wrap', marginBottom:9, opacity: noDate ? .45 : 1}}>
+            <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13, minWidth:58}}>Duración</b>
+            {ecSegBtns(dias, setDias, [['1', 'Un día'], ['n', 'Varios días']], noDate)}
           </div>
+          <div className="row-flex" style={{gap:7, flexWrap:'wrap', opacity: noDate ? .45 : 1}}>
+            <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13, minWidth:58}}>{varios ? 'Desde' : multi ? 'Parte 1' : 'Examen'}</b>
+            <input type="date" className="input-text" style={{width:150}} value={date} disabled={noDate} onChange={e => setDate(e.target.value)} />
+            {varios ? <>
+              <span style={{fontSize:11.5, fontWeight:800, color:'#8A8578'}}>hasta</span>
+              <input type="date" className="input-text" style={{width:150}} value={dateTo} min={date ? ecAddDays(date, 1) : undefined} max={date ? ecAddDays(date, EC_MAX_DIAS - 1) : undefined} onChange={e => setDateTo(e.target.value)} />
+            </> : <>
+              <span style={{fontSize:11.5, fontWeight:800, color:'#8A8578'}}>de</span>
+              <input type="time" className="input-text" style={{width:108}} value={from} disabled={noDate} onChange={e => setFrom(e.target.value)} />
+              <span style={{fontSize:11.5, fontWeight:800, color:'#8A8578'}}>a</span>
+              <input type="time" className="input-text" style={{width:108}} value={to} disabled={noDate} onChange={e => setTo(e.target.value)} />
+            </>}
+          </div>
+          {varios && <>
+            <div className="row-flex" style={{gap:6, flexWrap:'wrap', marginTop:8, paddingLeft:65}}>
+              <span style={{fontSize:11.5, fontWeight:800, color:'#8A8578'}}>Rápido:</span>
+              {[[2, '3 días'], [4, '5 días'], [6, '1 semana'], ['dom', 'hasta el domingo']].map(([n, l]) => <button key={l} className="preset" onClick={() => rapido(n)}>{l}</button>)}
+            </div>
+            <div className="row-flex" style={{gap:7, flexWrap:'wrap', marginTop:10}}>
+              <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13, minWidth:58}}>Horario</b>
+              {ecSegBtns(cont ? 'cont' : 'dia', v => setCont(v === 'cont'), [['dia', 'Mismo horario cada día'], ['cont', 'Corrido, día y noche']])}
+            </div>
+            <div className="row-flex" style={{gap:7, flexWrap:'wrap', marginTop:7, paddingLeft:65}}>
+              <span style={{fontSize:11.5, fontWeight:800, color:'#8A8578'}}>{cont ? 'abre el ' + (date ? ecCorta(date) : '1.er día') + ' a las' : 'cada día de'}</span>
+              <input type="time" className="input-text" style={{width:108}} value={from} onChange={e => setFrom(e.target.value)} />
+              <span style={{fontSize:11.5, fontWeight:800, color:'#8A8578'}}>{cont ? 'y cierra el ' + (dateTo ? ecCorta(dateTo) : 'último día') + ' a las' : 'a'}</span>
+              <input type="time" className="input-text" style={{width:108}} value={to} onChange={e => setTo(e.target.value)} />
+            </div>
+            {ecDiasTira(F, date, nDias ? dateTo : '', from, to, cont)}
+            <div className="settings-hint" style={{margin:'8px 0 0'}}>{cont ? 'Queda abierto día y noche desde la apertura del primer día hasta el cierre del último. Ideal para darlo en casa.' : 'Cada día del rango se abre y se cierra solo en ese horario. Fuera de esas horas no se puede entrar.'} Cada alumno lo da una sola vez. Máximo {EC_MAX_DIAS} días.</div>
+          </>}
           {multi && <>
             <div className="row-flex" style={{gap:7, flexWrap:'wrap', marginTop:8, opacity: noDate ? .45 : 1}}>
               <b style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:13, minWidth:58}}>Parte 2</b>
-              {ecSegBtns(p2mode, setP2mode, [['seguida', 'Seguida, al terminar la Parte 1'], ['otro', 'Otro día']], noDate)}
+              {ecSegBtns(p2m, setP2mode, [['seguida', 'Seguida, al terminar la Parte 1'], ['otro', 'Otro día']], noDate || varios)}
             </div>
-            {p2mode === 'otro' && <div className="row-flex" style={{gap:7, flexWrap:'wrap', marginTop:7, paddingLeft:65, opacity: noDate ? .45 : 1}}>
+            {p2m === 'otro' && <div className="row-flex" style={{gap:7, flexWrap:'wrap', marginTop:7, paddingLeft:65, opacity: noDate ? .45 : 1}}>
               <input type="date" className="input-text" style={{width:150}} value={p2date} disabled={noDate} onChange={e => setP2date(e.target.value)} />
               <span style={{fontSize:11.5, fontWeight:800, color:'#8A8578'}}>de</span>
               <input type="time" className="input-text" style={{width:108}} value={p2from} disabled={noDate} onChange={e => setP2from(e.target.value)} />
               <span style={{fontSize:11.5, fontWeight:800, color:'#8A8578'}}>a</span>
               <input type="time" className="input-text" style={{width:108}} value={p2to} disabled={noDate} onChange={e => setP2to(e.target.value)} />
             </div>}
-            <div className="settings-hint" style={{margin:'8px 0 0'}}>{p2mode === 'seguida' ? <>Al entregar la Parte 1, <b>en la misma página del examen</b> le aparece «Sigue la Parte 2». No vuelve a la plataforma a buscarla.</> : <>Al entregar la Parte 1 verá «Tu Parte 2 es el {p2date ? ecCorta(p2date) : '…'}». Cada parte se abre y se cierra sola.</>}</div>
+            <div className="settings-hint" style={{margin:'8px 0 0'}}>{varios ? <>Con varios días la Parte 2 va <b>seguida</b>: cada alumno la da al terminar la Parte 1, el día que entre.</> : p2mode === 'seguida' ? <>Al entregar la Parte 1, <b>en la misma página del examen</b> le aparece «Sigue la Parte 2». No vuelve a la plataforma a buscarla.</> : <>Al entregar la Parte 1 verá «Tu Parte 2 es el {p2date ? ecCorta(p2date) : '…'}». Cada parte se abre y se cierra sola.</>}</div>
           </>}
-          {!multi && <div className="settings-hint" style={{margin:'8px 0 0'}}>Se abre y se cierra solo. Después de la hora de cierre no queda nada abierto.</div>}
+          {!multi && !varios && <div className="settings-hint" style={{margin:'8px 0 0'}}>Se abre y se cierra solo. Después de la hora de cierre no queda nada abierto.</div>}
           <label className="check-row" style={{margin:'10px 0 0'}}><input type="checkbox" checked={noDate} onChange={e => setNoDate(e.target.checked)} /><span style={{fontSize:12}}>Todavía no tengo la fecha (solo avisar que se acerca)</span></label>
         </div>
         <div style={ecCard}>
@@ -370,9 +432,10 @@ function EcProgramar({ group, it, est, members, onChange, goStep }) {
           <div style={{display:'flex', gap:9, alignItems:'flex-start', background:'#F6F3EA', borderRadius:11, padding:'9px 11px', marginTop:10, fontSize:12.5, fontWeight:700}}>
             <span style={{fontSize:16}}>🔔</span>
             <div><div style={{fontSize:10, fontWeight:900, letterSpacing:'.05em', textTransform:'uppercase', color:'#A08F63'}}>Lo que verán</div>
-              {noDate ? 'Estás pronto a dar tu examen. ¡Practica un poquito cada día!' : aviso === 'no' ? <span style={{color:'#8A8578'}}>No se envía campanita: el examen igual aparece en su módulo con la cuenta regresiva.</span> : <>🎓 Tu examen es el {date ? F.fmtFecha(date) : '…'}{from ? ', ' + F.fmtHora(from) : ''}.{multi ? (p2mode === 'seguida' ? ' Las 2 partes van seguidas.' : ' La Parte 2 es el ' + (p2date ? F.fmtFecha(p2date) : '…') + '.') : ''} ¡Practica!</>}
+              {noDate ? 'Estás pronto a dar tu examen. ¡Practica un poquito cada día!' : aviso === 'no' ? <span style={{color:'#8A8578'}}>No se envía campanita: el examen igual aparece en su módulo con la cuenta regresiva.</span> : varios ? <>🎓 Tu examen estará abierto del {date ? F.fmtFecha(date) : '…'} al {dateTo ? F.fmtFecha(dateTo) : '…'}{cont ? '' : from ? ', cada día desde las ' + F.fmtHora(from) : ''}. Puedes darlo cualquiera de esos días. ¡Practica!</> : <>🎓 Tu examen es el {date ? F.fmtFecha(date) : '…'}{from ? ', ' + F.fmtHora(from) : ''}.{multi ? (p2mode === 'seguida' ? ' Las 2 partes van seguidas.' : ' La Parte 2 es el ' + (p2date ? F.fmtFecha(p2date) : '…') + '.') : ''} ¡Practica!</>}
             </div>
           </div>
+          {varios && <label className="check-row" style={{margin:'10px 0 0', alignItems:'flex-start'}}><input type="checkbox" checked={remind} onChange={e => setRemind(e.target.checked)} /><span style={{fontSize:12}}>⏰ El último día, recordar <b>solo a quien todavía no lo dio</b>: «¡Hoy es el último día para dar tu examen!»</span></label>}
         </div>
       </div>
 
@@ -401,7 +464,7 @@ function EcProgramar({ group, it, est, members, onChange, goStep }) {
           <span style={{flex:1}}></span>
           {ann && (ann.date || ann.notified) && <button className="att-btn" onClick={() => { if (confirm('¿Quitar la programación? El aviso y la cuenta regresiva desaparecen para los alumnos.')) { const keep = (ann && ann.paused) || []; F.setAnn(group.id, mid, null); if (keep.length) F.setAnn(group.id, mid, { paused: keep, examId: exam.id }); X.cancelAnnouncement(group.id, mid); onChange(); } }}>✕ Quitar programación</button>}
         </div>
-        {ann && ann.date && <div className="settings-hint" style={{margin:'8px 0 0'}}>✓ Programado: aviso {ann.notified ? 'ya enviado' : 'se enviará el ' + ecCorta(ann.notifyDate)} · examen {ecCorta(ann.date)}{ann.from ? ', ' + F.fmtHora(ann.from) : ''}{ann.to ? ' – ' + F.fmtHora(ann.to) : ''}{ann.p2mode === 'otro' && ann.p2date ? ' · Parte 2 ' + ecCorta(ann.p2date) : ''} · sale en tu calendario de Planificar.</div>}
+        {ann && ann.date && <div className="settings-hint" style={{margin:'8px 0 0'}}>✓ Programado: aviso {ann.notified ? 'ya enviado' : 'se enviará el ' + ecCorta(ann.notifyDate)} · examen {ecCorta(ann.date)}{ann.dateTo && ann.dateTo !== ann.date ? ' → ' + ecCorta(ann.dateTo) + (ann.cont ? ' (corrido)' : '') : ''}{ann.from ? ', ' + F.fmtHora(ann.from) : ''}{ann.to ? ' – ' + F.fmtHora(ann.to) : ''}{ann.p2mode === 'otro' && ann.p2date ? ' · Parte 2 ' + ecCorta(ann.p2date) : ''} · sale en tu calendario de Planificar.</div>}
       </div>
 
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap', margin:'20px 0 8px'}}>
@@ -438,8 +501,11 @@ function EcAbrirModal({ exam, group, defTo, entran, total, onClose, onOpen }) {
   opts.push(['60', 'Por 1 hora', ecHM(now + 60)], ['120', 'Por 2 horas', ecHM(now + 120)]);
   const [k, setK] = ecUS(opts[0][0]);
   const [otra, setOtra] = ecUS('');
+  const [dia, setDia] = ecUS(ecAddDays(F.pDay(), 2));
+  const [diaH, setDiaH] = ecUS('23:59');
+  const esDia = k === 'dia';
   const hasta = k === 'otra' ? otra : (opts.find(o => o[0] === k) || [])[2];
-  const valido = !!hasta && ecMinOf(hasta) != null && ecMinOf(hasta) > now;
+  const valido = esDia ? (!!dia && dia > F.pDay() && dia <= ecAddDays(F.pDay(), EC_MAX_DIAS - 1) && ecMinOf(diaH) != null) : (!!hasta && ecMinOf(hasta) != null && ecMinOf(hasta) > now);
   const opt = (key, label, right) => (
     <label key={key} style={{display:'flex', gap:10, alignItems:'center', border:'1.5px solid ' + (k === key ? '#1F3A8A' : '#D5CDBB'), background: k === key ? '#F7F9FE' : '#fff', borderRadius:12, padding:'9px 12px', marginTop:8, fontSize:13, fontWeight:800, cursor:'pointer'}}>
       <input type="radio" checked={k === key} onChange={() => setK(key)} />{label}<span style={{marginLeft:'auto', fontSize:12, color:'#8A8578'}}>{right}</span>
@@ -450,13 +516,14 @@ function EcAbrirModal({ exam, group, defTo, entran, total, onClose, onOpen }) {
       <div onClick={e => e.stopPropagation()} style={{background:'#fff', borderRadius:16, maxWidth:430, width:'100%', padding:'18px 20px', boxShadow:'0 18px 40px rgba(0,0,0,.2)'}}>
         <div style={{fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:17}}>▶ Abrir ahora · {exam.title}</div>
         <div className="settings-hint" style={{margin:'2px 0 0'}}>{group.name} · lo dan {entran} de {total} alumnos</div>
-        <div style={{fontSize:13, fontWeight:800, marginTop:12}}>¿Hasta qué hora queda abierto?</div>
+        <div style={{fontSize:13, fontWeight:800, marginTop:12}}>¿Hasta cuándo queda abierto?</div>
         {opts.map(o => opt(o[0], o[1], F.fmtHora(o[2])))}
         {opt('otra', 'Otra hora', <input type="time" className="input-text" style={{width:110}} value={otra} onClick={() => setK('otra')} onChange={e => { setOtra(e.target.value); setK('otra'); }} />)}
-        <div className="settings-hint" style={{margin:'10px 0 0'}}>A esa hora se cierra solo (hora de Perú). Quien esté dentro alcanza a enviar lo que lleva.</div>
+        {opt('dia', 'Hasta otro día', <span style={{display:'inline-flex', gap:6}}><input type="date" className="input-text" style={{width:140}} value={dia} min={ecAddDays(F.pDay(), 1)} max={ecAddDays(F.pDay(), EC_MAX_DIAS - 1)} onClick={() => setK('dia')} onChange={e => { setDia(e.target.value); setK('dia'); }} /><input type="time" className="input-text" style={{width:100}} value={diaH} onClick={() => setK('dia')} onChange={e => { setDiaH(e.target.value); setK('dia'); }} /></span>)}
+        <div className="settings-hint" style={{margin:'10px 0 0'}}>{esDia ? 'Queda abierto día y noche hasta esa fecha y hora (hora de Perú); ahí se cierra solo. Cada alumno lo da una sola vez.' : 'A esa hora se cierra solo (hora de Perú). Quien esté dentro alcanza a enviar lo que lleva.'}</div>
         <div className="row-flex" style={{gap:8, justifyContent:'flex-end', marginTop:14}}>
           <button className="att-btn" onClick={onClose}>Cancelar</button>
-          <button className="btn-save" disabled={!valido} style={{opacity: valido ? 1 : .5}} onClick={() => valido && onOpen(ecHoyIso(hasta))}>🟢 Abrir{valido ? ' hasta las ' + F.fmtHora(hasta) : ''}</button>
+          <button className="btn-save" disabled={!valido} style={{opacity: valido ? 1 : .5}} onClick={() => valido && onOpen(esDia ? ecDiaIso(dia, diaH) : ecHoyIso(hasta))}>🟢 Abrir{valido ? (esDia ? ' hasta el ' + ecCorta(dia) + ', ' + F.fmtHora(diaH) : ' hasta las ' + F.fmtHora(hasta)) : ''}</button>
         </div>
       </div>
     </div>
@@ -486,7 +553,18 @@ function EcEnVivo({ group, it, members, onChange, goStep }) {
   const open = F.winEffectiveOpen(win);
   const hoy = F.pDay();
   const esDia2 = otro && hoy === ann.p2date;
-  const cierre = F.abiertoAhoraHasta && F.abiertoAhoraHasta(ann) ? ecPeruHM(ann.openUntil) : ann ? (esDia2 ? (ann.p2to || ann.to) : ann.to) : null;
+  /* 📅 EXAMEN-VARIOS-DIAS-V1: día X de N · alargar · cerrar solo hoy / del todo */
+  const abiertoHasta = !!(F.abiertoAhoraHasta && F.abiertoAhoraHasta(ann));
+  const ouFuera = abiertoHasta && ecPeruDia(ann.openUntil) !== hoy;
+  const rango = !!(ann && ann.date && ann.dateTo && ann.dateTo > ann.date && ann.p2mode !== 'otro' && F.enFechaAnn(ann, hoy));
+  const contHoy = rango && ann.cont && hoy < ann.dateTo;
+  const puedeAlargar = !!(ann && ((ann.date && ann.p2mode !== 'otro' && F.enFechaAnn(ann, hoy)) || ouFuera));
+  const finActual = ouFuera ? ecPeruDia(ann.openUntil) : ann ? (ann.dateTo || ann.date) : null;
+  const [alargar, setAlargar] = ecUS(false);
+  const [nuevoFin, setNuevoFin] = ecUS('');
+  const cierre = abiertoHasta ? (ouFuera ? null : ecPeruHM(ann.openUntil)) : contHoy ? null : ann ? (esDia2 ? (ann.p2to || ann.to) : ann.to) : null;
+  const cierreLargo = ouFuera ? ecCorta(ecPeruDia(ann.openUntil)) + ', ' + F.fmtHora(ecPeruHM(ann.openUntil)) : rango ? ecCorta(ann.dateTo) + (ann.to ? ', ' + F.fmtHora(ann.to) : '') : null;
+  const diaTxt = rango ? ' · día ' + (ecDiff(ann.date, hoy) + 1) + ' de ' + (ecDiff(ann.date, ann.dateTo) + 1) : ouFuera ? ' · abierto hasta otro día' : '';
   const falta = cierre && open ? Math.max(0, ecMinOf(cierre) - F.pMin()) : null;
   const celda = (s, k) => {
     const comp = ((D.getStudentProgress && D.getStudentProgress(s.id)) || {}).completed || {};
@@ -522,11 +600,28 @@ function EcEnVivo({ group, it, members, onChange, goStep }) {
     onChange();
   };
   const cerrar = () => {
-    if (!confirm('¿Cerrar el examen ahora? Quien esté dentro alcanza a enviar lo que lleva. ' + (otro && !esDia2 ? 'La Parte 2 del ' + ecCorta(ann.p2date) + ' sigue programada.' : ''))) return;
-    if (F.abiertoAhoraHasta(ann)) F.setAnn(group.id, mid, { openUntil: new Date().toISOString(), closedOn: hoy });
+    if (!confirm((rango || ouFuera ? '¿Cerrar el examen solo por HOY? Mañana vuelve a abrirse en su horario. ' : '¿Cerrar el examen ahora? ') + 'Quien esté dentro alcanza a enviar lo que lleva. ' + (otro && !esDia2 ? 'La Parte 2 del ' + ecCorta(ann.p2date) + ' sigue programada.' : ''))) return;
+    if (ouFuera) F.setAnn(group.id, mid, { closedOn: hoy, examId: exam.id });
+    else if (F.abiertoAhoraHasta(ann)) F.setAnn(group.id, mid, { openUntil: new Date().toISOString(), closedOn: hoy });
     else F.setAnn(group.id, mid, { closedOn: hoy, examId: exam.id });
+    if (win && win.isOpen && !ouFuera) X.setWindowOpen(win.id, false);
+    onChange();
+  };
+  const cerrarTodo = () => {
+    if (!confirm('¿Cerrar el examen DEL TODO? Ya no se abre los días que faltaban. Quien esté dentro alcanza a enviar lo que lleva.')) return;
+    if (abiertoHasta) F.setAnn(group.id, mid, { openUntil: new Date().toISOString(), closedOn: hoy });
+    if (rango) F.setAnn(group.id, mid, { dateTo: hoy > ann.date ? hoy : null, cont: hoy > ann.date ? ann.cont : false, closedOn: hoy, examId: exam.id });
+    else if (!abiertoHasta) F.setAnn(group.id, mid, { closedOn: hoy, examId: exam.id });
     if (win && win.isOpen) X.setWindowOpen(win.id, false);
     onChange();
+  };
+  const guardarAlargar = () => {
+    const ini = ouFuera ? ecPeruDia(ann.openedAt) : ann.date;
+    if (!nuevoFin || nuevoFin <= finActual) { alert('Elige un día DESPUÉS del ' + ecCorta(finActual) + '.'); return; }
+    if (ecDiff(ini, nuevoFin) + 1 > EC_MAX_DIAS) { alert('Máximo ' + EC_MAX_DIAS + ' días abierto (desde el ' + ecCorta(ini) + ').'); return; }
+    if (ouFuera) F.setAnn(group.id, mid, { openUntil: ecDiaIso(nuevoFin, ecPeruHM(ann.openUntil)), examId: exam.id });
+    else F.setAnn(group.id, mid, { dateTo: nuevoFin, remindedOn: null, examId: exam.id });
+    setAlargar(false); setNuevoFin(''); onChange();
   };
   const chip = (x) => {
     if (x.k === 'ok') return ecPill('#E8F5E9', '#2E7D32', '✓ ' + x.score, 'c');
@@ -542,15 +637,17 @@ function EcEnVivo({ group, it, members, onChange, goStep }) {
     <div>
       <div style={{border:'1.5px solid ' + (open ? '#A5D6A7' : '#D5CDBB'), borderRadius:12, background: open ? '#F6FBF6' : '#FBFAF5', padding:'12px 14px'}}>
         <div className="row-flex" style={{gap:8, flexWrap:'wrap', fontSize:13, fontWeight:800}}>
-          {open ? <><span style={{width:10, height:10, borderRadius:'50%', background:'#2E7D32', boxShadow:'0 0 0 4px rgba(46,125,50,.18)'}}></span>En curso{esDia2 ? ' · Parte 2' : multi && otro ? ' · Parte 1' : ''}{cierre ? ' · se cierra solo a las ' + F.fmtHora(cierre) : ''}{falta != null ? ' · faltan ' + falta + ' min' : ''}</>
-            : <>⚪ Cerrado ahora{ann && ann.date && F.enFechaAnn(ann, hoy) && ann.from && ecMinOf(ann.from) > F.pMin() ? ' · se abre solo a las ' + F.fmtHora(esDia2 ? (ann.p2from || ann.from) : ann.from) : ''}</>}
+          {open ? <><span style={{width:10, height:10, borderRadius:'50%', background:'#2E7D32', boxShadow:'0 0 0 4px rgba(46,125,50,.18)'}}></span>En curso{esDia2 ? ' · Parte 2' : multi && otro ? ' · Parte 1' : ''}{diaTxt}{cierre ? ' · se cierra solo a las ' + F.fmtHora(cierre) : ''}{falta != null ? ' · faltan ' + falta + ' min' : ''}{cierreLargo ? ' · cierra del todo el ' + cierreLargo : ''}</>
+            : <>⚪ Cerrado ahora{diaTxt}{ann && ann.date && F.enFechaAnn(ann, hoy) && ann.from && ecMinOf(ann.from) > F.pMin() ? ' · se abre solo a las ' + F.fmtHora(esDia2 ? (ann.p2from || ann.from) : ann.from) : ''}</>}
         </div>
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:8, margin:'11px 0'}}>
           {K.map(([l, n]) => <div key={l} style={{background:'#fff', border:'1px solid #EFE7D2', borderRadius:11, padding:'8px 10px'}}><b style={{display:'block', fontFamily:"'Fredoka',sans-serif", fontWeight:600, fontSize:22, lineHeight:1.1}}>{n}</b><span style={{fontSize:11, fontWeight:800, color:'#8A8578'}}>{l}</span></div>)}
         </div>
         <div className="row-flex" style={{gap:8, flexWrap:'wrap'}}>
-          {open ? <><button className="att-btn" onClick={mas15}>+15 min a todos</button><button className="att-btn" onClick={cerrar}>⚪ Cerrar ahora</button></>
+          {open ? <>{cierre && <button className="att-btn" onClick={mas15}>+15 min a todos</button>}<button className="att-btn" onClick={cerrar}>{rango || ouFuera ? '⏸ Cerrar solo por hoy' : '⚪ Cerrar ahora'}</button>{(rango || ouFuera) && <button className="att-btn" style={{color:'#C62828'}} onClick={cerrarTodo}>⛔ Cerrar del todo</button>}</>
             : <button className="att-btn" style={{background:'#2E7D32', borderColor:'#2E7D32', color:'#fff'}} onClick={() => setAbrir(true)}>▶ Abrir ahora</button>}
+          {puedeAlargar && !alargar && <button className="att-btn" onClick={() => { setNuevoFin(ecAddDays(finActual, 1)); setAlargar(true); }}>📅 {finActual && ann.date && finActual === ann.date && !ouFuera ? 'Alargar a más días' : 'Alargar hasta…'}</button>}
+          {alargar && <span className="row-flex" style={{gap:6, flexWrap:'wrap'}}><input type="date" className="input-text" style={{width:150}} value={nuevoFin} min={ecAddDays(finActual, 1)} onChange={e => setNuevoFin(e.target.value)} /><button className="btn-save" onClick={guardarAlargar}>Guardar</button><button className="att-btn" onClick={() => setAlargar(false)}>Cancelar</button></span>}
           <button className="att-btn" onClick={() => goStep(3)}>📊 Ver notas</button>
           <span className="settings-hint" style={{margin:0}}>Se actualiza solo. ¿Alguien no puede entrar? Su motivo está en su fila.</span>
         </div>

@@ -749,7 +749,7 @@ function ModuleExamBanner({ mod, studentId }) {
     </div>
   );
   const box = (borderColor, children) => <div style={{borderRadius:13, marginTop:12, overflow:'hidden', width:'100%', border:'1.5px solid ' + borderColor}}>{children}</div>;
-  const horario = info.ann ? ((info.ann.from ? F.fmtHora(info.ann.from) + (info.ann.to ? ' – ' + F.fmtHora(info.ann.to) : '') : 'todo el día') + (info.ann.dateTo && info.ann.dateTo !== info.ann.date ? ' · disponible hasta el ' + F.fmtFecha(info.ann.dateTo) : '')) : '';
+  const horario = info.ann && F.horarioTxt ? F.horarioTxt(info.ann) /* EXAMEN-VARIOS-DIAS-V1 */ : info.ann ? ((info.ann.from ? F.fmtHora(info.ann.from) + (info.ann.to ? ' – ' + F.fmtHora(info.ann.to) : '') : 'todo el día') + (info.ann.dateTo && info.ann.dateTo !== info.ann.date ? ' · disponible hasta el ' + F.fmtFecha(info.ann.dateTo) : '')) : '';
 
   /* Ya rindió (nota automática instantánea): resultado + retroalimentación por parte */
   if (att && info.phase !== 'done') {
