@@ -276,7 +276,7 @@ function SaReportPop({ o, area, onClose }) {
 /* ── Panel ── areas: qué pestañas se muestran (grupo: todas · Modo clase: ['c','p']) */
 function GroupFollowPanel({ groupId, areas, startArea, classDate, remind }) {
   const D = window.JUCUM_DATA, S = window.JUCUM_SEG; if (!D || !S) return null;
-  const AR = areas || ['p', 'r', 'c', 't'];
+  const AR = areas || ['p', 'r', 'c', 't', 'm'];   // MATRIZ-MATERIALES-V1: «m» solo en el 🔎 Seguimiento del grupo
   const [area, setArea] = React.useState(startArea || AR[0]); const [date, setDate] = React.useState(classDate || null); const [pop, setPop] = React.useState(null); const [task, setTask] = React.useState(null); const [rep, setRep] = React.useState(false);
   const [remG, setRemG] = React.useState(null); const remOn = (remind != null ? !!remind : !areas) && !!window.SegRemindBox;   // RECORDAR-EN-SEGUIMIENTO-V1: sin «areas» = 🔎 Seguimiento del grupo
   const [, tick] = React.useReducer(x => x + 1, 0);
@@ -287,19 +287,19 @@ function GroupFollowPanel({ groupId, areas, startArea, classDate, remind }) {
   React.useEffect(() => { if (list.length) return; const iv = setInterval(tick, 2000); return () => clearInterval(iv); }, [list.length]);
   const lvl = group ? group.level : (list[0] && list[0].level); const thr = (F && F.thr && F.thr[lvl] != null) ? F.thr[lvl] : ({ 'pre-a1': 75, a1: 78, a2: 85 }[lvl] || 75);
   const goal = (D.getGroupSettings(groupId) || {}).dailyTargetMin || 15; const studs = { gid: groupId, list, thr };
-  const TABS = { p: ['🏠', 'Práctica del teacher', 'Los sets para casa'], r: ['🔁', 'Repaso por su cuenta', 'Meta diaria de ' + goal + ' min y qué repasó'], c: ['🏫', 'En clase', 'Materiales del plan en cada clase'], t: ['📝', 'Tareas', 'Quién entregó · ver su tarea aquí'] };
-  const SRC = { p: '📍 Cada columna es un set para casa. El anillo cuenta lo hecho dentro de las fechas del set; se le pide a todos, aunque ya lo tuviera aprobado. Toque un anillo para ver cada material con su nota.', r: '📍 Si llegó a la meta diaria del grupo (⚙️ Configurar → ' + goal + ' min). Toque el anillo para ver qué repasó, día por día, de cualquier tema o módulo.', c: '📍 Completó = hizo todos los materiales del plan ese día (aprobar se ve en la nota). Los que terminan suben arriba por orden de llegada. Toque «¡Completó!» o «le faltan» para el detalle.', t: '📍 Toque una celda para ver la tarea del alumno aquí mismo: respuestas, texto, audio, foto o PDF, sin descargar. Puede compararla con lo que usted dejó y calificarla.' };
+  const TABS = { p: ['🏠', 'Práctica del teacher', 'Los sets para casa'], r: ['🔁', 'Repaso por su cuenta', 'Meta diaria de ' + goal + ' min y qué repasó'], c: ['🏫', 'En clase', 'Materiales del plan en cada clase'], t: ['📝', 'Tareas', 'Quién entregó · ver su tarea aquí'], m: ['🧩', 'Matriz de materiales', 'Cada material del tema, alumno por alumno'] };
+  const SRC = { p: '📍 Cada columna es un set para casa. El anillo cuenta lo hecho dentro de las fechas del set; se le pide a todos, aunque ya lo tuviera aprobado. Toque un anillo para ver cada material con su nota.', r: '📍 Si llegó a la meta diaria del grupo (⚙️ Configurar → ' + goal + ' min). Toque el anillo para ver qué repasó, día por día, de cualquier tema o módulo.', c: '📍 Completó = hizo todos los materiales del plan ese día (aprobar se ve en la nota). Los que terminan suben arriba por orden de llegada. Toque «¡Completó!» o «le faltan» para el detalle.', t: '📍 Toque una celda para ver la tarea del alumno aquí mismo: respuestas, texto, audio, foto o PDF, sin descargar. Puede compararla con lo que usted dejó y calificarla.', m: '📍 Por defecto, el módulo en clase y su tema actual; cambie Módulo o Tema en las listas. Toque un punto para ver en un calendario los días que lo hizo.' };
   return <div className="sa">
     <style>{SA_CSS}</style>
     <div className="sa-hd"><div className="sa-areas">{AR.map(k => <button type="button" key={k} className={area === k ? 'on' : ''} onClick={() => setArea(k)}><b>{TABS[k][0]} {TABS[k][1]}</b><span>{TABS[k][2]}</span></button>)}</div>
-      <div className="sa-tools">{window.SegAgo ? <SegAgo F={F} busy={seg.busy} err={seg.err} onReload={seg.reload} /> : null}<button type="button" className="sa-btn rep" onClick={() => setRep(true)} disabled={!F}>📤 Reporte para tu Claude</button></div></div>
+      <div className="sa-tools">{window.SegAgo ? <SegAgo F={F} busy={seg.busy} err={seg.err} onReload={seg.reload} /> : null}<button type="button" className="sa-btn rep" onClick={() => setRep(true)} disabled={!F} style={area === 'm' ? { display: 'none' } : undefined}>📤 Reporte para tu Claude</button></div></div>
     <div className="sa-src">{SRC[area]}</div>
-    {!F ? <div className="sa-empty">{seg.err ? 'Sin conexión con la nube. ' : ''}Cargando el seguimiento desde la nube…</div> : <div className="sa-sc">
+    {area === 'm' ? <SaMatrix groupId={groupId} group={group} list={list} thr={thr} /> : !F ? <div className="sa-empty">{seg.err ? 'Sin conexión con la nube. ' : ''}Cargando el seguimiento desde la nube…</div> : <div className="sa-sc">
       {area === 'p' ? <SaPractice F={F} studs={studs} t={t} onPop={setPop} onRemind={remOn ? setRemG : null} split={!areas} /> : area === 'r' ? <SaReview F={F} studs={studs} t={t} daily={daily} goal={goal} onPop={setPop} /> : area === 'c' ? <SaClass F={F} studs={studs} t={t} daily={daily} date={date} setDate={setDate} onPop={setPop} /> : <SaTasks F={F} studs={studs} t={t} onTask={(k, st) => setTask({ k, st })} />}
     </div>}
     {pop && pop.kind === 'review' ? <SaReviewPop p={pop} thr={thr} onClose={() => setPop(null)} /> : pop ? <SaPop title={pop.title} sub={pop.sub} onClose={() => setPop(null)}>{pop.sum ? <div className="sa-sum">{pop.sum}</div> : null}<SaRows rows={pop.rows || []} grouped={pop.grouped} /></SaPop> : null}
     {task && F ? <SaTaskPop tk={task.k} st={task.st} studs={studs} F={F} onClose={() => setTask(null)} onMove={st => setTask({ k: task.k, st })} /> : null}
-    {rep && F ? <SaReportPop o={{ F, studs, daily, goal, group, t, areas: AR }} area={area} onClose={() => setRep(false)} /> : null}
+    {rep && F ? <SaReportPop o={{ F, studs, daily, goal, group, t, areas: AR.filter(k => k !== 'm') }} area={area} onClose={() => setRep(false)} /> : null}
     {remG && remOn ? <SaPop title={'🔔 Recordar · ' + saSetTitle(remG.plan)} sub={saDay(remG.from, 1) + ' → ' + saDay(remG.to, 1) + ' · ' + remG.full + ' de ' + remG.n + ' completos · ' + S.endsTxt(remG.to, t)} onClose={() => setRemG(null)}><div className="sa-remb"><SegRemindBox G={remG} onCancel={() => setRemG(null)} /></div></SaPop> : null}
   </div>;
 }
@@ -371,6 +371,183 @@ const SA_CSS = `.sa{display:flex;flex-direction:column;gap:12px;color:#1d2433;fo
 .sa-t tr.cmp td{background:#EFF8F0}.sa-t th.on{color:#0D1B5A;box-shadow:inset 0 -3px 0 #5B3FA0}
 .sa-rem{display:inline-flex;align-items:center;gap:4px;margin-top:6px;border:none;border-radius:9px;padding:5px 9px;min-height:30px;font:800 11.5px Nunito,sans-serif;color:#fff;background:linear-gradient(135deg,#7B5CC8,#5B3FA0);cursor:pointer;white-space:nowrap}.sa-rem:hover{filter:brightness(1.08)}
 .sa-t th small.rd{color:#2E7D32;font-weight:800;margin-top:3px}.sa-remb{padding:12px 18px 18px}
-@media (max-width:760px){.sa-vbody,.sa-vbody.both{grid-template-columns:1fr}.sa-vside{border-left:none;border-top:1px solid #F2ECDD}}`;
+@media (max-width:760px){.sa-vbody,.sa-vbody.both{grid-template-columns:1fr}.sa-vside{border-left:none;border-top:1px solid #F2ECDD}}
+.sa-mx{display:flex;flex-direction:column;gap:12px}.sa-mxw{display:flex;flex-direction:column;gap:10px}
+.sa-mxctl,.sa-mxbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.sa-mxctl label{display:inline-flex;gap:7px;align-items:center;font-size:12px;font-weight:800;color:#6B7280}
+.sa-mxsel{border:1.5px solid #D6DEEA;background:#fff;color:#33415C;border-radius:10px;padding:7px 8px;font:800 12.5px Nunito,sans-serif;min-height:38px;max-width:100%;cursor:pointer}.sa-mxsel.big{font-size:14px;color:#0D1B5A}
+.sa-mxseg{display:inline-flex;border:1.5px solid #D6DEEA;border-radius:11px;padding:2px;gap:2px;background:#fff}.sa-mxseg button{border:none;border-radius:9px;padding:6px 12px;min-height:34px;font:900 12.5px Nunito,sans-serif;cursor:pointer;background:transparent;color:#33415C;white-space:nowrap;display:inline-flex;align-items:center}.sa-mxseg button.on{background:#0D1B5A;color:#fff}
+.sa-mxst{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;border-radius:20px;padding:4px 10px;white-space:nowrap}.sa-mxst.g{background:#E3F4E6;color:#2E7D32}.sa-mxst.o{background:#FFF1D6;color:#8A5200}.sa-mxst.r{background:#FDECEA;color:#B23A2A}.sa-mxst.b{background:#EEF2FC;color:#1F3A8A}
+.sa-mxsc{overflow-x:auto;border:1px solid #E3DCC9;border-radius:12px}.sa-mxt{border-collapse:collapse;width:100%}.sa-mxt td,.sa-mxt th{border-top:1px solid #F2ECDD}.sa-mxt thead tr:first-child th{border-top:none}
+.sa-mxt th{font-size:10.5px;font-weight:800;color:#8a7f6a;padding:4px 3px;text-align:center;line-height:1.2;vertical-align:bottom}.sa-mxt th.nm{text-align:left;padding:6px 10px}.sa-mxt th.tp{font-size:11px;font-weight:900;color:#0D1B5A;padding:7px 4px 3px;background:#FBFAF6}
+.sa-mxt .stk{position:sticky;left:0;background:#fff;z-index:1}.sa-mxt td.stk{padding:4px 10px;white-space:nowrap}.sa-mxt .bl{border-left:2px solid #E3DCC9}.sa-mxt td.c{text-align:center;padding:2px}
+.sa-mxt td.tot{text-align:center;font-weight:900;font-size:12.5px;color:#6B6252;white-space:nowrap;padding:0 8px}.sa-mxt td.tot.ok,.sa-mxt td.ft.ok{color:#2E7D32}.sa-mxt td.ft{text-align:center;font-weight:900;font-size:12px;background:#FBFAF6;color:#33415C}.sa-mxt td.stk.ft{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#8a7f6a;text-align:left;padding:7px 10px}
+.sa-mxn{border:none;background:transparent;font:800 12.5px Nunito,sans-serif;color:#0D1B5A;cursor:pointer;text-align:left;padding:0}.sa-mxn:hover{color:#3F5BB8;text-decoration:underline}
+.sa-mxb{border:none;background:transparent;border-radius:9px;padding:4px 3px;cursor:pointer;font-family:inherit;min-width:44px;min-height:44px;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}.sa-mxb:hover{background:#EEF2FC}.sa-mxb.on{background:#DCE4F8;box-shadow:inset 0 0 0 2px #3F5BB8}
+.sa-mxd{font-size:10px;font-weight:700;color:#9AA3B2;white-space:nowrap}.sa-mxd.st{color:#C0392B}
+.sa-mxlgd{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:#6B7280;font-weight:800;align-items:center}.sa-mxlgd span{display:inline-flex;gap:5px;align-items:center;white-space:nowrap}.sa-mxlgd span:last-child{white-space:normal}
+.sa-mxnt{font-size:11.5px;font-weight:700;color:#6B7280}.sa-mxln{font-size:12.5px;font-weight:700}.sa-mxln small{color:#6B7280}
+.sa-mxpl{border:1px solid #E3DCC9;border-radius:12px;overflow:hidden}.sa-mxpr{display:grid;grid-template-columns:minmax(150px,240px) minmax(0,1fr) 54px;gap:10px;align-items:center;padding:8px 12px;border-top:1px solid #F2ECDD;background:#fff}.sa-mxpr:first-child{border-top:none}.sa-mxpr.cur{background:#F7F9FE}
+.sa-mxpr .tn{display:flex;flex-direction:column;gap:3px;min-width:0}.sa-mxpr .tn b{font-size:12.8px;color:#0D1B5A}.sa-mxpr .tn span{align-self:flex-start;font-size:10.5px;font-weight:800;background:#0D1B5A;color:#fff;border-radius:20px;padding:2px 8px;white-space:nowrap}
+.sa-mxpr .ds{display:flex;gap:4px;flex-wrap:wrap}.sa-mxpr .di{display:flex;flex-direction:column;align-items:center;min-width:66px}.sa-mxpr .di small{font-size:10.5px;font-weight:800;color:#8a7f6a;white-space:nowrap}.sa-mxpr .tot{text-align:center;font-size:12.5px;color:#6B6252}.sa-mxpr .tot.ok{color:#2E7D32}
+.sa-mxinfo{font-size:12.5px;font-weight:700;color:#5A5140;background:#FFF8E6;border:1px dashed #E6C46B;border-radius:12px;padding:9px 12px;line-height:1.5}
+.sa-mxbk{position:fixed;inset:0;z-index:1400}.sa-mxpop{position:fixed;z-index:1401;max-height:calc(100vh - 20px);overflow-y:auto;background:#fff;border:2px solid #9FB0DA;border-radius:14px;box-shadow:0 12px 32px rgba(13,27,90,.22);padding:13px;display:flex;flex-direction:column;gap:8px;font-size:12.5px;box-sizing:border-box}
+.sa-mxph{display:flex;gap:8px;align-items:flex-start}.sa-mxph>div{flex:1;min-width:0}.sa-mxph b{display:block;font-size:13.5px;color:#0D1B5A}.sa-mxph span{font-weight:700;color:#6B7280}.sa-mxpop>.sa-mxst{align-self:flex-start}
+.sa-mxcal{display:flex;flex-direction:column;gap:7px}.sa-mxcn{display:flex;align-items:center;gap:6px}.sa-mxcn b{flex:1;text-align:center;font-size:13px;color:#0D1B5A}.sa-mxcn .sa-btn{min-height:30px;padding:2px 10px}
+.sa-mxg{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center}.sa-mxg .hd{font-size:10px;font-weight:900;color:#8a7f6a}.sa-mxg .dy{height:30px;display:flex;align-items:center;justify-content:center;border-radius:8px;font-size:12px;font-weight:700;color:#6B6252}.sa-mxg .dy.fu{color:#C9C2B3}.sa-mxg .dy.td{box-shadow:inset 0 0 0 1.5px #9FB0DA}.sa-mxg .dy.on{background:#BFE5C4;color:#1B5E20;font-weight:900}.sa-mxg .dy.rg{background:#2E7D32;color:#fff;font-weight:900}
+.sa-mxch{display:flex;gap:6px;flex-wrap:wrap}.sa-mxch span{font-size:11.5px;font-weight:800;border-radius:20px;padding:4px 10px;white-space:nowrap}.sa-mxch .g{background:#E3F4E6;color:#2E7D32}.sa-mxch .b{background:#EEF2FC;color:#1F3A8A}
+.sa-mxlg{display:flex;gap:10px;flex-wrap:wrap;font-size:10.5px;font-weight:800;color:#6B7280}.sa-mxlg span{display:inline-flex;gap:4px;align-items:center;white-space:nowrap}.sa-mxlg i{width:11px;height:11px;border-radius:3px}.sa-mxlg i.on{background:#BFE5C4}.sa-mxlg i.rg{background:#2E7D32}
+@media (max-width:760px){.sa-mxpr{grid-template-columns:1fr}.sa-mxpr .tot{text-align:left}}`;
+
+/* 🧩 MATRIZ-MATERIALES-V1 (21-nov-2026 · aprobada en «Espejo - Matriz de materiales.html»): 5.ª pestaña del 🔎 Seguimiento del GRUPO
+ * (no en el Modo clase). Todos los materiales de un módulo/tema, alumno por alumno, con los puntos fuDot (✓ verde · ½ naranja nota
+ * baja · ○ rojo no lo hizo). Por defecto: el módulo «en clase» y su tema actual (Ritmo del grupo → set más nuevo → el primero);
+ * Módulo y Tema en listas desplegables + «Todos los temas». 👥 Grupal (filas = alumnos) · 👤 Personal (un alumno, filas = temas).
+ * Tocar un punto = calendario del mes con los días que lo trabajó (verde claro) y el día de la nota (verde oscuro).
+ * Cuenta lo hecho en CUALQUIER fecha (no es el Avance de un set). Solo lectura: no escribe nada. Quizlet fuera (no se registra). */
+const MX_MON = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const MX_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const MX_GEN = '__mod';
+function mxShortDay(d) { if (!d) return ''; const x = window.JUCUM_DAY.parse(d); return x.getDate() + ' ' + MX_MON[x.getMonth()]; }
+function mxShort(a, sums) {
+  if (a.type === 'summary') return sums.length > 1 ? 'Resumen ' + (sums.indexOf(a) + 1) : 'Resumen';
+  if (a.type === 'story') return 'Stories';
+  const n = String(a.name || a.id).split('·')[0].trim(); return n.length > 18 ? n.slice(0, 17) + '…' : n;
+}
+function mxTopics(mod) {
+  const acts = (mod.activities || []).filter(a => a.type !== 'quizlet' && a.id !== 'quizlet'), out = [], by = {};
+  const gen = acts.filter(a => !a.group);
+  acts.filter(a => a.group).forEach(a => { if (!by[a.group]) { by[a.group] = { key: a.group, label: a.group, acts: [] }; out.push(by[a.group]); } by[a.group].acts.push({ a, short: '' }); });
+  out.forEach(t => { const sums = t.acts.filter(x => x.a.type === 'summary').map(x => x.a); t.acts.forEach(x => { x.short = mxShort(x.a, sums); }); });
+  if (gen.length) out.push({ key: MX_GEN, label: '📚 Materiales del módulo', gen: true, acts: gen.map(a => ({ a, short: mxShort(a, []) })) });
+  return out;
+}
+function mxTName(t) { return t.gen ? t.label : String(t.label).replace(/\s*\(.*$/, ''); }
+function mxCurTopic(gid, mod, tops) {
+  const S = window.JUCUM_SEG, TT = window.JUCUM_TT;
+  try { const th = (window.rtGroupRhythm ? window.rtGroupRhythm(gid) : []).filter(x => x.mod.id === mod.id).sort((a, b) => String(b.since).localeCompare(String(a.since))); if (th[0] && tops.some(x => x.key === th[0].group)) return th[0].group; } catch (e) {}
+  try { const today = S.today(); const last = p => (p.dates || []).filter(d => d <= today).sort().pop() || '';
+    const ps = TT.getPracticePlans().filter(p => p.groupId === gid && last(p)).sort((a, b) => last(b).localeCompare(last(a)));
+    for (const p of ps) for (const m of (p.activities || [])) { if (m.moduleId !== mod.id) continue; const a = (mod.activities || []).find(x => x.id === m.activityId); if (a && a.group) return a.group; } } catch (e) {}
+  const t = tops.find(x => !x.gen); return t ? t.key : (tops[0] && tops[0].key);
+}
+function mxCell(F, s, mod, a, thr) {
+  const S = window.JUCUM_SEG, NG = S.NOGRADE || { story: 1, summary: 1, quizlet: 1, dialog: 1 };
+  const k = mod.id + ':' + a.id, e = ((F.prog || {})[String(s.id)] || {})[k] || null;
+  const days = (((F.days || {})[String(s.id)] || {})[k] || []).slice(); if (e && e.day && days.indexOf(e.day) < 0) days.push(e.day);
+  const ds = Array.from(new Set(days)).sort(), ng = !!NG[a.type];
+  const sc = e && !ng && typeof e.score === 'number' && isFinite(e.score) ? Math.max(0, Math.min(100, Math.round(e.score))) : null;
+  const st = e ? (ng || sc == null || sc >= thr ? 'ok' : 'lo') : ds.length ? 'start' : 'no';
+  return { st, sc, ng, reg: e ? e.day : null, days: ds, last: ds[ds.length - 1] || null, thr };
+}
+function MxDot({ c, on, onClick }) {
+  const base = c.st === 'start' ? 'no' : c.st;
+  return <button type="button" className={'sa-mxb' + (on ? ' on' : '')} onClick={onClick} title="Ver fechas">
+    {window.fuDot ? window.fuDot({ st: base, pct: c.st === 'ok' || c.st === 'lo' ? c.sc : null, day: null }) : <i>{base === 'ok' ? '✓' : base === 'lo' ? '½' : '○'}</i>}
+    {c.last && c.st !== 'no' ? <span className={'sa-mxd' + (c.st === 'start' ? ' st' : '')}>{c.st === 'start' ? 'empezó' : mxShortDay(c.last)}</span> : null}
+  </button>;
+}
+function MxCal({ days, reg }) {
+  const S = window.JUCUM_SEG; const [ym, setYm] = React.useState((days[days.length - 1] || S.today()).slice(0, 7));
+  const y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1, nd = new Date(y, m + 1, 0).getDate(), off = (new Date(y, m, 1).getDay() + 6) % 7;
+  const set = new Set(days), inMonth = days.filter(d => d.slice(0, 7) === ym).length, today = S.today();
+  const mv = k => { const d = new Date(y, m + k, 1); setYm(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')); };
+  const cells = []; for (let i = 0; i < off; i++) cells.push(null); for (let d = 1; d <= nd; d++) cells.push(d);
+  return <div className="sa-mxcal">
+    <div className="sa-mxcn"><button type="button" className="sa-btn" onClick={() => mv(-1)} aria-label="Mes anterior">‹</button><b>{MX_MES[m] + ' ' + y}</b><button type="button" className="sa-btn" onClick={() => mv(1)} aria-label="Mes siguiente">›</button></div>
+    <div className="sa-mxg">{['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d, i) => <span key={'h' + i} className="hd">{d}</span>)}
+      {cells.map((d, i) => { if (!d) return <span key={i}></span>; const iso = ym + '-' + String(d).padStart(2, '0'), on = set.has(iso), r = iso === reg;
+        return <span key={i} className={'dy' + (on ? (r ? ' rg' : ' on') : '') + (iso > today ? ' fu' : '') + (iso === today ? ' td' : '')} title={on ? S.fmtDay(iso) + (r ? ' · nota registrada' : ' · lo practicó') : ''}>{d}</span>; })}</div>
+    <div className="sa-mxch"><span className="g">{'✓ ' + inMonth + (inMonth === 1 ? ' vez' : ' veces') + ' este mes'}</span><span className="b">{days.length + (days.length === 1 ? ' vez' : ' veces') + ' en total'}</span></div>
+    <div className="sa-mxlg"><span><i className="on"></i>lo practicó</span>{reg ? <span><i className="rg"></i>día de la nota</span> : null}</div>
+    <div className="sa-mxnt">Cada día verde = un día en que lo trabajó (si lo repitió el mismo día, cuenta 1).</div>
+  </div>;
+}
+function MxPop({ p, onClose }) {
+  React.useEffect(() => { const k = e => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }; window.addEventListener('keydown', k, true); return () => window.removeEventListener('keydown', k, true); }, []);
+  const S = window.JUCUM_SEG, { c, s, a, t, x, y } = p, W = 300, H = Math.min(560, window.innerHeight - 20);
+  const left = Math.max(10, Math.min(window.innerWidth - W - 10, x - W / 2)), below = y + 560 < window.innerHeight, top = Math.max(10, Math.min(below ? y + 10 : y - 10 - H, window.innerHeight - H - 10));
+  const ST = { ok: ['✓ Hecho' + (c.ng ? '' : ' y aprobado'), 'g'], lo: ['½ Nota baja · no aprobó', 'o'], start: ['Lo abrió, no lo terminó', 'r'], no: ['○ No lo hizo', 'r'] }[c.st];
+  const el = <React.Fragment><div className="sa-mxbk" onClick={onClose}></div>
+    <div className="sa-mxpop" role="dialog" style={{ left, top, width: W }}>
+      <div className="sa-mxph"><div><b>{s.fullName || s.username}</b><span>{(t.gen ? '' : mxTName(t) + ' · ') + (a.name || a.id)}</span></div><button type="button" className="sa-btn" onClick={onClose} aria-label="Cerrar">✕</button></div>
+      <span className={'sa-mxst ' + ST[1]}>{ST[0]}</span>
+      {c.ng ? <div className="sa-mxnt">No lleva nota: cuenta con hacerlo.</div> : c.sc != null ? <div className="sa-mxln">Nota: <b>{c.sc + ' %'}</b> <small>(mínimo {c.thr})</small></div> : null}
+      {c.reg ? <div className="sa-mxln">Nota registrada el <b>{S.fmtDay(c.reg)}</b></div> : null}
+      <MxCal days={c.days} reg={c.reg} />
+    </div></React.Fragment>;
+  return window.ReactDOM && ReactDOM.createPortal ? ReactDOM.createPortal(<div className="sa" style={{ display: 'contents' }} onClick={e => e.stopPropagation()}>{el}</div>, document.body) : el;   // en <body>: ningún contenedor la recorta
+}
+function MxLegend() {
+  const d = st => window.fuDot ? window.fuDot({ st }) : null;
+  return <div className="sa-mxlgd"><span>{d('ok')} hecho / aprobado</span><span>{d('lo')} nota baja</span><span>{d('no')} no lo hizo</span><span>Debajo: nota y último día · toque un punto para ver todas las fechas</span></div>;
+}
+function MxGroup({ F, list, mod, shown, thr, pop, setPop, onStudent }) {
+  const [ord, setOrd] = React.useState('az');
+  const cols = []; shown.forEach(t => t.acts.forEach((x, i) => cols.push({ t, a: x.a, short: x.short, first: i === 0 })));
+  const rows = list.map(s => { const cs = cols.map(x => mxCell(F, s, mod, x.a, thr)); return { s, cs, ok: cs.filter(c => c.st === 'ok').length, lo: cs.filter(c => c.st === 'lo').length }; });
+  if (ord === 'mas') rows.sort((a, b) => b.ok - a.ok || b.lo - a.lo); else if (ord === 'menos') rows.sort((a, b) => a.ok - b.ok || a.lo - b.lo);
+  const full = rows.filter(r => cols.length && r.ok === cols.length).length, none = rows.filter(r => r.cs.every(c => c.st === 'no')).length, low = rows.filter(r => r.lo).length;
+  const multi = shown.length > 1, bl = x => multi && x.first ? ' bl' : '';
+  const nm = s => (s.fullName || s.username || '').split(' ').slice(0, 2).join(' ');
+  return <div className="sa-mxw">
+    <div className="sa-mxbar"><span className="sa-mxst g">{'✓ Completaron todo: ' + full + ' de ' + rows.length}</span>{low ? <span className="sa-mxst o">{'½ Con nota baja: ' + low}</span> : null}{none ? <span className="sa-mxst r">{'○ Sin empezar: ' + none}</span> : null}<span style={{ flex: 1 }}></span>
+      <span className="sa-mxseg">{[['az', 'A–Z'], ['mas', 'Más avance'], ['menos', 'Menos avance']].map(([k, l]) => <button key={k} type="button" className={ord === k ? 'on' : ''} onClick={() => setOrd(k)}>{l}</button>)}</span></div>
+    <div className="sa-mxsc"><table className="sa-mxt" style={{ minWidth: 190 + cols.length * 64 }}>
+      <thead>{multi ? <tr><th className="stk"></th>{shown.map(t => <th key={t.key} colSpan={t.acts.length} className="tp bl">{mxTName(t)}</th>)}<th></th></tr> : null}
+        <tr><th className="stk nm">{'Alumno · ' + rows.length}</th>{cols.map((x, i) => <th key={i} className={bl(x)}>{x.short}</th>)}<th>Hechos</th></tr></thead>
+      <tbody>{rows.map(r => <tr key={r.s.id}><td className="stk"><button type="button" className="sa-mxn" onClick={() => onStudent(r.s.id)} title="Ver su seguimiento personal">{nm(r.s)}</button></td>
+        {r.cs.map((c, i) => { const id = r.s.id + '|' + cols[i].a.id; return <td key={i} className={'c' + bl(cols[i])}><MxDot c={c} on={pop && pop.id === id} onClick={e => { const b = e.currentTarget.getBoundingClientRect(); setPop({ id, c, s: r.s, a: cols[i].a, t: cols[i].t, x: b.left + b.width / 2, y: b.bottom }); }} /></td>; })}
+        <td className={'tot' + (r.ok === cols.length ? ' ok' : '')}>{r.ok + '/' + cols.length}</td></tr>)}</tbody>
+      <tfoot><tr><td className="stk ft">Lo hicieron</td>{cols.map((x, i) => { const n = rows.filter(r => r.cs[i].st === 'ok').length; return <td key={i} className={'ft' + bl(x) + (n === rows.length ? ' ok' : '')}>{n + '/' + rows.length}</td>; })}<td className="ft"></td></tr></tfoot>
+    </table></div>
+    <MxLegend /><div className="sa-mxnt">Toque el nombre de un alumno para ver su seguimiento personal.</div>
+  </div>;
+}
+function MxPerson({ F, list, sid, setSid, mod, shown, thr, cur, pop, setPop }) {
+  const i = Math.max(0, list.findIndex(s => String(s.id) === String(sid))), s = list[i];
+  if (!s) return <div className="sa-empty">Sin alumnos en este grupo.</div>;
+  let ok = 0, n = 0; const rows = shown.map(t => { const cs = t.acts.map(x => mxCell(F, s, mod, x.a, thr)); const k = cs.filter(c => c.st === 'ok').length; ok += k; n += cs.length; return { t, cs, ok: k }; });
+  return <div className="sa-mxw">
+    <div className="sa-mxbar"><button type="button" className="sa-btn" disabled={i === 0} onClick={() => setSid(list[i - 1].id)}>‹</button>
+      <select className="sa-mxsel big" value={s.id} onChange={e => setSid(e.target.value)}>{list.map(x => <option key={x.id} value={x.id}>{x.fullName || x.username}</option>)}</select>
+      <button type="button" className="sa-btn" disabled={i === list.length - 1} onClick={() => setSid(list[i + 1].id)}>›</button><span className="sa-mxnt">{(i + 1) + ' de ' + list.length}</span><span style={{ flex: 1 }}></span>
+      <span className={'sa-mxst ' + (ok === n ? 'g' : 'b')}>{'✓ ' + ok + ' de ' + n + ' materiales'}</span></div>
+    <div className="sa-mxpl">{rows.map(r => <div key={r.t.key} className={'sa-mxpr' + (r.t.key === cur ? ' cur' : '')}>
+      <div className="tn"><b>{mxTName(r.t)}</b>{r.t.key === cur ? <span>📍 en clase ahora</span> : null}</div>
+      <div className="ds">{r.cs.map((c, j) => { const id = s.id + '|' + r.t.acts[j].a.id; return <div key={j} className="di"><small>{r.t.acts[j].short}</small><MxDot c={c} on={pop && pop.id === id} onClick={e => { const b = e.currentTarget.getBoundingClientRect(); setPop({ id, c, s, a: r.t.acts[j].a, t: r.t, x: b.left + b.width / 2, y: b.bottom }); }} /></div>; })}</div>
+      <b className={'tot' + (r.ok === r.cs.length ? ' ok' : '')}>{r.ok + '/' + r.cs.length}</b></div>)}</div>
+    <MxLegend />
+  </div>;
+}
+function SaMatrix({ groupId, group, list, thr: thr0 }) {
+  const D = window.JUCUM_DATA, S = window.JUCUM_SEG, t = S.today();
+  const ids = list.map(s => String(s.id)); const seg = window.useSegFacts({ ids, groups: [groupId], since: S.addD(t, -150) }); const F = seg.F;
+  const lvl = group ? group.level : (list[0] && list[0].level);
+  const thr = F && F.thr && F.thr.__groups && F.thr.__groups[groupId] != null ? F.thr.__groups[groupId] : (F && F.thr && F.thr[lvl] != null ? F.thr[lvl] : thr0);
+  const mods = ((D.MODULE_CATALOG || {})[lvl] || []).filter(m => (m.activities || []).length);
+  const clsMod = (D.getClassModuleId && D.getClassModuleId(groupId)) || (mods[0] && mods[0].id);
+  const [view, setView] = React.useState('grp'); const [mid, setMid] = React.useState(null); const [tk, setTk] = React.useState(null); const [sid, setSid] = React.useState(null); const [pop, setPop] = React.useState(null);
+  const mod = mods.find(m => m.id === (mid || clsMod)) || mods[0];
+  const tops = React.useMemo(() => mod ? mxTopics(mod) : [], [mod]);
+  const cur = mod ? mxCurTopic(groupId, mod, tops) : null; const isCur = !!mod && mod.id === clsMod;
+  const tSel = tk || (isCur ? cur : ((tops.find(x => !x.gen) || tops[0] || {}).key));
+  const shown = tSel === '*' ? tops : tops.filter(x => x.key === tSel);
+  if (!mods.length) return <div className="sa-empty">Este nivel no tiene módulos con materiales.</div>;
+  return <div className="sa-mx">
+    <div className="sa-mxctl">
+      <span className="sa-mxseg">{[['grp', '👥 Grupal'], ['per', '👤 Personal']].map(([k, l]) => <button key={k} type="button" className={view === k ? 'on' : ''} onClick={() => { setView(k); setPop(null); }}>{l}</button>)}</span>
+      <label>Módulo <select className="sa-mxsel" value={mod ? mod.id : ''} onChange={e => { setMid(e.target.value); setTk(null); setPop(null); }}>{mods.map((m, i) => <option key={m.id} value={m.id}>{'M' + (i + 1) + ' · ' + m.name + (m.id === clsMod ? '  📍 en clase' : '')}</option>)}</select></label>
+      <label>Tema <select className="sa-mxsel" value={tSel || ''} onChange={e => { setTk(e.target.value); setPop(null); }}>{tops.map(x => <option key={x.key} value={x.key}>{mxTName(x) + (isCur && x.key === cur ? '  📍 en clase' : '')}</option>)}{tops.length > 1 ? <option value="*">Todos los temas</option> : null}</select></label>
+      {(!isCur || (tk && tk !== cur)) ? <button type="button" className="sa-btn" onClick={() => { setMid(null); setTk(null); setPop(null); }}>↺ Volver al actual</button> : null}
+      <span style={{ flex: 1 }}></span>{window.SegAgo ? <SegAgo F={F} busy={seg.busy} err={seg.err} onReload={seg.reload} /> : null}
+    </div>
+    {!F ? <div className="sa-empty">{seg.err ? 'Sin conexión con la nube. ' : ''}Cargando desde la nube…</div>
+      : !shown.length ? <div className="sa-empty">Este módulo no tiene materiales.</div>
+      : view === 'grp' ? <MxGroup F={F} list={list} mod={mod} shown={shown} thr={thr} pop={pop} setPop={setPop} onStudent={id => { setSid(id); setView('per'); setPop(null); }} />
+      : <MxPerson F={F} list={list} sid={sid || (list[0] && list[0].id)} setSid={id => { setSid(id); setPop(null); }} mod={mod} shown={shown} thr={thr} cur={isCur ? cur : null} pop={pop} setPop={setPop} />}
+    <div className="sa-mxinfo">{'Cómo se cuenta: ✓ = el material está registrado y, si lleva nota, aprobado (mínimo del grupo: ' + thr + '). Cuenta TODO lo hecho, en cualquier fecha (no solo dentro de un set). El Quizlet no aparece porque la plataforma no lo registra. «empezó» = lo abrió algún día pero no lo terminó.'}</div>
+    {pop ? <MxPop p={pop} onClose={() => setPop(null)} /> : null}
+  </div>;
+}
 
 Object.assign(window, { GroupFollowPanel });
